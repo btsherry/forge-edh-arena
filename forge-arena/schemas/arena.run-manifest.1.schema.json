@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:run-manifest:1",
+  "title": "Arena run manifest",
+  "description": "Written first for every batch (Gate 5). A run is reproducible from (seed_base, pinned artifacts, fork_commit).",
+  "type": "object",
+  "required": ["schema", "run_id", "fork_commit", "seed_base", "games", "seats", "rotation", "limits"],
+  "properties": {
+    "schema": { "const": "arena.run-manifest/1" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "fork_commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "seed_base": { "type": "integer" },
+    "games": { "type": "integer", "minimum": 1 },
+    "seats": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["deck", "deck_hash", "ai"],
+        "properties": {
+          "deck": { "type": "string", "minLength": 1 },
+          "deck_hash": { "type": "string", "pattern": "^[0-9a-f]{8,64}$" },
+          "dossier_version": { "type": "string" },
+          "ai": {
+            "type": "object",
+            "required": ["profile"],
+            "properties": {
+              "profile": { "enum": ["Default", "Cautious", "Experimental", "Reckless"] },
+              "combo_aware": { "type": "boolean", "default": false },
+              "simulation_ai": { "type": "boolean", "default": false },
+              "combo_patience": { "type": "number", "minimum": 0, "maximum": 1, "default": 0 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "rotation": { "enum": ["latin_square_4", "fixed"] },
+    "limits": {
+      "type": "object",
+      "required": ["turns", "wall_clock_sec"],
+      "properties": {
+        "turns": { "type": "integer", "minimum": 1 },
+        "wall_clock_sec": { "type": "integer", "minimum": 1 },
+        "priority_passes_per_turn": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Pinned prep-artifact versions: spellbook snapshot dates, banlist version, binding-library version, win-routes version.",
+      "properties": {
+        "spellbook_snapshot_dates": { "type": "object", "additionalProperties": { "type": "string" } },
+        "banlist_version": { "type": "string" },
+        "binding_library_version": { "type": "string" },
+        "win_routes_version": { "type": "string" }
+      }
+    },
+    "pilot_floors": {
+      "type": "object",
+      "description": "v3.2 Gate 4 pilot-quality floors this run was admitted under.",
+      "properties": {
+        "conversion_when_ready": { "type": "number", "minimum": 0, "maximum": 1 },
+        "goldfish_win_turn_band": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "minItems": 2, "maxItems": 2 }
+      }
+    }
+  },
+  "additionalProperties": false
+}

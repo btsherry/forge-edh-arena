@@ -1,0 +1,9 @@
+{
+  "schema": "arena.game-record/1",
+  "game_index": 419,
+  "seed": 4200419,
+  "seats": ["selvala-b3", "net-krenko", "net-atraxa", "net-muldrotha"],
+  "result": "timeout_draw",
+  "turns": 30,
+  "duration_ms": 412000
+}

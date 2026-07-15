@@ -74,6 +74,8 @@
         <module>adventure-editor</module>
         <module>forge-gui-android</module>
         <module>forge-installer</module>
+        <!-- ARENA-PATCH: forge-arena headless EDH batch harness (see UPSTREAM-PATCHES.md #1) -->
+        <module>forge-arena</module>
     </modules>
 
     <distributionManagement>

@@ -57,6 +57,10 @@ Method: full structural map built from a March-2026 checkout, then every claim r
 | JUnit 5 (§8) | TestNG (repo convention; reuse `AITest` bootstrap) |
 | `GameRules` turn/priority limits | do not exist — arena-side in `EngineFacade.playWithLimits` |
 
+## 4.5 Addendum (PR-1, 2026-07-15): RNG seeding — VERIFIED clean
+
+`forge.util.MyRandom` (forge-core) is the single RNG seam: `getRandom()` / `setRandom(Random)` (`MyRandom.java:55/63`, setter documented "Used for deterministic simulation"). Audit of forge-game + forge-ai main sources: every `Collections.shuffle` call passes `MyRandom.getRandom()` (10+ sites incl. `Zone.java:262` library shuffle, `GameAction.java:2282/2412`), and there are **zero** `new Random()`, `ThreadLocalRandom`, or `Math.random` call sites. Seeding = `MyRandom.setRandom(new Random(seed))` per game (`ArenaBootstrap.seedRng`). Constraint: the seam is a global static ⇒ determinism requires **one game per JVM process** — satisfied by the worker-pool design. Default (unseeded) is `SecureRandom`.
+
 ## 5. Reference: old-project (mtg-deck-test) hook points — NOT carried forward
 
 The v1 project modified 7 tracked forge-ai files directly (`AiController`, `AiAttackController`, `AiBlockController`, `ComputerUtil`, `ChangeZoneAi`, `SpellAbilityPicker`, `GameStateEvaluator`) plus an untracked `forge.ai.combo` package. v3 replaces all of this with the `ComboAwareController extends PlayerControllerAi` + `LobbyPlayerAi.createControllerFor` seam behind `EngineFacade`; the old checkout remains at `personal/mtg-deck-test/forge` as a behavioral reference only.

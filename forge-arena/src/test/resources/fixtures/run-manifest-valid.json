@@ -1,0 +1,21 @@
+{
+  "schema": "arena.run-manifest/1",
+  "run_id": "2026-07-15T19-00_selvala-vs-meta",
+  "fork_commit": "0eec0a16d0ad4352648b8b36e9569c4591082ad2",
+  "seed_base": 42,
+  "games": 1000,
+  "seats": [
+    {"deck": "selvala-b3", "deck_hash": "d7498c0379debdfa", "ai": {"profile": "Default", "combo_aware": true, "combo_patience": 0.3}},
+    {"deck": "net-krenko", "deck_hash": "77b1aa0000000000", "ai": {"profile": "Reckless"}},
+    {"deck": "net-atraxa", "deck_hash": "c0dec0dec0dec0de", "ai": {"profile": "Cautious", "simulation_ai": true}},
+    {"deck": "net-muldrotha", "deck_hash": "51ab51ab51ab51ab", "ai": {"profile": "Default"}}
+  ],
+  "rotation": "latin_square_4",
+  "limits": {"turns": 30, "wall_clock_sec": 600, "priority_passes_per_turn": 2000},
+  "artifacts": {
+    "spellbook_snapshot_dates": {"selvala-b3": "2026-07-15"},
+    "banlist_version": "2026-06-30",
+    "win_routes_version": "win-routes/1"
+  },
+  "pilot_floors": {"conversion_when_ready": 0.5, "goldfish_win_turn_band": [6, 12]}
+}

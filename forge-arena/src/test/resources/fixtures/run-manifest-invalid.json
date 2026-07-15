@@ -1,0 +1,12 @@
+{
+  "schema": "arena.run-manifest/1",
+  "run_id": "missing-seed-base",
+  "fork_commit": "0eec0a16d0a",
+  "games": 1000,
+  "seats": [
+    {"deck": "a", "deck_hash": "d7498c0379debdfa", "ai": {"profile": "Default"}},
+    {"deck": "b", "deck_hash": "77b1aa0000000000", "ai": {"profile": "Default"}}
+  ],
+  "rotation": "round_robin",
+  "limits": {"turns": 30, "wall_clock_sec": 600}
+}

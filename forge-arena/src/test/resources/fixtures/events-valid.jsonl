@@ -1,0 +1,15 @@
+{"t":"game_start","seats":["selvala-b3","net-krenko","net-atraxa","net-muldrotha"],"seed":4200417}
+{"t":"turn_begin","turn":5,"seat":0}
+{"t":"tutor_decision","turn":5,"seat":0,"source":"Green Sun's Zenith","chosen":"Temur Sabertooth","ranked":[{"c":"Temur Sabertooth","score":0.81,"why":"completes csb-9902 next turn"},{"c":"Reclamation Sage","score":0.44,"why":"stock_heuristic"}]}
+{"t":"mulligan_decision","turn":0,"seat":1,"decision":"mulligan","reason":"no lands, no combo pieces","hand_distance":{"csb-4131":3}}
+{"t":"combo_state","turn":7,"seat":0,"combo":"csb-4131","distance":0,"ready":true,"blocked_by":[]}
+{"t":"combo_ready","turn":7,"seat":0,"combo":"csb-4131","window":"sorcery_speed_main1"}
+{"t":"combo_ignored","turn":7,"seat":0,"combo":"csb-4520","reason":"no_viable_route"}
+{"t":"line_entered","turn":7,"seat":0,"combo":"csb-4131","binding":"csb-4131@1","attempted_via":"binding","entry_phase":"MAIN1"}
+{"t":"line_step","turn":7,"seat":0,"stage":"MANA_LOOP","iteration":2}
+{"t":"combo_shortcut","turn":7,"seat":0,"combo":"csb-4131","iterations_proven":3,"bounded_product":{"mana_G":1000000}}
+{"t":"route_rejected","turn":7,"seat":0,"route":"SPREAD_COMBAT","failed_predicate":"alpha>=table_life+blockers","predicates":{"alpha":34,"table_life":71,"blockers":6}}
+{"t":"route_selected","turn":7,"seat":0,"route":"DRAW_DECK_THEN_OVERKILL","predicates":{"draw_available":true,"oracle_guard":"n/a_stops_at_will"}}
+{"t":"line_aborted","turn":8,"seat":0,"cause":"interaction","piece_lost":"Umbral Mantle"}
+{"t":"combo_stalled","turn":9,"seat":0,"binding":"csb-4520@1","rejected_routes":["SPREAD_COMBAT"],"state_hash":"ab12cd34","dump_path":"stalls/ab12cd34.txt"}
+{"t":"game_end","turn":9,"winner_seat":1,"win_condition":"combat","combo_id":"csb-4131","route":"SPREAD_COMBAT"}

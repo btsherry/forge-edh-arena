@@ -1,0 +1,25 @@
+{
+  "schema": "arena.dossier/1",
+  "deck_id": "selvala-b3",
+  "deck_hash": "d7498c0379debdfa",
+  "created": "2026-07-15T19:05:00Z",
+  "versions": {
+    "schemas": "1",
+    "win_routes": "win-routes/1",
+    "spellbook_snapshot": "2026-07-15",
+    "banlist": "2026-06-30"
+  },
+  "artifacts": {
+    "combos": {"path": "combos.json", "sha256": "9f3a9f3a9f3a9f3a9f3a9f3a9f3a9f3a9f3a9f3a9f3a9f3a9f3a9f3a9f3a9f3a"},
+    "tutor_priorities": {"path": "tutor-priorities.json", "sha256": "77b177b177b177b177b177b177b177b177b177b177b177b177b177b177b177b1"},
+    "route_coverage": {"path": "route-coverage.json", "sha256": "c0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0dec0de"}
+  },
+  "status": {
+    "lint": "pass",
+    "implementability": "pass",
+    "route_coverage": "clean",
+    "sim_verified": "not_run",
+    "goldfish": "not_run"
+  },
+  "warnings": ["1 card unimplemented in Forge: (example) — substituted none"]
+}

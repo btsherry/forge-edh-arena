@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:game-record:1",
+  "title": "Arena per-game record",
+  "description": "One record per game, crashes and timeouts included — never dropped.",
+  "type": "object",
+  "required": ["schema", "game_index", "seed", "seats", "result", "turns", "duration_ms"],
+  "properties": {
+    "schema": { "const": "arena.game-record/1" },
+    "game_index": { "type": "integer", "minimum": 0 },
+    "seed": { "type": "integer" },
+    "seats": {
+      "type": "array",
+      "description": "Deck ids in seat order for THIS game (after rotation).",
+      "minItems": 2,
+      "maxItems": 4,
+      "items": { "type": "string" }
+    },
+    "result": { "enum": ["win", "draw", "timeout_draw", "crash"] },
+    "winner_seat": { "type": "integer", "minimum": 0, "maximum": 3 },
+    "win_condition": { "type": "string" },
+    "combo_id": { "type": "string" },
+    "route": { "type": "string" },
+    "limiting_factor": { "enum": ["turns", "wall_clock", "priority_passes", "stack_depth"] },
+    "turns": { "type": "integer", "minimum": 0 },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "crash": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "message": { "type": "string" },
+        "stack_hash": { "type": "string" }
+      }
+    },
+    "seat_stats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "deck": { "type": "string" },
+          "mulligans": { "type": "integer", "minimum": 0 },
+          "opening_hand_size": { "type": "integer", "minimum": 0 },
+          "turns_played": { "type": "integer", "minimum": 0 },
+          "eliminated_turn": { "type": "integer", "minimum": 1 },
+          "commander_cast_turn": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "event_log": { "type": "string", "description": "Relative path to this game's events JSONL." }
+  },
+  "allOf": [
+    { "if": { "properties": { "result": { "const": "win" } } }, "then": { "required": ["winner_seat", "win_condition"] } },
+    { "if": { "properties": { "result": { "const": "timeout_draw" } } }, "then": { "required": ["limiting_factor"] } },
+    { "if": { "properties": { "result": { "const": "crash" } } }, "then": { "required": ["crash"] } }
+  ],
+  "additionalProperties": false
+}
