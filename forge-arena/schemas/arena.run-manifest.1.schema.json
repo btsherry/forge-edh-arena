@@ -30,6 +30,7 @@
               "profile": { "enum": ["Default", "Cautious", "Experimental", "Reckless"] },
               "combo_aware": { "type": "boolean", "default": false },
               "simulation_ai": { "type": "boolean", "default": false },
+              "goldfish": { "type": "boolean", "default": false },
               "combo_patience": { "type": "number", "minimum": 0, "maximum": 1, "default": 0 }
             },
             "additionalProperties": false

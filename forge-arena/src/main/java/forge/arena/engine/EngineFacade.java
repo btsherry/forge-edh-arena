@@ -62,11 +62,15 @@ public final class EngineFacade {
                 throw new IllegalArgumentException("not a loadable Commander deck: " + seat.deckFile());
             }
             RegisteredPlayer rp = RegisteredPlayer.forCommander(deck);
-            Set<AIOption> options = seat.simulationAi()
-                    ? Collections.singleton(AIOption.USE_SIMULATION)
-                    : Collections.emptySet();
             String name = "seat" + seatIndex + "-" + deck.getName();
-            rp.setPlayer(GamePlayerUtil.createAiPlayer(name, seatIndex, seatIndex, options, seat.aiProfile()));
+            if (seat.goldfish()) {
+                rp.setPlayer(new GoldfishLobbyPlayer(name));
+            } else {
+                Set<AIOption> options = seat.simulationAi()
+                        ? Collections.singleton(AIOption.USE_SIMULATION)
+                        : Collections.emptySet();
+                rp.setPlayer(GamePlayerUtil.createAiPlayer(name, seatIndex, seatIndex, options, seat.aiProfile()));
+            }
             players.add(rp);
             seatIndex++;
         }

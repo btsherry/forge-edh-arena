@@ -42,7 +42,8 @@ public final class WorkerMain {
             seats.add(new SeatSpec(
                     new File(seat.get("deck_file").asText()),
                     seat.get("profile").asText("Default"),
-                    seat.path("simulation_ai").asBoolean(false)));
+                    seat.path("simulation_ai").asBoolean(false),
+                    seat.path("goldfish").asBoolean(false)));
         }
         JsonNode lim = cfg.get("limits");
         ArenaLimits limits = new ArenaLimits(
