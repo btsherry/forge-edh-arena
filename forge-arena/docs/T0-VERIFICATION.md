@@ -57,6 +57,11 @@ Method: full structural map built from a March-2026 checkout, then every claim r
 | JUnit 5 (§8) | TestNG (repo convention; reuse `AITest` bootstrap) |
 | `GameRules` turn/priority limits | do not exist — arena-side in `EngineFacade.playWithLimits` |
 
+## 4.4 Addendum (PR-2, 2026-07-15): two source corrections found while implementing
+
+1. **`GameState` is concrete on current master** — the abstract `getPaperCard(String, String, int)` hook reported in §1/#15 (from the March checkout) no longer exists; card resolution is internal and `applyToGame(Game)` is public. `ArenaGameState` is a thin subclass. Multiplayer states use `p0..p3` key prefixes (`GameState.getPlayerState`, line 507-518).
+2. **Forced draws need per-player `intentionalDraw()`** — `Game.setGameOver(GameEndReason.Draw)` alone leaves surviving players marked as winners (`GameOutcome.isDraw()` iterates per-player `hasWon()`). The engine's own stack-depth guard (`MagicStack.java:262-267`) calls `p.intentionalDraw()` on every player first; arena's LimitEnforcer mirrors this, and the facade additionally never reports a winner when a limit tripped.
+
 ## 4.5 Addendum (PR-1, 2026-07-15): RNG seeding — VERIFIED clean
 
 `forge.util.MyRandom` (forge-core) is the single RNG seam: `getRandom()` / `setRandom(Random)` (`MyRandom.java:55/63`, setter documented "Used for deterministic simulation"). Audit of forge-game + forge-ai main sources: every `Collections.shuffle` call passes `MyRandom.getRandom()` (10+ sites incl. `Zone.java:262` library shuffle, `GameAction.java:2282/2412`), and there are **zero** `new Random()`, `ThreadLocalRandom`, or `Math.random` call sites. Seeding = `MyRandom.setRandom(new Random(seed))` per game (`ArenaBootstrap.seedRng`). Constraint: the seam is a global static ⇒ determinism requires **one game per JVM process** — satisfied by the worker-pool design. Default (unseeded) is `SecureRandom`.
