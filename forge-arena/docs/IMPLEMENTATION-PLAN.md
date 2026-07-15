@@ -1,4 +1,4 @@
-# Forge EDH Arena — Implementation Plan v3.2
+# Forge EDH Arena — Implementation Plan v3.3
 
 > **Repo note (2026-07-15):** This is the master spec, authored in a planning session prior to implementation (as v3.1) and amended in-repo since. T0 verification is complete — see [T0-VERIFICATION.md](T0-VERIFICATION.md) for confirmed/corrected class names (4 corrections, incl. no engine turn cap; arena-side limits required). Per §11: when this document and the Forge source disagree, the source wins, and this document gets updated in the same PR.
 
@@ -9,6 +9,8 @@
 **v3.1 amendments (from the Selvala end-to-end trace):** (1) executor yield may come from a third bound permanent (Arbor Elf taps the Forest, not itself); (2) executors are stage-chained and phase-aware (Staff = mana loop → draw loop → deploy/win, entered in precombat main); (3) a LethalityPlanner decides how infinite resources convert to a win against three opponents; (4) Gate 3.5: LLM-generated binding files — a Claude API call at prep time parameterizes archetype bindings per newly-encountered combo, verified by sandbox simulation before use, cached in a global binding library so the approach scales to unbounded deck inflow.
 
 **v3.2 amendments (2026-07-15 session, post-T0 + Spellbook probe):** (1) **Win Routes spec** — docs/WIN-ROUTES.md defines the closed set of win-conversion routes (each terminating in an engine-enforced end state) plus versioned, deterministic feature-classification rules; LethalityPlanner's route enum is drawn from it, not hand-grown per trace. **Classification is per-deck, at preflight** (Gate 3): only the `produces` features actually appearing in that deck's included combos are classified, cache-first against a global feature→route mapping library — same amortization model as Gate 3.5 bindings; no global vocabulary sweeps. (2) **Gate 3 route-coverage report** — prep flags any `produces` feature in the deck's combos that the rules can't classify, before a batch runs. (3) **Gate 3.6 stall autopsy** — batches never call LLMs in-loop; instead, proven-infinite states that fail to convert within N turns are snapshotted and sent to a post-run bindgen repair pass (one Claude call per *distinct* stall, sim-verified, cached in the binding library). Rationale: keeps seed determinism and pays for each answer once. (4) Empirically verified this session: Spellbook `find-my-combos` returns per-card zone requirements, `manaNeeded`, easy/notable prerequisite split, and step text (richer than v3 assumed); per-deck cache keyed by deck hash works (Selvala list: 11 included combos, 142 almost-included, 50 distinct produces-features — all 11 resource-only, none directly lethal). (5) **Combo telemetry taxonomy + pilot-quality floors** — the §5 event log gains a normative combo/route event set (notably `combo_ignored` and `route_selected`/`route_rejected`: silence is never a valid record of a decision), §7 gains the extended funnel with hesitation metrics, and Gate 4 gains per-deck pilot-quality floors so a bad pilot is reported as a pilot problem, never silently read as a bad deck.
+
+**v3.3 amendments (2026-07-15 session, preflight/ingestion discussion):** (1) **Default batch target is 1,000 games** (±~2.7pp Wilson CI at p=0.25; paired-seed A/B detects 3–5pp lifts), 10k remains a supported scale — Phase 1 exit criterion updated accordingly. (2) **Prep is packaged as a standalone dossier compiler** (`arena prep <deck>`): all gates run once per deck at ingestion and emit a versioned **deck dossier** (normalized list, lint/implementability reports, combos, bindings, win plan, tutor priorities, mulligan hints); batch start does no prep work — it only validates dossier freshness (deck hash, schema versions, binding-library version) and fails fast. Lands in two versions: **v1 after Phase 3** (detection artifacts, route coverage, tutor weights), **v2 after the first executor exists** (sim verification + dossier goldfish). (3) **Dossier goldfish** — prep's final gate plays N solo games with the combo-aware controller consuming the dossier against a non-interactive seat, asserting the deck executes its primary win route by turn X; needs only bootstrap + EngineFacade + the GameState sandbox (pulled into Phase 1 as shared infrastructure), not pods. (4) **Tutor priorities derive from the win plan, not just the combo list** — enabler/payoff cards (e.g. Concordant Crossroads, Craterhoof: in ~zero Spellbook combos, mandatory for Selvala's actual win line) get weights from route requirements.
 
 **Date:** July 2026 · **Upstream:** Forge master; latest release forge-2.0.12 (Apr 2026); Java 17+; Maven; GPL-3.0.
 
@@ -43,6 +45,8 @@ forge/  (fork; upstream patches tagged // ARENA-PATCH + logged in UPSTREAM-PATCH
 ## 3. Pre-run preparation pipeline (expanded)
 
 The goal-state is "solid runs": a batch either starts with everything it needs validated, or fails fast with an actionable report. Prep is a chain of gates; each emits a machine-readable report into the run directory.
+
+**v3.3 — packaging: the dossier compiler.** Gates 0–3.6 run **once per deck at ingestion** via `arena prep <deck>`, emitting a versioned deck dossier (`decks/<id>/dossier/` — every artifact below plus a `dossier.json` index with schema/binding-library/win-routes versions and content hashes). Batch start performs **no prep work**: it validates dossier freshness against the manifest and refuses stale or missing dossiers. Prep failures therefore surface at ingestion, dossiers are inspectable/diffable before a run trusts them, and the run manifest pins one dossier version per deck. The prep tool's final gate is the **dossier goldfish** (v2, requires an executor): N solo games, combo-aware controller + dossier, non-interactive opponent, asserting the primary win route executes by turn X — proving ingest → detect → assemble → execute → convert end-to-end using only bootstrap + EngineFacade + the GameState sandbox, no pods. Behavioral quality under interaction remains the canary's and batch's job.
 
 ### Gate 0 — Ingest
 
@@ -282,6 +286,8 @@ public GameRecord runOne(RunConfig cfg, int gameIndex) {
 }
 ```
 
+*v3.3: derivation extends beyond combo pieces — the win plan contributes weights for route-required enablers and payoffs (haste statics, mass pump, X-spells), scaled by how many of the deck's routes require them. In the Selvala dossier, Concordant Crossroads and Craterhoof Behemoth carry high weights despite appearing in ~zero included combos.*
+
 **Event log** (events/000042.jsonl, excerpts):
 
 ```json
@@ -520,7 +526,7 @@ New prep-step protections added in v3 beyond the v2 list: legality lint with pin
 | Phase | Scope | Exit criterion | Est. |
 |---|---|---|---|
 | 0 | Fork builds; stock 4p commander sim; T0 verification doc; games/hr measured | 100 stock games; T0 committed; perf baseline | 3–5 days |
-| 1 | Harness: bootstrap, EngineFacade, runner, seeds, rotation, limits, JSONL, worker pool + DeterminismTest, RotationTest, TimeoutDrawTest | 10k-game overnight, <2% timeout/crash, seed replay | 2–3 wks |
+| 1 | Harness: bootstrap, EngineFacade (+ GameState sandbox loader, v3.3), runner, seeds, rotation, limits, JSONL + run.log sinks, worker pool + DeterminismTest, RotationTest, TimeoutDrawTest | 1k-game run in an afternoon, <2% timeout/crash, seed replay (10k remains supported) | 2–3 wks |
 | 2 | Ingest + preflight gates 0–2 + canary script; assignable AI (profiles, sim toggle, goldfish, controller injection) | 4 target decks pass all gates; per-seat behavior differs in logs | 1.5 wks |
 | 3 | Prep pipeline gates 3+5: Spellbook client, cache, artifacts, schemas; ComboTracker detection-only + SeatView | Artifacts for all decks; distance traces in every log; inertness test green | 1.5–2 wks |
 | 3.5 | Bindgen: Claude API client, prompt assembly, static gates, sandbox-sim verifier, global binding library, repair loop | BindingGenerationVerificationTest + BindingLibraryCacheTest green; Selvala's combos auto-bound and sim-verified | 1–1.5 wks |
@@ -531,6 +537,8 @@ New prep-step protections added in v3 beyond the v2 list: legality lint with pin
 ~4–5 months solo; Phase 4 still the riskiest estimate. Note the ordering dependency: Phase 3.5's sim verifier needs at least one working archetype executor, so implement TapForManaUntapLoop (Phase 4's first deliverable) before wiring the verification loop, then parallelize.
 
 The Win Routes spec (route definitions + classification rules) is a documentation artifact with no code dependencies — seeded immediately post-T0 (2026-07-15, this repo) so Phase 4's planner and executor contracts are designed against the full route set rather than grown per trace. Feature classification itself runs per deck at preflight (Gate 3, cache-first); the spec and mapping library are maintained thereafter by the Gate 3.5/3.6 feedback loops. No global combo/feature sweeps are part of any workflow.
+
+**v3.3 — `arena prep` landing plan.** The dossier compiler ships twice: **v1 at the end of Phase 3** (ingest→lint→implementability→combos→route coverage→tutor weights; everything except execution proof) and **v2 during Phase 4** once TapForManaUntapLoop exists (adds Gate 3.5 sim verification + the dossier goldfish). This keeps the ordering dependency explicit: the sandbox verifier and goldfish need one working executor, but every detection-side artifact is testable earlier via prep v1.
 
 ## 11. Handoff notes for Claude Code
 
