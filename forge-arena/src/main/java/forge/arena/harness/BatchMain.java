@@ -45,8 +45,21 @@ public final class BatchMain {
 
     public static int run(Path configPath) throws Exception {
         JsonNode cfg = MAPPER.readTree(configPath.toFile());
-        Path outDir = Path.of(cfg.get("out_dir").asText()).toAbsolutePath();
+        Path batchRoot = Path.of(cfg.get("out_dir").asText()).toAbsolutePath();
+        Files.createDirectories(batchRoot);
+
+        // per-batch directory: never clobbers a previous batch
+        String runId = cfg.path("run_id").asText("run");
+        String stamp = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+                .format(java.time.LocalDateTime.now());
+        String batchId = runId + "-" + stamp;
+        Path outDir = batchRoot.resolve(batchId);
+        for (int n = 2; Files.exists(outDir); n++) {
+            batchId = runId + "-" + stamp + "-" + n;
+            outDir = batchRoot.resolve(batchId);
+        }
         Files.createDirectories(outDir);
+
         int games = cfg.get("games").asInt();
         int workers = Math.max(1, cfg.path("workers").asInt(4));
         long seedBase = cfg.get("seed_base").asLong();
@@ -81,6 +94,7 @@ public final class BatchMain {
 
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("schema", "arena.run-manifest/1");
+        manifest.put("batch_id", batchId);
         manifest.put("run_id", cfg.path("run_id").asText("run-" + seedBase + "-" + games));
         manifest.put("fork_commit", forkCommit());
         manifest.put("seed_base", seedBase);
@@ -107,7 +121,31 @@ public final class BatchMain {
         Files.writeString(outDir.resolve("worker-config.json"),
                 MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(workerCfg));
 
+        // --- batch ledger: append every resolved input for this batch ---
+        Map<String, Object> resolved = new LinkedHashMap<>();
+        resolved.put("games", games);
+        resolved.put("workers", workers);
+        resolved.put("seed_base", seedBase);
+        resolved.put("worker_heap", workerHeap);
+        resolved.put("rotation", manifest.get("rotation"));
+        resolved.put("limits", limits);
+        resolved.put("seats", workerSeats);
+        resolved.put("assets_dir", assetsDir.toString());
+        resolved.put("out_dir", outDir.toString());
+        Map<String, Object> ledgerStart = new LinkedHashMap<>();
+        ledgerStart.put("t", "batch_start");
+        ledgerStart.put("batch_id", batchId);
+        ledgerStart.put("started", java.time.Instant.now().toString());
+        ledgerStart.put("config_path", configPath.toAbsolutePath().toString());
+        ledgerStart.put("fork_commit", manifest.get("fork_commit"));
+        ledgerStart.put("inputs", resolved);
+        try (RecordWriter ledger = new RecordWriter(batchRoot.resolve("batches.jsonl"))) {
+            ledger.write(ledgerStart);
+        }
+
+        System.out.println("batch id: " + batchId);
         System.out.println("run dir:  " + outDir);
+        System.out.println("ledger:   " + batchRoot.resolve("batches.jsonl"));
         System.out.println("live log: tail -f " + outDir.resolve("run.log"));
 
         // --- spawn the pool ---
@@ -133,11 +171,22 @@ public final class BatchMain {
         }
         long wallMs = System.currentTimeMillis() - started;
 
-        summarize(outDir, games, workers, wallMs);
+        Map<String, Object> outcome = summarize(outDir, games, workers, wallMs);
+        Map<String, Object> ledgerEnd = new LinkedHashMap<>();
+        ledgerEnd.put("t", "batch_end");
+        ledgerEnd.put("batch_id", batchId);
+        ledgerEnd.put("ended", java.time.Instant.now().toString());
+        ledgerEnd.put("wall_ms", wallMs);
+        ledgerEnd.put("worker_failures", failures);
+        ledgerEnd.putAll(outcome);
+        try (RecordWriter ledger = new RecordWriter(batchRoot.resolve("batches.jsonl"))) {
+            ledger.write(ledgerEnd);
+        }
         return failures == 0 ? 0 : 1;
     }
 
-    private static void summarize(Path outDir, int games, int workers, long wallMs) throws IOException {
+    private static Map<String, Object> summarize(Path outDir, int games, int workers, long wallMs)
+            throws IOException {
         Map<String, Integer> byResult = new TreeMap<>();
         Map<String, Integer> winsByDeck = new TreeMap<>();
         long totalDur = 0;
@@ -166,6 +215,12 @@ public final class BatchMain {
         }
         System.out.println("human-readable log: " + outDir.resolve("run.log"));
         System.out.println("artifacts: " + outDir + "/{run-manifest.json,game-records.jsonl,events/,run.log}");
+        Map<String, Object> outcome = new LinkedHashMap<>();
+        outcome.put("records", n);
+        outcome.put("expected_games", games);
+        outcome.put("results", byResult);
+        outcome.put("wins_by_deck", winsByDeck);
+        return outcome;
     }
 
     private static JsonSchema manifestSchema() throws IOException {

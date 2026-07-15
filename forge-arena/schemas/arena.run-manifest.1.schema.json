@@ -7,6 +7,7 @@
   "required": ["schema", "run_id", "fork_commit", "seed_base", "games", "seats", "rotation", "limits"],
   "properties": {
     "schema": { "const": "arena.run-manifest/1" },
+    "batch_id": { "type": "string", "minLength": 1, "description": "Unique per execution (run_id + timestamp); names the per-batch output dir and keys the batches.jsonl ledger." },
     "run_id": { "type": "string", "minLength": 1 },
     "fork_commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
     "seed_base": { "type": "integer" },

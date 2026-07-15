@@ -50,8 +50,32 @@ public class BatchIntegrationTest {
         int exit = BatchMain.run(cfgFile);
         assertEquals("batch must exit clean", 0, exit);
 
-        // manifest written and schema-valid
-        JsonNode manifest = MAPPER.readTree(runDir.resolve("run-manifest.json").toFile());
+        // artifacts live in a per-batch subdir (no clobbering batch to batch)
+        List<Path> batchDirs;
+        try (var stream = Files.list(runDir)) {
+            batchDirs = stream.filter(Files::isDirectory).toList();
+        }
+        assertEquals("exactly one batch dir", 1, batchDirs.size());
+        assertTrue("batch dir named <run_id>-<stamp>",
+                batchDirs.get(0).getFileName().toString().startsWith("batch-int-test-"));
+        Path batchDir = batchDirs.get(0);
+
+        // ledger records start (all inputs) + end (outcome)
+        List<String> ledger = Files.readAllLines(runDir.resolve("batches.jsonl"));
+        assertEquals(2, ledger.size());
+        JsonNode start = MAPPER.readTree(ledger.get(0));
+        assertEquals("batch_start", start.get("t").asText());
+        assertEquals(42, start.get("inputs").get("seed_base").asInt());
+        assertEquals(4, start.get("inputs").get("seats").size());
+        assertEquals(3, start.get("inputs").get("limits").get("turns").asInt());
+        JsonNode end = MAPPER.readTree(ledger.get(1));
+        assertEquals("batch_end", end.get("t").asText());
+        assertEquals(4, end.get("records").asInt());
+        assertEquals(start.get("batch_id").asText(), end.get("batch_id").asText());
+
+        // manifest written and schema-valid, carries the batch id
+        JsonNode manifest = MAPPER.readTree(batchDir.resolve("run-manifest.json").toFile());
+        assertEquals(start.get("batch_id").asText(), manifest.get("batch_id").asText());
         JsonSchema schema;
         try (InputStream in = Files.newInputStream(Path.of("schemas", "arena.run-manifest.1.schema.json"))) {
             schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012).getSchema(in);
@@ -60,7 +84,7 @@ public class BatchIntegrationTest {
         assertEquals(4, manifest.get("seats").size());
 
         // all 4 games recorded, schema-valid, no crashes; both workers contributed
-        List<String> records = Files.readAllLines(runDir.resolve("game-records.jsonl"));
+        List<String> records = Files.readAllLines(batchDir.resolve("game-records.jsonl"));
         assertEquals(4, records.size());
         JsonSchema recSchema;
         try (InputStream in = Files.newInputStream(Path.of("schemas", "arena.game-record.1.schema.json"))) {
@@ -79,9 +103,9 @@ public class BatchIntegrationTest {
 
         // per-game event logs exist; shared run.log has lines from both workers
         for (int i = 0; i < 4; i++) {
-            assertTrue(Files.exists(runDir.resolve("events").resolve(String.format("%06d.jsonl", i))));
+            assertTrue(Files.exists(batchDir.resolve("events").resolve(String.format("%06d.jsonl", i))));
         }
-        List<String> log = Files.readAllLines(runDir.resolve("run.log"));
+        List<String> log = Files.readAllLines(batchDir.resolve("run.log"));
         assertTrue(log.stream().anyMatch(l -> l.startsWith("[w0 ")));
         assertTrue(log.stream().anyMatch(l -> l.startsWith("[w1 ")));
     }

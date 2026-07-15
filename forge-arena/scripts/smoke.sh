@@ -33,10 +33,13 @@ EOF
 bash "$REPO_ROOT/forge-arena/scripts/batch.sh" "$CONFIG"
 
 echo "== canary checks =="
-RECORDS="$RUN_DIR/run/game-records.jsonl"
+BATCH_DIR=$(ls -d "$RUN_DIR/run"/*/ 2>/dev/null | head -1)
+[ -n "$BATCH_DIR" ] || { echo "FAIL: no batch dir under $RUN_DIR/run"; exit 1; }
+RECORDS="${BATCH_DIR}game-records.jsonl"
 COUNT=$(wc -l < "$RECORDS" | tr -d ' ')
 CRASHES=$(grep -c '"result":"crash"' "$RECORDS" || true)
 [ "$COUNT" -eq "$GAMES" ] || { echo "FAIL: $COUNT/$GAMES records"; exit 1; }
 [ "$CRASHES" -eq 0 ] || { echo "FAIL: $CRASHES crash records"; exit 1; }
-[ -s "$RUN_DIR/run/run.log" ] || { echo "FAIL: empty run.log"; exit 1; }
-echo "SMOKE PASS: $COUNT games, 0 crashes  ($RUN_DIR/run)"
+[ -s "${BATCH_DIR}run.log" ] || { echo "FAIL: empty run.log"; exit 1; }
+[ -s "$RUN_DIR/run/batches.jsonl" ] || { echo "FAIL: no batch ledger"; exit 1; }
+echo "SMOKE PASS: $COUNT games, 0 crashes  ($BATCH_DIR)"
