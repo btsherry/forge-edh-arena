@@ -309,6 +309,21 @@ public GameRecord runOne(RunConfig cfg, int gameIndex) {
 | `mulligan_decision` | keep/tuck, hand distance summary, reason | each mulligan checkpoint |
 | `game_end` | winner seat, win_condition, combo_id?, route? | always — full win attribution |
 
+**v3.2 — dual log sinks (human-tailable run log).** Every run writes two sinks from the *same* event stream: `events/NNNNNN.jsonl` per game (machine-of-record, drives all §7 reducers) and a single append-only `run.log` (human-readable, meant for `tail -f` while a batch runs). The run.log renderer subscribes to the identical events, so it structurally cannot drift from the JSONL. Lines are one-per-event, line-buffered (short atomic appends across worker processes), prefixed `[worker game turn seat]`, verbosity-tiered: default = game lifecycle + combo/route/tutor events + funnel summary per game end; `--log-verbose` adds line_step/combo_state ticks. Example:
+
+```
+[w2 g0417] game start  seats: selvala-b3(0) net-krenko(1) net-atraxa(2) net-muldrotha(3)  seed=42:417
+[w2 g0417 t5 s0] tutor  Green Sun's Zenith -> Temur Sabertooth  (0.81 completes csb-9902 next turn)
+[w2 g0417 t7 s0] READY  csb-4131 Selvala+Mantle  (sorcery window, prereqs ok)
+[w2 g0417 t7 s0] line   csb-4131 via binding  entered MAIN1
+[w2 g0417 t7 s0] loop   proven x3 -> {G}*1e6 shortcut
+[w2 g0417 t7 s0] route  SPREAD_COMBAT rejected (alpha 34 < table 71+blockers) -> DRAW_DECK_THEN_OVERKILL selected
+[w2 g0417 t7]    WIN    seat 0 selvala-b3  combo csb-4131 route DRAW_DECK_THEN_OVERKILL  (7 turns, 94s)
+[w2 g0417]       funnel ready t7, attempted t7, hesitation 0, ignored 0
+```
+
+The §7(a) auto-narrative renderer is this same renderer run post-hoc at paragraph granularity — one implementation, two moments of use.
+
 ## 6. Combo layer — key classes
 
 ```java
