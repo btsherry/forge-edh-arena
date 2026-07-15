@@ -8,7 +8,7 @@
 
 **v3.1 amendments (from the Selvala end-to-end trace):** (1) executor yield may come from a third bound permanent (Arbor Elf taps the Forest, not itself); (2) executors are stage-chained and phase-aware (Staff = mana loop → draw loop → deploy/win, entered in precombat main); (3) a LethalityPlanner decides how infinite resources convert to a win against three opponents; (4) Gate 3.5: LLM-generated binding files — a Claude API call at prep time parameterizes archetype bindings per newly-encountered combo, verified by sandbox simulation before use, cached in a global binding library so the approach scales to unbounded deck inflow.
 
-**v3.2 amendments (2026-07-15 session, post-T0 + Spellbook probe):** (1) **Win Routes spec** — docs/WIN-ROUTES.md defines the closed set of win-conversion routes (each terminating in an engine-enforced end state) plus versioned, deterministic feature-classification rules; LethalityPlanner's route enum is drawn from it, not hand-grown per trace. **Classification is per-deck, at preflight** (Gate 3): only the `produces` features actually appearing in that deck's included combos are classified, cache-first against a global feature→route mapping library — same amortization model as Gate 3.5 bindings; no global vocabulary sweeps. (2) **Gate 3 route-coverage report** — prep flags any `produces` feature in the deck's combos that the rules can't classify, before a batch runs. (3) **Gate 3.6 stall autopsy** — batches never call LLMs in-loop; instead, proven-infinite states that fail to convert within N turns are snapshotted and sent to a post-run bindgen repair pass (one Claude call per *distinct* stall, sim-verified, cached in the binding library). Rationale: keeps seed determinism and pays for each answer once. (4) Empirically verified this session: Spellbook `find-my-combos` returns per-card zone requirements, `manaNeeded`, easy/notable prerequisite split, and step text (richer than v3 assumed); per-deck cache keyed by deck hash works (Selvala list: 11 included combos, 142 almost-included, 50 distinct produces-features — all 11 resource-only, none directly lethal).
+**v3.2 amendments (2026-07-15 session, post-T0 + Spellbook probe):** (1) **Win Routes spec** — docs/WIN-ROUTES.md defines the closed set of win-conversion routes (each terminating in an engine-enforced end state) plus versioned, deterministic feature-classification rules; LethalityPlanner's route enum is drawn from it, not hand-grown per trace. **Classification is per-deck, at preflight** (Gate 3): only the `produces` features actually appearing in that deck's included combos are classified, cache-first against a global feature→route mapping library — same amortization model as Gate 3.5 bindings; no global vocabulary sweeps. (2) **Gate 3 route-coverage report** — prep flags any `produces` feature in the deck's combos that the rules can't classify, before a batch runs. (3) **Gate 3.6 stall autopsy** — batches never call LLMs in-loop; instead, proven-infinite states that fail to convert within N turns are snapshotted and sent to a post-run bindgen repair pass (one Claude call per *distinct* stall, sim-verified, cached in the binding library). Rationale: keeps seed determinism and pays for each answer once. (4) Empirically verified this session: Spellbook `find-my-combos` returns per-card zone requirements, `manaNeeded`, easy/notable prerequisite split, and step text (richer than v3 assumed); per-deck cache keyed by deck hash works (Selvala list: 11 included combos, 142 almost-included, 50 distinct produces-features — all 11 resource-only, none directly lethal). (5) **Combo telemetry taxonomy + pilot-quality floors** — the §5 event log gains a normative combo/route event set (notably `combo_ignored` and `route_selected`/`route_rejected`: silence is never a valid record of a decision), §7 gains the extended funnel with hesitation metrics, and Gate 4 gains per-deck pilot-quality floors so a bad pilot is reported as a pilot problem, never silently read as a bad deck.
 
 **Date:** July 2026 · **Upstream:** Forge master; latest release forge-2.0.12 (Apr 2026); Java 17+; Maven; GPL-3.0.
 
@@ -109,6 +109,15 @@ Properties this preserves: seed determinism (no in-loop network), bounded cost (
 ### Gate 4 — Canary
 
 Before any large batch: 20 games of the exact pod configuration with full logging, auto-checked for: crash rate 0, timeout rate < 10%, every seat both won ≥0 and cast its commander in ≥90% of games (catches bootstrap/AI misconfig), event-log schema validation. `scripts/canary.sh` is the gate CI runs.
+
+**v3.2 — per-deck pilot-quality floors.** For every combo-aware seat, the canary additionally enforces acceptance criteria on the deck's *pilot*, so a bad pilot can never silently read as a bad deck:
+
+- route coverage clean (no `unroutable` win path, from Gate 3);
+- **conversion-when-ready floor**: across canary games, `line_entered` ≥ configured fraction of `combo_ready` games (default 0.5), and zero `combo_stalled` without a matching Gate 3.6 dump;
+- goldfish win-turn within the deck's expected bracket band (from deck-meta.yaml);
+- telemetry completeness: every ready-with-no-attempt decision point has a `combo_ignored` reason, every planner evaluation has `route_selected`/`route_rejected` events.
+
+A deck failing floors is marked `pilot_invalid` in the canary report with the failing metric named; the batch refuses to include its results in list-vs-list conclusions (it may still run for telemetry, clearly labeled). Floors are recorded in the run manifest so "which quality bar was this experiment run under" is always answerable.
 
 ### Gate 5 — Run manifest
 
@@ -282,6 +291,24 @@ public GameRecord runOne(RunConfig cfg, int gameIndex) {
 {"t":"game_end","turn":7,"winner_seat":0,"win_condition":"combo","combo_id":"csb-4131"}
 ```
 
+**v3.2 — combo/route telemetry taxonomy (normative).** The events above are the sketch; the full per-seat event set below is required output from `ComboAwareController` + LethalityPlanner. Design rule: **silence is never a valid record of a decision** — a ready combo that is not attempted MUST emit `combo_ignored`; a route the planner considers MUST emit `route_selected` or `route_rejected`. Absence of an event means "the situation never arose," and nothing else.
+
+| Event | Required fields (beyond turn/seat/phase) | Emitted when |
+|---|---|---|
+| `combo_state` | combo, distance, per-piece location | on zone-change/turn tick (distance trace) |
+| `combo_ready` | combo, window (sorcery-speed? combat available?), prereqs satisfied | tracker first reports distance 0 + prereqs OK this turn |
+| `combo_ignored` | combo, reason: `patience_gate` \| `no_viable_route` \| `validation_failed` \| `threat_assessment` \| `mana_reserved` | ready at a decision point but no line entered |
+| `line_entered` | combo, binding id, `attempted_via: binding \| generic_fallback`, entry phase | executor takes control |
+| `line_step` | stage, iteration | per executor step (sampled after N repeats) |
+| `line_aborted` | cause: `interaction` \| `validation` \| `engine_error`, piece lost | line ends without completing |
+| `combo_shortcut` | iterations proven, bounded product | loop shortcut engages |
+| `route_selected` | route, predicate values (projected alpha, table life, blocker buffer, haste source type, oracle guard) | planner commits to a win route |
+| `route_rejected` | route, failed predicate + values | each route evaluated and not chosen |
+| `combo_stalled` | binding, rejected routes, state hash, dump path | proven-infinite, no end state within N turns (Gate 3.6 input) |
+| `tutor_decision` | source, chosen, full ranking with per-candidate why | any search effect resolves |
+| `mulligan_decision` | keep/tuck, hand distance summary, reason | each mulligan checkpoint |
+| `game_end` | winner seat, win_condition, combo_id?, route? | always — full win attribution |
+
 ## 6. Combo layer — key classes
 
 ```java
@@ -407,7 +434,7 @@ public List<Ranked<Card>> rank(List<Card> legal, SeatView v, TrackerSnapshot sna
 - **Development:** commander cast turn; lands played vs. turns (missed-drop rate); mana spent / mana available per turn (efficiency curve); total own board power/toughness by turn.
 - **Velocity:** cards drawn per turn beyond the draw step; tutors resolved and their targets' categories; average hand size.
 - **Interaction:** removal/counters cast (count, timing, targets by seat); board wipes cast/suffered; times targeted by each opponent (threat-received index — a proxy for how the table perceives the deck).
-- **Combo:** the funnel (in-99 → assembled → attempted → resolved → won), distance-over-time traces, shortcut usage, lines aborted by validation vs. by interaction.
+- **Combo (v3.2 extended funnel):** in-99 → assembled → **ready** → attempted → resolved → **converted** → won, computed directly from the §5 taxonomy; each stage ratio localizes a failure class (low attempted/ready ⇒ patience gate or planner; low converted/resolved ⇒ routes/DEPLOY logic; low won/converted ⇒ protection/stack play). Derived metrics: **hesitation** (turns between first `combo_ready` and `line_entered`), **ready-but-never-attempted rate** (games with `combo_ready` and zero `line_entered`, broken down by `combo_ignored` reason), route-rejection distribution (which predicates fail most, from `route_rejected`), plus distance-over-time traces, shortcut usage, and aborts by cause.
 - **Outcome texture:** life totals over time; first-blood / first-eliminated rates; eliminations dealt.
 
 All computed from the JSONL streams by report/ reducers (report.py reference implementation; keep reducers pure functions over event lists so notebooks can reuse them).
@@ -453,6 +480,8 @@ All computed from the JSONL streams by report/ reducers (report.py reference imp
 - **RouteCoverageTest:** deck whose combos produce only unmapped features ⇒ Gate 3 emits `unroutable` flag + blocking warning; fully-mapped deck ⇒ every included combo lists ≥1 reachable route.
 - **OracleGuardTest:** infinite draw proven, no Thassa's/Lab Man-class effect in the 99 ⇒ DRAW_DECK_THEN_OVERKILL rejected by the planner (never attempted), BANK_AND_HOLD or another route chosen; with Thassa's Oracle present ⇒ ORACLE_WIN selected and game ends `WinsGameSpellEffect`.
 - **StallAutopsyTest:** forced stall (binding whose payoffs were removed from the deck) ⇒ `combo_stalled` logged with rejected-route trace, state dump written, deduped by state hash; batch mode makes zero network calls (autopsy consumes the dumps post-run, recorded-fixture LLM).
+- **TelemetryCompletenessTest:** scripted game where a combo is ready and deliberately not fired ⇒ exactly one `combo_ignored` with a valid reason enum per decision point; every LethalityPlanner evaluation emits `route_selected` or `route_rejected` with predicate values; a game with no combo activity emits none of these (no phantom events).
+- **PilotQualityFloorsTest:** canary fixture where a deck's conversion-when-ready falls below the floor ⇒ canary report marks the deck `pilot_invalid` naming the failing metric, and the batch runner excludes it from comparative stats while still recording telemetry; fixture above the floor ⇒ deck admitted.
 
 Every phase's definition-of-done = its exit criterion demonstrated by a committed script/test, not narrative.
 
