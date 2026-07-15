@@ -107,6 +107,9 @@ public final class BatchMain {
         Files.writeString(outDir.resolve("worker-config.json"),
                 MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(workerCfg));
 
+        System.out.println("run dir:  " + outDir);
+        System.out.println("live log: tail -f " + outDir.resolve("run.log"));
+
         // --- spawn the pool ---
         long started = System.currentTimeMillis();
         List<Process> pool = new ArrayList<>();
@@ -161,6 +164,7 @@ public final class BatchMain {
             System.out.printf("avg game: %.1fs  wall: %.1f min  throughput: %.0f games/hr on %d workers%n",
                     totalDur / 1000.0 / n, wallMs / 60000.0, n / (wallMs / 3600000.0), workers);
         }
+        System.out.println("human-readable log: " + outDir.resolve("run.log"));
         System.out.println("artifacts: " + outDir + "/{run-manifest.json,game-records.jsonl,events/,run.log}");
     }
 

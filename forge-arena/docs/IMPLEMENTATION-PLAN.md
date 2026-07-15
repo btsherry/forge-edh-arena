@@ -192,7 +192,9 @@ public GameRecord runOne(RunConfig cfg, int gameIndex) {
 
 ### Shipped CLI reference (v3.3 — Phase 1 as implemented)
 
-**`scripts/batch.sh <batch-config.json>`** — launches a batch. One positional argument: the config file (format below). Environment: `JAVA_HOME` (default `/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`). Behavior: resolves the runtime classpath via `mvn dependency:build-classpath` (cached at `forge-arena/target/classpath.txt`, regenerated when the pom is newer), then runs `forge.arena.harness.BatchMain` from the repo root. The orchestrator JVM is light (`-Xmx512m`); worker heap comes from the config. Monitor a running batch with `tail -f <out_dir>/run.log`.
+**`scripts/batch.sh <batch-config.json>`** — launches a batch. One positional argument: the config file (format below). Environment: `JAVA_HOME` (default `/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`). Behavior: resolves the runtime classpath via `mvn dependency:build-classpath` (cached at `forge-arena/target/classpath.txt`, regenerated when the pom is newer), then runs `forge.arena.harness.BatchMain` from the repo root. The orchestrator JVM is light (`-Xmx512m`); worker heap comes from the config.
+
+**The human-readable log lives at `<out_dir>/run.log`.** BatchMain prints its exact path (as a ready-to-copy `tail -f` line) at batch start, before workers spawn, and again in the completion summary — you never have to reconstruct it. Watch a running batch with `tail -f <out_dir>/run.log`; all workers append to this single file with `[wN gNNNN turn seat]`-prefixed lines at the default verbosity tier (game lifecycle + combo/route/tutor decisions).
 
 **`batch-config.json` fields** (this file is the batch's entire argument surface):
 
