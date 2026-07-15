@@ -1,0 +1,49 @@
+{
+  "results": {
+    "identity": "G",
+    "included": [
+      {
+        "id": "527-2816",
+        "status": "OK",
+        "uses": [
+          {"card": {"id": 2816, "name": "Umbral Mantle"}, "quantity": 1, "zoneLocations": ["B"], "mustBeCommander": false},
+          {"card": {"id": 527, "name": "Selvala, Heart of the Wilds"}, "quantity": 1, "zoneLocations": ["B"], "mustBeCommander": false}
+        ],
+        "requires": [],
+        "produces": [
+          {"feature": {"name": "Infinite colored mana"}},
+          {"feature": {"name": "Infinitely large creature until end of turn"}},
+          {"feature": {"name": "Infinite untap of creatures you control"}}
+        ],
+        "easyPrerequisites": "Umbral Mantle attached to Selvala.",
+        "notablePrerequisites": "Selvala does not have summoning sickness.",
+        "manaNeeded": "{2}{G} at most",
+        "description": "Activate Selvala by paying {G} and tapping it. Activate Selvala by paying {3} and untapping it. Repeat."
+      },
+      {
+        "id": "9999-1111",
+        "status": "OK",
+        "uses": [
+          {"card": {"id": 9999, "name": "Fake Pinger"}, "quantity": 1, "zoneLocations": ["B"]},
+          {"card": {"id": 1111, "name": "Fake Untapper"}, "quantity": 1, "zoneLocations": ["H"]}
+        ],
+        "produces": [
+          {"feature": {"name": "Infinite damage"}},
+          {"feature": {"name": "Infinite gremlin polkas"}}
+        ],
+        "description": "Ping repeatedly."
+      }
+    ],
+    "almostIncluded": [
+      {
+        "id": "215-527-876",
+        "uses": [
+          {"card": {"name": "Temur Sabertooth"}, "zoneLocations": ["B"]},
+          {"card": {"name": "Selvala, Heart of the Wilds"}, "zoneLocations": ["B"]},
+          {"card": {"name": "Lightning Greaves"}, "zoneLocations": ["B"]}
+        ],
+        "produces": [{"feature": {"name": "Infinite colored mana"}}]
+      }
+    ]
+  }
+}
