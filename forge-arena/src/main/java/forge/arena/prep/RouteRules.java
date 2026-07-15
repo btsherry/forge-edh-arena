@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  */
 public final class RouteRules {
 
-    public static final String VERSION = "win-routes/1";
+    public static final String VERSION = "win-routes/2";
 
     public record Verdict(String category, List<String> routes) {
     }
@@ -24,6 +24,10 @@ public final class RouteRules {
     private static final List<Rule> RULES = List.of(
             new Rule("can't lose the game|can’t lose the game", "GUARD"),
             new Rule("^draw the game$", "GUARD"),
+            // win-routes/2 (first Gate 3 feedback-loop amendment — flagged by the Urza dossier)
+            new Rule("prevent all damage that would be dealt to you", "GUARD"),
+            new Rule("protection from everything", "GUARD"),
+            new Rule("^lock$", "LOCK_DISRUPTION"),
             new Rule("damage to all players|lifeloss for all players|card draw for all players"
                     + "|draw triggers for all players|lifegain for all players", "TABLE_HAZARD"),
             new Rule("self-mill", "RESOURCE"),

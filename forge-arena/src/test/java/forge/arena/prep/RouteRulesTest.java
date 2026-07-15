@@ -41,6 +41,10 @@ public class RouteRulesTest {
         check("Destroy all permanents opponents control each turn", "LOCK_DISRUPTION");
         check("Infinite self-mill", "RESOURCE");
         check("Infinite gremlin polkas", "UNROUTABLE");
+        // win-routes/2 additions (from the Urza dossier's unroutable flags)
+        check("Prevent all damage that would be dealt to you", "GUARD");
+        check("You have protection from everything", "GUARD");
+        check("Lock", "LOCK_DISRUPTION");
     }
 
     @Test

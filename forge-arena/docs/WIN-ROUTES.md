@@ -38,7 +38,9 @@ Sketch fields: *converts* (feature classes that trigger consideration), *termina
 
 **Route selection order** is deck-contextual, not global: prefer same-turn terminal routes; among those, fewest additional cards needed, then least interactable (LIFELOSS_DRAIN > DIRECT_DAMAGE > combat routes). INFINITE_TURNS is a route of last resort when a same-turn route exists.
 
-## 2. Feature classification rules (`win-routes/1`)
+## 2. Feature classification rules (`win-routes/2`)
+
+*v2 amendment (2026-07-15, first Gate 3 feedback-loop entry — flagged `unroutable` by the real Urza dossier): `Prevent all damage that would be dealt to you` → GUARD; `You have protection from everything` (pattern `protection from everything`) → GUARD; the bare feature `Lock` → LOCK_DISRUPTION. Inserted after rule 2; numbering below unchanged for readability. Code form: `RouteRules.java` (kept in lockstep).*
 
 Ordered, first-match-wins, case-insensitive. Applied per deck to the `produces` features of **included** combos only. Categories: `WIN_TRIGGER`, `LETHAL`, `RESOURCE`, `GUARD`, `TABLE_HAZARD`, `BOARD_CONTROL`, `LOCK_DISRUPTION`, `CARD_CLASS`, `UNROUTABLE`.
 
