@@ -190,6 +190,38 @@ public GameRecord runOne(RunConfig cfg, int gameIndex) {
 
 **Timeouts as data:** games hitting any limit end as `result: "timeout_draw"` with the limiting factor recorded — never discarded (discarding biases against grindy decks, which matters when comparing your brews to stax/control netdecks).
 
+### Shipped CLI reference (v3.3 — Phase 1 as implemented)
+
+**`scripts/batch.sh <batch-config.json>`** — launches a batch. One positional argument: the config file (format below). Environment: `JAVA_HOME` (default `/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`). Behavior: resolves the runtime classpath via `mvn dependency:build-classpath` (cached at `forge-arena/target/classpath.txt`, regenerated when the pom is newer), then runs `forge.arena.harness.BatchMain` from the repo root. The orchestrator JVM is light (`-Xmx512m`); worker heap comes from the config. Monitor a running batch with `tail -f <out_dir>/run.log`.
+
+**`batch-config.json` fields** (this file is the batch's entire argument surface):
+
+| Field | Required | Default | Meaning |
+|---|---|---|---|
+| `run_id` | no | `run-<seed_base>-<games>` | manifest run id |
+| `seed_base` | **yes** | — | root seed; per-game seed = `Seeds.derive(seed_base, gameIndex)` |
+| `games` | **yes** | — | total games in the batch |
+| `workers` | no | 4 | worker JVM count (interleaved index stride: worker w plays w, w+W, w+2W…) |
+| `worker_heap` | no | `-Xmx2g` | per-worker JVM heap flag (plan W6) |
+| `out_dir` | **yes** | — | run directory; created if absent |
+| `assets_dir` | no | `../forge-gui` | forge-gui dir containing `res/` (explicit-path bootstrap) |
+| `rotation` | no | `latin_square_4` | seat rotation scheme (`latin_square_4` \| `fixed`) |
+| `limits.turns` | no | 30 | arena-side turn cap; `0` disables |
+| `limits.wall_clock_sec` | no | 600 | per-game wall clock (last-resort limit; must be > 0) |
+| `limits.priority_passes_per_turn` | no | 2000 | per-turn priority cap; `0` disables |
+| `seats[]` | **yes** (2–4) | — | pod in canonical (manifest) order |
+| `seats[].deck` | **yes** | — | path to a Commander `.dck` file |
+| `seats[].profile` | no | `Default` | AI personality: `Default` \| `Cautious` \| `Experimental` \| `Reckless` |
+| `seats[].simulation_ai` | no | false | per-seat lookahead AI (`AIOption.USE_SIMULATION`) |
+
+**Outputs in `out_dir`:** `run-manifest.json` (written FIRST, schema-validated — an invalid manifest aborts with exit 2 before any game runs), `worker-config.json` (resolved absolute paths for workers), `game-records.jsonl` (one `arena.game-record/1` line per game, atomic appends), `events/NNNNNN.jsonl` (per-game `arena.events/1` streams), `run.log` (human-tailable, `[wN gNNNN …]` lines), `worker-<N>.out` (per-worker stdout/stderr for debugging). Exit codes: `0` all workers clean, `1` ≥1 worker exited nonzero (crashed *games* are still exit 0 — they're records, not failures), `2` invalid manifest. A completion summary prints result counts, wins by deck, avg game time, and games/hour.
+
+**`scripts/smoke.sh`** — the CI gate (plan §11): no positional arguments. Environment overrides: `SMOKE_GAMES` (default 8), `SMOKE_WORKERS` (2), `SMOKE_TURNS` (10), `JAVA_HOME`. Behavior: builds the module chain and runs all forge-arena unit tests, then generates a temp batch config over the four baseline decks and runs the canary via `batch.sh`. Pass criteria: record count == `SMOKE_GAMES`, zero `crash` results, non-empty `run.log`. Prints `SMOKE PASS` and the run directory, exits nonzero on any failure.
+
+**Direct JVM entry points** (what the scripts wrap): `forge.arena.harness.BatchMain <batch-config.json>` — the orchestrator; `forge.arena.harness.WorkerMain <runDir> <workerId> <numWorkers>` — internal, spawned by BatchMain, reads `<runDir>/worker-config.json`; not intended for manual use except replaying one worker's slice for debugging.
+
+**Phase-1 exit run** (deferred; launch when ready): a config with `"games": 1000`, `"workers": 8` over the four baseline decks, then `bash forge-arena/scripts/batch.sh <config>` — expect ~3–4 h at baseline throughput; verify <2% timeout/crash and a seed replay afterward.
+
 ## 5. Prep artifacts — file examples
 
 **combos.json** (per deck; excerpt):
