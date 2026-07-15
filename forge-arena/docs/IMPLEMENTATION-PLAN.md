@@ -1,12 +1,14 @@
-# Forge EDH Arena — Implementation Plan v3.1
+# Forge EDH Arena — Implementation Plan v3.2
 
-> **Repo note (2026-07-15):** This is the master spec, authored in a planning session prior to implementation. T0 verification is complete — see [T0-VERIFICATION.md](T0-VERIFICATION.md) for confirmed/corrected class names (4 corrections, incl. no engine turn cap; arena-side limits required). Per §11: when this document and the Forge source disagree, the source wins, and this document gets updated in the same PR.
+> **Repo note (2026-07-15):** This is the master spec, authored in a planning session prior to implementation (as v3.1) and amended in-repo since. T0 verification is complete — see [T0-VERIFICATION.md](T0-VERIFICATION.md) for confirmed/corrected class names (4 corrections, incl. no engine turn cap; arena-side limits required). Per §11: when this document and the Forge source disagree, the source wins, and this document gets updated in the same PR.
 
 **Mission:** A headless, standalone engine on top of Card-Forge/forge that runs 4-player Commander pods with assignable AI per seat, at batch scale, to compare netdecks against user-designed decks with heavy statistical, qualitative, and play-pattern analysis — plus a combo-aware AI layer (per-deck prep, live tracking, deliberate execution, combo-directed tutoring).
 
 **This revision (v3):** adds concrete class designs, code and file-format examples, a unit/golden test suite, expanded pre-run preparation steps, a play-pattern & qualitative analytics spec, and a design response to every weakness identified in v2 §9.
 
 **v3.1 amendments (from the Selvala end-to-end trace):** (1) executor yield may come from a third bound permanent (Arbor Elf taps the Forest, not itself); (2) executors are stage-chained and phase-aware (Staff = mana loop → draw loop → deploy/win, entered in precombat main); (3) a LethalityPlanner decides how infinite resources convert to a win against three opponents; (4) Gate 3.5: LLM-generated binding files — a Claude API call at prep time parameterizes archetype bindings per newly-encountered combo, verified by sandbox simulation before use, cached in a global binding library so the approach scales to unbounded deck inflow.
+
+**v3.2 amendments (2026-07-15 session, post-T0 + Spellbook probe):** (1) **Win Routes spec** — docs/WIN-ROUTES.md defines the closed set of win-conversion routes (each terminating in an engine-enforced end state) plus versioned, deterministic feature-classification rules; LethalityPlanner's route enum is drawn from it, not hand-grown per trace. **Classification is per-deck, at preflight** (Gate 3): only the `produces` features actually appearing in that deck's included combos are classified, cache-first against a global feature→route mapping library — same amortization model as Gate 3.5 bindings; no global vocabulary sweeps. (2) **Gate 3 route-coverage report** — prep flags any `produces` feature in the deck's combos that the rules can't classify, before a batch runs. (3) **Gate 3.6 stall autopsy** — batches never call LLMs in-loop; instead, proven-infinite states that fail to convert within N turns are snapshotted and sent to a post-run bindgen repair pass (one Claude call per *distinct* stall, sim-verified, cached in the binding library). Rationale: keeps seed determinism and pays for each answer once. (4) Empirically verified this session: Spellbook `find-my-combos` returns per-card zone requirements, `manaNeeded`, easy/notable prerequisite split, and step text (richer than v3 assumed); per-deck cache keyed by deck hash works (Selvala list: 11 included combos, 142 almost-included, 50 distinct produces-features — all 11 resource-only, none directly lethal).
 
 **Date:** July 2026 · **Upstream:** Forge master; latest release forge-2.0.12 (Apr 2026); Java 17+; Maven; GPL-3.0.
 
@@ -82,6 +84,8 @@ Every card name must resolve in Forge's card DB; emit unimplemented-cards.txt pe
 
 As v2 §5: query the Commander Spellbook find-my-combos API once per deck, keyed by `deckHash = sha256(sorted oracle names + counts)`; snapshot raw JSON; transform to artifacts (§5). Reminder of the v2 semantic rule: runtime tutor/tracking data comes only from **included** combos ("almost included" = the piece is not in the 99 — deckbuilding advice only, emitted to a separate advisory report).
 
+**v3.2 — route-coverage report (per deck, at preflight).** Gate 3 additionally classifies each `produces` feature in the deck's included combos using the versioned rules in docs/WIN-ROUTES.md — **cache-first**: features classified for any earlier deck are library hits; only never-seen features run the rules (and, if unmatched, are flagged `unroutable` and queued for prep-time LLM classification via the Gate 3.5 machinery or human review). Output is `route-coverage.json`: each combo annotated with its reachable win routes and required payoff support from the 99. A deck whose combos are all unroutable gets a blocking warning — its win path is not expressible to the planner, so batch results would understate it. Empirical shape (verified 2026-07-15): Selvala list → 11 included combos, 50 distinct features, **all resource-only** (untap/mana/ETB/storm — none directly lethal); every win requires payoff conversion, which is exactly what the planner + route-coverage check exist to guarantee.
+
 ### Gate 3.5 — LLM-generated binding files (scales prep to unbounded deck inflow)
 
 Hand-authoring executor-bindings.json is the pipeline's manual bottleneck (§9 W1). Gate 3.5 automates it with a generate-and-verify loop against a Claude API call, built on one structural insight: **bindings are per-combo, not per-deck.** Spellbook combo variants carry stable IDs, so a binding is generated once, stored in a global content-addressed binding library keyed by (combo_variant_id, binding_schema_version), and every subsequent deck containing that combo is a cache hit. Generation volume is O(distinct new combos ever encountered), not O(decks) — and real decks concentrate heavily on the same few thousand combos, so the library converges fast.
@@ -95,6 +99,12 @@ Per new combo:
 Novel-archetype proposals go to a human review queue; the LLM never emits executable Java — it only parameterizes existing archetypes or files proposals. New archetypes remain hand-written, tested code.
 
 **Constraints:** bindgen/ runs only at prep time (the no-network-in-game-loop rule is unchanged); API key via environment variable; run manifests pin the binding-library version so batches are reproducible even as the library grows; a nightly batch job can pre-warm the library from popular-combo lists. Cost stays bounded and amortizes to ~zero for repeat combos.
+
+### Gate 3.6 — Stall autopsy (v3.2; runtime→prep feedback loop)
+
+The batch loop stays LLM-free, but its failures feed the next prep cycle. During a batch, if a seat **proves** infinite resources (loop shortcut fires) and the game does not reach an engine-enforced end state within N turns (default 2), the harness: (1) logs `combo_stalled` with the binding id, the LethalityPlanner's evaluated-and-rejected routes, and the reasons; (2) dumps the full game state (Forge `GameState` dump format) to `stalls/<state_hash>.txt`. Post-run, bindgen processes **distinct** stalled states (deduped by state hash → usually a handful per 10k games): one Claude API call per distinct stall, carrying the game state, the fired binding, the route catalog, and the rejection trace; the response is a repaired/extended binding or a proposed new route mapping — which passes the same schema → lint → sandbox-sim verification as Gate 3.5 before entering the library/catalog. The next batch converts those states deterministically.
+
+Properties this preserves: seed determinism (no in-loop network), bounded cost (one call per distinct failure mode, ever — same amortization argument as Gate 3.5), and monotonic improvement (the catalog grows from observed failures, not speculation). A `--dev-live-line` single-game mode MAY later allow an interactive Claude-driven line for debugging/authoring; it is never valid in batch mode and its games are never counted.
 
 ### Gate 4 — Canary
 
@@ -349,6 +359,8 @@ public WinRoute choose(SeatView v, InfiniteResources res) {
 
 SPREAD_COMBAT must verify damage assignment across three players (haste availability — Concordant Crossroads/Craterhoof — and each opponent's blockers), not just a raw total. COMMANDER_DAMAGE_SEQUENCE acknowledges it kills one player per combat and expects to survive a table turn — the planner weighs that against BANK_AND_HOLD.
 
+**v3.2 — WinRoute enum from the Win Routes spec.** The four routes above were a skeleton from one deck trace. The full enum is defined in docs/WIN-ROUTES.md, which specifies routes terminating in an engine-enforced end state and the per-deck classification rules that map a deck's `produces` features onto them (`LifeReachedZero`, `CommanderDamage`, `Poisoned`, `Milled`, `WinsGameSpellEffect` — the closed set verified in T0). Additional routes beyond the sketch: DIRECT_DAMAGE_LOOP, LIFELOSS_DRAIN, EXTRA_COMBATS (whole table in one turn — preferred over INFINITE_TURNS when available), INFINITE_TURNS (not shortcut-able; planner compresses to "lethal within K combats" with K bounded by table life), ORACLE_WIN (Thassa's Oracle / Lab Man class), FORCED_DRAW_OUT / MILL_OPPONENTS (mill alone doesn't kill — the empty-library *draw* does; usually costs a turn cycle), POISON_LOOP (10, not 40), STATIC_THRESHOLD (Simic Ascendancy class; win check at upkeep — must survive to it). The catalog also carries **guards** the planner must enforce: DRAW_DECK_THEN_OVERKILL without an oracle effect in deck is self-mill death (route rejected, not attempted); "Infinite lifegain" is a survivability resource, never a win-trigger; "Near-infinite X" features are bounded quantities, not proofs; any route spanning a turn cycle inherits wipe/removal risk priced via the patience knob.
+
 ```java
 // ai/ComboAwareController.java — the seam (extends stock AI, inert without artifacts)
 public class ComboAwareController extends PlayerControllerAi {
@@ -436,6 +448,12 @@ All computed from the JSONL streams by report/ reducers (report.py reference imp
 - **BindingGenerationVerificationTest:** recorded LLM fixture with a plausible but wrong binding (e.g., Staff untap_cost:{3}) ⇒ sim verification fails, repair retry runs, on second failure the combo lands detection-only; a hallucinated binding can never reach executable.
 - **BindingLibraryCacheTest:** second deck containing an already-bound combo ⇒ zero API calls, library hit, identical binding bytes.
 
+**v3.2 additions:**
+
+- **RouteCoverageTest:** deck whose combos produce only unmapped features ⇒ Gate 3 emits `unroutable` flag + blocking warning; fully-mapped deck ⇒ every included combo lists ≥1 reachable route.
+- **OracleGuardTest:** infinite draw proven, no Thassa's/Lab Man-class effect in the 99 ⇒ DRAW_DECK_THEN_OVERKILL rejected by the planner (never attempted), BANK_AND_HOLD or another route chosen; with Thassa's Oracle present ⇒ ORACLE_WIN selected and game ends `WinsGameSpellEffect`.
+- **StallAutopsyTest:** forced stall (binding whose payoffs were removed from the deck) ⇒ `combo_stalled` logged with rejected-route trace, state dump written, deduped by state hash; batch mode makes zero network calls (autopsy consumes the dumps post-run, recorded-fixture LLM).
+
 Every phase's definition-of-done = its exit criterion demonstrated by a committed script/test, not narrative.
 
 ## 9. Weakness remediations (v2 §9 → v3 design responses)
@@ -462,10 +480,13 @@ New prep-step protections added in v3 beyond the v2 list: legality lint with pin
 | 2 | Ingest + preflight gates 0–2 + canary script; assignable AI (profiles, sim toggle, goldfish, controller injection) | 4 target decks pass all gates; per-seat behavior differs in logs | 1.5 wks |
 | 3 | Prep pipeline gates 3+5: Spellbook client, cache, artifacts, schemas; ComboTracker detection-only + SeatView | Artifacts for all decks; distance traces in every log; inertness test green | 1.5–2 wks |
 | 3.5 | Bindgen: Claude API client, prompt assembly, static gates, sandbox-sim verifier, global binding library, repair loop | BindingGenerationVerificationTest + BindingLibraryCacheTest green; Selvala's combos auto-bound and sim-verified | 1–1.5 wks |
-| 4 | Executor archetypes in Java (staged LineExecutor, LethalityPlanner, yield-source support), line mode, shortcut, generic fallback + golden tests | All golden scenarios incl. v3.1 pass; Selvala wins via Mantle/Staff in live 4-player pods | 3–5 wks |
+| 3.6 | Stall autopsy: `combo_stalled` telemetry, state dumps, dedup, post-run repair pass reusing 3.5's verifier; Gate 3 route-coverage report | StallAutopsyTest + RouteCoverageTest green; a seeded stall round-trips to a repaired, sim-verified binding | 0.5–1 wk |
+| 4 | Executor archetypes in Java (staged LineExecutor, catalog-driven LethalityPlanner, yield-source support), line mode, shortcut, generic fallback + golden tests | All golden scenarios incl. v3.1/v3.2 pass; Selvala wins via Mantle/Staff in live 4-player pods | 3–5 wks |
 | 5 | TutorRanker, mulligan/discard integration; full analytics suite incl. narratives & autopsies; A/B evaluation | Measured lift w/ CIs; tutor audit ≥80%; analytics report generated end-to-end | 2.5–3 wks |
 
 ~4–5 months solo; Phase 4 still the riskiest estimate. Note the ordering dependency: Phase 3.5's sim verifier needs at least one working archetype executor, so implement TapForManaUntapLoop (Phase 4's first deliverable) before wiring the verification loop, then parallelize.
+
+The Win Routes spec (route definitions + classification rules) is a documentation artifact with no code dependencies — seeded immediately post-T0 (2026-07-15, this repo) so Phase 4's planner and executor contracts are designed against the full route set rather than grown per trace. Feature classification itself runs per deck at preflight (Gate 3, cache-first); the spec and mapping library are maintained thereafter by the Gate 3.5/3.6 feedback loops. No global combo/feature sweeps are part of any workflow.
 
 ## 11. Handoff notes for Claude Code
 
