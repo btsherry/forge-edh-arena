@@ -77,6 +77,18 @@ public class IngestIntegrationTest {
     }
 
     @Test
+    public void selvalaDossierPassesGate1Lint() throws Exception {
+        Path out = Files.createTempDirectory("arena-lint-real");
+        Ingest.Result r = Ingest.run(new Ingest.Spec(
+                Path.of("decks", "selvala-heart-of-the-wilds.dck"), "selvala-b3", out,
+                "homebrew", 3, null, null, null));
+        var lint = forge.arena.prep.DeckLint.run(r.dossierDir(),
+                Path.of("banlists", "commander-banlist.txt"));
+        assertTrue("real deck must lint clean, errors: " + lint.errors(), lint.pass());
+        assertEquals("2026-07-15-approx", lint.banlistVersion());
+    }
+
+    @Test
     public void plainListWithCommanderFlagIngests() throws Exception {
         Path out = Files.createTempDirectory("arena-ingest2");
         Path list = out.resolve("list.txt");

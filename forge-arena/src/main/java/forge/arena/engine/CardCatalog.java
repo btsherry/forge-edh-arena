@@ -31,7 +31,29 @@ public final class CardCatalog {
                 card.getName(),
                 String.valueOf(rules.getManaCost()),
                 String.valueOf(rules.getType()),
-                String.valueOf(rules.getColorIdentity()),
+                identityLetters(rules),
                 rules.getOracleText()));
+    }
+
+    /** Canonical WUBRG-order identity letters ("" = colorless) — lint does subset math on this. */
+    private static String identityLetters(CardRules rules) {
+        var ci = rules.getColorIdentity();
+        StringBuilder sb = new StringBuilder(5);
+        if (ci.hasWhite()) {
+            sb.append('W');
+        }
+        if (ci.hasBlue()) {
+            sb.append('U');
+        }
+        if (ci.hasBlack()) {
+            sb.append('B');
+        }
+        if (ci.hasRed()) {
+            sb.append('R');
+        }
+        if (ci.hasGreen()) {
+            sb.append('G');
+        }
+        return sb.toString();
     }
 }

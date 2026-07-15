@@ -1,0 +1,46 @@
+# version: 2026-07-15-approx
+# Commander banned list — PINNED data file (plan §3 Gate 1: bans change; the
+# run manifest records which version a batch used).
+# NOTE: seeded from model knowledge at project setup; VERIFY against the
+# official list (mtgcommander.net / WotC) and bump the version line when
+# updating. Lint is mechanism; this file is policy.
+Ancestral Recall
+Balance
+Biorhythm
+Black Lotus
+Chaos Orb
+Dockside Extortionist
+Emrakul, the Aeons Torn
+Erayo, Soratami Ascendant
+Falling Star
+Fastbond
+Flash
+Golos, Tireless Pilgrim
+Griselbrand
+Hullbreacher
+Iona, Shield of Emeria
+Jeweled Lotus
+Karakas
+Leovold, Emissary of Trest
+Library of Alexandria
+Limited Resources
+Lutri, the Spellchaser
+Mana Crypt
+Mox Emerald
+Mox Jet
+Mox Pearl
+Mox Ruby
+Mox Sapphire
+Nadu, Winged Wisdom
+Paradox Engine
+Primeval Titan
+Prophet of Kruphix
+Shahrazad
+Sundering Titan
+Sylvan Primordial
+Time Vault
+Time Walk
+Tinker
+Tolarian Academy
+Upheaval
+Yawgmoth's Bargain
