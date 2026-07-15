@@ -80,6 +80,8 @@ Name=Selvala Heart of the Wilds - Bracket 3
 
 100 cards inc. commander; singleton (basics exempt); color identity of every card ⊆ commander's; Commander banlist check against a pinned local banlist file (versioned — bans change; a run manifest must record which banlist it used). Errors block; warnings (e.g., >1 Game Changer count, for your bracket bookkeeping) annotate.
 
+**Deferred TO-DO (v3.3, down the road — explicitly NOT current work): Gate 1.5 bracket check.** Verify a deck's `expected_bracket` (deck-meta.yaml) against its actual contents: Game Changers count (pinned versioned list, same mechanism as the banlist), 2-card infinite combos present in the Spellbook data (cheap once Gate 3 artifacts exist), tutor density, extra-turn and mass-land-denial cards. Output: warnings + a computed bracket estimate in the dossier, so "bracket-3 brew vs bracket-3 netdecks" claims are checkable and the §7 sanity anchors (a B3 shouldn't beat cEDH 70/30) have data behind them. Slot after Gate 3 (it wants combo artifacts); revisit when Phase 3 lands.
+
 ### Gate 2 — Implementability preflight
 
 Every card name must resolve in Forge's card DB; emit unimplemented-cards.txt per deck. Then a goldfish compile: for each deck, run 3 solo games against a goldfish seat with a 12-turn cap, asserting no exceptions and that every castable card's script loads. This catches broken/missing card scripts before they poison a 10k-game batch. Netdecks with fresh set cards fail here most often — the report tells you whether to wait for upstream, patch a card script, or substitute.
