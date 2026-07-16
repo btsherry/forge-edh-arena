@@ -83,6 +83,9 @@ public final class EngineFacade {
         LimitEnforcer enforcer = new LimitEnforcer(game, limits);
         game.subscribeToEvents(enforcer);
         for (Object subscriber : extraSubscribers) {
+            if (subscriber instanceof GameAware aware) {
+                aware.onGameCreated(game);
+            }
             game.subscribeToEvents(subscriber);
         }
 

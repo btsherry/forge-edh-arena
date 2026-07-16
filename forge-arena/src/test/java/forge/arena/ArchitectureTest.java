@@ -29,4 +29,24 @@ public class ArchitectureTest {
                 .because("EngineFacade is the single import point for Forge internals (plan §4, W2)")
                 .check(arenaClasses);
     }
+
+    @Test
+    public void comboLayerMayTouchOnlySeatViewFromTheEngine() {
+        JavaClasses arenaClasses = new ClassFileImporter()
+                .withImportOption(new ImportOption.DoNotIncludeTests())
+                .importPackages("forge.arena");
+
+        noClasses()
+                .that().resideInAPackage("forge.arena.combo..")
+                .should().dependOnClassesThat(new com.tngtech.archunit.base.DescribedPredicate<>(
+                        "engine classes other than SeatView (the W8 read-model)") {
+                    @Override
+                    public boolean test(com.tngtech.archunit.core.domain.JavaClass input) {
+                        return input.getPackageName().startsWith("forge.arena.engine")
+                                && !input.getFullName().startsWith("forge.arena.engine.SeatView");
+                    }
+                })
+                .because("combo/ consumes SeatView ONLY — never Game, never the facade (plan §6/§9 W8)")
+                .check(arenaClasses);
+    }
 }
