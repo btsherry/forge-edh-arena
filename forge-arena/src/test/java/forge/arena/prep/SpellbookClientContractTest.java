@@ -65,19 +65,42 @@ public class SpellbookClientContractTest {
             return recorded;
         });
         assertEquals(1, calls.get());
-        assertEquals(2, r.included());
+        assertEquals(3, r.included());
         assertEquals(1, r.almostIncluded());
         assertEquals("unroutable_flagged", r.coverageStatus()); // "Infinite gremlin polkas"
         assertEquals(List.of("Infinite gremlin polkas"), r.unroutableFeatures());
 
         // combos.json validates + carries the Mantle combo details
         JsonNode combos = MAPPER.readTree(dir.resolve("combos.json").toFile());
-        assertTrue(schema("arena.combos.1.schema.json").validate(combos).isEmpty());
+        assertTrue("combos.json schema errors: " + schema("arena.combos.1.schema.json").validate(combos),
+                schema("arena.combos.1.schema.json").validate(combos).isEmpty());
         JsonNode mantle = combos.get("combos").get(0);
         assertEquals("527-2816", mantle.get("id").asText());
         assertEquals("battlefield", mantle.get("cards").get(0).get("zone_req").asText());
         assertEquals("{2}{G} at most", mantle.get("mana_needed").asText());
         assertTrue(mantle.get("steps").asText().contains("untapping"));
+        // commander identity from THIS deck's list (post-review): Selvala is card index 1
+        assertTrue(mantle.get("cards").get(1).get("commander").asBoolean());
+
+        // urza-style variant (post-review): template requires, card states, multi-zone, PU feature
+        JsonNode scepter = combos.get("combos").get(2);
+        assertEquals("4821-5261", scepter.get("id").asText());
+        assertEquals("exiled by Isochron Scepter", scepter.get("cards").get(0).get("state").asText());
+        assertEquals("untapped", scepter.get("cards").get(1).get("state").asText());
+        JsonNode nexus = scepter.get("cards").get(2);
+        assertEquals("hand", nexus.get("zone_req").asText());
+        assertEquals(3, nexus.get("zones").size());
+        assertEquals("library", nexus.get("zones").get(2).asText());
+        JsonNode template = scepter.get("template_requirements").get(0);
+        assertEquals("Permanent that can be cast using {C}", template.get("name").asText());
+        assertEquals("hand", template.get("zone_req").asText());
+        assertEquals(1234, scepter.get("popularity").asInt());
+        assertEquals("R", scepter.get("bracket_tag").asText());
+
+        // PU-status feature classified CARD_CLASS, never UNROUTABLE (doc rule 30)
+        JsonNode coverageScepter = MAPPER.readTree(dir.resolve("route-coverage.json").toFile())
+                .get("combos").get(2);
+        assertEquals("CARD_CLASS", coverageScepter.get("features").get(1).get("category").asText());
 
         // route coverage validates; Mantle combo is resources-only, pinger is direct win
         JsonNode coverage = MAPPER.readTree(dir.resolve("route-coverage.json").toFile());
@@ -101,7 +124,70 @@ public class SpellbookClientContractTest {
         ComboPrep.Result r = ComboPrep.run(dir, (url, body) -> {
             throw new IOException("network hit on cache!");
         });
-        assertEquals(2, r.included());
+        assertEquals(3, r.included());
+    }
+
+    @Test
+    public void cacheHitPreservesOriginalFetchDate() throws Exception {
+        Path dir = dossierWithFixture();
+        Files.writeString(dir.resolve("spellbook-raw.json"), fixture());
+        Files.writeString(dir.resolve("spellbook-raw.meta.json"),
+                "{\"fetched\": \"2026-01-01\", \"deck_hash\": \"d7498c0379debdfa\"}");
+        ComboPrep.run(dir, (url, body) -> {
+            throw new IOException("network hit on cache!");
+        });
+        JsonNode combos = MAPPER.readTree(dir.resolve("combos.json").toFile());
+        assertEquals("W5: snapshot date must be the FETCH date, not the run date",
+                "2026-01-01", combos.get("spellbook_snapshot").asText());
+    }
+
+    @Test
+    public void deckHashMismatchRefetchesInsteadOfServingStaleCombos() throws Exception {
+        Path dir = dossierWithFixture();
+        Files.writeString(dir.resolve("spellbook-raw.json"), "{\"results\": {\"included\": []}}");
+        Files.writeString(dir.resolve("spellbook-raw.meta.json"),
+                "{\"fetched\": \"2026-01-01\", \"deck_hash\": \"aaaaaaaaaaaaaaaa\"}");
+        AtomicInteger calls = new AtomicInteger();
+        String recorded = fixture();
+        ComboPrep.Result r = ComboPrep.run(dir, (url, body) -> {
+            calls.incrementAndGet();
+            return recorded;
+        });
+        assertEquals("changed deck must refetch", 1, calls.get());
+        assertEquals(3, r.included());
+    }
+
+    @Test(expectedExceptions = IOException.class,
+            expectedExceptionsMessageRegExp = ".*drift or corrupt cache.*")
+    public void cachedSnapshotWithoutResultsFailsLoudlyNotNpe() throws Exception {
+        Path dir = dossierWithFixture();
+        Files.writeString(dir.resolve("spellbook-raw.json"), "{\"totally\": \"different\"}");
+        Files.writeString(dir.resolve("spellbook-raw.meta.json"),
+                "{\"fetched\": \"2026-01-01\", \"deck_hash\": \"d7498c0379debdfa\"}");
+        SpellbookClient.fetchOrLoad(dir, (url, body) -> {
+            throw new IOException("should not fetch");
+        });
+    }
+
+    @Test
+    public void partnerCommandersBothLandInCommandersArray() throws Exception {
+        Path dir = Files.createTempDirectory("combo-prep-partners");
+        Map<String, Object> deckCards = Map.of(
+                "schema", "arena.deck-cards/1", "deck_id", "p",
+                "cards", List.of(
+                        Map.of("name", "Thrasios, Triton Hero", "qty", 1, "zone", "commander"),
+                        Map.of("name", "Tymna the Weaver", "qty", 1, "zone", "commander"),
+                        Map.of("name", "Sol Ring", "qty", 1, "zone", "main")),
+                "unresolved", List.of());
+        MAPPER.writeValue(dir.resolve("deck-cards.json").toFile(), deckCards);
+        Files.writeString(dir.resolve("dossier.json"),
+                "{\"deck_id\":\"p\",\"deck_hash\":\"bbbbbbbbbbbbbbbb\",\"status\":{},\"versions\":{}}");
+        SpellbookClient.fetchOrLoad(dir, (url, body) -> {
+            JsonNode b = MAPPER.readTree(body);
+            assertEquals(2, b.get("commanders").size());
+            assertEquals(1, b.get("main").size());
+            return "{\"results\": {\"included\": []}}";
+        });
     }
 
     @Test(expectedExceptions = IOException.class,

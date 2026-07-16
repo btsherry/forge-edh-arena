@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  */
 public final class RouteRules {
 
-    public static final String VERSION = "win-routes/2";
+    public static final String VERSION = "win-routes/3";
 
     public record Verdict(String category, List<String> routes) {
     }
@@ -34,9 +34,11 @@ public final class RouteRules {
             new Rule("win(s)? the game", "WIN_TRIGGER", "ORACLE_WIN", "STATIC_THRESHOLD"),
             new Rule("opponent(s)?.* loses the game", "WIN_TRIGGER", "SPELL_LOSE"),
             new Rule("poison|infect|toxic", "LETHAL", "POISON_LOOP"),
-            new Rule("damage to (all |most |some )?creatures", "BOARD_CONTROL"),
+            new Rule("damage to (all |most |some |each |any number of )?(target )?creatures?", "BOARD_CONTROL"),
             new Rule("infinite combat damage", "LETHAL", "COMBAT_DAMAGE"),
-            new Rule("infinite damage", "LETHAL", "DIRECT_DAMAGE_LOOP"),
+            // anchored (win-routes/3): scoped damage to non-player objects must not match
+            new Rule("infinite damage( to (one|most|each|all|target|any number of)? ?(opponent|player)s?)?$",
+                    "LETHAL", "DIRECT_DAMAGE_LOOP"),
             new Rule("infinite lifeloss", "LETHAL", "LIFELOSS_DRAIN"),
             new Rule("life total becomes (0|1)", "LETHAL", "SETUP_LETHAL"),
             new Rule("(infinite|near-infinite) mill", "LETHAL", "MILL_OPPONENTS"),
@@ -46,7 +48,8 @@ public final class RouteRules {
             new Rule("infinite combat (phase|step)s?", "LETHAL", "EXTRA_COMBATS"),
             new Rule("infinitely large|infinite (power|\\+1/\\+1 counters)", "RESOURCE",
                     "SPREAD_COMBAT", "COMMANDER_DMG_SEQUENCE"),
-            new Rule("infinite .*(token|copies)", "RESOURCE", "SPREAD_COMBAT"),
+            // \b guards against 'nontoken' (win-routes/3)
+            new Rule("infinite .*\\b(tokens?|copies)\\b", "RESOURCE", "SPREAD_COMBAT"),
             new Rule("infinite card draw$|draw (all|your).*librar|exile your library.*play",
                     "RESOURCE", "DECK_ACCESS"),
             new Rule("infinite draw triggers$", "RESOURCE"),
@@ -65,6 +68,18 @@ public final class RouteRules {
     }
 
     public static Verdict classify(String featureName) {
+        return classify(featureName, "");
+    }
+
+    /**
+     * Status-aware form (doc rule 30, win-routes/3): Spellbook feature status
+     * "PU" marks a card-class placeholder used for variant generation, not a
+     * runtime result — classified CARD_CLASS regardless of name.
+     */
+    public static Verdict classify(String featureName, String featureStatus) {
+        if ("PU".equals(featureStatus)) {
+            return new Verdict("CARD_CLASS", List.of());
+        }
         for (Rule rule : RULES) {
             if (rule.pattern().matcher(featureName).find()) {
                 return new Verdict(rule.category(), rule.routes());

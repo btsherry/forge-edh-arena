@@ -4,10 +4,11 @@
   "title": "Per-deck route coverage (Gate 3, v3.2)",
   "description": "Every produces-feature of the deck's included combos classified against the WIN-ROUTES rules (cache-first, per deck — no global sweeps). A deck whose combos are all unroutable gets a blocking warning.",
   "type": "object",
-  "required": ["schema", "deck_id", "win_routes_version", "combos", "unroutable_features", "status"],
+  "required": ["schema", "deck_id", "deck_hash", "win_routes_version", "combos", "unroutable_features", "status"],
   "properties": {
     "schema": { "const": "arena.route-coverage/1" },
     "deck_id": { "type": "string" },
+    "deck_hash": { "type": "string", "pattern": "^[0-9a-f]{8,64}$" },
     "win_routes_version": { "type": "string" },
     "combos": {
       "type": "array",
@@ -23,9 +24,10 @@
               "required": ["name", "category"],
               "properties": {
                 "name": { "type": "string" },
-                "category": { "enum": ["WIN_TRIGGER", "LETHAL", "RESOURCE", "GUARD", "TABLE_HAZARD", "BOARD_CONTROL", "LOCK_DISRUPTION", "UNROUTABLE"] },
+                "category": { "enum": ["WIN_TRIGGER", "LETHAL", "RESOURCE", "GUARD", "TABLE_HAZARD", "BOARD_CONTROL", "LOCK_DISRUPTION", "CARD_CLASS", "UNROUTABLE"] },
                 "routes": { "type": "array", "items": { "type": "string" } }
-              }
+              },
+              "additionalProperties": false
             }
           },
           "direct_win": { "type": "boolean", "description": "true when any feature is LETHAL or WIN_TRIGGER; false = resources only, payoff conversion required (the LethalityPlanner's job)." }

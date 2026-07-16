@@ -45,6 +45,26 @@ public class RouteRulesTest {
         check("Prevent all damage that would be dealt to you", "GUARD");
         check("You have protection from everything", "GUARD");
         check("Lock", "LOCK_DISRUPTION");
+        // win-routes/3: real vocab coverage widened
+        check("Infinite damage to one opponent", "LETHAL", "DIRECT_DAMAGE_LOOP");
+        check("Infinite damage to most opponents", "LETHAL", "DIRECT_DAMAGE_LOOP");
+        check("Near-infinite mill", "LETHAL", "MILL_OPPONENTS");
+        check("Infinite tapped creature tokens", "RESOURCE", "SPREAD_COMBAT");
+    }
+
+    @Test
+    public void winRoutes3RegressionFixes() {
+        // 'nontoken' must NOT hit the token rule (word boundary): untap rule wins, no SPREAD_COMBAT
+        RouteRules.Verdict v = RouteRules.classify("Infinite untap of nontoken creatures you control");
+        assertEquals("RESOURCE", v.category());
+        assertTrue("nontoken must not gain SPREAD_COMBAT via the token rule: " + v.routes(),
+                !v.routes().contains("SPREAD_COMBAT"));
+        // anchored damage rule: scoped non-player damage is BOARD_CONTROL, not player-lethal
+        assertEquals("BOARD_CONTROL",
+                RouteRules.classify("Infinite damage to each creature an opponent controls").category());
+        // doc rule 30: PU status = card-class placeholder regardless of name
+        assertEquals("CARD_CLASS", RouteRules.classify("Extra Turn Spell", "PU").category());
+        assertEquals("CARD_CLASS", RouteRules.classify("Infinite damage", "PU").category());
     }
 
     @Test

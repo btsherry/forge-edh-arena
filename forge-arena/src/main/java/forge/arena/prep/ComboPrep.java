@@ -2,8 +2,8 @@ package forge.arena.prep;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,7 +18,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * Gate 3 orchestration: raw Spellbook snapshot → combos.json (included only)
  * + advisory-combos.json (almost-included: deckbuilding advice, never runtime
  * data) + route-coverage.json (v3.2, per-deck classification via RouteRules).
- * Updates the dossier index.
+ * Updates the dossier index. Post-review (2026-07-16) the extraction carries
+ * template requirements, per-card states/zone alternatives, commander
+ * identity, popularity/bracketTag, and provenance-true snapshot dates.
  */
 public final class ComboPrep {
 
@@ -33,28 +35,76 @@ public final class ComboPrep {
 
     public static Result run(Path dossierDir, SpellbookClient.Fetcher fetcher) throws IOException {
         ObjectNode index = (ObjectNode) MAPPER.readTree(dossierDir.resolve("dossier.json").toFile());
-        JsonNode raw = SpellbookClient.fetchOrLoad(dossierDir, fetcher);
-        JsonNode results = raw.get("results");
-        String snapshotDate = LocalDate.now().toString();
+        SpellbookClient.Snapshot snapshot = SpellbookClient.fetchOrLoad(dossierDir, fetcher);
+        JsonNode results = snapshot.raw().get("results");
+
+        // commander identity comes from the deck, not from Spellbook's mustBeCommander
+        Set<String> commanderNames = new HashSet<>();
+        JsonNode deckCards = MAPPER.readTree(dossierDir.resolve("deck-cards.json").toFile());
+        for (JsonNode c : deckCards.get("cards")) {
+            if (c.get("zone").asText().equals("commander")) {
+                commanderNames.add(c.get("name").asText());
+            }
+        }
 
         // --- combos.json: included only ---
         List<Map<String, Object>> combos = new ArrayList<>();
         for (JsonNode v : iter(results.get("included"))) {
             Map<String, Object> combo = new LinkedHashMap<>();
-            String id = v.get("id").asText();
+            String id = requireText(v, "id", "variant");
             combo.put("id", id);
             combo.put("url", "https://commanderspellbook.com/combo/" + id + "/");
             List<Map<String, Object>> cards = new ArrayList<>();
             for (JsonNode use : iter(v.get("uses"))) {
-                Map<String, Object> card = new LinkedHashMap<>();
-                card.put("name", use.get("card").get("name").asText());
-                card.put("zone_req", zone(use.path("zoneLocations")));
-                if (use.path("mustBeCommander").asBoolean(false)) {
-                    card.put("must_be_commander", true);
+                JsonNode card = use.get("card");
+                if (card == null || !card.hasNonNull("name")) {
+                    throw new IOException("spellbook variant " + id
+                            + " uses[] entry lacks card.name (schema drift — W5)");
                 }
-                cards.add(card);
+                Map<String, Object> row = new LinkedHashMap<>();
+                String name = card.get("name").asText();
+                row.put("name", name);
+                List<String> zones = zones(use.path("zoneLocations"));
+                row.put("zone_req", zones.isEmpty() ? "unknown" : zones.get(0));
+                if (zones.size() > 1) {
+                    row.put("zones", zones);
+                }
+                String state = firstNonEmpty(use, "battlefieldCardState", "exileCardState",
+                        "graveyardCardState", "libraryCardState");
+                if (state != null) {
+                    row.put("state", state);
+                }
+                if (commanderNames.contains(name)) {
+                    row.put("commander", true);
+                }
+                if (use.path("mustBeCommander").asBoolean(false)) {
+                    row.put("must_be_commander", true);
+                }
+                cards.add(row);
             }
             combo.put("cards", cards);
+
+            // generic template pieces (e.g. "Permanent that can be cast using {C}")
+            List<Map<String, Object>> templates = new ArrayList<>();
+            for (JsonNode req : iter(v.get("requires"))) {
+                Map<String, Object> t = new LinkedHashMap<>();
+                JsonNode template = req.path("template");
+                t.put("name", template.path("name").asText("unknown requirement"));
+                if (template.hasNonNull("scryfallQuery")) {
+                    t.put("scryfall_query", template.get("scryfallQuery").asText());
+                }
+                List<String> tz = zones(req.path("zoneLocations"));
+                t.put("zone_req", tz.isEmpty() ? "unknown" : tz.get(0));
+                if (tz.size() > 1) {
+                    t.put("zones", tz);
+                }
+                t.put("quantity", req.path("quantity").asInt(1));
+                templates.add(t);
+            }
+            if (!templates.isEmpty()) {
+                combo.put("template_requirements", templates);
+            }
+
             if (v.hasNonNull("manaNeeded") && !v.get("manaNeeded").asText().isEmpty()) {
                 combo.put("mana_needed", v.get("manaNeeded").asText());
             }
@@ -71,7 +121,13 @@ public final class ComboPrep {
             if (v.hasNonNull("description")) {
                 combo.put("steps", v.get("description").asText());
             }
-            combo.put("produces", featureNames(v));
+            if (v.hasNonNull("popularity")) {
+                combo.put("popularity", v.get("popularity").asInt());
+            }
+            if (v.hasNonNull("bracketTag") && !v.get("bracketTag").asText().isEmpty()) {
+                combo.put("bracket_tag", v.get("bracketTag").asText());
+            }
+            combo.put("produces", featureList(v).stream().map(f -> f.name).toList());
             combos.add(combo);
         }
 
@@ -79,7 +135,7 @@ public final class ComboPrep {
         combosJson.put("schema", "arena.combos/1");
         combosJson.put("deck_id", index.get("deck_id").asText());
         combosJson.put("deck_hash", index.get("deck_hash").asText());
-        combosJson.put("spellbook_snapshot", snapshotDate);
+        combosJson.put("spellbook_snapshot", snapshot.fetchedDate());
         combosJson.put("combos", combos);
         MAPPER.writerWithDefaultPrettyPrinter()
                 .writeValue(dossierDir.resolve("combos.json").toFile(), combosJson);
@@ -88,11 +144,11 @@ public final class ComboPrep {
         List<Map<String, Object>> advisory = new ArrayList<>();
         for (JsonNode v : iter(results.get("almostIncluded"))) {
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", v.get("id").asText());
+            row.put("id", v.path("id").asText("?"));
             List<String> cards = new ArrayList<>();
-            iter(v.get("uses")).forEach(u -> cards.add(u.get("card").get("name").asText()));
+            iter(v.get("uses")).forEach(u -> cards.add(u.path("card").path("name").asText("?")));
             row.put("cards", cards);
-            row.put("produces", featureNames(v));
+            row.put("produces", featureList(v).stream().map(f -> f.name).toList());
             advisory.add(row);
         }
         Map<String, Object> advisoryJson = Map.of(
@@ -105,15 +161,13 @@ public final class ComboPrep {
         // --- route-coverage.json (v3.2) ---
         Set<String> unroutable = new LinkedHashSet<>();
         List<Map<String, Object>> coverageRows = new ArrayList<>();
-        for (Map<String, Object> combo : combos) {
+        for (JsonNode v : iter(results.get("included"))) {
             List<Map<String, Object>> features = new ArrayList<>();
             boolean directWin = false;
-            @SuppressWarnings("unchecked")
-            List<String> produces = (List<String>) combo.get("produces");
-            for (String feature : produces) {
-                RouteRules.Verdict verdict = RouteRules.classify(feature);
+            for (Feature feature : featureList(v)) {
+                RouteRules.Verdict verdict = RouteRules.classify(feature.name, feature.status);
                 Map<String, Object> row = new LinkedHashMap<>();
-                row.put("name", feature);
+                row.put("name", feature.name);
                 row.put("category", verdict.category());
                 if (!verdict.routes().isEmpty()) {
                     row.put("routes", verdict.routes());
@@ -123,11 +177,11 @@ public final class ComboPrep {
                     directWin = true;
                 }
                 if (verdict.category().equals("UNROUTABLE")) {
-                    unroutable.add(feature);
+                    unroutable.add(feature.name);
                 }
             }
             Map<String, Object> cRow = new LinkedHashMap<>();
-            cRow.put("id", combo.get("id"));
+            cRow.put("id", requireText(v, "id", "variant"));
             cRow.put("features", features);
             cRow.put("direct_win", directWin);
             coverageRows.add(cRow);
@@ -136,6 +190,7 @@ public final class ComboPrep {
         Map<String, Object> coverageJson = new LinkedHashMap<>();
         coverageJson.put("schema", "arena.route-coverage/1");
         coverageJson.put("deck_id", index.get("deck_id").asText());
+        coverageJson.put("deck_hash", index.get("deck_hash").asText());
         coverageJson.put("win_routes_version", RouteRules.VERSION);
         coverageJson.put("combos", coverageRows);
         coverageJson.put("unroutable_features", new ArrayList<>(unroutable));
@@ -145,7 +200,7 @@ public final class ComboPrep {
 
         // --- dossier index ---
         ((ObjectNode) index.get("status")).put("route_coverage", status);
-        ((ObjectNode) index.get("versions")).put("spellbook_snapshot", snapshotDate);
+        ((ObjectNode) index.get("versions")).put("spellbook_snapshot", snapshot.fetchedDate());
         ((ObjectNode) index.get("versions")).put("win_routes", RouteRules.VERSION);
         MAPPER.writerWithDefaultPrettyPrinter()
                 .writeValue(dossierDir.resolve("dossier.json").toFile(), index);
@@ -153,28 +208,55 @@ public final class ComboPrep {
         return new Result(combos.size(), advisory.size(), status, new ArrayList<>(unroutable));
     }
 
-    private static List<String> featureNames(JsonNode variant) {
-        List<String> names = new ArrayList<>();
-        for (JsonNode p : iter(variant.get("produces"))) {
-            JsonNode f = p.get("feature");
-            names.add(f != null && f.has("name") ? f.get("name").asText() : p.path("name").asText());
-        }
-        return names;
+    private record Feature(String name, String status) {
     }
 
-    private static String zone(JsonNode zoneLocations) {
-        if (zoneLocations != null && zoneLocations.isArray() && zoneLocations.size() > 0) {
-            switch (zoneLocations.get(0).asText()) {
-                case "B": return "battlefield";
-                case "H": return "hand";
-                case "C": return "command";
-                case "G": return "graveyard";
-                case "L": return "library";
-                case "E": return "exile";
-                default: break;
+    private static List<Feature> featureList(JsonNode variant) {
+        List<Feature> features = new ArrayList<>();
+        for (JsonNode p : iter(variant.get("produces"))) {
+            JsonNode f = p.get("feature");
+            if (f != null && f.hasNonNull("name")) {
+                features.add(new Feature(f.get("name").asText(), f.path("status").asText("")));
+            } else if (p.hasNonNull("name")) {
+                features.add(new Feature(p.get("name").asText(), ""));
             }
         }
-        return "unknown";
+        return features;
+    }
+
+    private static String requireText(JsonNode node, String field, String what) throws IOException {
+        if (!node.hasNonNull(field)) {
+            throw new IOException("spellbook " + what + " lacks '" + field + "' (schema drift — W5)");
+        }
+        return node.get(field).asText();
+    }
+
+    private static String firstNonEmpty(JsonNode node, String... fields) {
+        for (String f : fields) {
+            String v = node.path(f).asText("");
+            if (!v.isEmpty()) {
+                return v;
+            }
+        }
+        return null;
+    }
+
+    private static List<String> zones(JsonNode zoneLocations) {
+        List<String> out = new ArrayList<>();
+        if (zoneLocations != null && zoneLocations.isArray()) {
+            for (JsonNode z : zoneLocations) {
+                switch (z.asText()) {
+                    case "B": out.add("battlefield"); break;
+                    case "H": out.add("hand"); break;
+                    case "C": out.add("command"); break;
+                    case "G": out.add("graveyard"); break;
+                    case "L": out.add("library"); break;
+                    case "E": out.add("exile"); break;
+                    default: out.add("unknown"); break;
+                }
+            }
+        }
+        return out;
     }
 
     private static Iterable<JsonNode> iter(JsonNode node) {
@@ -183,9 +265,21 @@ public final class ComboPrep {
 
     /** CLI: {@code ComboPrep <dossier-dir> [--offline]} — offline requires an existing snapshot. */
     public static void main(String[] args) throws Exception {
-        boolean offline = args.length > 1 && args[1].equals("--offline");
+        if (args.length < 1) {
+            System.err.println("usage: ComboPrep <dossier-dir> [--offline]");
+            System.exit(2);
+        }
+        boolean offline = false;
+        for (int i = 1; i < args.length; i++) {
+            if (args[i].equals("--offline")) {
+                offline = true;
+            } else {
+                System.err.println("unknown option: " + args[i]);
+                System.exit(2);
+            }
+        }
         SpellbookClient.Fetcher fetcher = offline
-                ? (url, body) -> { throw new IOException("offline mode and no cached snapshot"); }
+                ? (url, body) -> { throw new IOException("offline mode and no usable cached snapshot"); }
                 : SpellbookClient.httpFetcher();
         Result r = run(Path.of(args[0]), fetcher);
         System.out.println("combos: " + r.included() + " included, " + r.almostIncluded()

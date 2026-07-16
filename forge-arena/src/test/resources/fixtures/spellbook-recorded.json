@@ -32,6 +32,31 @@
           {"feature": {"name": "Infinite gremlin polkas"}}
         ],
         "description": "Ping repeatedly."
+      },
+      {
+        "id": "4821-5261",
+        "status": "OK",
+        "popularity": 1234,
+        "bracketTag": "R",
+        "uses": [
+          {"card": {"id": 4821, "name": "Dramatic Reversal"}, "quantity": 1, "zoneLocations": ["E"],
+           "exileCardState": "exiled by Isochron Scepter", "battlefieldCardState": "",
+           "graveyardCardState": "", "libraryCardState": ""},
+          {"card": {"id": 5261, "name": "Isochron Scepter"}, "quantity": 1, "zoneLocations": ["B"],
+           "battlefieldCardState": "untapped", "exileCardState": "", "graveyardCardState": "",
+           "libraryCardState": ""},
+          {"card": {"id": 1367, "name": "Nexus of Fate"}, "quantity": 1, "zoneLocations": ["H", "G", "L"]}
+        ],
+        "requires": [
+          {"template": {"name": "Permanent that can be cast using {C}",
+                        "scryfallQuery": "mv<=1 (mana={0} or mana={C}) is:permanent"},
+           "zoneLocations": ["H"], "quantity": 1}
+        ],
+        "produces": [
+          {"feature": {"name": "Infinite colored mana", "status": "S"}},
+          {"feature": {"name": "Extra Turn Spell", "status": "PU"}}
+        ],
+        "description": "Activate the Scepter, untap with the copy, repeat."
       }
     ],
     "almostIncluded": [

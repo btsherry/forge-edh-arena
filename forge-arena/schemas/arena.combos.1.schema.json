@@ -26,9 +26,29 @@
               "required": ["name", "zone_req"],
               "properties": {
                 "name": { "type": "string" },
-                "zone_req": { "enum": ["battlefield", "hand", "command", "graveyard", "library", "exile", "unknown"] },
+                "zone_req": { "$ref": "#/$defs/zone" },
+                "zones": { "type": "array", "items": { "$ref": "#/$defs/zone" }, "minItems": 2, "description": "All acceptable zones when the piece works from more than one; zone_req is the first." },
+                "state": { "type": "string", "description": "Required card state within its zone (e.g. 'exiled by Isochron Scepter', 'attached to a creature you control') — a detection predicate, not decoration." },
+                "commander": { "type": "boolean", "description": "This piece is THIS deck's commander (command-zone reachability)." },
                 "must_be_commander": { "type": "boolean" }
-              }
+              },
+              "additionalProperties": false
+            }
+          },
+          "template_requirements": {
+            "type": "array",
+            "description": "Generic unnamed pieces the combo needs beyond the named cards (Spellbook 'requires'). A combo with entries here is NOT fully specified by its cards array.",
+            "items": {
+              "type": "object",
+              "required": ["name", "zone_req", "quantity"],
+              "properties": {
+                "name": { "type": "string" },
+                "scryfall_query": { "type": "string" },
+                "zone_req": { "$ref": "#/$defs/zone" },
+                "zones": { "type": "array", "items": { "$ref": "#/$defs/zone" }, "minItems": 2 },
+                "quantity": { "type": "integer", "minimum": 1 }
+              },
+              "additionalProperties": false
             }
           },
           "mana_needed": { "type": "string" },
@@ -37,13 +57,20 @@
             "properties": {
               "easy": { "type": "string" },
               "notable": { "type": "string" }
-            }
+            },
+            "additionalProperties": false
           },
           "steps": { "type": "string" },
+          "popularity": { "type": "integer", "description": "Spellbook popularity — raw input for §5 quality derivation." },
+          "bracket_tag": { "type": "string", "description": "Spellbook bracket tag — Gate 1.5 input." },
           "produces": { "type": "array", "items": { "type": "string" } }
-        }
+        },
+        "additionalProperties": false
       }
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "zone": { "enum": ["battlefield", "hand", "command", "graveyard", "library", "exile", "unknown"] }
+  }
 }

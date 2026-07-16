@@ -309,6 +309,8 @@ public GameRecord runOne(RunConfig cfg, int gameIndex) {
 }
 ```
 
+*v3.3 as-built note (PR-10 + 2026-07-16 review): the shipped `arena.combos/1` differs from the sketch above — prerequisites are the API's `easy`/`notable` prose plus structured `mana_needed` (the TYPED prerequisites array with `UNPARSED` fallback is a Phase-4 deliverable alongside PrereqEvaluator; raw text is preserved so parsing needs no refetch); `quality` is deferred (raw Spellbook `popularity` is captured per combo as its input) and `playable_in_forge` lands with Gate-2 integration in arena prep v1. Post-review additions beyond the sketch: `template_requirements` (generic unnamed pieces — a combo with entries here is NOT fully specified by named cards), per-card `state` (e.g. "exiled by Isochron Scepter"), `zones` alternatives, per-card `commander` flag (command-zone reachability), and `bracket_tag`. The route-coverage deck-level layer (payoff support from the 99, all-unroutable blocking, oracle/lock guards) ships with arena prep v1 — the current per-feature file is the classification layer only.*
+
 **tutor-priorities.json:**
 
 ```json

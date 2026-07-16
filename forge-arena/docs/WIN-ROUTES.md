@@ -38,9 +38,11 @@ Sketch fields: *converts* (feature classes that trigger consideration), *termina
 
 **Route selection order** is deck-contextual, not global: prefer same-turn terminal routes; among those, fewest additional cards needed, then least interactable (LIFELOSS_DRAIN > DIRECT_DAMAGE > combat routes). INFINITE_TURNS is a route of last resort when a same-turn route exists.
 
-## 2. Feature classification rules (`win-routes/2`)
+## 2. Feature classification rules (`win-routes/3`)
 
 *v2 amendment (2026-07-15, first Gate 3 feedback-loop entry — flagged `unroutable` by the real Urza dossier): `Prevent all damage that would be dealt to you` → GUARD; `You have protection from everything` (pattern `protection from everything`) → GUARD; the bare feature `Lock` → LOCK_DISRUPTION. Inserted after rule 2; numbering below unchanged for readability. Code form: `RouteRules.java` (kept in lockstep).*
+
+*v3 amendment (2026-07-16, from the PR-10 adversarial review): (a) rule 19's token pattern gains a word boundary — `infinite .*\b(tokens?|copies)\b` — so `nontoken` features no longer match it; (b) rule 10 is anchored in code exactly as this table always specified (`infinite damage( to …(opponent|player)s?)?$` with `one|most|each|all|target|any number of` scopes), so scoped non-player damage falls to BOARD_CONTROL/UNROUTABLE instead of reading as player-lethal; (c) rule 8 widens to `damage to (all |most |some |each |any number of )?(target )?creatures?`; (d) rule 28's alternation includes `blood` (present in code since v1, previously undocumented here); (e) rules 11/13's "(opponent-scoped)" annotations are dropped — the code has always matched any scope, and the symmetric variants are caught earlier by rule 3; (f) **rule 30 is now implemented**: `classify(name, status)` returns CARD_CLASS for Spellbook feature status `PU` regardless of name (the status field IS present in find-my-combos `produces[].feature`), and CARD_CLASS joins the route-coverage schema's category enum.*
 
 Ordered, first-match-wins, case-insensitive. Applied per deck to the `produces` features of **included** combos only. Categories: `WIN_TRIGGER`, `LETHAL`, `RESOURCE`, `GUARD`, `TABLE_HAZARD`, `BOARD_CONTROL`, `LOCK_DISRUPTION`, `CARD_CLASS`, `UNROUTABLE`.
 
