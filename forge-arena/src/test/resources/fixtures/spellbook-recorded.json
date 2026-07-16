@@ -1,74 +1,214 @@
 {
-  "results": {
-    "identity": "G",
-    "included": [
-      {
-        "id": "527-2816",
-        "status": "OK",
-        "uses": [
-          {"card": {"id": 2816, "name": "Umbral Mantle"}, "quantity": 1, "zoneLocations": ["B"], "mustBeCommander": false},
-          {"card": {"id": 527, "name": "Selvala, Heart of the Wilds"}, "quantity": 1, "zoneLocations": ["B"], "mustBeCommander": false}
-        ],
-        "requires": [],
-        "produces": [
-          {"feature": {"name": "Infinite colored mana"}},
-          {"feature": {"name": "Infinitely large creature until end of turn"}},
-          {"feature": {"name": "Infinite untap of creatures you control"}}
-        ],
-        "easyPrerequisites": "Umbral Mantle attached to Selvala.",
-        "notablePrerequisites": "Selvala does not have summoning sickness.",
-        "manaNeeded": "{2}{G} at most",
-        "description": "Activate Selvala by paying {G} and tapping it. Activate Selvala by paying {3} and untapping it. Repeat."
+ "results": {
+  "identity": "G",
+  "included": [
+   {
+    "id": "527-2816",
+    "status": "OK",
+    "uses": [
+     {
+      "card": {
+       "id": 2816,
+       "name": "Umbral Mantle"
       },
-      {
-        "id": "9999-1111",
-        "status": "OK",
-        "uses": [
-          {"card": {"id": 9999, "name": "Fake Pinger"}, "quantity": 1, "zoneLocations": ["B"]},
-          {"card": {"id": 1111, "name": "Fake Untapper"}, "quantity": 1, "zoneLocations": ["H"]}
-        ],
-        "produces": [
-          {"feature": {"name": "Infinite damage"}},
-          {"feature": {"name": "Infinite gremlin polkas"}}
-        ],
-        "description": "Ping repeatedly."
+      "quantity": 1,
+      "zoneLocations": [
+       "B"
+      ],
+      "mustBeCommander": false
+     },
+     {
+      "card": {
+       "id": 527,
+       "name": "Selvala, Heart of the Wilds"
       },
-      {
-        "id": "4821-5261",
-        "status": "OK",
-        "popularity": 1234,
-        "bracketTag": "R",
-        "uses": [
-          {"card": {"id": 4821, "name": "Dramatic Reversal"}, "quantity": 1, "zoneLocations": ["E"],
-           "exileCardState": "exiled by Isochron Scepter", "battlefieldCardState": "",
-           "graveyardCardState": "", "libraryCardState": ""},
-          {"card": {"id": 5261, "name": "Isochron Scepter"}, "quantity": 1, "zoneLocations": ["B"],
-           "battlefieldCardState": "untapped", "exileCardState": "", "graveyardCardState": "",
-           "libraryCardState": ""},
-          {"card": {"id": 1367, "name": "Nexus of Fate"}, "quantity": 1, "zoneLocations": ["H", "G", "L"]}
-        ],
-        "requires": [
-          {"template": {"name": "Permanent that can be cast using {C}",
-                        "scryfallQuery": "mv<=1 (mana={0} or mana={C}) is:permanent"},
-           "zoneLocations": ["H"], "quantity": 1}
-        ],
-        "produces": [
-          {"feature": {"name": "Infinite colored mana", "status": "S"}},
-          {"feature": {"name": "Extra Turn Spell", "status": "PU"}}
-        ],
-        "description": "Activate the Scepter, untap with the copy, repeat."
-      }
+      "quantity": 1,
+      "zoneLocations": [
+       "B"
+      ],
+      "mustBeCommander": false
+     }
     ],
-    "almostIncluded": [
-      {
-        "id": "215-527-876",
-        "uses": [
-          {"card": {"name": "Temur Sabertooth"}, "zoneLocations": ["B"]},
-          {"card": {"name": "Selvala, Heart of the Wilds"}, "zoneLocations": ["B"]},
-          {"card": {"name": "Lightning Greaves"}, "zoneLocations": ["B"]}
-        ],
-        "produces": [{"feature": {"name": "Infinite colored mana"}}]
+    "requires": [],
+    "produces": [
+     {
+      "feature": {
+       "name": "Infinite colored mana"
       }
+     },
+     {
+      "feature": {
+       "name": "Infinitely large creature until end of turn"
+      }
+     },
+     {
+      "feature": {
+       "name": "Infinite untap of creatures you control"
+      }
+     },
+     {
+      "feature": {
+       "name": "Infinite card draw"
+      }
+     }
+    ],
+    "easyPrerequisites": "Umbral Mantle attached to Selvala.",
+    "notablePrerequisites": "Selvala does not have summoning sickness.",
+    "manaNeeded": "{2}{G} at most",
+    "description": "Activate Selvala by paying {G} and tapping it. Activate Selvala by paying {3} and untapping it. Repeat."
+   },
+   {
+    "id": "9999-1111",
+    "status": "OK",
+    "uses": [
+     {
+      "card": {
+       "id": 9999,
+       "name": "Fake Pinger"
+      },
+      "quantity": 1,
+      "zoneLocations": [
+       "B"
+      ]
+     },
+     {
+      "card": {
+       "id": 1111,
+       "name": "Fake Untapper"
+      },
+      "quantity": 1,
+      "zoneLocations": [
+       "H"
+      ]
+     }
+    ],
+    "produces": [
+     {
+      "feature": {
+       "name": "Infinite damage"
+      }
+     },
+     {
+      "feature": {
+       "name": "Infinite gremlin polkas"
+      }
+     }
+    ],
+    "description": "Ping repeatedly."
+   },
+   {
+    "id": "4821-5261",
+    "status": "OK",
+    "popularity": 1234,
+    "bracketTag": "R",
+    "uses": [
+     {
+      "card": {
+       "id": 4821,
+       "name": "Dramatic Reversal"
+      },
+      "quantity": 1,
+      "zoneLocations": [
+       "E"
+      ],
+      "exileCardState": "exiled by Isochron Scepter",
+      "battlefieldCardState": "",
+      "graveyardCardState": "",
+      "libraryCardState": ""
+     },
+     {
+      "card": {
+       "id": 5261,
+       "name": "Isochron Scepter"
+      },
+      "quantity": 1,
+      "zoneLocations": [
+       "B"
+      ],
+      "battlefieldCardState": "untapped",
+      "exileCardState": "",
+      "graveyardCardState": "",
+      "libraryCardState": ""
+     },
+     {
+      "card": {
+       "id": 1367,
+       "name": "Nexus of Fate"
+      },
+      "quantity": 1,
+      "zoneLocations": [
+       "H",
+       "G",
+       "L"
+      ]
+     }
+    ],
+    "requires": [
+     {
+      "template": {
+       "name": "Permanent that can be cast using {C}",
+       "scryfallQuery": "mv<=1 (mana={0} or mana={C}) is:permanent"
+      },
+      "zoneLocations": [
+       "H"
+      ],
+      "quantity": 1
+     }
+    ],
+    "produces": [
+     {
+      "feature": {
+       "name": "Infinite colored mana",
+       "status": "S"
+      }
+     },
+     {
+      "feature": {
+       "name": "Extra Turn Spell",
+       "status": "PU"
+      }
+     }
+    ],
+    "description": "Activate the Scepter, untap with the copy, repeat."
+   }
+  ],
+  "almostIncluded": [
+   {
+    "id": "215-527-876",
+    "uses": [
+     {
+      "card": {
+       "name": "Temur Sabertooth"
+      },
+      "zoneLocations": [
+       "B"
+      ]
+     },
+     {
+      "card": {
+       "name": "Selvala, Heart of the Wilds"
+      },
+      "zoneLocations": [
+       "B"
+      ]
+     },
+     {
+      "card": {
+       "name": "Lightning Greaves"
+      },
+      "zoneLocations": [
+       "B"
+      ]
+     }
+    ],
+    "produces": [
+     {
+      "feature": {
+       "name": "Infinite colored mana"
+      }
+     }
     ]
-  }
+   }
+  ]
+ }
 }

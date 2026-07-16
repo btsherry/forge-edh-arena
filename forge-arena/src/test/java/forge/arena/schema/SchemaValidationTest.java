@@ -47,6 +47,8 @@ public class SchemaValidationTest {
                 { "arena.game-record.1.schema.json", "game-record-win-valid.json" },
                 { "arena.game-record.1.schema.json", "game-record-timeout-valid.json" },
                 { "arena.dossier.1.schema.json", "dossier-valid.json" },
+                { "arena.route-coverage.2.schema.json", "route-coverage-valid.json" },
+                { "arena.tutor-priorities.1.schema.json", "tutor-priorities-valid.json" },
         };
     }
 
@@ -63,6 +65,8 @@ public class SchemaValidationTest {
                 { "arena.run-manifest.1.schema.json", "run-manifest-invalid.json" },
                 // result=timeout_draw but no limiting_factor
                 { "arena.game-record.1.schema.json", "game-record-timeout-invalid.json" },
+                // v2 requires the deck-level layer — a v1-shaped file must not pass as v2
+                { "arena.route-coverage.2.schema.json", "route-coverage-missing-deck-invalid.json" },
         };
     }
 

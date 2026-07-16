@@ -102,11 +102,17 @@ public class SpellbookClientContractTest {
                 .get("combos").get(2);
         assertEquals("CARD_CLASS", coverageScepter.get("features").get(1).get("category").asText());
 
-        // route coverage validates; Mantle combo is resources-only, pinger is direct win
+        // route coverage validates (v2); Mantle combo is resources-only, pinger is direct win
         JsonNode coverage = MAPPER.readTree(dir.resolve("route-coverage.json").toFile());
-        assertTrue(schema("arena.route-coverage.1.schema.json").validate(coverage).isEmpty());
+        assertTrue("route-coverage schema errors: "
+                + schema("arena.route-coverage.2.schema.json").validate(coverage),
+                schema("arena.route-coverage.2.schema.json").validate(coverage).isEmpty());
         assertEquals(false, coverage.get("combos").get(0).get("direct_win").asBoolean());
         assertEquals(true, coverage.get("combos").get(1).get("direct_win").asBoolean());
+        // deck layer present: the fixture pinger's Infinite damage is a direct win path,
+        // so this deck is unroutable_flagged (gremlin polkas) but NOT blocked
+        assertEquals("direct", coverage.get("deck").get("routes").get(0).get("origin").asText());
+        assertTrue(coverage.get("deck").get("win_paths").asInt() >= 1);
 
         // advisory stays out of runtime data
         JsonNode advisory = MAPPER.readTree(dir.resolve("advisory-combos.json").toFile());

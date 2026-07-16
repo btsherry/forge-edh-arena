@@ -107,7 +107,9 @@ public final class Ingest {
         index.put("deck_id", spec.deckId());
         index.put("deck_hash", DeckHash.of(dckFile));
         index.put("created", Instant.now().toString());
-        index.put("versions", Map.of("schemas", "1", "win_routes", "win-routes/1"));
+        // pin the CURRENT rules version, not a literal — a hardcoded string here
+        // shipped stale once already (win-routes/1 while the rules were at /3)
+        index.put("versions", Map.of("schemas", "1", "win_routes", forge.arena.prep.RouteRules.VERSION));
         Map<String, Object> artifacts = new LinkedHashMap<>();
         artifacts.put("deck", fileRef(dossier, dckFile));
         artifacts.put("deck_meta", fileRef(dossier, metaFile));

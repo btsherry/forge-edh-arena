@@ -44,6 +44,8 @@ Sketch fields: *converts* (feature classes that trigger consideration), *termina
 
 *v3 amendment (2026-07-16, from the PR-10 adversarial review): (a) rule 19's token pattern gains a word boundary — `infinite .*\b(tokens?|copies)\b` — so `nontoken` features no longer match it; (b) rule 10 is anchored in code exactly as this table always specified (`infinite damage( to …(opponent|player)s?)?$` with `one|most|each|all|target|any number of` scopes), so scoped non-player damage falls to BOARD_CONTROL/UNROUTABLE instead of reading as player-lethal; (c) rule 8 widens to `damage to (all |most |some |each |any number of )?(target )?creatures?`; (d) rule 28's alternation includes `blood` (present in code since v1, previously undocumented here); (e) rules 11/13's "(opponent-scoped)" annotations are dropped — the code has always matched any scope, and the symmetric variants are caught earlier by rule 3; (f) **rule 30 is now implemented**: `classify(name, status)` returns CARD_CLASS for Spellbook feature status `PU` regardless of name (the status field IS present in find-my-combos `produces[].feature`), and CARD_CLASS joins the route-coverage schema's category enum.*
 
+*v4 amendment (2026-07-16, PR-12 / arena prep v1): the §2 feature patterns are UNCHANGED from v3. The version bump covers (a) stable per-rule ids exposed as `RouteRules.Verdict.ruleId` — the §2b conversion table is keyed by them, so renaming an id is a rules change; and (b) the new §2b payoff/enabler rule family (`PayoffRules.java`, `DeckCoverage.java`) — the deck-level coverage layer plan §3 Gate 3 deferred into prep v1, emitted as the `deck` section of `arena.route-coverage/2`.*
+
 Ordered, first-match-wins, case-insensitive. Applied per deck to the `produces` features of **included** combos only. Categories: `WIN_TRIGGER`, `LETHAL`, `RESOURCE`, `GUARD`, `TABLE_HAZARD`, `BOARD_CONTROL`, `LOCK_DISRUPTION`, `CARD_CLASS`, `UNROUTABLE`.
 
 | # | Pattern (regex, i) | Category | Route / note |
@@ -82,7 +84,49 @@ Ordered, first-match-wins, case-insensitive. Applied per deck to the `produces` 
 
 Validation snapshot (2026-07-15, full Spellbook vocabulary, 1,246 features — scratchpad exercise, not a workflow step): 9 WIN_TRIGGER, 48 LETHAL, 539 RESOURCE, 126 LOCK_DISRUPTION, 14 TABLE_HAZARD, ~30% long-tail UNROUTABLE (mostly H-status stax/prison helpers and C-status cast-from-zone effects — the per-deck + LLM-fallback path exists precisely for this tail).
 
+## 2b. Payoff/enabler classes & the conversion table (`win-routes/4`, deck-level layer)
+
+§2 classifies what a combo *produces*; this section classifies what the 99 can *convert with*. Matching runs against each card's oracle text (lowercased; Forge's literal `\n` separators flattened); a card may hit any number of classes. Code form: `PayoffRules.java`, kept in lockstep like §2.
+
+| Class | Detects (pattern sketch, i) | Example cards |
+|---|---|---|
+| `oracle_win` | `you win the game instead` · `no cards in it, you win the game` · `equal to the number of cards in your library, you win the game` | Thassa's Oracle, Laboratory Maniac, Jace WoM |
+| `alt_win` | any other `you win the game` (remainder class — never doubles with oracle_win) | Simic Ascendancy, Helix Pinnacle |
+| `cant_lose` | `you can't lose the game` | Platinum Angel |
+| `haste_static` | `all creatures have haste` · `creatures you control have haste` | Concordant Crossroads, Fervor |
+| `haste_oneshot` | `creatures you control [^.]*gain haste` | Finale of Devastation, Overrun-with-haste class |
+| `haste_targeted` | `equipped creature has haste` · `target creature … gains haste` · `it gains haste` | Lightning Greaves |
+| `mass_pump` | `creatures you control [^.]*get +` | Craterhoof Behemoth, Finale, Overwhelming Stampede |
+| `ping_each_opponent` | `deals N/X damage to each opponent` | Purphoros, Impact Tremors |
+| `ping_any_target` | `deals N/X damage to any target` | Walking Ballista, Niv-Mizzet |
+| `x_damage` | `deals X damage to (any target\|target player/opponent\|each opponent)` · `deals X damage divided … among any number of targets` — player-capable scopes only; Polukranos-class creature-scoped X damage must not match | Fireball, Banefire (the infinite-mana sink) |
+| `drain_on_trigger` | `whenever … (dies\|enters\|leaves…) … loses N life` | Blood Artist, Zulaport Cutthroat |
+| `commander_creature` | *pseudo-class:* commander type line contains Creature | (type-line fact, not oracle text) |
+
+**Conversion table** — which routes a RESOURCE feature class (§2 rule id) can reach, and the payoff classes the 99 must supply. Requirement groups are AND-ed; within a group, *full* alternatives give `supported`, *partial*-only gives `partial` (usable, hazards priced), nothing gives `unsupported`:
+
+| §2 rule id | Route | Required (full) | Partial fallback |
+|---|---|---|---|
+| `pump` | SPREAD_COMBAT | haste_static \| haste_oneshot | haste_targeted (Greaves on the one big creature) |
+| `pump` | COMMANDER_DMG_SEQUENCE | commander_creature | — |
+| `tokens` | SPREAD_COMBAT | haste_static \| haste_oneshot | — (fresh tokens can't ride Greaves at scale) |
+| `deck-access` | ORACLE_WIN | oracle_win | — |
+| `deck-access` | SPREAD_COMBAT | mass_pump AND (haste_static \| haste_oneshot) | haste_targeted for the haste group |
+| `mana` | DIRECT_DAMAGE_LOOP | x_damage | ping_any_target (repeatability-by-mana unverified from text) |
+| `mana` | STATIC_THRESHOLD | alt_win | — |
+| `etb-flicker` | DIRECT_DAMAGE_LOOP | ping_each_opponent | ping_any_target |
+| `etb-flicker` | LIFELOSS_DRAIN | drain_on_trigger | — |
+| `death-sac-triggers` | LIFELOSS_DRAIN | drain_on_trigger | — |
+| `death-sac-triggers` | DIRECT_DAMAGE_LOOP | ping_each_opponent | ping_any_target |
+| `draw-triggers` | DIRECT_DAMAGE_LOOP | ping_each_opponent \| ping_any_target | — |
+
+Routes named by LETHAL/WIN_TRIGGER features are **direct** (support `intrinsic` — the combo itself is the payoff). A deck's `win_paths` = routes with support better than `unsupported`; **included combos + zero win paths = `blocked`** (the plan §3 blocking warning, generalized: all-unroutable is one way to get there, resource-only combos with no payoffs is the other). `DossierCheck` refuses blocked dossiers.
+
+**Known v1 gaps (deliberate, feedback-loop fodder):** `untap`, `lifegain`, `storm-magecraft`, `counters-misc`, and `self-mill` resources map to no conversion yet (they contribute routes only through their combo's other features); INFINITE_TURNS/EXTRA_COMBATS are treated intrinsic (an attacker is assumed); `mana`→DIRECT_DAMAGE_LOOP demotes `ping_any_target` to partial because text alone can't verify the pinger repeats per mana. Gate 3.6 stall autopsies amend this table in the same PR as the fix, like everything else here.
+
 ## 3. Guards & anti-catalog (the planner must refuse these)
+
+*(v4: implemented at prep time — `route-coverage/2` carries `deck.guards` rows `{id, severity, detail}`: `oracle_guard` (info), `table_hazard_without_guard` (warning), `lock_without_clock` (warning), `no_expressible_win_path` (blocking), `no_included_combos` (info). The planner re-enforces the same guards live in Phase 4.)*
 
 - **DRAW_DECK without oracle:** infinite self-draw with no Thassa's Oracle/Lab Man class in the 99 and no "can't lose" guard = self-mill death. Route rejected at validation, logged `route_rejected: oracle_guard`.
 - **Infinite lifegain is not a win.** Ever. It's survivability and payoff fuel only.

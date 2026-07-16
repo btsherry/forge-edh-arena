@@ -1,0 +1,9 @@
+{
+  "schema": "arena.route-coverage/2",
+  "deck_id": "selvala-b3",
+  "deck_hash": "aabbccdd11223344",
+  "win_routes_version": "win-routes/4",
+  "combos": [],
+  "unroutable_features": [],
+  "status": "clean"
+}

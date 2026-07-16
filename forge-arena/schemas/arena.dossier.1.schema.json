@@ -39,7 +39,7 @@
       "properties": {
         "lint": { "enum": ["pass", "fail", "not_run"] },
         "implementability": { "enum": ["pass", "fail", "not_run"] },
-        "route_coverage": { "enum": ["clean", "unroutable_flagged", "not_run"] },
+        "route_coverage": { "enum": ["clean", "unroutable_flagged", "blocked", "not_run"] },
         "sim_verified": { "enum": ["pass", "fail", "partial", "not_run"] },
         "goldfish": { "enum": ["pass", "fail", "not_run"] }
       }

@@ -1,0 +1,17 @@
+{
+  "schema": "arena.tutor-priorities/1",
+  "deck_id": "selvala-b3",
+  "deck_hash": "aabbccdd11223344",
+  "win_routes_version": "win-routes/4",
+  "derivation": "combo pieces: (0.5 + 0.45*logNorm(popularity)) * min(1, 2/pieces), commanders x0.2; route payoffs: 0.35 + 0.35*(routes served / expressible routes)",
+  "weights": {
+    "Umbral Mantle": 0.95,
+    "Concordant Crossroads": 0.7,
+    "Craterhoof Behemoth": 0.525
+  },
+  "explanations": {
+    "Umbral Mantle": "combo 527-2816 (popularity 13010, 2 pieces)",
+    "Concordant Crossroads": "route payoff: SPREAD_COMBAT, COMMANDER_DMG_SEQUENCE",
+    "Craterhoof Behemoth": "route payoff: SPREAD_COMBAT"
+  }
+}

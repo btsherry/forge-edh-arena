@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:tutor-priorities:1",
+  "title": "Static tutor weights (plan §5, v3.3)",
+  "description": "Per-deck tutor priorities derived from the combo list AND the win plan: combo pieces weighted by popularity and piece-count leverage (commander pieces discounted — the command zone is always available), route payoffs weighted by how many expressible routes they serve. Consumed by the Phase-5 TutorRanker as base weights; live completion leverage is computed in-game.",
+  "type": "object",
+  "required": ["schema", "deck_id", "deck_hash", "win_routes_version", "derivation", "weights", "explanations"],
+  "properties": {
+    "schema": { "const": "arena.tutor-priorities/1" },
+    "deck_id": { "type": "string" },
+    "deck_hash": { "type": "string", "pattern": "^[0-9a-f]{8,64}$" },
+    "win_routes_version": { "type": "string" },
+    "derivation": { "type": "string", "description": "Human-readable statement of the weight formula actually used." },
+    "weights": {
+      "type": "object",
+      "description": "Card name -> weight in [0,1], descending (ties by name). Cards with zero weight are omitted.",
+      "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+    },
+    "explanations": {
+      "type": "object",
+      "description": "Card name -> why it carries its weight (argmax contribution) — the §7 tutor-audit trail.",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

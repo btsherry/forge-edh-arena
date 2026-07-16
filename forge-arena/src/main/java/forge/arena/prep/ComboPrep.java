@@ -17,10 +17,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 /**
  * Gate 3 orchestration: raw Spellbook snapshot → combos.json (included only)
  * + advisory-combos.json (almost-included: deckbuilding advice, never runtime
- * data) + route-coverage.json (v3.2, per-deck classification via RouteRules).
- * Updates the dossier index. Post-review (2026-07-16) the extraction carries
- * template requirements, per-card states/zone alternatives, commander
- * identity, popularity/bracketTag, and provenance-true snapshot dates.
+ * data) + route-coverage.json (arena.route-coverage/2: the v3.2 per-feature
+ * classification via RouteRules plus the v3.3 deck-level layer via
+ * DeckCoverage — expressible routes, payoff support from the 99, guards,
+ * blocking status). Updates the dossier index. Post-review (2026-07-16) the
+ * extraction carries template requirements, per-card states/zone
+ * alternatives, commander identity, popularity/bracketTag, and
+ * provenance-true snapshot dates.
  */
 public final class ComboPrep {
 
@@ -158,14 +161,17 @@ public final class ComboPrep {
         MAPPER.writerWithDefaultPrettyPrinter()
                 .writeValue(dossierDir.resolve("advisory-combos.json").toFile(), advisoryJson);
 
-        // --- route-coverage.json (v3.2) ---
+        // --- route-coverage.json (v3.2 per-feature layer + v3.3 deck layer) ---
         Set<String> unroutable = new LinkedHashSet<>();
         List<Map<String, Object>> coverageRows = new ArrayList<>();
+        List<DeckCoverage.ComboFeatures> comboFeatures = new ArrayList<>();
         for (JsonNode v : iter(results.get("included"))) {
             List<Map<String, Object>> features = new ArrayList<>();
+            List<DeckCoverage.Classified> classified = new ArrayList<>();
             boolean directWin = false;
             for (Feature feature : featureList(v)) {
                 RouteRules.Verdict verdict = RouteRules.classify(feature.name, feature.status);
+                classified.add(new DeckCoverage.Classified(feature.name, verdict));
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("name", feature.name);
                 row.put("category", verdict.category());
@@ -181,18 +187,24 @@ public final class ComboPrep {
                 }
             }
             Map<String, Object> cRow = new LinkedHashMap<>();
-            cRow.put("id", requireText(v, "id", "variant"));
+            String comboId = requireText(v, "id", "variant");
+            cRow.put("id", comboId);
             cRow.put("features", features);
             cRow.put("direct_win", directWin);
             coverageRows.add(cRow);
+            comboFeatures.add(new DeckCoverage.ComboFeatures(comboId, classified));
         }
-        String status = unroutable.isEmpty() ? "clean" : "unroutable_flagged";
+        Map<String, Object> deck = DeckCoverage.analyze(comboFeatures,
+                DeckCoverage.payoffs(deckCards), new ArrayList<>(unroutable));
+        // single source of truth: the deck-level verdict IS the artifact status
+        String status = (String) deck.remove("status");
         Map<String, Object> coverageJson = new LinkedHashMap<>();
-        coverageJson.put("schema", "arena.route-coverage/1");
+        coverageJson.put("schema", "arena.route-coverage/2");
         coverageJson.put("deck_id", index.get("deck_id").asText());
         coverageJson.put("deck_hash", index.get("deck_hash").asText());
         coverageJson.put("win_routes_version", RouteRules.VERSION);
         coverageJson.put("combos", coverageRows);
+        coverageJson.put("deck", deck);
         coverageJson.put("unroutable_features", new ArrayList<>(unroutable));
         coverageJson.put("status", status);
         MAPPER.writerWithDefaultPrettyPrinter()

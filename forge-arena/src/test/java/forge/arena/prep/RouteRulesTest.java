@@ -53,6 +53,21 @@ public class RouteRulesTest {
     }
 
     @Test
+    public void ruleIdsAreStableForTheConversionLayer() {
+        // DeckCoverage's conversion table is keyed by these ids (win-routes/4);
+        // renaming one silently disables its conversions
+        assertEquals("deck-access", RouteRules.classify("Infinite card draw").ruleId());
+        assertEquals("mana", RouteRules.classify("Infinite green mana").ruleId());
+        assertEquals("pump", RouteRules.classify("Infinitely large creature until end of turn").ruleId());
+        assertEquals("tokens", RouteRules.classify("Infinite creature tokens").ruleId());
+        assertEquals("etb-flicker", RouteRules.classify("Infinite ETB").ruleId());
+        assertEquals("death-sac-triggers", RouteRules.classify("Infinite death triggers").ruleId());
+        assertEquals("draw-triggers", RouteRules.classify("Infinite draw triggers").ruleId());
+        assertEquals("card-class", RouteRules.classify("Anything", "PU").ruleId());
+        assertEquals("unroutable", RouteRules.classify("Infinite gremlin polkas").ruleId());
+    }
+
+    @Test
     public void winRoutes3RegressionFixes() {
         // 'nontoken' must NOT hit the token rule (word boundary): untap rule wins, no SPREAD_COMBAT
         RouteRules.Verdict v = RouteRules.classify("Infinite untap of nontoken creatures you control");
