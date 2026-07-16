@@ -42,8 +42,11 @@ public class ArchitectureTest {
                         "engine classes other than SeatView (the W8 read-model)") {
                     @Override
                     public boolean test(com.tngtech.archunit.core.domain.JavaClass input) {
+                        // exact match + nested (SeatView$Zone) — a bare startsWith would
+                        // wrongly exempt SeatViews, the Forge-importing factory
                         return input.getPackageName().startsWith("forge.arena.engine")
-                                && !input.getFullName().startsWith("forge.arena.engine.SeatView");
+                                && !input.getFullName().equals("forge.arena.engine.SeatView")
+                                && !input.getFullName().startsWith("forge.arena.engine.SeatView$");
                     }
                 })
                 .because("combo/ consumes SeatView ONLY — never Game, never the facade (plan §6/§9 W8)")
