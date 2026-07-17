@@ -102,12 +102,13 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 return super.chooseSpellAbilityToPlay();
             }
             LineExecutor.Step step = action.step();
-            SpellAbility sa = AbilityResolver.resolve(player, step.card(), step.costHint(),
-                    step.targets());
+            SpellAbility sa = step.isCast()
+                    ? AbilityResolver.resolveCast(player, step.card())
+                    : AbilityResolver.resolve(player, step.card(), step.costHint(), step.targets());
             if (sa == null) {
-                // a piece the proven line relied on is gone or changed —
-                // graceful fallback, recorded, never a crash (plan §8)
-                pilot.abortLine(turn, "interaction", step.card());
+                // a piece is gone/changed, or an assembly cast is unaffordable
+                // this turn — graceful fallback, recorded, retried next turn
+                pilot.abortLine(turn, step.isCast() ? "validation" : "interaction", step.card());
                 return super.chooseSpellAbilityToPlay();
             }
             return Collections.singletonList(sa);
@@ -163,38 +164,33 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         }
 
         @Override
-        public <T extends forge.game.GameEntity> T chooseSingleEntityForEffect(
-                forge.util.collect.FCollectionView<T> optionList,
-                forge.game.player.DelayedReveal delayedReveal, SpellAbility sa, String title,
-                boolean isOptional, Player targetedPlayer, java.util.Map<String, Object> params) {
-            // TutorRanker hook (PR-17): only genuine library searches WE cast —
-            // ChangeZone with a Library origin. Everything else is stock.
-            if (sa != null && sa.getActivatingPlayer() == player
-                    && sa.getApi() == forge.game.ability.ApiType.ChangeZone
-                    && sa.getParamOrDefault("Origin", "").contains("Library")) {
+        public List<forge.game.card.Card> chooseCardsForZoneChange(
+                forge.game.zone.ZoneType destination, List<forge.game.zone.ZoneType> origin,
+                SpellAbility sa, forge.game.card.CardCollection fetchList, int min, int max,
+                forge.game.player.DelayedReveal delayedReveal, String selectPrompt, Player decider) {
+            // TutorRanker hook (PR-18: the REAL library-search seam — the first
+            // e2e run proved chooseSingleEntityForEffect never fires for AI
+            // hidden-origin searches). Single-pick searches we decide only.
+            if (sa != null && decider == player && max == 1 && origin != null
+                    && origin.contains(forge.game.zone.ZoneType.Library) && !fetchList.isEmpty()) {
                 java.util.List<String> names = new java.util.ArrayList<>();
-                for (T option : optionList) {
-                    if (option instanceof forge.game.card.Card card) {
-                        names.add(card.getName());
-                    }
+                for (forge.game.card.Card card : fetchList) {
+                    names.add(card.getName());
                 }
-                if (names.size() == optionList.size() && !names.isEmpty()) {
-                    int turn = getGame().getPhaseHandler().getTurn();
-                    var ranked = pilot.rankTutor(sa.getHostCard().getName(), names,
-                            SeatViews.of(player, seatIndex, turn));
-                    if (!ranked.isEmpty()) {
-                        String best = ranked.get(0).card();
-                        for (T option : optionList) {
-                            if (option instanceof forge.game.card.Card card
-                                    && card.getName().equals(best)) {
-                                return option;
-                            }
+                int turn = getGame().getPhaseHandler().getTurn();
+                var ranked = pilot.rankTutor(sa.getHostCard().getName(), names,
+                        SeatViews.of(player, seatIndex, turn));
+                if (!ranked.isEmpty()) {
+                    String best = ranked.get(0).card();
+                    for (forge.game.card.Card card : fetchList) {
+                        if (card.getName().equals(best)) {
+                            return List.of(card);
                         }
                     }
                 }
             }
-            return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title,
-                    isOptional, targetedPlayer, params);
+            return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max,
+                    delayedReveal, selectPrompt, decider);
         }
     }
 }

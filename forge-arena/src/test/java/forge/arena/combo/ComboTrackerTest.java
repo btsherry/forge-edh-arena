@@ -80,7 +80,7 @@ public class ComboTrackerTest {
         // zones (PR-16 adds own manaPool + opponents' PUBLIC state — life/poison/
         // battlefield; still structurally no hands, no libraries)
         Set<String> allowed = Set.of("seatIndex", "turn", "cardsIn", "librarySize", "locate",
-                "manaPool", "ownBoardPower", "opponents",
+                "manaPool", "ownBoardPower", "opponents", "ownAttachments",
                 "equals", "hashCode", "toString", "getClass", "notify", "notifyAll", "wait");
         for (var m : SeatView.class.getMethods()) {
             assertTrue("unexpected public API on SeatView (W8): " + m.getName(),

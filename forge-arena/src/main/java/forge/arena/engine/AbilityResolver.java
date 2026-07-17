@@ -69,6 +69,33 @@ final class AbilityResolver {
     }
 
     /**
+     * Resolve a {@code cast} assembly step (PR-18): the named card's spell,
+     * from hand or the command zone (commander tax and MayPlay statics are
+     * the engine's business — getAllPossibleAbilities carries them). Null
+     * when the card isn't castable here and now (missing, or costs
+     * unpayable) — the pilot records the abort and retries next turn.
+     */
+    static SpellAbility resolveCast(Player player, String cardName) {
+        for (ZoneType zone : List.of(ZoneType.Hand, ZoneType.Command)) {
+            for (Card card : player.getCardsIn(zone)) {
+                if (!card.getName().equals(cardName)) {
+                    continue;
+                }
+                for (SpellAbility sa : card.getAllPossibleAbilities(player, true)) {
+                    if (!sa.isSpell()) {
+                        continue;
+                    }
+                    sa.setActivatingPlayer(player);
+                    if (forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                        return sa;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Cost matching by normalized symbol containment: hint "{3}" matches
      * "{3}, {Q}: ..." but not "{13}". Hints are whole symbols, so a binding
      * distinguishes Staff's {1}/{3}/{5} abilities unambiguously.

@@ -68,6 +68,16 @@ public class ComboPilotTest {
                 SeatView.Zone.EXILE, Set.of()), 80);
     }
 
+    private static SeatView view(Set<String> battlefield, Set<String> hand, Set<String> command,
+            Map<String, String> attachments) {
+        return new SeatView(0, 3, Map.of(
+                SeatView.Zone.BATTLEFIELD, battlefield,
+                SeatView.Zone.HAND, hand,
+                SeatView.Zone.COMMAND, command,
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 80, 0, 0, List.of(), attachments);
+    }
+
     private static final Function<LineExecutor, SimResult> PROFITABLE =
             executor -> SimResult.profitable(3);
     private static final Function<LineExecutor, SimResult> UNPROFITABLE =
@@ -110,7 +120,9 @@ public class ComboPilotTest {
     }
 
     @Test
-    public void validationFailureIsRecordedOncePerTurnPerCombo() throws Exception {
+    public void validationFailureAbortsTheEnteredLineOncePerTurn() throws Exception {
+        // PR-18: assembly-first flow — the attempt HAPPENED (assembly ran/was
+        // empty), so a post-assembly refusal is line_aborted, not an ignore
         List<ArenaEvent> events = new ArrayList<>();
         ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
                 0.0, 0, events::add);
@@ -123,13 +135,74 @@ public class ComboPilotTest {
         assertTrue(pilot.nextAction(ready(3), true, failing).isEmpty());
         assertTrue(pilot.nextAction(ready(3), true, failing).isEmpty());
         assertEquals("one validation per combo per turn", 1, validations.get());
-        assertEquals(1, events.size());
-        assertEquals("combo_ignored", events.get(0).t());
-        assertEquals("validation_failed", events.get(0).fields().get("reason"));
+        assertEquals(List.of("line_entered", "line_aborted"),
+                events.stream().map(ArenaEvent::t).toList());
+        assertEquals("validation", events.get(1).fields().get("cause"));
+        assertFalse(pilot.lineActive());
         // a NEW turn is a new decision point
         assertTrue(pilot.nextAction(ready(4), true, failing).isEmpty());
         assertEquals(2, validations.get());
-        assertEquals(2, events.size());
+        assertEquals(4, events.size());
+        assertAllValid(events);
+    }
+
+    @Test
+    public void assemblyDeploysCastsThenAttachesThenProves() throws Exception {
+        Path dir = Files.createTempDirectory("pilot-assembly");
+        Files.writeString(dir.resolve("executor-bindings.json"), """
+                {"schema": "arena.executor-bindings/1",
+                 "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
+                   "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
+                              "activation_cost": "{G}", "untap_cost": "{3}",
+                              "untap_ability_host": "engine", "attach_cost": "{0}"}}],
+                 "unbound": []}""");
+        ExecutorBindings assemblyBindings = ExecutorBindings.load(dir.resolve("executor-bindings.json"));
+        List<ArenaEvent> events = new ArrayList<>();
+        AtomicInteger validations = new AtomicInteger();
+        Function<LineExecutor, SimResult> proving = executor -> {
+            validations.incrementAndGet();
+            return SimResult.profitable(3);
+        };
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), assemblyBindings,
+                0.0, 0, events::add);
+
+        // Selvala in command, Mantle in hand: reachable-ready, NOT executable
+        SeatView start = view(Set.of(), Set.of("Umbral Mantle"),
+                Set.of("Selvala, Heart of the Wilds"), Map.of());
+        ComboPilot.Action cast1 = pilot.nextAction(start, true, proving).orElseThrow();
+        assertTrue(cast1.step().isCast());
+        assertEquals("Selvala, Heart of the Wilds", cast1.step().card());
+        assertTrue(pilot.lineActive());
+        assertEquals(0, validations.get()); // no proof until assembled
+
+        // Selvala landed; Mantle still in hand
+        SeatView selvalaDown = view(Set.of("Selvala, Heart of the Wilds"),
+                Set.of("Umbral Mantle"), Set.of(), Map.of());
+        ComboPilot.Action cast2 = pilot.nextAction(selvalaDown, true, proving).orElseThrow();
+        assertTrue(cast2.step().isCast());
+        assertEquals("Umbral Mantle", cast2.step().card());
+
+        // both down, unattached: the equip step targets the engine
+        SeatView unattached = view(Set.of("Selvala, Heart of the Wilds", "Umbral Mantle"),
+                Set.of(), Set.of(), Map.of());
+        ComboPilot.Action equip = pilot.nextAction(unattached, true, proving).orElseThrow();
+        assertEquals("Umbral Mantle", equip.step().card());
+        assertEquals("{0}", equip.step().costHint());
+        assertEquals(List.of("Selvala, Heart of the Wilds"), equip.step().targets());
+
+        // attached: NOW the engine proves it, the planner runs, the pool fires
+        SeatView attached = view(Set.of("Selvala, Heart of the Wilds", "Umbral Mantle"),
+                Set.of(), Set.of(), Map.of("Umbral Mantle", "Selvala, Heart of the Wilds"));
+        ComboPilot.Action shortcut = pilot.nextAction(attached, true, proving).orElseThrow();
+        assertFalse(shortcut.isStep());
+        assertEquals(1, validations.get());
+        assertTrue("DEPLOY follows the shortcut", pilot.lineActive());
+        assertTrue(pilot.nextAction(attached, true, proving).isEmpty());
+        assertFalse(pilot.lineActive());
+
+        List<String> kinds = events.stream().map(ArenaEvent::t).toList();
+        assertEquals(List.of("line_entered", "line_step", "line_step", "line_step",
+                "route_selected", "combo_shortcut"), kinds);
         assertAllValid(events);
     }
 
@@ -207,7 +280,11 @@ public class ComboPilotTest {
         assertEquals("G", action.shortcut().color());
         assertEquals(ComboPilot.SHORTCUT_POOL, action.shortcut().amount());
         assertEquals("empty route plan -> explicit bank", "BANK_AND_HOLD", action.shortcut().route());
-        assertFalse("no line mode after a shortcut", pilot.lineActive());
+        // PR-18: the line survives the shortcut in DEPLOY; a binding with no
+        // payoffs (this fixture) exits on the next decision
+        assertTrue(pilot.lineActive());
+        assertTrue(pilot.nextAction(ready(3), true, PROFITABLE).isEmpty());
+        assertFalse("deploy exhausted -> line complete", pilot.lineActive());
 
         List<String> kinds = events.stream().map(ArenaEvent::t).toList();
         assertEquals(List.of("line_entered", "route_selected", "combo_shortcut"), kinds);

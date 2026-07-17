@@ -10,6 +10,7 @@
         "activation_cost": "{G}",
         "untap_cost": "{3}",
         "untap_ability_host": "engine",
+        "attach_cost": "{0}",
         "self_pump_per_cycle": "2",
         "yield_expr": "GREATEST_POWER_AMONG_OWN_CREATURES",
         "profit_invariant": "yield - 4 > 0 within 3 cycles"

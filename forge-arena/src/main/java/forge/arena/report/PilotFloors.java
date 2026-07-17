@@ -63,13 +63,19 @@ public final class PilotFloors {
             boolean ready = false;
             boolean attempted = false;
             boolean ignored = false;
+            int firstReadyTurn = Integer.MAX_VALUE;
+            int lastTurn = 0;
             for (JsonNode event : game) {
+                lastTurn = Math.max(lastTurn, event.path("turn").asInt(0));
                 if (event.path("seat").asInt(-1) != seat) {
                     continue;
                 }
                 String t = event.path("t").asText();
                 switch (t) {
-                    case "combo_ready" -> ready = true;
+                    case "combo_ready" -> {
+                        ready = true;
+                        firstReadyTurn = Math.min(firstReadyTurn, event.path("turn").asInt(0));
+                    }
                     case "line_entered", "combo_shortcut" -> attempted = true;
                     case "combo_ignored" -> ignored = true;
                     case "combo_stalled" -> {
@@ -86,7 +92,10 @@ public final class PilotFloors {
                 readyGames++;
                 if (attempted) {
                     attemptedGames++;
-                } else if (!ignored) {
+                } else if (!ignored && lastTurn > firstReadyTurn) {
+                    // PR-18 refinement: readiness is a bridge OBSERVATION; only
+                    // demand a decision record when the pilot actually had a
+                    // later turn (a decision point) to make one in
                     violations.add("ready-with-no-attempt lacks combo_ignored (seed "
                             + game.get(0).path("seed").asText("?") + ")");
                 }

@@ -71,6 +71,7 @@ public final class ComboPilot {
 
     private String activeComboId;
     private LineExecutor activeExecutor;
+    private ExecutorBindings.Binding activeBinding;
     private LineExecutor.LineState lineState;
     private final Map<String, Integer> firstReadyTurn = new HashMap<>();
     private final Map<String, Integer> lastIgnoredTurn = new HashMap<>();
@@ -145,6 +146,12 @@ public final class ComboPilot {
         }
 
         if (lineActive()) {
+            if (lineState.stage() == 0) {
+                return assemblyAction(view, validator);
+            }
+            if (lineState.stage() == 2) {
+                return deployAction(view);
+            }
             LineExecutor.Step step = activeExecutor.next(lineState, view);
             if (step.isDone()) {
                 exitLine();
@@ -180,6 +187,12 @@ public final class ComboPilot {
                 ignore(status.id(), view.turn(), "no_viable_route");
                 continue;
             }
+            // PR-18 (first e2e finding): tracker readiness is REACHABILITY;
+            // an unassemblable line (piece in graveyard/unseen) is no route
+            if (executor.get().assemblySteps(view) == null) {
+                ignore(status.id(), view.turn(), "no_viable_route");
+                continue;
+            }
             firstReadyTurn.putIfAbsent(status.id(), view.turn());
             int holdTurns = (int) Math.round(patience * 3);
             if (view.turn() - firstReadyTurn.get(status.id()) < holdTurns) {
@@ -187,37 +200,85 @@ public final class ComboPilot {
                 continue;
             }
             attemptedThisTurn.add(status.id());
-            SimResult proof = validator.apply(executor.get());
-            if (!proof.isProfitable()) {
-                ignore(status.id(), view.turn(), "validation_failed");
-                continue;
-            }
+            activeComboId = status.id();
+            activeExecutor = executor.get();
+            activeBinding = binding.get();
+            lineState = new LineExecutor.LineState(0, 0);
             events.accept(ArenaEvent.of("line_entered", view.turn(), seat)
                     .with("combo", status.id())
                     .with("binding", binding.get().comboId())
                     .with("attempted_via", "binding")
                     .with("entry_phase", executor.get().entryPhase()));
-
-            // PR-16: a proven loop compresses — plan the route, order the pool
-            if (executor.get() instanceof TapForManaUntapLoop loop && loop.shortcutEligible()) {
-                LethalityPlanner.Verdict verdict = LethalityPlanner.choose(routePlan, view, events);
-                Map<String, Object> boundedProduct = new HashMap<>();
-                boundedProduct.put("mana_" + loop.poolColor(), SHORTCUT_POOL);
-                firedShortcuts.add(status.id());
-                events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
-                        .with("combo", status.id())
-                        .with("iterations_proven", proof.cycles())
-                        .with("bounded_product", boundedProduct));
-                return Optional.of(Action.shortcut(new ShortcutOrder(status.id(),
-                        binding.get().params().get("engine"), loop.poolColor(),
-                        SHORTCUT_POOL, verdict.route())));
-            }
-
-            activeComboId = status.id();
-            activeExecutor = executor.get();
-            lineState = new LineExecutor.LineState(0, 0);
-            return nextAction(view, true, validator); // first step, same window
+            return assemblyAction(view, validator);
         }
+        return Optional.empty();
+    }
+
+    /**
+     * The ASSEMBLY stage (PR-18): deploy reachable pieces until the line is
+     * executable, THEN prove it on a copy. Validation failure after assembly
+     * is a line abort (the attempt happened and is recorded), not an ignore.
+     */
+    private Optional<Action> assemblyAction(SeatView view,
+            Function<LineExecutor, SimResult> validator) {
+        List<LineExecutor.Step> assembly = activeExecutor.assemblySteps(view);
+        if (assembly == null) {
+            abortLine(view.turn(), "validation", null);
+            return Optional.empty();
+        }
+        if (!assembly.isEmpty()) {
+            events.accept(ArenaEvent.of("line_step", view.turn(), seat)
+                    .with("stage", "ASSEMBLY")
+                    .with("iteration", lineState.iteration()));
+            lineState = lineState.advance();
+            return Optional.of(Action.play(assembly.get(0)));
+        }
+
+        // assembled — the engine proves the loop before anything fires
+        SimResult proof = validator.apply(activeExecutor);
+        if (!proof.isProfitable()) {
+            abortLine(view.turn(), "validation", null);
+            return Optional.empty();
+        }
+        if (activeExecutor instanceof TapForManaUntapLoop loop && loop.shortcutEligible()) {
+            String comboId = activeComboId;
+            String engineCard = activeBinding.params().get("engine");
+            LethalityPlanner.Verdict verdict = LethalityPlanner.choose(routePlan, view, events);
+            Map<String, Object> boundedProduct = new HashMap<>();
+            boundedProduct.put("mana_" + loop.poolColor(), SHORTCUT_POOL);
+            firedShortcuts.add(comboId);
+            events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
+                    .with("combo", comboId)
+                    .with("iterations_proven", proof.cycles())
+                    .with("bounded_product", boundedProduct));
+            // PR-18 (second e2e finding): stock AI's DECISION layer never sees
+            // floating mana (only battlefield sources) — the pool must be
+            // SPENT by script. DEPLOY follows: cast the binding's payoffs.
+            lineState = new LineExecutor.LineState(2, 0);
+            return Optional.of(Action.shortcut(new ShortcutOrder(comboId, engineCard,
+                    loop.poolColor(), SHORTCUT_POOL, verdict.route())));
+        }
+        lineState = lineState.nextStage(); // MANA_LOOP stepping (banking path)
+        return nextAction(view, true, validator);
+    }
+
+    /**
+     * The DEPLOY stage (PR-18): convert the injected pool by casting the
+     * binding's payoff cards from hand, one per priority — Craterhoof,
+     * Finale, Crossroads class. Hand exhausted = line complete; combat
+     * conversion is the stock attack logic's job (haste creatures attack).
+     */
+    private Optional<Action> deployAction(SeatView view) {
+        for (String payoff : activeBinding.payoffs()) {
+            if (view.cardsIn(SeatView.Zone.HAND).contains(payoff)) {
+                events.accept(ArenaEvent.of("line_step", view.turn(), seat)
+                        .with("stage", "DEPLOY")
+                        .with("iteration", lineState.iteration()));
+                lineState = lineState.advance();
+                return Optional.of(Action.play(LineExecutor.Step.cast(payoff)));
+            }
+        }
+        exitLine();
         return Optional.empty();
     }
 
@@ -242,6 +303,7 @@ public final class ComboPilot {
     private void exitLine() {
         activeComboId = null;
         activeExecutor = null;
+        activeBinding = null;
         lineState = null;
     }
 

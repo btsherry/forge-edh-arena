@@ -49,6 +49,8 @@ public final class TapForManaUntapLoop implements LineExecutor {
     private final int bankCycles;
     private final boolean shortcutEligible;
     private final String poolColor;
+    /** Equip/attach cost when the untap ability is GRANTED to the engine (Mantle: {0}). */
+    private final String attachCost;
     private final String entryPhase;
 
     public TapForManaUntapLoop(Map<String, String> params, String entryPhase) {
@@ -63,6 +65,7 @@ public final class TapForManaUntapLoop implements LineExecutor {
         this.bankCycles = Integer.parseInt(params.getOrDefault("bank_cycles", "6"));
         this.shortcutEligible = Boolean.parseBoolean(params.getOrDefault("shortcut", "true"));
         this.poolColor = params.getOrDefault("pool_color", "G");
+        this.attachCost = params.get("attach_cost");
         this.entryPhase = entryPhase != null ? entryPhase : "MAIN1";
     }
 
@@ -81,7 +84,33 @@ public final class TapForManaUntapLoop implements LineExecutor {
 
     @Override
     public List<String> stages() {
-        return List.of("MANA_LOOP");
+        return List.of("ASSEMBLY", "MANA_LOOP", "DEPLOY");
+    }
+
+    /**
+     * PR-18 (from the first e2e run): reachable pieces get DEPLOYED before
+     * the loop is provable — cast from hand/command, then attach when the
+     * untap ability is equipment-granted. Incremental: returns the current
+     * TODO each priority; the pilot plays the first item and asks again.
+     */
+    @Override
+    public List<Step> assemblySteps(SeatView view) {
+        List<Step> steps = new ArrayList<>();
+        for (String piece : List.of(engine, untapper)) {
+            switch (view.locate(piece)) {
+                case BATTLEFIELD -> {
+                }
+                case HAND, COMMAND -> steps.add(Step.cast(piece));
+                default -> {
+                    return null; // graveyard/absent: not assemblable from here
+                }
+            }
+        }
+        if (steps.isEmpty() && untapAbilityHost.equals(engine) && attachCost != null
+                && !engine.equals(view.ownAttachments().get(untapper))) {
+            steps.add(Step.activateTargeting(untapper, attachCost, engine));
+        }
+        return steps;
     }
 
     @Override

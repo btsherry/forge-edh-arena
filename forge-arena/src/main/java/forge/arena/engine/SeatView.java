@@ -55,13 +55,20 @@ public final class SeatView {
     private final int manaPool;
     private final int ownBoardPower;
     private final java.util.List<OpponentView> opponents;
+    private final Map<String, String> ownAttachments;
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize) {
-        this(seatIndex, turn, ownCards, librarySize, 0, 0, java.util.List.of());
+        this(seatIndex, turn, ownCards, librarySize, 0, 0, java.util.List.of(), Map.of());
     }
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
             int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents) {
+        this(seatIndex, turn, ownCards, librarySize, manaPool, ownBoardPower, opponents, Map.of());
+    }
+
+    public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
+            int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents,
+            Map<String, String> ownAttachments) {
         this.seatIndex = seatIndex;
         this.turn = turn;
         this.ownCards = Map.copyOf(ownCards);
@@ -69,6 +76,7 @@ public final class SeatView {
         this.manaPool = manaPool;
         this.ownBoardPower = ownBoardPower;
         this.opponents = java.util.List.copyOf(opponents);
+        this.ownAttachments = Map.copyOf(ownAttachments);
     }
 
     public int seatIndex() {
@@ -96,6 +104,15 @@ public final class SeatView {
     /** Summed power of this seat's creatures (public information). */
     public int ownBoardPower() {
         return ownBoardPower;
+    }
+
+    /**
+     * This seat's battlefield attachments: attachment name → host card name
+     * (public information; PR-18 — "Mantle on the battlefield" is not
+     * "Mantle equipped to Selvala", and executability needs the difference).
+     */
+    public Map<String, String> ownAttachments() {
+        return ownAttachments;
     }
 
     /** Opponents' PUBLIC state (life/poison/battlefield) — planner input. */

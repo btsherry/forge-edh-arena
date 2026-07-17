@@ -29,9 +29,21 @@ public interface LineExecutor {
     Step next(LineState state, SeatView view);
 
     /**
-     * One scripted action. {@code activate}: card + cost hint + explicit
-     * targets (v3.1 lesson: unscripted targets are nondeterministic — a step
-     * that needs targets names them).
+     * The steps that make this line EXECUTABLE from the current board
+     * (PR-18: tracker readiness is reachability — hand and command zone
+     * count — but activation needs pieces deployed and attached). Recomputed
+     * every priority as the board changes; empty = executable now; null =
+     * not assemblable from here.
+     */
+    default List<Step> assemblySteps(SeatView view) {
+        return List.of();
+    }
+
+    /**
+     * One scripted action. {@code activate}: battlefield card + cost hint +
+     * explicit targets (v3.1 lesson: unscripted targets are nondeterministic
+     * — a step that needs targets names them). {@code cast}: play the named
+     * card from hand or the command zone (PR-18 assembly).
      */
     record Step(String action, String card, String costHint, List<String> targets) {
         public static Step activate(String card, String costHint) {
@@ -42,12 +54,20 @@ public interface LineExecutor {
             return new Step("activate", card, costHint, List.of(targets));
         }
 
+        public static Step cast(String card) {
+            return new Step("cast", card, null, List.of());
+        }
+
         public static Step done() {
             return new Step("done", null, null, List.of());
         }
 
         public boolean isDone() {
             return "done".equals(action);
+        }
+
+        public boolean isCast() {
+            return "cast".equals(action);
         }
     }
 

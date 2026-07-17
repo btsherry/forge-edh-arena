@@ -31,24 +31,48 @@ public class PilotQualityFloorsTest {
         return events;
     }
 
-    /** One game: selvala seat 0; ready + optionally attempted/ignored. */
+    /**
+     * One game: selvala seat 0; ready at turn 3 with the game running to
+     * turn 9 (so a later decision point existed — the PR-18 completeness
+     * refinement only demands a record when the pilot had a next turn).
+     */
     private static List<JsonNode> selvalaGame(boolean ready, boolean attempted, boolean ignored)
             throws Exception {
         StringBuilder sb = new StringBuilder(
                 "{\"t\":\"game_start\",\"seats\":[\"selvala\",\"purphoros\"],\"seed\":1}\n");
         if (ready) {
-            sb.append("{\"t\":\"combo_ready\",\"seat\":0,\"combo\":\"c1\",\"window\":\"MAIN1\"}\n");
+            sb.append("{\"t\":\"combo_ready\",\"turn\":3,\"seat\":0,\"combo\":\"c1\","
+                    + "\"window\":\"MAIN1\"}\n");
         }
         if (attempted) {
-            sb.append("{\"t\":\"combo_shortcut\",\"seat\":0,\"combo\":\"c1\","
+            sb.append("{\"t\":\"combo_shortcut\",\"turn\":3,\"seat\":0,\"combo\":\"c1\","
                     + "\"iterations_proven\":3,\"bounded_product\":{\"mana_G\":10000}}\n");
         }
         if (ignored) {
-            sb.append("{\"t\":\"combo_ignored\",\"seat\":0,\"combo\":\"c1\","
+            sb.append("{\"t\":\"combo_ignored\",\"turn\":3,\"seat\":0,\"combo\":\"c1\","
                     + "\"reason\":\"threat_assessment\"}\n");
         }
-        sb.append("{\"t\":\"game_end\",\"win_condition\":\"Draw\"}");
+        sb.append("{\"t\":\"game_end\",\"turn\":9,\"win_condition\":\"Draw\"}");
         return game(sb.toString());
+    }
+
+    @Test
+    public void readyAtGameEndWithoutADecisionPointIsNotAViolation() throws Exception {
+        // ready on the game's LAST turn: the pilot never had a next turn,
+        // silence is the absence of a decision point, not a missing record
+        List<List<JsonNode>> games = List.of(
+                game("{\"t\":\"game_start\",\"seats\":[\"selvala\"],\"seed\":7}\n"
+                        + "{\"t\":\"combo_ready\",\"turn\":9,\"seat\":0,\"combo\":\"c1\","
+                        + "\"window\":\"MAIN1\"}\n"
+                        + "{\"t\":\"game_end\",\"turn\":9,\"win_condition\":\"Draw\"}"),
+                game("{\"t\":\"game_start\",\"seats\":[\"selvala\"],\"seed\":8}\n"
+                        + "{\"t\":\"combo_ready\",\"turn\":3,\"seat\":0,\"combo\":\"c1\","
+                        + "\"window\":\"MAIN1\"}\n"
+                        + "{\"t\":\"combo_shortcut\",\"turn\":3,\"seat\":0,\"combo\":\"c1\","
+                        + "\"iterations_proven\":3,\"bounded_product\":{}}\n"
+                        + "{\"t\":\"game_end\",\"turn\":9,\"win_condition\":\"Draw\"}"));
+        PilotFloors.DeckFloors floors = PilotFloors.evaluate("selvala", games, 0.5);
+        assertTrue("violations: " + floors.violations(), floors.pilotValid());
     }
 
     @Test
