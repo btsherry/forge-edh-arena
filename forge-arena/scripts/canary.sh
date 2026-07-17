@@ -69,3 +69,8 @@ if fails:
     print("CANARY FAIL:"); [print("  " + f) for f in fails]; sys.exit(1)
 print("CANARY PASS")
 EOF
+
+# Gate 4 v3.2 pilot-quality floors: enforced for combo-aware seats (no-op
+# otherwise). PilotFloors exits 1 on pilot_invalid, failing the canary.
+CP="$REPO_ROOT/forge-arena/target/classes:$(cat "$REPO_ROOT/forge-arena/target/classpath.txt")"
+(cd "$REPO_ROOT" && "$JAVA_HOME/bin/java" -cp "$CP" forge.arena.report.PilotFloors "$BATCH_DIR")

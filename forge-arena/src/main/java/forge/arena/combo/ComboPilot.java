@@ -2,6 +2,7 @@ package forge.arena.combo;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -63,6 +64,7 @@ public final class ComboPilot {
     private final ComboTracker tracker;
     private final ExecutorBindings bindings;
     private final RoutePlan routePlan;
+    private final TutorRanker tutorRanker;
     private final double patience;
     private final int seat;
     private final Consumer<ArenaEvent> events;
@@ -78,17 +80,50 @@ public final class ComboPilot {
 
     public ComboPilot(ComboTracker tracker, ExecutorBindings bindings, double patience,
             int seat, Consumer<ArenaEvent> events) {
-        this(tracker, bindings, RoutePlan.empty(), patience, seat, events);
+        this(tracker, bindings, RoutePlan.empty(), null, patience, seat, events);
     }
 
     public ComboPilot(ComboTracker tracker, ExecutorBindings bindings, RoutePlan routePlan,
             double patience, int seat, Consumer<ArenaEvent> events) {
+        this(tracker, bindings, routePlan, null, patience, seat, events);
+    }
+
+    public ComboPilot(ComboTracker tracker, ExecutorBindings bindings, RoutePlan routePlan,
+            TutorRanker tutorRanker, double patience, int seat, Consumer<ArenaEvent> events) {
         this.tracker = tracker;
         this.bindings = bindings;
         this.routePlan = routePlan;
+        this.tutorRanker = tutorRanker != null ? tutorRanker
+                : new TutorRanker(Map.of(), tracker);
         this.patience = patience;
         this.seat = seat;
         this.events = events;
+    }
+
+    /**
+     * Rank a search effect's options (PR-17): empty list = the ranker has no
+     * opinion, stock heuristics decide (and no event — the situation carried
+     * no combo information). A real opinion is RECORDED: tutor_decision with
+     * the full ranking and per-candidate why (plan §5 / §7 tutor audit).
+     */
+    public List<TutorRanker.Ranked> rankTutor(String source, List<String> options, SeatView view) {
+        List<TutorRanker.Ranked> ranked = tutorRanker.rank(options, view);
+        if (ranked.isEmpty() || ranked.get(0).score() <= 0) {
+            return List.of();
+        }
+        List<Map<String, Object>> rankedRows = new java.util.ArrayList<>();
+        for (TutorRanker.Ranked r : ranked.subList(0, Math.min(8, ranked.size()))) {
+            Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("c", r.card());
+            row.put("score", Math.round(r.score() * 1000.0) / 1000.0);
+            row.put("why", r.why());
+            rankedRows.add(row);
+        }
+        events.accept(ArenaEvent.of("tutor_decision", view.turn(), seat)
+                .with("source", source)
+                .with("chosen", ranked.get(0).card())
+                .with("ranked", rankedRows));
+        return ranked;
     }
 
     /** True while a line is being stepped (the controller is in line mode). */

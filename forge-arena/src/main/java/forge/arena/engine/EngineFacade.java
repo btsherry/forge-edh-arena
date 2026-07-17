@@ -68,6 +68,7 @@ public final class EngineFacade {
         }
 
         List<RegisteredPlayer> players = new ArrayList<>();
+        List<Object> autoSubscribers = new ArrayList<>();
         int seatIndex = 0;
         for (SeatSpec seat : seats) {
             Deck deck = DeckSerializer.fromFile(seat.deckFile());
@@ -80,6 +81,10 @@ public final class EngineFacade {
                 rp.setPlayer(new GoldfishLobbyPlayer(name));
             } else if (seat.comboAware()) {
                 rp.setPlayer(comboAwareLobbyPlayer(name, seat, seatIndex, eventSink));
+                // observation side (combo_state/combo_ready) rides along in
+                // batches too — the canary's conversion-when-ready floor is
+                // attempted/ready and needs both halves of the telemetry
+                autoSubscribers.add(comboDetectionBridge(seat, seatIndex, eventSink));
             } else {
                 Set<AIOption> options = seat.simulationAi()
                         ? Collections.singleton(AIOption.USE_SIMULATION)
@@ -98,6 +103,12 @@ public final class EngineFacade {
         LimitEnforcer enforcer = new LimitEnforcer(game, limits);
         game.subscribeToEvents(enforcer);
         for (Object subscriber : extraSubscribers) {
+            if (subscriber instanceof GameAware aware) {
+                aware.onGameCreated(game);
+            }
+            game.subscribeToEvents(subscriber);
+        }
+        for (Object subscriber : autoSubscribers) {
             if (subscriber instanceof GameAware aware) {
                 aware.onGameCreated(game);
             }
@@ -164,12 +175,15 @@ public final class EngineFacade {
         final java.util.List<forge.arena.combo.ComboDef> defs;
         final forge.arena.combo.ExecutorBindings bindings;
         final forge.arena.combo.RoutePlan routePlan;
+        final java.util.Map<String, Double> tutorWeights;
         try {
             defs = forge.arena.combo.ComboDef.load(seat.dossierDir().resolve("combos.json"));
             bindings = forge.arena.combo.ExecutorBindings.load(
                     forge.arena.combo.ExecutorBindings.defaultPath());
             routePlan = forge.arena.combo.RoutePlan.load(
                     seat.dossierDir().resolve("route-coverage.json"));
+            tutorWeights = forge.arena.combo.TutorRanker.loadWeights(
+                    seat.dossierDir().resolve("tutor-priorities.json"));
         } catch (java.io.IOException e) {
             throw new IllegalArgumentException("combo-aware seat " + seatIndex
                     + ": artifacts unreadable (run arena prep): " + e.getMessage(), e);
@@ -177,8 +191,28 @@ public final class EngineFacade {
         java.util.function.Consumer<forge.arena.report.ArenaEvent> sink =
                 eventSink != null ? eventSink : event -> {
                 };
-        return new ComboAwareLobbyPlayer(name, player -> new forge.arena.combo.ComboPilot(
-                new forge.arena.combo.ComboTracker(defs), bindings, routePlan, 0.0, seatIndex, sink));
+        return new ComboAwareLobbyPlayer(name, player -> {
+            forge.arena.combo.ComboTracker tracker = new forge.arena.combo.ComboTracker(defs);
+            return new forge.arena.combo.ComboPilot(tracker, bindings, routePlan,
+                    new forge.arena.combo.TutorRanker(tutorWeights, tracker), 0.0, seatIndex, sink);
+        });
+    }
+
+    /** The detection-only observation bridge for a combo-aware seat (PR-11 machinery). */
+    private static ComboDetectionBridge comboDetectionBridge(SeatSpec seat, int seatIndex,
+            java.util.function.Consumer<forge.arena.report.ArenaEvent> eventSink) {
+        try {
+            java.util.List<forge.arena.combo.ComboDef> defs =
+                    forge.arena.combo.ComboDef.load(seat.dossierDir().resolve("combos.json"));
+            java.util.function.Consumer<forge.arena.report.ArenaEvent> sink =
+                    eventSink != null ? eventSink : event -> {
+                    };
+            return new ComboDetectionBridge(seatIndex,
+                    new forge.arena.combo.ComboTracker(defs), sink);
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("combo-aware seat " + seatIndex
+                    + ": combos.json unreadable: " + e.getMessage(), e);
+        }
     }
 
     /** After a wall-clock interrupt the game thread may need a moment to unwind. */

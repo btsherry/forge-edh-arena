@@ -72,9 +72,31 @@ public final class BatchMain {
         for (JsonNode seat : cfg.get("seats")) {
             Path deckFile = Path.of(seat.get("deck").asText()).toAbsolutePath();
             String deckId = deckFile.getFileName().toString().replaceFirst("\\.dck$", "");
+            boolean comboAware = seat.path("combo_aware").asBoolean(false);
+            String dossier = seat.hasNonNull("dossier")
+                    ? Path.of(seat.get("dossier").asText()).toAbsolutePath().toString()
+                    : null;
+            if (comboAware) {
+                // plan §3 v3.3: batch start does NO prep work — it validates
+                // dossier freshness and refuses stale or missing dossiers
+                if (dossier == null) {
+                    System.err.println("combo_aware seat '" + deckId + "' needs \"dossier\"");
+                    return 2;
+                }
+                forge.arena.prep.DossierCheck.Result check =
+                        forge.arena.prep.DossierCheck.run(Path.of(dossier));
+                if (!check.ok()) {
+                    System.err.println("dossier REFUSED for '" + deckId + "':");
+                    check.problems().forEach(p -> System.err.println("  " + p));
+                    return 2;
+                }
+                check.warnings().forEach(w ->
+                        System.err.println("dossier warning for '" + deckId + "': " + w));
+            }
             Map<String, Object> ai = new LinkedHashMap<>();
             ai.put("profile", seat.path("profile").asText("Default"));
             ai.put("simulation_ai", seat.path("simulation_ai").asBoolean(false));
+            ai.put("combo_aware", comboAware);
             Map<String, Object> ms = new LinkedHashMap<>();
             ms.put("deck", deckId);
             ms.put("deck_hash", DeckHash.of(deckFile));
@@ -84,6 +106,10 @@ public final class BatchMain {
             ws.put("deck_file", deckFile.toString());
             ws.put("profile", seat.path("profile").asText("Default"));
             ws.put("simulation_ai", seat.path("simulation_ai").asBoolean(false));
+            ws.put("combo_aware", comboAware);
+            if (dossier != null) {
+                ws.put("dossier", dossier);
+            }
             workerSeats.add(ws);
         }
 

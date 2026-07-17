@@ -39,7 +39,10 @@ public final class ArenaRunner {
         long started = System.currentTimeMillis();
         try {
             GameEventBridge bridge = new GameEventBridge(recorder);
-            ArenaGameResult result = EngineFacade.playCommanderGame(seated, seed, cfg.limits(), bridge);
+            // recorder rides along as the Consumer<ArenaEvent> sink combo-aware
+            // seats emit decision telemetry to (EngineFacade discovers it)
+            ArenaGameResult result = EngineFacade.playCommanderGame(seated, seed, cfg.limits(),
+                    bridge, recorder);
             recorder.finish(result);
             return GameRecord.from(gameIndex, seed, deckNames, result, eventLogRel);
         } catch (EngineCrashException crash) {

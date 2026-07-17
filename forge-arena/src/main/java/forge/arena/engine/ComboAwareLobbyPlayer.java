@@ -161,5 +161,40 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             }
             return super.playChosenSpellAbility(sa);
         }
+
+        @Override
+        public <T extends forge.game.GameEntity> T chooseSingleEntityForEffect(
+                forge.util.collect.FCollectionView<T> optionList,
+                forge.game.player.DelayedReveal delayedReveal, SpellAbility sa, String title,
+                boolean isOptional, Player targetedPlayer, java.util.Map<String, Object> params) {
+            // TutorRanker hook (PR-17): only genuine library searches WE cast —
+            // ChangeZone with a Library origin. Everything else is stock.
+            if (sa != null && sa.getActivatingPlayer() == player
+                    && sa.getApi() == forge.game.ability.ApiType.ChangeZone
+                    && sa.getParamOrDefault("Origin", "").contains("Library")) {
+                java.util.List<String> names = new java.util.ArrayList<>();
+                for (T option : optionList) {
+                    if (option instanceof forge.game.card.Card card) {
+                        names.add(card.getName());
+                    }
+                }
+                if (names.size() == optionList.size() && !names.isEmpty()) {
+                    int turn = getGame().getPhaseHandler().getTurn();
+                    var ranked = pilot.rankTutor(sa.getHostCard().getName(), names,
+                            SeatViews.of(player, seatIndex, turn));
+                    if (!ranked.isEmpty()) {
+                        String best = ranked.get(0).card();
+                        for (T option : optionList) {
+                            if (option instanceof forge.game.card.Card card
+                                    && card.getName().equals(best)) {
+                                return option;
+                            }
+                        }
+                    }
+                }
+            }
+            return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title,
+                    isOptional, targetedPlayer, params);
+        }
     }
 }
