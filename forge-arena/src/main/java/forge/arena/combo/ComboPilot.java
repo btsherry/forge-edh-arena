@@ -197,8 +197,17 @@ public final class ComboPilot {
             }
             // PR-18 (first e2e finding): tracker readiness is REACHABILITY;
             // an unassemblable line (piece in graveyard/unseen) is no route
-            if (executor.get().assemblySteps(view) == null) {
+            List<LineExecutor.Step> assembly = executor.get().assemblySteps(view);
+            if (assembly == null) {
                 ignore(status.id(), view.turn(), "no_viable_route");
+                continue;
+            }
+            // PR-19 (second e2e batch finding): don't attempt a line whose
+            // first cast is plainly unpayable — that was 12 aborts of noise
+            if (!assembly.isEmpty() && assembly.get(0).isCast()
+                    && view.manaPool() + view.untappedManaSources()
+                            < executor.get().castCostEstimate(assembly.get(0).card())) {
+                ignore(status.id(), view.turn(), "mana_reserved");
                 continue;
             }
             firstReadyTurn.putIfAbsent(status.id(), view.turn());
@@ -283,13 +292,19 @@ public final class ComboPilot {
     }
 
     /**
-     * The DEPLOY stage (PR-18): convert the injected pool by casting the
-     * binding's payoff cards from hand, one per priority — Craterhoof,
-     * Finale, Crossroads class. Hand exhausted = line complete; combat
-     * conversion is the stock attack logic's job (haste creatures attack).
+     * The DEPLOY stage (PR-18/19): convert the injected pool by casting
+     * payoffs from hand, one per priority — the binding's own payoffs first
+     * (Craterhoof, Finale class), then ANY card the route-coverage deck
+     * layer identified as a payoff (PR-19 breadth: the one shortcut game of
+     * batch #3 had no binding payoffs in hand while route payoffs sat
+     * there). Hand exhausted = line complete; combat conversion is the
+     * stock attack logic's job (haste creatures attack).
      */
     private Optional<Action> deployAction(SeatView view) {
-        for (String payoff : activeBinding.payoffs()) {
+        java.util.LinkedHashSet<String> candidates =
+                new java.util.LinkedHashSet<>(activeBinding.payoffs());
+        routePlan.payoffs().values().forEach(candidates::addAll);
+        for (String payoff : candidates) {
             if (view.cardsIn(SeatView.Zone.HAND).contains(payoff)) {
                 events.accept(ArenaEvent.of("line_step", view.turn(), seat)
                         .with("stage", "DEPLOY")

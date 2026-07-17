@@ -51,6 +51,8 @@ public final class TapForManaUntapLoop implements LineExecutor {
     private final String poolColor;
     /** Equip/attach cost when the untap ability is GRANTED to the engine (Mantle: {0}). */
     private final String attachCost;
+    private final int engineManaValue;
+    private final int untapperManaValue;
     private final String entryPhase;
 
     public TapForManaUntapLoop(Map<String, String> params, String entryPhase) {
@@ -66,6 +68,8 @@ public final class TapForManaUntapLoop implements LineExecutor {
         this.shortcutEligible = Boolean.parseBoolean(params.getOrDefault("shortcut", "true"));
         this.poolColor = params.getOrDefault("pool_color", "G");
         this.attachCost = params.get("attach_cost");
+        this.engineManaValue = Integer.parseInt(params.getOrDefault("engine_mana_value", "0"));
+        this.untapperManaValue = Integer.parseInt(params.getOrDefault("untapper_mana_value", "0"));
         this.entryPhase = entryPhase != null ? entryPhase : "MAIN1";
     }
 
@@ -161,6 +165,17 @@ public final class TapForManaUntapLoop implements LineExecutor {
             enginePower += selfPumpPerCycle;
         }
         return SimResult.unprofitable();
+    }
+
+    @Override
+    public int castCostEstimate(String card) {
+        if (card.equals(engine)) {
+            return engineManaValue;
+        }
+        if (card.equals(untapper)) {
+            return untapperManaValue;
+        }
+        return 0;
     }
 
     /** Generic-mana estimate of a cost string: digits count face value, symbols count 1. */

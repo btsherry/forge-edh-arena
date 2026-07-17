@@ -11,6 +11,8 @@
         "untap_cost": "{3}",
         "untap_ability_host": "engine",
         "attach_cost": "{0}",
+        "engine_mana_value": "3",
+        "untapper_mana_value": "3",
         "self_pump_per_cycle": "2",
         "yield_expr": "GREATEST_POWER_AMONG_OWN_CREATURES",
         "profit_invariant": "yield - 4 > 0 within 3 cycles"
@@ -30,6 +32,8 @@
         "untap_ability_host": "untapper",
         "untap_targets_engine": "true",
         "untapper_reset_cost": "{1}",
+        "engine_mana_value": "3",
+        "untapper_mana_value": "3",
         "self_pump_per_cycle": "0",
         "yield_expr": "GREATEST_POWER_AMONG_OWN_CREATURES",
         "profit_invariant": "yield - 5 > 0"

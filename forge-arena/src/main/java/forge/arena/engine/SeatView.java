@@ -56,19 +56,28 @@ public final class SeatView {
     private final int ownBoardPower;
     private final java.util.List<OpponentView> opponents;
     private final Map<String, String> ownAttachments;
+    private final int untappedManaSources;
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize) {
-        this(seatIndex, turn, ownCards, librarySize, 0, 0, java.util.List.of(), Map.of());
+        this(seatIndex, turn, ownCards, librarySize, 0, 0, java.util.List.of(), Map.of(), 0);
     }
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
             int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents) {
-        this(seatIndex, turn, ownCards, librarySize, manaPool, ownBoardPower, opponents, Map.of());
+        this(seatIndex, turn, ownCards, librarySize, manaPool, ownBoardPower, opponents,
+                Map.of(), 0);
     }
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
             int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents,
             Map<String, String> ownAttachments) {
+        this(seatIndex, turn, ownCards, librarySize, manaPool, ownBoardPower, opponents,
+                ownAttachments, 0);
+    }
+
+    public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
+            int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents,
+            Map<String, String> ownAttachments, int untappedManaSources) {
         this.seatIndex = seatIndex;
         this.turn = turn;
         this.ownCards = Map.copyOf(ownCards);
@@ -77,6 +86,7 @@ public final class SeatView {
         this.ownBoardPower = ownBoardPower;
         this.opponents = java.util.List.copyOf(opponents);
         this.ownAttachments = Map.copyOf(ownAttachments);
+        this.untappedManaSources = untappedManaSources;
     }
 
     public int seatIndex() {
@@ -113,6 +123,15 @@ public final class SeatView {
      */
     public Map<String, String> ownAttachments() {
         return ownAttachments;
+    }
+
+    /**
+     * Untapped, usable mana producers this seat controls (public — a rough
+     * affordability signal; PR-19: don't attempt a line whose first cast is
+     * plainly unpayable).
+     */
+    public int untappedManaSources() {
+        return untappedManaSources;
     }
 
     /** Opponents' PUBLIC state (life/poison/battlefield) — planner input. */

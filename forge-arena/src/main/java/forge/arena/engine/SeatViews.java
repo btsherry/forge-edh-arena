@@ -43,13 +43,18 @@ public final class SeatViews {
                     other.getPoisonCounters(), names(other, ZoneType.Battlefield)));
         }
         Map<String, String> attachments = new java.util.HashMap<>();
+        int untappedManaSources = 0;
         for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
             if (c.isAttachedToEntity() && c.getEntityAttachedTo() instanceof Card host) {
                 attachments.put(c.getName(), host.getName());
             }
+            if (!c.isTapped() && !c.getManaAbilities().isEmpty()
+                    && !(c.isCreature() && c.hasSickness())) {
+                untappedManaSources++;
+            }
         }
         return new SeatView(seatIndex, turn, zones, librarySize, manaPool, ownBoardPower,
-                opponents, attachments);
+                opponents, attachments, untappedManaSources);
     }
 
     private static Set<String> names(Player player, ZoneType zone) {

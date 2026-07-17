@@ -25,6 +25,14 @@ public interface LineExecutor {
     /** Prove the full chain on a sandbox copy; the engine is the oracle. */
     SimResult validate(SimHandle sim);
 
+    /**
+     * Rough mana value of casting a named piece (PR-19 affordability gate,
+     * from binding params). 0 = unknown, never gates.
+     */
+    default int castCostEstimate(String card) {
+        return 0;
+    }
+
     /** The next scripted action; {@code Step.done()} ends the line. */
     Step next(LineState state, SeatView view);
 

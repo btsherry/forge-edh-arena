@@ -294,6 +294,82 @@ public class ComboPilotTest {
     }
 
     @Test
+    public void unaffordableFirstCastIsManaReservedNotAnAbortSpam() throws Exception {
+        Path dir = Files.createTempDirectory("pilot-afford");
+        Files.writeString(dir.resolve("executor-bindings.json"), """
+                {"schema": "arena.executor-bindings/1",
+                 "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
+                   "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
+                              "activation_cost": "{G}", "untap_cost": "{3}",
+                              "untap_ability_host": "engine", "attach_cost": "{0}",
+                              "engine_mana_value": "3", "untapper_mana_value": "3"}}],
+                 "unbound": []}""");
+        ExecutorBindings gated = ExecutorBindings.load(dir.resolve("executor-bindings.json"));
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), gated,
+                0.0, 0, events::add);
+
+        // 1 untapped source, first cast needs 3: wait, recorded, no line
+        SeatView poor = new SeatView(0, 2, Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of("Forest"),
+                SeatView.Zone.HAND, Set.of("Umbral Mantle"),
+                SeatView.Zone.COMMAND, Set.of("Selvala, Heart of the Wilds"),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 80, 0, 0, List.of(), Map.of(), 1);
+        assertTrue(pilot.nextAction(poor, true, PROFITABLE).isEmpty());
+        assertFalse(pilot.lineActive());
+        assertEquals(1, events.size());
+        assertEquals("combo_ignored", events.get(0).t());
+        assertEquals("mana_reserved", events.get(0).fields().get("reason"));
+
+        // 4 sources: the line enters and the first cast goes out
+        SeatView funded = new SeatView(0, 3, Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of("Forest"),
+                SeatView.Zone.HAND, Set.of("Umbral Mantle"),
+                SeatView.Zone.COMMAND, Set.of("Selvala, Heart of the Wilds"),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 80, 0, 0, List.of(), Map.of(), 4);
+        ComboPilot.Action action = pilot.nextAction(funded, true, PROFITABLE).orElseThrow();
+        assertTrue(action.step().isCast());
+        assertEquals("Selvala, Heart of the Wilds", action.step().card());
+        assertAllValid(events);
+    }
+
+    @Test
+    public void deployReachesRoutePlanPayoffsBeyondTheBinding() throws Exception {
+        RoutePlan plan = new RoutePlan(
+                List.of(new RoutePlan.PlannedRoute("DIRECT_DAMAGE_LOOP", "conversion", "supported",
+                        List.of("Fireball"))),
+                Map.of("x_damage", List.of("Fireball")));
+        Path dir = Files.createTempDirectory("pilot-deploy");
+        Files.writeString(dir.resolve("executor-bindings.json"), """
+                {"schema": "arena.executor-bindings/1",
+                 "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
+                   "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
+                              "activation_cost": "{G}", "untap_cost": "{3}",
+                              "untap_ability_host": "engine"}}],
+                 "unbound": []}""");
+        ExecutorBindings noPayoffBindings = ExecutorBindings.load(dir.resolve("executor-bindings.json"));
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), noPayoffBindings,
+                plan, null, 0.0, 0, events::add);
+
+        SeatView board = new SeatView(0, 5, Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of("Selvala, Heart of the Wilds", "Umbral Mantle"),
+                SeatView.Zone.HAND, Set.of("Fireball"),
+                SeatView.Zone.COMMAND, Set.of(),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 80, 0, 0, List.of(), Map.of(), 9);
+        ComboPilot.Action shortcut = pilot.nextAction(board, true, PROFITABLE).orElseThrow();
+        assertFalse(shortcut.isStep());
+        // DEPLOY: the binding lists no payoffs, but the route plan knows Fireball
+        ComboPilot.Action deploy = pilot.nextAction(board, true, PROFITABLE).orElseThrow();
+        assertTrue(deploy.step().isCast());
+        assertEquals("Fireball", deploy.step().card());
+        assertAllValid(events);
+    }
+
+    @Test
     public void notReadyMeansNoEventsAtAll() {
         List<ArenaEvent> events = new ArrayList<>();
         ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
