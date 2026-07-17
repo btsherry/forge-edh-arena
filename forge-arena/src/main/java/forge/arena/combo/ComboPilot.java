@@ -78,6 +78,8 @@ public final class ComboPilot {
     private final Set<String> attemptedThisTurn = new HashSet<>();
     private final Set<String> firedShortcuts = new HashSet<>();
     private int seenTurn = -1;
+    private String lastAssemblySignature;
+    private int assemblyRepeats;
 
     public ComboPilot(ComboTracker tracker, ExecutorBindings bindings, double patience,
             int seat, Consumer<ArenaEvent> events) {
@@ -146,6 +148,12 @@ public final class ComboPilot {
         }
 
         if (lineActive()) {
+            // ASSEMBLY and DEPLOY are sorcery-speed stages (casts, equips):
+            // outside the window the engine refuses them silently and the
+            // line would spin — wait for our next main phase instead
+            if ((lineState.stage() == 0 || lineState.stage() == 2) && !entryWindowOpen) {
+                return Optional.empty();
+            }
             if (lineState.stage() == 0) {
                 return assemblyAction(view, validator);
             }
@@ -227,6 +235,18 @@ public final class ComboPilot {
             return Optional.empty();
         }
         if (!assembly.isEmpty()) {
+            // no-progress watchdog: a step that plays but changes nothing
+            // (silent engine refusal) must abort, never spin priorities away
+            String signature = assembly.toString();
+            if (signature.equals(lastAssemblySignature)) {
+                if (++assemblyRepeats > 8) {
+                    abortLine(view.turn(), "engine_error", assembly.get(0).card());
+                    return Optional.empty();
+                }
+            } else {
+                lastAssemblySignature = signature;
+                assemblyRepeats = 0;
+            }
             events.accept(ArenaEvent.of("line_step", view.turn(), seat)
                     .with("stage", "ASSEMBLY")
                     .with("iteration", lineState.iteration()));
@@ -305,6 +325,8 @@ public final class ComboPilot {
         activeExecutor = null;
         activeBinding = null;
         lineState = null;
+        lastAssemblySignature = null;
+        assemblyRepeats = 0;
     }
 
     private void ignore(String comboId, int turn, String reason) {
