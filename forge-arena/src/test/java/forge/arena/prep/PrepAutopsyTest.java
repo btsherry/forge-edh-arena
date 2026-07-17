@@ -206,7 +206,9 @@ public class PrepAutopsyTest {
         String body = bodies.get(0);
         JsonNode request = MAPPER.readTree(body);
         assertEquals("test-model", request.get("model").asText());
-        assertEquals(0, request.get("temperature").asInt());
+        // temperature must be ABSENT: the API deprecated it for Claude 5
+        // models (400 on 2026-07-17) — determinism lives in the schema gates
+        assertFalse("deprecated param must not be sent", request.has("temperature"));
         String user = request.get("messages").get(0).get("content").asText();
         assertTrue(user.contains("SPREAD_COMBAT"));            // closed route set
         assertTrue(user.contains("drain_on_trigger"));         // closed payoff classes

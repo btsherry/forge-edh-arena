@@ -94,7 +94,9 @@ public final class ClaudeClient {
         Map<String, Object> body = new java.util.LinkedHashMap<>();
         body.put("model", model);
         body.put("max_tokens", 4096);
-        body.put("temperature", 0);
+        // no temperature: the API deprecated it for Claude 5 models (HTTP 400,
+        // observed 2026-07-17); determinism comes from the closed-enum schema
+        // gates + sim verification, never from sampling settings
         body.put("system", system);
         body.put("messages", List.of(message));
         return MAPPER.writeValueAsString(body);
