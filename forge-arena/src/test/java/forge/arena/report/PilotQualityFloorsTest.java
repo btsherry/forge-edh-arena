@@ -76,6 +76,26 @@ public class PilotQualityFloorsTest {
     }
 
     @Test
+    public void lateReadyWithNoSubsequentOwnTurnIsNotAViolation() throws Exception {
+        // PR-28 (found live): a 4-seat pod's seat gets a turn every 4 global
+        // turns — ready at t24 with the game ending t26 means the seat NEVER
+        // got another MAIN1; silence is the absence of a decision point
+        List<List<JsonNode>> games = List.of(
+                game("{\"t\":\"game_start\",\"seats\":[\"a\",\"selvala\",\"b\",\"c\"],\"seed\":5}\n"
+                        + "{\"t\":\"combo_ready\",\"turn\":24,\"seat\":1,\"combo\":\"c1\","
+                        + "\"window\":\"MAIN1\"}\n"
+                        + "{\"t\":\"game_end\",\"turn\":26,\"win_condition\":\"Draw\"}"),
+                game("{\"t\":\"game_start\",\"seats\":[\"a\",\"selvala\",\"b\",\"c\"],\"seed\":6}\n"
+                        + "{\"t\":\"combo_ready\",\"turn\":3,\"seat\":1,\"combo\":\"c1\","
+                        + "\"window\":\"MAIN1\"}\n"
+                        + "{\"t\":\"combo_shortcut\",\"turn\":7,\"seat\":1,\"combo\":\"c1\","
+                        + "\"iterations_proven\":3,\"bounded_product\":{}}\n"
+                        + "{\"t\":\"game_end\",\"turn\":30,\"win_condition\":\"Draw\"}"));
+        PilotFloors.DeckFloors floors = PilotFloors.evaluate("selvala", games, 0.5);
+        assertTrue("violations: " + floors.violations(), floors.pilotValid());
+    }
+
+    @Test
     public void aboveFloorWithCompleteTelemetryIsValid() throws Exception {
         List<List<JsonNode>> games = List.of(
                 selvalaGame(true, true, false),

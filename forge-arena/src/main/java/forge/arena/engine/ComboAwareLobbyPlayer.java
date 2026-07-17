@@ -183,15 +183,28 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             // PR-25: scripted X — playChosenSpellAbility never recomputes X,
             // so the pinned value flows straight into cost payment, which
             // prices it against the injected pool (the payment layer sees
-            // floating mana; only the decision layer is blind)
+            // floating mana; only the decision layer is blind). PR-28 guard:
+            // only when every X cost part is MANA — an X life/sacrifice
+            // rider at X=500 would be lethal to ourselves
             if (step.x() != null && sa.getPayCosts() != null
-                    && sa.getPayCosts().hasXInAnyCostPart()) {
+                    && sa.getPayCosts().hasXInAnyCostPart() && manaOnlyX(sa.getPayCosts())) {
                 sa.setXManaCostPaid(step.x());
             }
             // PR-27a: arm the resolution-choice hint (Sabertooth's bounce
             // asks WHICH creature to return while this ability resolves)
             pendingChoice = step.choice();
             return Collections.singletonList(sa);
+        }
+
+        /** PR-28: X is pin-safe only when every X cost part is mana. */
+        private static boolean manaOnlyX(forge.game.cost.Cost cost) {
+            for (forge.game.cost.CostPart part : cost.getCostParts()) {
+                if ("X".equals(part.getAmount())
+                        && !(part instanceof forge.game.cost.CostPartMana)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private int tutorTriedTurn = -1;
@@ -415,6 +428,31 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 mulligansTaken++;
             }
             return keep;
+        }
+
+        @Override
+        public forge.game.card.CardCollection chooseCardsToDiscardFrom(Player p, SpellAbility sa,
+                forge.game.card.CardCollection validCards, int min, int max,
+                forge.game.card.CardCollectionView visibleToChooser) {
+            // PR-28 discard shield (the tuck shield's sibling): cleanup and
+            // effect discards never pitch bound-combo pieces or payoffs while
+            // unprotected cards can fill the quota — a hand kept FOR a card
+            // must not discard that card
+            if (p == player) {
+                java.util.Set<String> shielded = pilot.protectedMulliganCards(
+                        SeatViews.of(player, seatIndex, getGame().getPhaseHandler().getTurn()));
+                forge.game.card.CardCollection free = new forge.game.card.CardCollection();
+                for (forge.game.card.Card c : validCards) {
+                    if (!shielded.contains(c.getName())) {
+                        free.add(c);
+                    }
+                }
+                if (free.size() >= min && free.size() < validCards.size()) {
+                    return super.chooseCardsToDiscardFrom(p, sa, free, min,
+                            Math.min(max, free.size()), visibleToChooser);
+                }
+            }
+            return super.chooseCardsToDiscardFrom(p, sa, validCards, min, max, visibleToChooser);
         }
 
         @Override

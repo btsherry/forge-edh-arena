@@ -92,10 +92,13 @@ public final class PilotFloors {
                 readyGames++;
                 if (attempted) {
                     attemptedGames++;
-                } else if (!ignored && lastTurn > firstReadyTurn) {
-                    // PR-18 refinement: readiness is a bridge OBSERVATION; only
-                    // demand a decision record when the pilot actually had a
-                    // later turn (a decision point) to make one in
+                } else if (!ignored
+                        && lastTurn >= firstReadyTurn + game.get(0).path("seats").size()) {
+                    // PR-18 refinement, PR-28 form: readiness is a bridge
+                    // OBSERVATION; a decision record is owed only when the
+                    // SEAT got a decision point afterwards — its own turns
+                    // come every podSize global turns, so a late ready with
+                    // no subsequent own MAIN1 is not a silent decision
                     violations.add("ready-with-no-attempt lacks combo_ignored (seed "
                             + game.get(0).path("seed").asText("?") + ")");
                 }
