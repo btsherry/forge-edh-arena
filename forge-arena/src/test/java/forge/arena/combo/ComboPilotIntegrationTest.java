@@ -113,7 +113,9 @@ public class ComboPilotIntegrationTest {
         EngineFacade.playCommanderGame(
                 List.of(SeatSpec.comboAware(new File("decks/selvala-heart-of-the-wilds.dck"), dossier),
                         SeatSpec.goldfish(new File("decks/purphoros-god-of-the-forge.dck"))),
-                42L, new ArenaLimits(6, 300, 2000), sink, new BoardProbe());
+                // cap 8: the PR-25 stall window is 2 of the SEAT's own turns
+                // (= 4 global in this 2-player game after the t3 fire, so t7)
+                42L, new ArenaLimits(8, 300, 2000), sink, new BoardProbe());
 
         List<ArenaEvent> entered = events.stream().filter(e -> e.t().equals("line_entered")).toList();
         assertTrue("the pilot must enter the Mantle line, events: "
@@ -131,7 +133,8 @@ public class ComboPilotIntegrationTest {
         assertEquals("527-2816", shortcuts.get(0).fields().get("combo"));
 
         // Gate 3.6 logging half: 10k mana + a synthetic 2-card route plan does
-        // not end the game within 2 turns -> the watchdog must say so, loudly
+        // not end the game within the window (PR-25: 2 of the seat's OWN
+        // turns) -> the watchdog must say so, loudly
         List<ArenaEvent> stalled = events.stream()
                 .filter(e -> e.t().equals("combo_stalled")).toList();
         assertEquals("proven-infinite with no end state = combo_stalled (never silence)",

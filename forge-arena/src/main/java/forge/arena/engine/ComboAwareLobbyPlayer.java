@@ -76,6 +76,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
 
         private int shortcutTurn = -1;
         private String shortcutCombo;
+        private String shortcutRoute;
         private boolean stallReported;
 
         @Override
@@ -86,30 +87,57 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             SeatView view = SeatViews.of(player, seatIndex, turn);
             boolean entryWindowOpen = game.getPhaseHandler().is(PhaseType.MAIN1, player)
                     && game.getStack().isEmpty();
-            ComboPilot.Action action = pilot.nextAction(view, entryWindowOpen,
-                    executor -> executor.validate(GameSimHandle.copyOf(game, player)))
+            java.util.function.Function<forge.arena.combo.LineExecutor, forge.arena.combo.SimResult>
+                    validator = executor -> executor.validate(GameSimHandle.copyOf(game, player));
+            ComboPilot.Action action = pilot.nextAction(view, entryWindowOpen, validator)
                     .orElse(null);
             if (action == null) {
                 return super.chooseSpellAbilityToPlay();
             }
             if (!action.isStep()) {
                 // loop shortcut (plan §6): the proof already ran on a copy —
-                // compress the loop to its bounded product and let stock AI
-                // convert along the planner's selected route
+                // compress the loop to its bounded product
                 injectPool(action.shortcut());
                 shortcutTurn = turn;
                 shortcutCombo = action.shortcut().comboId();
+                shortcutRoute = action.shortcut().route();
+                // PR-25 deploy-first (game 78): with the pool now injected,
+                // ask the pilot again in the SAME priority — stock only gets
+                // the window when the pilot has nothing to deploy, so it can
+                // never squander a payoff (Finale at pool-blind small X)
+                ComboPilot.Action deploy = pilot.nextAction(
+                        SeatViews.of(player, seatIndex, turn), entryWindowOpen, validator)
+                        .orElse(null);
+                if (deploy != null && deploy.isStep()) {
+                    List<SpellAbility> resolved = resolveStep(deploy.step(), turn);
+                    if (resolved != null) {
+                        return resolved;
+                    }
+                }
                 return super.chooseSpellAbilityToPlay();
             }
-            LineExecutor.Step step = action.step();
+            List<SpellAbility> resolved = resolveStep(action.step(), turn);
+            return resolved != null ? resolved : super.chooseSpellAbilityToPlay();
+        }
+
+        /** Step → engine ability; null = abort recorded, stock takes the priority. */
+        private List<SpellAbility> resolveStep(LineExecutor.Step step, int turn) {
             SpellAbility sa = step.isCast()
                     ? AbilityResolver.resolveCast(player, step.card())
                     : AbilityResolver.resolve(player, step.card(), step.costHint(), step.targets());
             if (sa == null) {
-                // a piece is gone/changed, or an assembly cast is unaffordable
-                // this turn — graceful fallback, recorded, retried next turn
+                // a piece is gone/changed, or a cast is unaffordable this
+                // turn — graceful fallback, recorded, retried next turn
                 pilot.abortLine(turn, step.isCast() ? "validation" : "interaction", step.card());
-                return super.chooseSpellAbilityToPlay();
+                return null;
+            }
+            // PR-25: scripted X — playChosenSpellAbility never recomputes X,
+            // so the pinned value flows straight into cost payment, which
+            // prices it against the injected pool (the payment layer sees
+            // floating mana; only the decision layer is blind)
+            if (step.x() != null && sa.getPayCosts() != null
+                    && sa.getPayCosts().hasXInAnyCostPart()) {
+                sa.setXManaCostPaid(step.x());
             }
             return Collections.singletonList(sa);
         }
@@ -124,10 +152,96 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             player.getManaPool().addMana(mana);
         }
 
-        /** Gate 3.6 logging half: proven-infinite with no end state within 2 turns. */
+        @Override
+        public void declareAttackers(Player attacker, forge.game.combat.Combat combat) {
+            // PR-25 forced close: while conversion is pending the pilot may
+            // steer combat — all-in split alpha (SPREAD_COMBAT) or commander
+            // at the lowest-life head (COMMANDER_DMG_SEQUENCE). No directive
+            // = stock combat untouched (inertness).
+            if (attacker == player) {
+                int turn = getGame().getPhaseHandler().getTurn();
+                ComboPilot.CombatOrder order = pilot.combatOrder(
+                        SeatViews.of(player, seatIndex, turn)).orElse(null);
+                if (order != null && scriptAttack(order, combat)) {
+                    return;
+                }
+            }
+            super.declareAttackers(attacker, combat);
+        }
+
+        /**
+         * Assign attackers per the pilot's directive: biggest hitters first,
+         * lethal-then-spill down the kill order (the commander sequence puts
+         * all pressure on the head). False = nothing could attack — stock
+         * declares instead.
+         */
+        private boolean scriptAttack(ComboPilot.CombatOrder order,
+                forge.game.combat.Combat combat) {
+            List<Player> targets = new java.util.ArrayList<>();
+            for (int seatIdx : order.killOrder()) {
+                for (Player p : getGame().getPlayers()) {
+                    if (p.getId() == seatIdx && !p.hasLost()) {
+                        targets.add(p);
+                    }
+                }
+            }
+            if (targets.isEmpty()) {
+                return false;
+            }
+            List<forge.game.card.Card> attackers = new java.util.ArrayList<>();
+            for (forge.game.card.Card c : player.getCreaturesInPlay()) {
+                if (forge.game.combat.CombatUtil.canAttack(c)) {
+                    attackers.add(c);
+                }
+            }
+            attackers.sort(java.util.Comparator.comparingInt(
+                    forge.game.card.Card::getNetPower).reversed());
+            boolean commanderRoute = "COMMANDER_DMG_SEQUENCE".equals(order.route());
+            int targetIndex = 0;
+            long assignedPower = 0;
+            boolean any = false;
+            for (forge.game.card.Card c : attackers) {
+                Player target = targets.get(commanderRoute ? 0 : targetIndex);
+                if (!forge.game.combat.CombatUtil.canAttack(c, target)) {
+                    for (Player alt : targets) {
+                        if (forge.game.combat.CombatUtil.canAttack(c, alt)) {
+                            combat.addAttacker(c, alt);
+                            any = true;
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                combat.addAttacker(c, target);
+                any = true;
+                if (!commanderRoute) {
+                    assignedPower += Math.max(0, c.getNetPower());
+                    if (assignedPower > target.getLife() && targetIndex < targets.size() - 1) {
+                        targetIndex++;
+                        assignedPower = 0;
+                    }
+                }
+            }
+            return any;
+        }
+
+        /**
+         * Gate 3.6 window, PR-25 form: measured in the SEAT's own turns
+         * (global turns ÷ pod size) — the old +2-global window fired before
+         * the seat's next turn even arrived, mid-legitimate-sequence (the
+         * stall autopsy's no-repair finding). Same-turn routes get 2 own
+         * turns; the commander sequence kills one head per combat and gets 4.
+         */
+        private int stallWindowTurns(Game game) {
+            int players = Math.max(1, game.getPlayers().size());
+            int ownTurns = "COMMANDER_DMG_SEQUENCE".equals(shortcutRoute) ? 4 : 2;
+            return ownTurns * players;
+        }
+
+        /** Gate 3.6 logging half: proven-infinite with no end state within the window. */
         private void watchForStall(Game game, int turn) {
             if (shortcutTurn < 0 || stallReported || game.isGameOver()
-                    || turn < shortcutTurn + 2) {
+                    || turn < shortcutTurn + stallWindowTurns(game)) {
                 return;
             }
             stallReported = true;

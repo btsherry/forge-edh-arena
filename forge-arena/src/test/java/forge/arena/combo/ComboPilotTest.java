@@ -366,7 +366,116 @@ public class ComboPilotTest {
         ComboPilot.Action deploy = pilot.nextAction(board, true, PROFITABLE).orElseThrow();
         assertTrue(deploy.step().isCast());
         assertEquals("Fireball", deploy.step().card());
+        // PR-25: conversion casts pin X — the AI's own choice is pool-blind
+        assertEquals(Integer.valueOf(ComboPilot.DEPLOY_X), deploy.step().x());
         assertAllValid(events);
+    }
+
+    // ---- PR-25: conversion — re-plan, late deploys, forced combat ----
+
+    private static SeatView convertView(Set<String> battlefield, Set<String> hand, int turn) {
+        return new SeatView(0, turn, Map.of(
+                SeatView.Zone.BATTLEFIELD, battlefield,
+                SeatView.Zone.HAND, hand,
+                SeatView.Zone.COMMAND, Set.of(),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 70, 10000, 9,
+                List.of(new SeatView.OpponentView(1, 40, 0, Set.of()),
+                        new SeatView.OpponentView(2, 26, 0, Set.of()),
+                        new SeatView.OpponentView(3, 31, 0, Set.of())),
+                Map.of(), 9);
+    }
+
+    private ComboPilot firedPilot(RoutePlan plan, List<ArenaEvent> events) throws Exception {
+        Path dir = Files.createTempDirectory("pilot-convert");
+        Files.writeString(dir.resolve("executor-bindings.json"), """
+                {"schema": "arena.executor-bindings/1",
+                 "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
+                   "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
+                              "activation_cost": "{G}", "untap_cost": "{3}",
+                              "untap_ability_host": "engine", "pool_color": "G"}}],
+                 "unbound": []}""");
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)),
+                ExecutorBindings.load(dir.resolve("executor-bindings.json")), plan, null,
+                0.0, 0, events::add);
+        // fire with an empty hand: nothing to deploy, line exits, pool banked
+        SeatView atFire = convertView(
+                Set.of("Selvala, Heart of the Wilds", "Umbral Mantle"), Set.of(), 3);
+        assertFalse(pilot.nextAction(atFire, true, PROFITABLE).orElseThrow().isStep());
+        assertTrue(pilot.nextAction(atFire, true, PROFITABLE).isEmpty());
+        assertFalse(pilot.lineActive());
+        return pilot;
+    }
+
+    @Test
+    public void replanDeploysLatePayoffsWithScriptedX() throws Exception {
+        RoutePlan plan = new RoutePlan(
+                List.of(new RoutePlan.PlannedRoute("SPREAD_COMBAT", "conversion", "supported",
+                        List.of("Concordant Crossroads", "Craterhoof Behemoth"))),
+                Map.of("haste_static", List.of("Concordant Crossroads"),
+                        "mass_pump", List.of("Craterhoof Behemoth")));
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = firedPilot(plan, events);
+
+        // next turn: Crossroads landed, Craterhoof drawn — the re-plan flips
+        // BANK_AND_HOLD into SPREAD_COMBAT and the payoff still gets cast
+        SeatView later = convertView(
+                Set.of("Selvala, Heart of the Wilds", "Umbral Mantle", "Concordant Crossroads"),
+                Set.of("Craterhoof Behemoth"), 7);
+        ComboPilot.Action deploy = pilot.nextAction(later, true, PROFITABLE).orElseThrow();
+        assertTrue(deploy.step().isCast());
+        assertEquals("Craterhoof Behemoth", deploy.step().card());
+        assertEquals(Integer.valueOf(ComboPilot.DEPLOY_X), deploy.step().x());
+        long spreadSelected = events.stream().filter(e -> e.t().equals("route_selected")
+                && "SPREAD_COMBAT".equals(e.fields().get("route"))).count();
+        assertEquals(1, spreadSelected);
+        long deployWin = events.stream().filter(e -> e.t().equals("line_step")
+                && "DEPLOY_WIN".equals(e.fields().get("stage"))).count();
+        assertEquals(1, deployWin);
+
+        // same turn, same card: deduped — and the planner ran ONCE this turn
+        assertTrue(pilot.nextAction(later, true, PROFITABLE).isEmpty());
+        assertEquals("route evaluation is once per turn", 1,
+                events.stream().filter(e -> e.t().equals("route_selected")
+                        && "SPREAD_COMBAT".equals(e.fields().get("route"))).count());
+        assertAllValid(events);
+    }
+
+    @Test
+    public void combatOrderSteersOnlyCombatRoutesAndSortsByLife() throws Exception {
+        RoutePlan plan = new RoutePlan(
+                List.of(new RoutePlan.PlannedRoute("SPREAD_COMBAT", "conversion", "supported",
+                        List.of("Concordant Crossroads"))),
+                Map.of("haste_static", List.of("Concordant Crossroads"),
+                        "mass_pump", List.of("Craterhoof Behemoth")));
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = firedPilot(plan, events);
+
+        // banked verdict (nothing visible at fire): no combat directive
+        assertTrue(pilot.combatOrder(convertView(
+                Set.of("Selvala, Heart of the Wilds", "Umbral Mantle"), Set.of(), 3)).isEmpty());
+
+        // SPREAD becomes live on a later turn: directive with lowest-life-first
+        SeatView later = convertView(
+                Set.of("Selvala, Heart of the Wilds", "Umbral Mantle", "Concordant Crossroads"),
+                Set.of("Craterhoof Behemoth"), 7);
+        pilot.nextAction(later, true, PROFITABLE); // re-plan runs here
+        ComboPilot.CombatOrder order = pilot.combatOrder(later).orElseThrow();
+        assertEquals("SPREAD_COMBAT", order.route());
+        assertEquals("kill order is lowest life first (26, 31, 40)",
+                List.of(2, 3, 1), order.killOrder());
+        assertTrue(events.stream().anyMatch(e -> e.t().equals("line_step")
+                && "FORCED_ATTACK".equals(e.fields().get("stage"))));
+        assertAllValid(events);
+    }
+
+    @Test
+    public void combatOrderIsInertWithoutAFiredShortcut() {
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
+                0.0, 0, e -> {
+                });
+        assertTrue("no fire -> stock combat untouched (inertness)",
+                pilot.combatOrder(convertView(Set.of(), Set.of(), 5)).isEmpty());
     }
 
     // ---- PR-24: payoff visibility — mulligan policy + tutor urgency ----

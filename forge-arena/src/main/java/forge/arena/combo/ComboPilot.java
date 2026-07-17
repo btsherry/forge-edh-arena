@@ -61,6 +61,24 @@ public final class ComboPilot {
     /** Bounded product of a proven-infinite loop (plan: large, engine-safe). */
     public static final int SHORTCUT_POOL = 10_000;
 
+    /**
+     * Scripted X for conversion casts (PR-25): lethal pump for any table
+     * (+500/+500), ≥ 10 for Finale's haste rider, and cheap against the
+     * {@link #SHORTCUT_POOL}. The AI's own X choice is pool-blind — game 78
+     * cast Finale at small X with 10^4 floating and fetched a Dreadnought
+     * that died to its own trigger.
+     */
+    public static final int DEPLOY_X = 500;
+
+    /**
+     * PR-25: the pilot's combat instruction while conversion is pending —
+     * the selected route plus the opponent kill order (seat indices,
+     * lowest life first). The controller translates it into declared
+     * attackers with engine data; an empty directive means stock combat.
+     */
+    public record CombatOrder(String route, List<Integer> killOrder) {
+    }
+
     private final ComboTracker tracker;
     private final ExecutorBindings bindings;
     private final RoutePlan routePlan;
@@ -80,6 +98,13 @@ public final class ComboPilot {
     private int seenTurn = -1;
     private String lastAssemblySignature;
     private int assemblyRepeats;
+    // PR-25 conversion state: the fired binding survives line exit (its
+    // payoffs stay deploy candidates), the planner re-runs once per turn
+    // while the pool is banked, and same-turn deploy retries are deduped
+    private ExecutorBindings.Binding firedBinding;
+    private String currentRoute;
+    private int lastPlanTurn = -1;
+    private final Set<String> attemptedDeploys = new HashSet<>();
 
     public ComboPilot(ComboTracker tracker, ExecutorBindings bindings, double patience,
             int seat, Consumer<ArenaEvent> events) {
@@ -259,6 +284,7 @@ public final class ComboPilot {
         if (view.turn() != seenTurn) {
             seenTurn = view.turn();
             attemptedThisTurn.clear();
+            attemptedDeploys.clear();
         }
 
         if (lineActive()) {
@@ -288,6 +314,23 @@ public final class ComboPilot {
 
         if (!entryWindowOpen) {
             return Optional.empty(); // not a decision point — no phantom events
+        }
+
+        // PR-25 re-plan: while conversion is pending (pool banked, no line
+        // running), re-evaluate routes ONCE per turn — a payoff drawn or
+        // tutored after the fire flips BANK_AND_HOLD into a real route
+        // instead of a stall — and keep deploying payoffs as they arrive
+        if (!firedShortcuts.isEmpty() && !lineActive()) {
+            if (view.turn() != lastPlanTurn) {
+                lastPlanTurn = view.turn();
+                currentRoute = LethalityPlanner.choose(routePlan, view, events).route();
+            }
+            if (!"BANK_AND_HOLD".equals(currentRoute)) {
+                Optional<Action> deploy = conversionDeploy(view);
+                if (deploy.isPresent()) {
+                    return deploy;
+                }
+            }
         }
 
         for (ComboTracker.ComboStatus status : tracker.recompute(view).statuses()) {
@@ -390,6 +433,11 @@ public final class ComboPilot {
             Map<String, Object> boundedProduct = new HashMap<>();
             boundedProduct.put("mana_" + loop.poolColor(), SHORTCUT_POOL);
             firedShortcuts.add(comboId);
+            // PR-25: conversion state — the binding's payoffs stay deploy
+            // candidates after the line exits, and the verdict feeds combat
+            firedBinding = activeBinding;
+            currentRoute = verdict.route();
+            lastPlanTurn = view.turn();
             events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
                     .with("combo", comboId)
                     .with("iterations_proven", proof.cycles())
@@ -415,20 +463,77 @@ public final class ComboPilot {
      * stock attack logic's job (haste creatures attack).
      */
     private Optional<Action> deployAction(SeatView view) {
-        java.util.LinkedHashSet<String> candidates =
-                new java.util.LinkedHashSet<>(activeBinding.payoffs());
-        routePlan.payoffs().values().forEach(candidates::addAll);
-        for (String payoff : candidates) {
-            if (view.cardsIn(SeatView.Zone.HAND).contains(payoff)) {
+        for (String payoff : deployCandidates(activeBinding)) {
+            if (view.cardsIn(SeatView.Zone.HAND).contains(payoff)
+                    && !attemptedDeploys.contains(payoff)) {
+                attemptedDeploys.add(payoff);
                 events.accept(ArenaEvent.of("line_step", view.turn(), seat)
                         .with("stage", "DEPLOY")
                         .with("iteration", lineState.iteration()));
                 lineState = lineState.advance();
-                return Optional.of(Action.play(LineExecutor.Step.cast(payoff)));
+                return Optional.of(Action.play(
+                        LineExecutor.Step.castX(payoff, DEPLOY_X)));
             }
         }
         exitLine();
         return Optional.empty();
+    }
+
+    /**
+     * PR-25 conversion deploy: after the line has exited (hand was empty at
+     * fire time), payoffs that arrive later still get cast off the banked
+     * pool, one per priority, deduped per turn — with the scripted X.
+     */
+    private Optional<Action> conversionDeploy(SeatView view) {
+        for (String payoff : deployCandidates(firedBinding)) {
+            if (view.cardsIn(SeatView.Zone.HAND).contains(payoff)
+                    && !attemptedDeploys.contains(payoff)) {
+                attemptedDeploys.add(payoff);
+                events.accept(ArenaEvent.of("line_step", view.turn(), seat)
+                        .with("stage", "DEPLOY_WIN")
+                        .with("iteration", 0));
+                return Optional.of(Action.play(
+                        LineExecutor.Step.castX(payoff, DEPLOY_X)));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** Binding payoffs (live or fired) ∪ the route plan's payoff classes. */
+    private java.util.LinkedHashSet<String> deployCandidates(ExecutorBindings.Binding binding) {
+        java.util.LinkedHashSet<String> candidates = new java.util.LinkedHashSet<>();
+        if (binding != null) {
+            candidates.addAll(binding.payoffs());
+        }
+        routePlan.payoffs().values().forEach(candidates::addAll);
+        return candidates;
+    }
+
+    /**
+     * PR-25 forced close: the combat instruction while conversion is pending.
+     * Only the combat routes produce one — SPREAD_COMBAT (all-in, split
+     * lowest-life-first) and COMMANDER_DMG_SEQUENCE (commander at the
+     * lowest-life head). Empty = stock combat, untouched (inertness: a
+     * pilot that never fired never steers an attack). Recorded as a
+     * FORCED_ATTACK line_step each combat it steers.
+     */
+    public Optional<CombatOrder> combatOrder(SeatView view) {
+        if (firedShortcuts.isEmpty() || currentRoute == null
+                || !("SPREAD_COMBAT".equals(currentRoute)
+                        || "COMMANDER_DMG_SEQUENCE".equals(currentRoute))) {
+            return Optional.empty();
+        }
+        List<Integer> killOrder = view.opponents().stream()
+                .sorted(java.util.Comparator.comparingInt(SeatView.OpponentView::life))
+                .map(SeatView.OpponentView::seatIndex)
+                .toList();
+        if (killOrder.isEmpty()) {
+            return Optional.empty();
+        }
+        events.accept(ArenaEvent.of("line_step", view.turn(), seat)
+                .with("stage", "FORCED_ATTACK")
+                .with("iteration", 0));
+        return Optional.of(new CombatOrder(currentRoute, killOrder));
     }
 
     /** Gate 3.6 logging half: the controller's stall watchdog reports through the pilot. */

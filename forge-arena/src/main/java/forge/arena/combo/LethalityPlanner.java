@@ -86,12 +86,26 @@ public final class LethalityPlanner {
                 return sink != null ? null : "damage_sink_not_visible";
             }
             case "SPREAD_COMBAT": {
+                // PR-25 haste v2: a static grant anywhere visible, a one-shot
+                // (Finale class) IN HAND — castable off the proven pool — or
+                // an ETB-haste permanent ON BATTLEFIELD (Surrak class: every
+                // DEPLOYED attacker enters hasty; the stall autopsies showed
+                // haste_source_not_visible was every SPREAD rejection)
                 String haste = firstVisible(plan.payoffCards("haste_static"), view);
+                String hasteKind = haste != null ? "static" : null;
                 if (haste == null) {
-                    haste = firstVisible(plan.payoffCards("haste_oneshot"), view);
+                    haste = firstIn(plan.payoffCards("haste_oneshot"), view,
+                            SeatView.Presence.HAND);
+                    hasteKind = haste != null ? "oneshot_in_hand" : null;
+                }
+                if (haste == null) {
+                    haste = firstIn(plan.payoffCards("haste_targeted"), view,
+                            SeatView.Presence.BATTLEFIELD);
+                    hasteKind = haste != null ? "targeted_on_battlefield" : null;
                 }
                 String pump = firstVisible(plan.payoffCards("mass_pump"), view);
                 predicates.put("haste_source", haste);
+                predicates.put("haste_kind", hasteKind);
                 predicates.put("mass_pump", pump);
                 predicates.put("own_board_power", view.ownBoardPower());
                 predicates.put("table_life", tableLife);
@@ -124,6 +138,16 @@ public final class LethalityPlanner {
             SeatView.Presence where = view.locate(card);
             if (where == SeatView.Presence.BATTLEFIELD || where == SeatView.Presence.HAND
                     || where == SeatView.Presence.COMMAND) {
+                return card;
+            }
+        }
+        return null;
+    }
+
+    /** First card in exactly the given zone, else null (PR-25 haste v2). */
+    private static String firstIn(List<String> cards, SeatView view, SeatView.Presence zone) {
+        for (String card : cards) {
+            if (view.locate(card) == zone) {
                 return card;
             }
         }

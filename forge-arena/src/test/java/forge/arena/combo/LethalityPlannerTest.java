@@ -144,6 +144,82 @@ public class LethalityPlannerTest {
     }
 
     @Test
+    public void finaleInHandSatisfiesHasteAsOneshot() throws Exception {
+        // PR-25 haste v2 — game 78's exact shape: no static haste anywhere,
+        // but Finale in hand is castable off the proven pool and grants haste
+        RoutePlan plan = new RoutePlan(
+                List.of(new RoutePlan.PlannedRoute("SPREAD_COMBAT", "conversion", "supported",
+                        List.of("Finale of Devastation"))),
+                Map.of("haste_oneshot", List.of("Finale of Devastation"),
+                        "mass_pump", List.of("Finale of Devastation")));
+        List<ArenaEvent> events = new ArrayList<>();
+        LethalityPlanner.Verdict verdict = LethalityPlanner.choose(plan,
+                view(Set.of("Selvala, Heart of the Wilds"),
+                        Set.of("Finale of Devastation"), 9, 33),
+                events::add);
+        assertEquals("SPREAD_COMBAT", verdict.route());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> predicates = (Map<String, Object>)
+                events.get(events.size() - 1).fields().get("predicates");
+        assertEquals("Finale of Devastation", predicates.get("haste_source"));
+        assertEquals("oneshot_in_hand", predicates.get("haste_kind"));
+        assertAllValid(events);
+    }
+
+    @Test
+    public void oneshotHasteOutsideHandDoesNotCount() throws Exception {
+        RoutePlan plan = new RoutePlan(
+                List.of(new RoutePlan.PlannedRoute("SPREAD_COMBAT", "conversion", "supported",
+                        List.of("Finale of Devastation"))),
+                Map.of("haste_oneshot", List.of("Finale of Devastation"),
+                        "mass_pump", List.of("Craterhoof Behemoth")));
+        List<ArenaEvent> events = new ArrayList<>();
+        // Finale already spent (graveyard is not a castable zone)
+        LethalityPlanner.Verdict verdict = LethalityPlanner.choose(plan,
+                new SeatView(0, 7, Map.of(
+                        SeatView.Zone.BATTLEFIELD, Set.of("Selvala, Heart of the Wilds"),
+                        SeatView.Zone.HAND, Set.of("Craterhoof Behemoth"),
+                        SeatView.Zone.COMMAND, Set.of(),
+                        SeatView.Zone.GRAVEYARD, Set.of("Finale of Devastation"),
+                        SeatView.Zone.EXILE, Set.of()), 60, 10000, 9,
+                        List.of(new SeatView.OpponentView(1, 40, 0, Set.of()))),
+                events::add);
+        assertEquals("BANK_AND_HOLD", verdict.route());
+        ArenaEvent rejected = events.stream()
+                .filter(e -> e.t().equals("route_rejected")).findFirst().orElseThrow();
+        assertEquals("haste_source_not_visible", rejected.fields().get("failed_predicate"));
+        assertAllValid(events);
+    }
+
+    @Test
+    public void surrakOnBattlefieldCountsAsHasteForDeployedAttackers() throws Exception {
+        // PR-25 haste v2: an ETB-haste permanent already on the battlefield
+        // makes every DEPLOYED attacker hasty (the Surrak class)
+        RoutePlan plan = new RoutePlan(
+                List.of(new RoutePlan.PlannedRoute("SPREAD_COMBAT", "conversion", "supported",
+                        List.of("Surrak and Goreclaw"))),
+                Map.of("haste_targeted", List.of("Surrak and Goreclaw"),
+                        "mass_pump", List.of("Craterhoof Behemoth")));
+        List<ArenaEvent> events = new ArrayList<>();
+        LethalityPlanner.Verdict verdict = LethalityPlanner.choose(plan,
+                view(Set.of("Surrak and Goreclaw"), Set.of("Craterhoof Behemoth"), 6, 30),
+                events::add);
+        assertEquals("SPREAD_COMBAT", verdict.route());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> predicates = (Map<String, Object>)
+                events.get(events.size() - 1).fields().get("predicates");
+        assertEquals("targeted_on_battlefield", predicates.get("haste_kind"));
+
+        // in HAND it grants nothing this turn — not a haste source yet
+        List<ArenaEvent> events2 = new ArrayList<>();
+        assertEquals("BANK_AND_HOLD", LethalityPlanner.choose(plan,
+                view(Set.of(), Set.of("Surrak and Goreclaw", "Craterhoof Behemoth"), 6, 30),
+                events2::add).route());
+        assertAllValid(events);
+        assertAllValid(events2);
+    }
+
+    @Test
     public void emptyPlanBanksImmediately() throws Exception {
         List<ArenaEvent> events = new ArrayList<>();
         LethalityPlanner.Verdict verdict = LethalityPlanner.choose(RoutePlan.empty(),
