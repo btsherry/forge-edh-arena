@@ -67,7 +67,13 @@ public final class ComboDetectionBridge implements GameAware {
     }
 
     private void recompute() {
-        if (player == null) {
+        if (player == null || turn == 0) {
+            // PR-24: pre-game hand selection is not an observation window —
+            // mulligan draws churn Library↔Hand and would emit phantom
+            // combo_ready for hands that get tucked straight back (the pilot's
+            // dig policy makes that churn routine). The first TurnBegan does
+            // the first real recompute, so a KEPT piece-hand still fires
+            // ready at turn 1; §5 readiness is per-turn and turn 0 has none.
             return;
         }
         SeatView view = SeatViews.of(player, seatIndex, turn);
