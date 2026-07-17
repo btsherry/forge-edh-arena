@@ -92,7 +92,36 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             ComboPilot.Action action = pilot.nextAction(view, entryWindowOpen, validator)
                     .orElse(null);
             if (action == null) {
-                return super.chooseSpellAbilityToPlay();
+                // PR-26: pilot-initiated tutor cast — stock cast zero tutors
+                // in 100 observed games; the fetch target is decided by the
+                // existing chooseCardsForZoneChange hook (ranked by urgency)
+                if (entryWindowOpen && pilot.wantsTutor(view)) {
+                    // reserved set: a payoff that is ITSELF a search effect
+                    // (Finale) must not be spent as a generic tutor — the
+                    // deploy path casts it at the scripted X when it matters
+                    SpellAbility tutorSa = findCastableTutor(turn,
+                            pilot.conversionPayoffNames(view));
+                    if (tutorSa != null) {
+                        return Collections.singletonList(tutorSa);
+                    }
+                }
+                List<SpellAbility> stock = super.chooseSpellAbilityToPlay();
+                // PR-26 payoff-protection veto: one-shot conversion spells
+                // (Finale class) are reserved while a bound combo exists —
+                // obs game 78's PRE-fire pathology: stock burned Finale at a
+                // pool-blind small X in the window between abort and refire.
+                // Permanent payoffs deploy freely (a battlefield Crossroads
+                // makes SPREAD_COMBAT better, not worse).
+                if (stock != null && pilot.hasBoundCombo(view)) {
+                    for (SpellAbility sa : stock) {
+                        forge.game.card.Card host = sa.getHostCard();
+                        if (sa.isSpell() && host != null && !host.getType().isPermanent()
+                                && pilot.conversionPayoffNames(view).contains(host.getName())) {
+                            return null; // pass — the payoff waits for conversion
+                        }
+                    }
+                }
+                return stock;
             }
             if (!action.isStep()) {
                 // loop shortcut (plan §6): the proof already ran on a copy —
@@ -120,15 +149,20 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             return resolved != null ? resolved : super.chooseSpellAbilityToPlay();
         }
 
-        /** Step → engine ability; null = abort recorded, stock takes the priority. */
+        /** Step → engine ability; null = failure handled, stock takes the priority. */
         private List<SpellAbility> resolveStep(LineExecutor.Step step, int turn) {
             SpellAbility sa = step.isCast()
                     ? AbilityResolver.resolveCast(player, step.card())
                     : AbilityResolver.resolve(player, step.card(), step.costHint(), step.targets());
             if (sa == null) {
-                // a piece is gone/changed, or a cast is unaffordable this
-                // turn — graceful fallback, recorded, retried next turn
-                pilot.abortLine(turn, step.isCast() ? "validation" : "interaction", step.card());
+                // inside a line: a piece is gone/changed or a cast is
+                // unaffordable — graceful abort, recorded, retried next turn.
+                // OUTSIDE a line (PR-26 pre-assembly, PR-25 conversion
+                // deploys): soft skip — there is no line to abort, and the
+                // per-turn dedupe already prevents a retry loop
+                if (pilot.lineActive()) {
+                    pilot.abortLine(turn, step.isCast() ? "validation" : "interaction", step.card());
+                }
                 return null;
             }
             // PR-25: scripted X — playChosenSpellAbility never recomputes X,
@@ -140,6 +174,49 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 sa.setXManaCostPaid(step.x());
             }
             return Collections.singletonList(sa);
+        }
+
+        private int tutorTriedTurn = -1;
+        private final java.util.Set<String> tutorTried = new java.util.HashSet<>();
+
+        /**
+         * PR-26: a castable search-effect spell in hand, found STRUCTURALLY
+         * (ChangeZone from the Library — no card names), affordable now.
+         * X-cost tutors get the maximum payable X: pre-fire that is real
+         * mana (the correct on-curve choice); post-fire the payment probe
+         * sees the injected pool, so the conversion fetch runs at a huge X.
+         * One attempt per card per turn — a refused cast never loops.
+         */
+        private SpellAbility findCastableTutor(int turn, java.util.Set<String> reserved) {
+            if (turn != tutorTriedTurn) {
+                tutorTriedTurn = turn;
+                tutorTried.clear();
+            }
+            for (forge.game.card.Card c : player.getCardsIn(forge.game.zone.ZoneType.Hand)) {
+                if (tutorTried.contains(c.getName()) || reserved.contains(c.getName())) {
+                    continue;
+                }
+                for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
+                    if (!sa.isSpell() || sa.getApi() != forge.game.ability.ApiType.ChangeZone
+                            || !String.valueOf(sa.getParam("Origin")).contains("Library")) {
+                        continue;
+                    }
+                    sa.setActivatingPlayer(player);
+                    if (sa.getPayCosts() != null && sa.getPayCosts().hasXInAnyCostPart()) {
+                        int x = forge.ai.ComputerUtilMana.determineLeftoverMana(sa, player, false);
+                        if (x <= 0) {
+                            continue;
+                        }
+                        sa.setXManaCostPaid(x);
+                    }
+                    if (!forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                        continue;
+                    }
+                    tutorTried.add(c.getName());
+                    return sa;
+                }
+            }
+            return null;
         }
 
         private void injectPool(ComboPilot.ShortcutOrder order) {

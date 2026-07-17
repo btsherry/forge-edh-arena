@@ -469,6 +469,96 @@ public class ComboPilotTest {
         assertAllValid(events);
     }
 
+    // ---- PR-26: pre-assembly, tutor appetite, veto set ----
+
+    @Test
+    public void preAssemblyCastsTheBoundCommandPieceOnCurve() {
+        // Mantle in the library (distance 1, no line can enter) but Selvala
+        // sits castable in the command zone: cast her NOW (the obs-100 t14
+        // finding) — once per turn, retried next turn
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
+                0.0, 0, events::add);
+        SeatView early = new SeatView(0, 2, Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of("Forest"),
+                SeatView.Zone.HAND, Set.of("Llanowar Elves"),
+                SeatView.Zone.COMMAND, Set.of("Selvala, Heart of the Wilds"),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 92, 0, 0, List.of(), Map.of(), 4);
+        ComboPilot.Action action = pilot.nextAction(early, true, PROFITABLE).orElseThrow();
+        assertTrue(action.step().isCast());
+        assertEquals("Selvala, Heart of the Wilds", action.step().card());
+        // soft decision: no line entered, no events — spell_cast records it
+        assertTrue("pre-assembly is silent (no phantom line events)", events.isEmpty());
+        // same turn: deduped; next turn: retried
+        assertTrue(pilot.nextAction(early, true, PROFITABLE).isEmpty());
+        SeatView nextTurn = new SeatView(0, 3, Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of("Forest"),
+                SeatView.Zone.HAND, Set.of("Llanowar Elves"),
+                SeatView.Zone.COMMAND, Set.of("Selvala, Heart of the Wilds"),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 92, 0, 0, List.of(), Map.of(), 4);
+        assertTrue(pilot.nextAction(nextTurn, true, PROFITABLE).isPresent());
+    }
+
+    @Test
+    public void preAssemblyIsInertWithoutABindingOrBelowTheCostGate() throws Exception {
+        // unbound combo: never deviates from stock
+        ExecutorBindings empty = ExecutorBindings.load(Path.of("/nonexistent"));
+        ComboPilot unboundPilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), empty,
+                0.0, 0, e -> {
+                });
+        SeatView early = new SeatView(0, 2, Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of(),
+                SeatView.Zone.HAND, Set.of(),
+                SeatView.Zone.COMMAND, Set.of("Selvala, Heart of the Wilds"),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 92, 0, 0, List.of(), Map.of(), 4);
+        assertTrue(unboundPilot.nextAction(early, true, PROFITABLE).isEmpty());
+
+        // bound but unaffordable (engine_mana_value 3 vs 1 source): wait
+        Path dir = Files.createTempDirectory("pilot-pregate");
+        Files.writeString(dir.resolve("executor-bindings.json"), """
+                {"schema": "arena.executor-bindings/1",
+                 "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
+                   "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
+                              "activation_cost": "{G}", "untap_cost": "{3}",
+                              "untap_ability_host": "engine", "engine_mana_value": "3"}}],
+                 "unbound": []}""");
+        ComboPilot gated = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)),
+                ExecutorBindings.load(dir.resolve("executor-bindings.json")),
+                0.0, 0, e -> {
+                });
+        SeatView poor = new SeatView(0, 2, Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of("Forest"),
+                SeatView.Zone.HAND, Set.of(),
+                SeatView.Zone.COMMAND, Set.of("Selvala, Heart of the Wilds"),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 92, 0, 0, List.of(), Map.of(), 1);
+        assertTrue(gated.nextAction(poor, true, PROFITABLE).isEmpty());
+    }
+
+    @Test
+    public void tutorAppetiteAndVetoSetFollowTheArtifacts() throws Exception {
+        RoutePlan plan = new RoutePlan(List.of(),
+                Map.of("haste_oneshot", List.of("Finale of Devastation")));
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
+                plan, null, 0.0, 0, e -> {
+                });
+        SeatView view = mullView(Set.of(), SELVALA_CMD, 0, 0);
+        assertTrue("bound combo -> the pilot wants tutors", pilot.wantsTutor(view));
+        assertTrue("bound combo present", pilot.hasBoundCombo(view));
+        assertTrue("veto set carries the route payoffs",
+                pilot.conversionPayoffNames(view).contains("Finale of Devastation"));
+
+        ComboPilot unbound = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)),
+                ExecutorBindings.load(Path.of("/nonexistent")), 0.0, 0, e -> {
+                });
+        assertFalse("no bound combo -> stock decides everything (inertness)",
+                unbound.wantsTutor(view));
+        assertFalse(unbound.hasBoundCombo(view));
+    }
+
     @Test
     public void combatOrderIsInertWithoutAFiredShortcut() {
         ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,

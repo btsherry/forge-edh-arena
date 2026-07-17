@@ -74,13 +74,13 @@ public class SelvalaFinaleWinTest {
                         forge.StaticData.instance().getCommonCards().getCard(name), p0);
                 game.getAction().moveTo(ZoneType.Hand, card, null, null);
             }
-            // EXACTLY 6 forests: Selvala (3) + Mantle (3) spend them all on
-            // assembly, so stock can never afford to squander Finale in the
-            // pre-fire windows (the first proof correctly refuses a sick
-            // Selvala, and the priorities between abort and refire belong to
-            // stock — protecting payoffs there is the PR-26 lever; this
-            // golden pins the conversion chain itself)
-            for (int i = 0; i < 6; i++) {
+            // 8 forests — MORE than assembly needs (Selvala 3 + Mantle 3):
+            // stock could afford Finale in the pre-fire windows between the
+            // sickness-refused first proof and the refire, and in PR-25 this
+            // golden needed exactly 6 to close that hole. The PR-26 veto now
+            // reserves one-shot payoffs while a bound combo exists, so the
+            // surplus mana proves the veto live alongside the conversion chain
+            for (int i = 0; i < 8; i++) {
                 forge.game.card.Card forest = forge.game.card.Card.fromPaperCard(
                         forge.StaticData.instance().getCommonCards().getCard("Forest"), p0);
                 game.getAction().moveToPlay(forest, null, null);

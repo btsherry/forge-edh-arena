@@ -385,7 +385,73 @@ public final class ComboPilot {
                     .with("entry_phase", executor.get().entryPhase()));
             return assemblyAction(view, validator);
         }
+        return preAssembly(view);
+    }
+
+    /**
+     * PR-26 pre-assembly (the obs-100 t14 finding: stock casts the commander
+     * at median turn 14 in a deck whose plan needs her on turn 3): when no
+     * line can enter, cast a bound combo's COMMAND-zone piece on curve —
+     * driven entirely by the combos.json piece locations and the binding's
+     * cost estimate, so a deck with no bound combos never deviates from
+     * stock (inertness). Soft decision: no event (the cast itself is
+     * recorded as spell_cast), and a live refusal is skipped, not aborted.
+     */
+    private Optional<Action> preAssembly(SeatView view) {
+        for (ComboTracker.ComboStatus status : tracker.recompute(view).statuses()) {
+            if (!status.fullySpecified() || firedShortcuts.contains(status.id())) {
+                continue;
+            }
+            Optional<LineExecutor> executor = bindings.forCombo(status.id())
+                    .flatMap(ExecutorBindings::executorFor);
+            if (executor.isEmpty()) {
+                continue;
+            }
+            for (Map.Entry<String, String> piece : status.where().entrySet()) {
+                if (!"COMMAND".equals(piece.getValue())
+                        || attemptedDeploys.contains(piece.getKey())) {
+                    continue;
+                }
+                int estimate = executor.get().castCostEstimate(piece.getKey());
+                if (estimate > 0
+                        && view.manaPool() + view.untappedManaSources() < estimate) {
+                    continue;
+                }
+                attemptedDeploys.add(piece.getKey());
+                return Optional.of(Action.play(LineExecutor.Step.cast(piece.getKey())));
+            }
+        }
         return Optional.empty();
+    }
+
+    /** PR-26: does any bound, fully-specified combo exist? (The pilot has business.) */
+    public boolean hasBoundCombo(SeatView view) {
+        for (ComboTracker.ComboStatus status : tracker.recompute(view).statuses()) {
+            if (status.fullySpecified() && executorExists(status.id())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * PR-26 veto set: the deck's conversion payoffs. The controller adds the
+     * engine-side spell-ness test — only ONE-SHOT payoffs (instant/sorcery)
+     * are reserved; permanents deploy freely (early Crossroads on the
+     * battlefield makes SPREAD_COMBAT better, not worse).
+     */
+    public Set<String> conversionPayoffNames(SeatView view) {
+        return deckPayoffs(tracker.recompute(view));
+    }
+
+    /**
+     * PR-26: worth casting a tutor now? Any bound combo (missing pieces are
+     * fetchable, payoffs stageable at IMMINENT) or a pending conversion (the
+     * fetch runs at CONVERSION urgency and pulls the payoff). Stock cast
+     * zero tutors in 100 observed games — the pilot initiates.
+     */
+    public boolean wantsTutor(SeatView view) {
+        return !firedShortcuts.isEmpty() || hasBoundCombo(view);
     }
 
     /**
