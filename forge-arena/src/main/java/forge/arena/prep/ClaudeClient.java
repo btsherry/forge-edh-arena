@@ -61,7 +61,10 @@ public final class ClaudeClient {
         HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).build();
         return (url, body) -> {
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-                    .timeout(Duration.ofSeconds(120))
+                    // Claude 5 thinking-heavy analyses (stall autopsies) run
+                    // multiple minutes end-to-end; 120s timed out live
+                    // 2026-07-17. Prep-time only — a long wait hurts nothing.
+                    .timeout(Duration.ofMinutes(10))
                     .header("Content-Type", "application/json")
                     .header("x-api-key", apiKey)
                     .header("anthropic-version", "2023-06-01")
