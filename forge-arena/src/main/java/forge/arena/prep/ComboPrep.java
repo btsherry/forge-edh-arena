@@ -37,6 +37,11 @@ public final class ComboPrep {
     }
 
     public static Result run(Path dossierDir, SpellbookClient.Fetcher fetcher) throws IOException {
+        return run(dossierDir, fetcher, RouteLibrary.load(RouteLibrary.defaultPath()));
+    }
+
+    public static Result run(Path dossierDir, SpellbookClient.Fetcher fetcher, RouteLibrary library)
+            throws IOException {
         ObjectNode index = (ObjectNode) MAPPER.readTree(dossierDir.resolve("dossier.json").toFile());
         SpellbookClient.Snapshot snapshot = SpellbookClient.fetchOrLoad(dossierDir, fetcher);
         JsonNode results = snapshot.raw().get("results");
@@ -171,12 +176,19 @@ public final class ComboPrep {
             boolean directWin = false;
             for (Feature feature : featureList(v)) {
                 RouteRules.Verdict verdict = RouteRules.classify(feature.name, feature.status);
+                if (verdict.category().equals("UNROUTABLE")) {
+                    // approved route-library overlay: the LLM/human-classified tail
+                    verdict = library.lookupFeature(feature.name).orElse(verdict);
+                }
                 classified.add(new DeckCoverage.Classified(feature.name, verdict));
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("name", feature.name);
                 row.put("category", verdict.category());
                 if (!verdict.routes().isEmpty()) {
                     row.put("routes", verdict.routes());
+                }
+                if (verdict.ruleId().equals("library")) {
+                    row.put("source", "library");
                 }
                 features.add(row);
                 if (verdict.category().equals("LETHAL") || verdict.category().equals("WIN_TRIGGER")) {
@@ -194,8 +206,25 @@ public final class ComboPrep {
             coverageRows.add(cRow);
             comboFeatures.add(new DeckCoverage.ComboFeatures(comboId, classified));
         }
+        Map<String, List<String>> payoffs = DeckCoverage.payoffs(deckCards);
+        // approved payoff overrides, applied only to cards this deck contains
+        Map<String, String> canonicalNames = new LinkedHashMap<>();
+        for (JsonNode c : deckCards.get("cards")) {
+            canonicalNames.put(c.get("name").asText().toLowerCase(), c.get("name").asText());
+        }
+        library.payoffOverrides().forEach((card, classes) -> {
+            String canonical = canonicalNames.get(card.toLowerCase());
+            if (canonical != null) {
+                for (String payoffClass : classes) {
+                    List<String> cards = payoffs.computeIfAbsent(payoffClass, k -> new ArrayList<>());
+                    if (!cards.contains(canonical)) {
+                        cards.add(canonical);
+                    }
+                }
+            }
+        });
         Map<String, Object> deck = DeckCoverage.analyze(comboFeatures,
-                DeckCoverage.payoffs(deckCards), new ArrayList<>(unroutable));
+                payoffs, new ArrayList<>(unroutable));
         // single source of truth: the deck-level verdict IS the artifact status
         String status = (String) deck.remove("status");
         Map<String, Object> coverageJson = new LinkedHashMap<>();
@@ -214,6 +243,7 @@ public final class ComboPrep {
         ((ObjectNode) index.get("status")).put("route_coverage", status);
         ((ObjectNode) index.get("versions")).put("spellbook_snapshot", snapshot.fetchedDate());
         ((ObjectNode) index.get("versions")).put("win_routes", RouteRules.VERSION);
+        ((ObjectNode) index.get("versions")).put("route_library", library.effectiveVersion());
         MAPPER.writerWithDefaultPrettyPrinter()
                 .writeValue(dossierDir.resolve("dossier.json").toFile(), index);
 

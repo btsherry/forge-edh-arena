@@ -1,0 +1,27 @@
+{
+  "schema": "arena.route-library/1",
+  "features": [
+    {
+      "feature": "Infinite gremlin polkas",
+      "category": "RESOURCE",
+      "routes": [],
+      "status": "proposed",
+      "win_routes_version": "win-routes/4"
+    },
+    {
+      "feature": "Infinite kobold waltzes",
+      "category": "LETHAL",
+      "routes": ["DIRECT_DAMAGE_LOOP"],
+      "status": "approved",
+      "win_routes_version": "win-routes/4"
+    }
+  ],
+  "payoffs": [
+    {
+      "card": "Rolling Earthquake",
+      "payoff_class": "x_damage",
+      "status": "approved",
+      "win_routes_version": "win-routes/4"
+    }
+  ]
+}

@@ -25,7 +25,8 @@
               "properties": {
                 "name": { "type": "string" },
                 "category": { "enum": ["WIN_TRIGGER", "LETHAL", "RESOURCE", "GUARD", "TABLE_HAZARD", "BOARD_CONTROL", "LOCK_DISRUPTION", "CARD_CLASS", "UNROUTABLE"] },
-                "routes": { "type": "array", "items": { "type": "string" } }
+                "routes": { "type": "array", "items": { "type": "string" } },
+                "source": { "const": "library", "description": "Present when the classification came from an APPROVED route-library entry rather than the versioned rules (PR-13; optional additive widening of v2)." }
               },
               "additionalProperties": false
             }

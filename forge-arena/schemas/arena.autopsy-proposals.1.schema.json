@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:autopsy-proposals:1",
+  "title": "Prep autopsy proposals (PR-13, Gate 3 LLM fallback)",
+  "description": "Output of the single batched Claude call made when a dossier lands blocked or unroutable_flagged: proposed feature classifications and payoff-card identifications, with full provenance. Proposals are INERT — they enter the route library as status=proposed and affect nothing until a human approves them and prep re-runs. Category, route, and payoff-class vocabularies are the closed sets from WIN-ROUTES; the model structurally cannot invent one.",
+  "type": "object",
+  "required": ["schema", "deck_id", "deck_hash", "win_routes_version", "model", "request_sha256", "features", "payoffs", "dropped"],
+  "properties": {
+    "schema": { "const": "arena.autopsy-proposals/1" },
+    "deck_id": { "type": "string" },
+    "deck_hash": { "type": "string", "pattern": "^[0-9a-f]{8,64}$" },
+    "win_routes_version": { "type": "string" },
+    "model": { "type": "string" },
+    "request_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["feature", "category", "routes", "rationale"],
+        "properties": {
+          "feature": { "type": "string" },
+          "category": { "enum": ["WIN_TRIGGER", "LETHAL", "RESOURCE", "GUARD", "TABLE_HAZARD", "BOARD_CONTROL", "LOCK_DISRUPTION", "CARD_CLASS", "UNROUTABLE"] },
+          "routes": { "type": "array", "items": { "enum": ["ORACLE_WIN", "SPELL_LOSE", "DIRECT_DAMAGE_LOOP", "LIFELOSS_DRAIN", "COMBAT_DAMAGE", "SPREAD_COMBAT", "COMMANDER_DMG_SEQUENCE", "EXTRA_COMBATS", "INFINITE_TURNS", "MILL_OPPONENTS", "FORCED_DRAW_OUT", "POISON_LOOP", "SETUP_LETHAL", "STATIC_THRESHOLD", "BANK_AND_HOLD", "DECK_ACCESS"] } },
+          "rationale": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "payoffs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["card", "payoff_class", "rationale"],
+        "properties": {
+          "card": { "type": "string" },
+          "payoff_class": { "enum": ["oracle_win", "alt_win", "cant_lose", "haste_static", "haste_oneshot", "haste_targeted", "mass_pump", "ping_each_opponent", "ping_any_target", "x_damage", "drain_on_trigger"] },
+          "rationale": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "dropped": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Proposals discarded by semantic gates (feature not asked about, card not in this deck) — recorded, never silent."
+    }
+  },
+  "additionalProperties": false
+}

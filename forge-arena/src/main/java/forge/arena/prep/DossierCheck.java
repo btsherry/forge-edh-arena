@@ -46,6 +46,10 @@ public final class DossierCheck {
     }
 
     public static Result run(Path dossierDir) {
+        return run(dossierDir, RouteLibrary.defaultPath());
+    }
+
+    public static Result run(Path dossierDir, Path libraryPath) {
         List<String> problems = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
@@ -96,6 +100,18 @@ public final class DossierCheck {
         if (!winRoutes.equals(RouteRules.VERSION)) {
             problems.add("stale win-routes version: dossier has '" + winRoutes + "', current is '"
                     + RouteRules.VERSION + "' (re-run prep)");
+        }
+        // route library: an approval after this prep must stale the dossier
+        String pinnedLibrary = index.path("versions").path("route_library")
+                .asText(RouteLibrary.NO_LIBRARY);
+        try {
+            String currentLibrary = RouteLibrary.load(libraryPath).effectiveVersion();
+            if (!pinnedLibrary.equals(currentLibrary)) {
+                problems.add("stale route-library version: dossier prepped under '" + pinnedLibrary
+                        + "', current approved library is '" + currentLibrary + "' (re-run prep)");
+            }
+        } catch (IOException e) {
+            problems.add("route library unreadable: " + e.getMessage());
         }
 
         // gate statuses

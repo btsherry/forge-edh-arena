@@ -18,6 +18,21 @@ public final class RouteRules {
 
     public static final String VERSION = "win-routes/4";
 
+    /** The closed category set (WIN-ROUTES §2). */
+    public static final List<String> CATEGORIES = List.of("WIN_TRIGGER", "LETHAL", "RESOURCE",
+            "GUARD", "TABLE_HAZARD", "BOARD_CONTROL", "LOCK_DISRUPTION", "CARD_CLASS", "UNROUTABLE");
+
+    /**
+     * The closed route set (WIN-ROUTES §1, plus the DECK_ACCESS resource
+     * marker). Library entries and autopsy proposals are schema-constrained
+     * to this list — a classification can never invent a route.
+     */
+    public static final List<String> ROUTES = List.of("ORACLE_WIN", "SPELL_LOSE",
+            "DIRECT_DAMAGE_LOOP", "LIFELOSS_DRAIN", "COMBAT_DAMAGE", "SPREAD_COMBAT",
+            "COMMANDER_DMG_SEQUENCE", "EXTRA_COMBATS", "INFINITE_TURNS", "MILL_OPPONENTS",
+            "FORCED_DRAW_OUT", "POISON_LOOP", "SETUP_LETHAL", "STATIC_THRESHOLD",
+            "BANK_AND_HOLD", "DECK_ACCESS");
+
     public record Verdict(String category, List<String> routes, String ruleId) {
     }
 

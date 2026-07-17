@@ -37,6 +37,14 @@ public final class PayoffRules {
     /** Pseudo-class injected by DeckCoverage when a commander is a creature. */
     public static final String COMMANDER_CREATURE = "commander_creature";
 
+    /**
+     * Classes an autopsy/library entry may assign (COMMANDER_CREATURE is
+     * excluded — that's a computed type-line fact, never a classification).
+     */
+    public static final java.util.List<String> ASSIGNABLE_CLASSES = java.util.List.of(
+            ORACLE_WIN, ALT_WIN, CANT_LOSE, HASTE_STATIC, HASTE_ONESHOT, HASTE_TARGETED,
+            MASS_PUMP, PING_EACH_OPPONENT, PING_ANY_TARGET, X_DAMAGE, DRAIN_ON_TRIGGER);
+
     private record Rule(String payoffClass, Pattern pattern) {
         Rule(String payoffClass, String regex) {
             this(payoffClass, Pattern.compile(regex));

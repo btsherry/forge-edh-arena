@@ -1,0 +1,24 @@
+{
+  "schema": "arena.autopsy-proposals/1",
+  "deck_id": "t",
+  "deck_hash": "aabbccdd11223344",
+  "win_routes_version": "win-routes/4",
+  "model": "claude-fable-5",
+  "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "features": [
+    {
+      "feature": "Infinite gremlin polkas",
+      "category": "RESOURCE",
+      "routes": [],
+      "rationale": "novelty token dance, no direct game effect"
+    }
+  ],
+  "payoffs": [
+    {
+      "card": "Rolling Earthquake",
+      "payoff_class": "x_damage",
+      "rationale": "X damage to each player converts infinite mana"
+    }
+  ],
+  "dropped": ["payoff card not in this deck: Not In Deck"]
+}

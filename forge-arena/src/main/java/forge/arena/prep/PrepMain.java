@@ -50,10 +50,20 @@ public final class PrepMain {
         ARTIFACT_FILES.put("advisory_combos", "advisory-combos.json");
         ARTIFACT_FILES.put("route_coverage", "route-coverage.json");
         ARTIFACT_FILES.put("tutor_priorities", "tutor-priorities.json");
+        ARTIFACT_FILES.put("autopsy_proposals", "autopsy-proposals.json");
+        ARTIFACT_FILES.put("autopsy_raw", "autopsy-raw.json");
     }
 
+    /**
+     * {@code routeLibrary} null = the in-repo default; {@code autopsyClient}
+     * null = no LLM calls ever (the default — autopsy is strictly opt-in).
+     */
     public record Options(Ingest.Spec ingest, Path banlist, int goldfishGames,
-            SpellbookClient.Fetcher fetcher) {
+            SpellbookClient.Fetcher fetcher, Path routeLibrary, ClaudeClient autopsyClient) {
+        public Options(Ingest.Spec ingest, Path banlist, int goldfishGames,
+                SpellbookClient.Fetcher fetcher) {
+            this(ingest, banlist, goldfishGames, fetcher, null, null);
+        }
     }
 
     public record GateOutcome(String gate, boolean ok, String detail) {
@@ -68,6 +78,8 @@ public final class PrepMain {
     /** The full gate chain; requires ArenaBootstrap (Gate 0 card DB, Gate 2 engine). */
     public static PrepResult prep(Options options) throws IOException {
         List<GateOutcome> gates = new ArrayList<>();
+        RouteLibrary library = RouteLibrary.load(
+                options.routeLibrary() != null ? options.routeLibrary() : RouteLibrary.defaultPath());
 
         // Gate 0 — ingest (a failure here is unrecoverable: no dossier skeleton)
         Ingest.Result ingest = Ingest.run(options.ingest());
@@ -95,7 +107,7 @@ public final class PrepMain {
         boolean comboOk = false;
         String coverageStatus = "not_run";
         try {
-            ComboPrep.Result combos = ComboPrep.run(dossier, options.fetcher());
+            ComboPrep.Result combos = ComboPrep.run(dossier, options.fetcher(), library);
             comboOk = !combos.coverageStatus().equals("blocked");
             coverageStatus = combos.coverageStatus();
             gates.add(new GateOutcome("3 combos+coverage", comboOk,
@@ -114,6 +126,16 @@ public final class PrepMain {
             TutorWeights.Result weights = TutorWeights.run(dossier);
             gates.add(new GateOutcome("tutor weights", true,
                     weights.weightedCards() + " weighted cards"));
+        }
+
+        // prep autopsy (PR-13): opt-in, fires only on blocked/flagged coverage
+        if (options.autopsyClient() != null && !coverageStatus.equals("not_run")) {
+            try {
+                PrepAutopsy.Result autopsy = PrepAutopsy.run(dossier, library, options.autopsyClient());
+                gates.add(new GateOutcome("autopsy", autopsy.ranOrCached(), autopsy.detail()));
+            } catch (IOException e) {
+                gates.add(new GateOutcome("autopsy", false, e.getMessage()));
+            }
         }
 
         finalizeIndex(dossier, gates);
@@ -191,6 +213,7 @@ public final class PrepMain {
         Path banlist = null;
         int goldfishGames = 3;
         boolean offline = false;
+        boolean autopsy = false;
         List<String> commanders = new ArrayList<>();
         for (int i = 1; i < args.length; i++) {
             switch (args[i]) {
@@ -204,6 +227,7 @@ public final class PrepMain {
                 case "--banlist" -> banlist = Path.of(args[++i]);
                 case "--goldfish-games" -> goldfishGames = Integer.parseInt(args[++i]);
                 case "--offline" -> offline = true;
+                case "--autopsy" -> autopsy = true;
                 default -> {
                     System.err.println("unknown option: " + args[i]);
                     usage();
@@ -233,10 +257,21 @@ public final class PrepMain {
                 }
                 : SpellbookClient.httpFetcher();
 
+        // fail fast on a missing API key BEFORE any gate runs, not after goldfish
+        ClaudeClient autopsyClient = null;
+        if (autopsy) {
+            try {
+                autopsyClient = ClaudeClient.fromEnvironment();
+            } catch (IllegalStateException e) {
+                System.err.println(e.getMessage());
+                System.exit(2);
+            }
+        }
+
         PrepResult result = prep(new Options(
                 new Ingest.Spec(input, id, out, source, bracket, name, notes,
                         commanders.isEmpty() ? null : commanders),
-                banlist, goldfishGames, fetcher));
+                banlist, goldfishGames, fetcher, null, autopsyClient));
 
         System.out.println();
         for (GateOutcome gate : result.gates()) {
@@ -261,7 +296,11 @@ public final class PrepMain {
     private static void usage() {
         System.err.println("usage: PrepMain <input> --id <deck-id> [--commander <name>]..."
                 + " [--out <dir>] [--source homebrew|netdeck] [--bracket N] [--name <n>]"
-                + " [--notes <t>] [--banlist <file>] [--goldfish-games N] [--offline]");
+                + " [--notes <t>] [--banlist <file>] [--goldfish-games N] [--offline]"
+                + " [--autopsy]");
         System.err.println("       PrepMain --check <dossier-dir>");
+        System.err.println("--autopsy: on blocked/unroutable coverage, ONE Claude call proposes"
+                + " classifications into the route library (needs " + ClaudeClient.API_KEY_ENV
+                + "; proposals are inert until approved)");
     }
 }

@@ -49,6 +49,8 @@ public class SchemaValidationTest {
                 { "arena.dossier.1.schema.json", "dossier-valid.json" },
                 { "arena.route-coverage.2.schema.json", "route-coverage-valid.json" },
                 { "arena.tutor-priorities.1.schema.json", "tutor-priorities-valid.json" },
+                { "arena.route-library.1.schema.json", "route-library-valid.json" },
+                { "arena.autopsy-proposals.1.schema.json", "autopsy-proposals-valid.json" },
         };
     }
 
@@ -67,6 +69,8 @@ public class SchemaValidationTest {
                 { "arena.game-record.1.schema.json", "game-record-timeout-invalid.json" },
                 // v2 requires the deck-level layer — a v1-shaped file must not pass as v2
                 { "arena.route-coverage.2.schema.json", "route-coverage-missing-deck-invalid.json" },
+                // the route set is CLOSED — a classification cannot invent a route
+                { "arena.route-library.1.schema.json", "route-library-invented-route-invalid.json" },
         };
     }
 

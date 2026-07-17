@@ -123,6 +123,18 @@ public class PrepMainIntegrationTest {
                 staleCheck.problems().stream().anyMatch(p -> p.contains("stale win-routes")));
         Files.write(dossier.resolve("dossier.json"), original);
 
+        // an approval AFTER this prep must stale the dossier (library version pin)
+        Path libFile = out.resolve("lib").resolve("classifications.json");
+        Files.createDirectories(libFile.getParent());
+        Files.writeString(libFile, ("{\"schema\": \"arena.route-library/1\","
+                + " \"features\": [{\"feature\": \"Newly Approved Feature\", \"category\": \"GUARD\","
+                + " \"routes\": [], \"status\": \"approved\", \"win_routes_version\": \"%s\"}],"
+                + " \"payoffs\": []}").formatted(RouteRules.VERSION));
+        DossierCheck.Result staleLib = DossierCheck.run(dossier, libFile);
+        assertFalse(staleLib.ok());
+        assertTrue(staleLib.problems().toString(),
+                staleLib.problems().stream().anyMatch(p -> p.contains("stale route-library")));
+
         // tampered artifact -> refused
         Files.writeString(dossier.resolve("deck-cards.json"), "{\"cards\":[]}");
         DossierCheck.Result tampered = DossierCheck.run(dossier);

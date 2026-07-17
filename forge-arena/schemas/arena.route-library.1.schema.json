@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:route-library:1",
+  "title": "Global route-classification library (plan §3 Gate 3, WIN-ROUTES §5)",
+  "description": "In-repo, human-curated overlay for the UNROUTABLE tail: feature→(category, routes) classifications and card→payoff-class overrides, keyed by win-routes version. status=proposed entries (autopsy output) are inert; only status=approved entries affect route coverage. The library's effective version — a content hash over approved entries under the current rules — is pinned in every dossier, so an approval automatically stales dossiers prepped without it.",
+  "type": "object",
+  "required": ["schema", "features", "payoffs"],
+  "properties": {
+    "schema": { "const": "arena.route-library/1" },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["feature", "category", "routes", "status", "win_routes_version"],
+        "properties": {
+          "feature": { "type": "string" },
+          "category": { "enum": ["WIN_TRIGGER", "LETHAL", "RESOURCE", "GUARD", "TABLE_HAZARD", "BOARD_CONTROL", "LOCK_DISRUPTION", "CARD_CLASS", "UNROUTABLE"] },
+          "routes": { "type": "array", "items": { "enum": ["ORACLE_WIN", "SPELL_LOSE", "DIRECT_DAMAGE_LOOP", "LIFELOSS_DRAIN", "COMBAT_DAMAGE", "SPREAD_COMBAT", "COMMANDER_DMG_SEQUENCE", "EXTRA_COMBATS", "INFINITE_TURNS", "MILL_OPPONENTS", "FORCED_DRAW_OUT", "POISON_LOOP", "SETUP_LETHAL", "STATIC_THRESHOLD", "BANK_AND_HOLD", "DECK_ACCESS"] } },
+          "status": { "enum": ["proposed", "approved"] },
+          "win_routes_version": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "payoffs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["card", "payoff_class", "status", "win_routes_version"],
+        "properties": {
+          "card": { "type": "string" },
+          "payoff_class": { "enum": ["oracle_win", "alt_win", "cant_lose", "haste_static", "haste_oneshot", "haste_targeted", "mass_pump", "ping_each_opponent", "ping_any_target", "x_damage", "drain_on_trigger"] },
+          "status": { "enum": ["proposed", "approved"] },
+          "win_routes_version": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -17,6 +17,7 @@
         "schemas": { "type": "string" },
         "win_routes": { "type": "string" },
         "binding_library": { "type": "string" },
+        "route_library": { "type": "string", "description": "Effective route-library version at prep time (content hash over approved entries, or 'none'). DossierCheck refuses mismatches." },
         "spellbook_snapshot": { "type": "string" },
         "banlist": { "type": "string" }
       }

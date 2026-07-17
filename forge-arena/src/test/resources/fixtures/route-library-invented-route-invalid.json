@@ -1,0 +1,13 @@
+{
+  "schema": "arena.route-library/1",
+  "features": [
+    {
+      "feature": "Infinite kobold waltzes",
+      "category": "LETHAL",
+      "routes": ["SUMMON_CTHULHU"],
+      "status": "approved",
+      "win_routes_version": "win-routes/4"
+    }
+  ],
+  "payoffs": []
+}

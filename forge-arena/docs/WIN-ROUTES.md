@@ -149,6 +149,6 @@ Planner implications confirmed by this example: (1) the LethalityPlanner *is* th
 ## 5. Maintenance
 
 - Rules bump = `win-routes/N+1`; run manifests pin the version (reproducibility).
-- New features encountered per deck: classified once, cached in the global mapping library keyed `(feature_id, win-routes version)`.
-- UNROUTABLE features → Gate 3.5-style LLM classification at prep (schema-validated, human-reviewable), never at runtime.
+- New features encountered per deck: classified once, cached in the global mapping library keyed `(feature_id, win-routes version)`. *(As-built, PR-13: `forge-arena/route-library/classifications.json` — feature classifications for the UNROUTABLE tail plus card→payoff-class overrides, schema `arena.route-library/1`. Only `status: approved` entries affect coverage; a rules bump orphans old entries on purpose.)*
+- UNROUTABLE features → Gate 3.5-style LLM classification at prep (schema-validated, human-reviewable), never at runtime. *(As-built, PR-13: `prep.sh … --autopsy` — one batched call on blocked/flagged dossiers, closed-enum schema, proposals inert until a human approves and re-runs prep. Dossiers pin the library's effective version — a content hash over approved entries — so approvals stale old dossiers automatically via DossierCheck.)*
 - Gate 3.6 stall autopsies that reveal a *route* gap (not a binding gap) amend §1/§3 here, in the same PR as the fix.
