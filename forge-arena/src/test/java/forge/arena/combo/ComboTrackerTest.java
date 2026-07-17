@@ -78,9 +78,11 @@ public class ComboTrackerTest {
         assertEquals(90, v.librarySize());
         // API whitelist: no public method may expose card lists beyond the visible
         // zones (PR-16 adds own manaPool + opponents' PUBLIC state — life/poison/
-        // battlefield; still structurally no hands, no libraries)
+        // battlefield; PR-24 adds own hand size/land counts for mulligan policy;
+        // still structurally no hidden hands, no libraries)
         Set<String> allowed = Set.of("seatIndex", "turn", "cardsIn", "librarySize", "locate",
                 "manaPool", "ownBoardPower", "opponents", "ownAttachments", "untappedManaSources",
+                "handSize", "handLands",
                 "equals", "hashCode", "toString", "getClass", "notify", "notifyAll", "wait");
         for (var m : SeatView.class.getMethods()) {
             assertTrue("unexpected public API on SeatView (W8): " + m.getName(),

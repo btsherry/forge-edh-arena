@@ -369,6 +369,157 @@ public class ComboPilotTest {
         assertAllValid(events);
     }
 
+    // ---- PR-24: payoff visibility — mulligan policy + tutor urgency ----
+
+    /** A mulligan-time view: hand + command names, plus TRUE hand counts. */
+    private static SeatView mullView(Set<String> hand, Set<String> command, int handSize,
+            int handLands) {
+        return new SeatView(0, 0, Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of(),
+                SeatView.Zone.HAND, hand,
+                SeatView.Zone.COMMAND, command,
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 92, 0, 0, List.of(), Map.of(), 0,
+                handSize, handLands);
+    }
+
+    private static final Set<String> SELVALA_CMD = Set.of("Selvala, Heart of the Wilds");
+
+    @Test
+    public void mulliganKeepsAPieceHandEvenWhenStockWouldNot() throws Exception {
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
+                0.0, 0, events::add);
+        SeatView hand = mullView(Set.of("Umbral Mantle", "Forest", "Llanowar Elves"),
+                SELVALA_CMD, 7, 3);
+        assertTrue("piece + playable lands = keep", pilot.mulliganKeep(hand, 0, true, false));
+        assertEquals(1, events.size());
+        ArenaEvent decision = events.get(0);
+        assertEquals("mulligan_decision", decision.t());
+        assertEquals("keep", decision.fields().get("decision"));
+        assertEquals("combo_piece_hand", decision.fields().get("reason"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> summary = (Map<String, Object>) decision.fields().get("hand_distance");
+        assertEquals(List.of("Umbral Mantle"), summary.get("pieces"));
+        assertEquals(3, summary.get("lands"));
+        assertEquals(7, summary.get("hand_size"));
+        assertEquals("Mantle in hand + Selvala in command -> distance 0",
+                0, summary.get("best_bound_distance"));
+        assertAllValid(events);
+    }
+
+    @Test
+    public void mulliganKeepsAPayoffBehindRealLands() throws Exception {
+        RoutePlan plan = new RoutePlan(List.of(),
+                Map.of("mass_pump", List.of("Craterhoof Behemoth")));
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
+                plan, null, 0.0, 0, events::add);
+        SeatView hand = mullView(Set.of("Craterhoof Behemoth", "Forest", "Rampant Growth"),
+                SELVALA_CMD, 7, 4);
+        assertTrue(pilot.mulliganKeep(hand, 0, true, false));
+        assertEquals("payoff_with_lands", events.get(0).fields().get("reason"));
+        assertAllValid(events);
+    }
+
+    @Test
+    public void mulliganSpendsTheFreeMullDiggingThenDefersToStock() throws Exception {
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
+                0.0, 0, events::add);
+        SeatView dead = mullView(Set.of("Forest", "Rampant Growth", "Llanowar Elves"),
+                SELVALA_CMD, 7, 3);
+        // free 4-player mulligan: a hand with no piece and no payoff digs,
+        // overriding a stock keep
+        assertFalse(pilot.mulliganKeep(dead, 0, true, true));
+        assertEquals("dig_for_pieces", events.get(0).fields().get("reason"));
+        // the dig spent: same dead hand at depth 1 is stock's call again
+        assertTrue(pilot.mulliganKeep(dead, 1, true, true));
+        assertEquals("stock_keep", events.get(1).fields().get("reason"));
+        // and without a free mull (2-player goldfish), never dig
+        assertTrue(pilot.mulliganKeep(dead, 0, false, true));
+        assertEquals("stock_keep", events.get(2).fields().get("reason"));
+        assertAllValid(events);
+    }
+
+    @Test
+    public void mulliganLandScrewedPieceHandStaysStocksCall() throws Exception {
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
+                0.0, 0, events::add);
+        // Mantle + 1 land: the piece rule demands >=2 lands, no dig (a piece
+        // is present), so stock's mulligan verdict stands
+        SeatView screwed = mullView(Set.of("Umbral Mantle", "Forest"), SELVALA_CMD, 7, 1);
+        assertFalse(pilot.mulliganKeep(screwed, 0, true, false));
+        assertEquals("stock_mulligan", events.get(0).fields().get("reason"));
+        assertAllValid(events);
+    }
+
+    @Test
+    public void mulliganWithNoComboAssetsIsPureStockAndSilent() throws Exception {
+        // inertness: unbound combo + empty route plan = no assets, no events
+        ExecutorBindings empty = ExecutorBindings.load(Path.of("/nonexistent"));
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), empty,
+                0.0, 0, events::add);
+        SeatView hand = mullView(Set.of("Umbral Mantle", "Forest"), SELVALA_CMD, 7, 3);
+        assertTrue(pilot.mulliganKeep(hand, 0, true, true));
+        assertFalse(pilot.mulliganKeep(hand, 0, true, false));
+        assertTrue("no combo information -> no phantom events (plan §5)", events.isEmpty());
+    }
+
+    @Test
+    public void protectedMulliganCardsCoverBoundPiecesAndPayoffs() {
+        RoutePlan plan = new RoutePlan(List.of(),
+                Map.of("mass_pump", List.of("Craterhoof Behemoth")));
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
+                plan, null, 0.0, 0, e -> {
+                });
+        Set<String> shielded = pilot.protectedMulliganCards(
+                mullView(Set.of(), SELVALA_CMD, 0, 0));
+        assertTrue(shielded.contains("Umbral Mantle"));
+        assertTrue(shielded.contains("Selvala, Heart of the Wilds"));
+        assertTrue(shielded.contains("Craterhoof Behemoth"));
+        assertFalse(shielded.contains("Forest"));
+    }
+
+    @Test
+    public void tutorUrgencyEscalatesFromImminentToConversion() throws Exception {
+        Path dir = Files.createTempDirectory("pilot-urgency");
+        Files.writeString(dir.resolve("executor-bindings.json"), """
+                {"schema": "arena.executor-bindings/1",
+                 "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
+                   "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
+                              "activation_cost": "{G}", "untap_cost": "{3}",
+                              "untap_ability_host": "engine", "pool_color": "G"}}],
+                 "unbound": []}""");
+        ExecutorBindings shortcutBindings = ExecutorBindings.load(dir.resolve("executor-bindings.json"));
+        RoutePlan plan = new RoutePlan(List.of(),
+                Map.of("mass_pump", List.of("Craterhoof Behemoth")));
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboTracker tracker = new ComboTracker(List.of(MANTLE_DEF));
+        ComboPilot pilot = new ComboPilot(tracker, shortcutBindings, plan,
+                new TutorRanker(Map.of(), tracker, Set.of("Craterhoof Behemoth")),
+                0.0, 0, events::add);
+
+        // combo ready (distance 0, bound) but nothing fired: IMMINENT — the
+        // payoff already carries an opinion, below a finishing piece
+        var beforeFire = pilot.rankTutor("Green Sun's Zenith",
+                List.of("Llanowar Elves", "Craterhoof Behemoth"), ready(3));
+        assertEquals("Craterhoof Behemoth", beforeFire.get(0).card());
+        assertEquals(TutorRanker.PAYOFF_IMMINENT, beforeFire.get(0).score(), 1e-9);
+
+        // shortcut fires: CONVERSION — the floated pool needs the payoff NOW
+        assertFalse(pilot.nextAction(ready(3), true, PROFITABLE).orElseThrow().isStep());
+        var afterFire = pilot.rankTutor("Green Sun's Zenith",
+                List.of("Llanowar Elves", "Craterhoof Behemoth"), ready(3));
+        assertEquals("Craterhoof Behemoth", afterFire.get(0).card());
+        assertEquals(TutorRanker.PAYOFF_CONVERSION, afterFire.get(0).score(), 1e-9);
+        assertTrue(afterFire.get(0).why().contains("converts"));
+        assertEquals(2, events.stream().filter(e -> "tutor_decision".equals(e.t())).count());
+        assertAllValid(events);
+    }
+
     @Test
     public void notReadyMeansNoEventsAtAll() {
         List<ArenaEvent> events = new ArrayList<>();

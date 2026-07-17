@@ -57,27 +57,37 @@ public final class SeatView {
     private final java.util.List<OpponentView> opponents;
     private final Map<String, String> ownAttachments;
     private final int untappedManaSources;
+    private final int handSize;
+    private final int handLands;
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize) {
-        this(seatIndex, turn, ownCards, librarySize, 0, 0, java.util.List.of(), Map.of(), 0);
+        this(seatIndex, turn, ownCards, librarySize, 0, 0, java.util.List.of(), Map.of(), 0, 0, 0);
     }
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
             int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents) {
         this(seatIndex, turn, ownCards, librarySize, manaPool, ownBoardPower, opponents,
-                Map.of(), 0);
+                Map.of(), 0, 0, 0);
     }
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
             int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents,
             Map<String, String> ownAttachments) {
         this(seatIndex, turn, ownCards, librarySize, manaPool, ownBoardPower, opponents,
-                ownAttachments, 0);
+                ownAttachments, 0, 0, 0);
     }
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
             int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents,
             Map<String, String> ownAttachments, int untappedManaSources) {
+        this(seatIndex, turn, ownCards, librarySize, manaPool, ownBoardPower, opponents,
+                ownAttachments, untappedManaSources, 0, 0);
+    }
+
+    public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
+            int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents,
+            Map<String, String> ownAttachments, int untappedManaSources, int handSize,
+            int handLands) {
         this.seatIndex = seatIndex;
         this.turn = turn;
         this.ownCards = Map.copyOf(ownCards);
@@ -87,6 +97,8 @@ public final class SeatView {
         this.opponents = java.util.List.copyOf(opponents);
         this.ownAttachments = Map.copyOf(ownAttachments);
         this.untappedManaSources = untappedManaSources;
+        this.handSize = handSize;
+        this.handLands = handLands;
     }
 
     public int seatIndex() {
@@ -132,6 +144,20 @@ public final class SeatView {
      */
     public int untappedManaSources() {
         return untappedManaSources;
+    }
+
+    /**
+     * True card count of this seat's hand (own information; PR-24). The name
+     * set in {@link #cardsIn} collapses duplicate basics, so mulligan policy
+     * needs the real count.
+     */
+    public int handSize() {
+        return handSize;
+    }
+
+    /** Lands among this seat's hand cards (own information; PR-24 mulligan policy). */
+    public int handLands() {
+        return handLands;
     }
 
     /** Opponents' PUBLIC state (life/poison/battlefield) — planner input. */

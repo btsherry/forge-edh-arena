@@ -163,6 +163,51 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             return super.playChosenSpellAbility(sa);
         }
 
+        private int mulligansTaken;
+
+        @Override
+        public boolean mulliganKeepHand(Player firstPlayer, int cardsToReturn) {
+            // PR-24 (plan §6 distance-aware keep): stock evaluates first —
+            // its land judgment stays the fallback — then the pilot may keep
+            // for a piece/payoff or spend the free 4-player mulligan digging
+            boolean stockKeeps = super.mulliganKeepHand(firstPlayer, cardsToReturn);
+            int turn = getGame().getPhaseHandler().getTurn();
+            boolean firstMullFree = getGame().getPlayers().size() > 2;
+            boolean keep = pilot.mulliganKeep(SeatViews.of(player, seatIndex, turn),
+                    mulligansTaken, firstMullFree, stockKeeps);
+            if (!keep) {
+                mulligansTaken++;
+            }
+            return keep;
+        }
+
+        @Override
+        public forge.game.card.CardCollectionView tuckCardsViaMulligan(
+                forge.game.card.CardCollectionView hand, int cardsToReturn) {
+            // PR-24: a hand kept FOR a piece/payoff must not have its reason
+            // bottomed — stock picks the tucks from the unprotected cards only
+            java.util.Set<String> shieldedNames = pilot.protectedMulliganCards(
+                    SeatViews.of(player, seatIndex, getGame().getPhaseHandler().getTurn()));
+            forge.game.card.CardCollection free = new forge.game.card.CardCollection();
+            forge.game.card.CardCollection shielded = new forge.game.card.CardCollection();
+            for (forge.game.card.Card c : hand) {
+                (shieldedNames.contains(c.getName()) ? shielded : free).add(c);
+            }
+            if (free.size() >= cardsToReturn) {
+                return super.tuckCardsViaMulligan(free, cardsToReturn);
+            }
+            // hand is nearly all pieces/payoffs: every free card goes and the
+            // shield yields the remainder in hand order
+            forge.game.card.CardCollection tucked = new forge.game.card.CardCollection(free);
+            for (forge.game.card.Card c : shielded) {
+                if (tucked.size() >= cardsToReturn) {
+                    break;
+                }
+                tucked.add(c);
+            }
+            return tucked;
+        }
+
         @Override
         public List<forge.game.card.Card> chooseCardsForZoneChange(
                 forge.game.zone.ZoneType destination, List<forge.game.zone.ZoneType> origin,

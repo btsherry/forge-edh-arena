@@ -191,10 +191,19 @@ public final class EngineFacade {
         java.util.function.Consumer<forge.arena.report.ArenaEvent> sink =
                 eventSink != null ? eventSink : event -> {
                 };
+        // PR-24: the ranker knows the deck's payoff cards (route-coverage deck
+        // layer ∪ binding payoffs — the DEPLOY breadth set) so a proven line
+        // can tutor toward conversion, not just assembly
+        java.util.Set<String> payoffCards = new java.util.LinkedHashSet<>();
+        routePlan.payoffs().values().forEach(payoffCards::addAll);
+        for (forge.arena.combo.ComboDef def : defs) {
+            bindings.forCombo(def.id()).ifPresent(b -> payoffCards.addAll(b.payoffs()));
+        }
         return new ComboAwareLobbyPlayer(name, player -> {
             forge.arena.combo.ComboTracker tracker = new forge.arena.combo.ComboTracker(defs);
             return new forge.arena.combo.ComboPilot(tracker, bindings, routePlan,
-                    new forge.arena.combo.TutorRanker(tutorWeights, tracker), 0.0, seatIndex, sink);
+                    new forge.arena.combo.TutorRanker(tutorWeights, tracker, payoffCards),
+                    0.0, seatIndex, sink);
         });
     }
 

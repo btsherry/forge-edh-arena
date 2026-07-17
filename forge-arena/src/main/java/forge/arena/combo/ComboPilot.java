@@ -110,7 +110,7 @@ public final class ComboPilot {
      * the full ranking and per-candidate why (plan §5 / §7 tutor audit).
      */
     public List<TutorRanker.Ranked> rankTutor(String source, List<String> options, SeatView view) {
-        List<TutorRanker.Ranked> ranked = tutorRanker.rank(options, view);
+        List<TutorRanker.Ranked> ranked = tutorRanker.rank(options, view, tutorUrgency(view));
         if (ranked.isEmpty() || ranked.get(0).score() <= 0) {
             return List.of();
         }
@@ -132,6 +132,120 @@ public final class ComboPilot {
     /** True while a line is being stepped (the controller is in line mode). */
     public boolean lineActive() {
         return activeExecutor != null;
+    }
+
+    /**
+     * PR-24 payoff visibility: how urgently this seat needs win conversion.
+     * CONVERSION once a shortcut fired or a line is deploying (the floated
+     * pool needs a payoff, not a second engine); IMMINENT while a bound,
+     * fully-specified combo sits at distance ≤ 1; NONE otherwise — which
+     * reproduces the PR-17 ranking exactly (inertness).
+     */
+    private TutorRanker.Urgency tutorUrgency(SeatView view) {
+        if (!firedShortcuts.isEmpty() || (lineActive() && lineState.stage() == 2)) {
+            return TutorRanker.Urgency.CONVERSION;
+        }
+        for (ComboTracker.ComboStatus status : tracker.recompute(view).statuses()) {
+            if (status.fullySpecified() && status.distance() <= 1 && executorExists(status.id())) {
+                return TutorRanker.Urgency.IMMINENT;
+            }
+        }
+        return TutorRanker.Urgency.NONE;
+    }
+
+    private boolean executorExists(String comboId) {
+        return bindings.forCombo(comboId).flatMap(ExecutorBindings::executorFor).isPresent();
+    }
+
+    /**
+     * PR-24 mulligan policy (plan §6 "distance-aware keep"): keep a hand that
+     * holds a piece of a BOUND combo behind a playable land count, or a
+     * payoff with the lands to cast toward it; spend the free 4-player
+     * mulligan digging when the hand carries neither; defer to the stock
+     * evaluator everywhere else (land screw/flood judgment stays stock's).
+     * Every checkpoint is RECORDED as mulligan_decision (§5 taxonomy) — with
+     * one exception: a pilot with no combo assets at all returns stock's
+     * verdict silently, because the situation carries no combo information
+     * (the rankTutor no-opinion precedent, §8 inertness).
+     */
+    public boolean mulliganKeep(SeatView view, int mulligansTaken, boolean firstMullFree,
+            boolean stockKeeps) {
+        ComboTracker.Snapshot snap = tracker.recompute(view);
+        Set<String> boundPieces = boundPieces(snap);
+        Set<String> deckPayoffs = deckPayoffs(snap);
+        if (boundPieces.isEmpty() && deckPayoffs.isEmpty()) {
+            return stockKeeps;
+        }
+        Set<String> hand = view.cardsIn(SeatView.Zone.HAND);
+        List<String> pieces = hand.stream().filter(boundPieces::contains).sorted().toList();
+        List<String> payoffs = hand.stream().filter(deckPayoffs::contains).sorted().toList();
+        int lands = view.handLands();
+        int nonlands = view.handSize() - lands;
+
+        boolean keep;
+        String reason;
+        if (!pieces.isEmpty() && lands >= 2 && nonlands >= 2) {
+            keep = true;
+            reason = "combo_piece_hand";
+        } else if (!payoffs.isEmpty() && lands >= 3 && nonlands >= 2) {
+            keep = true;
+            reason = "payoff_with_lands";
+        } else if (pieces.isEmpty() && payoffs.isEmpty() && mulligansTaken == 0 && firstMullFree) {
+            keep = false;
+            reason = "dig_for_pieces";
+        } else {
+            keep = stockKeeps;
+            reason = stockKeeps ? "stock_keep" : "stock_mulligan";
+        }
+
+        int bestDistance = snap.statuses().stream()
+                .filter(s -> s.fullySpecified() && executorExists(s.id()))
+                .mapToInt(ComboTracker.ComboStatus::distance)
+                .min().orElse(-1);
+        Map<String, Object> handDistance = new java.util.LinkedHashMap<>();
+        handDistance.put("best_bound_distance", bestDistance);
+        handDistance.put("pieces", pieces);
+        handDistance.put("payoffs", payoffs);
+        handDistance.put("lands", lands);
+        handDistance.put("hand_size", view.handSize());
+        handDistance.put("mulligans_taken", mulligansTaken);
+        events.accept(ArenaEvent.of("mulligan_decision", view.turn(), seat)
+                .with("decision", keep ? "keep" : "mulligan")
+                .with("reason", reason)
+                .with("hand_distance", handDistance));
+        return keep;
+    }
+
+    /**
+     * Cards the London-mulligan tuck must never bottom (PR-24): a hand kept
+     * FOR a piece or payoff must not have its reason tucked away.
+     */
+    public Set<String> protectedMulliganCards(SeatView view) {
+        ComboTracker.Snapshot snap = tracker.recompute(view);
+        Set<String> out = new java.util.LinkedHashSet<>(boundPieces(snap));
+        out.addAll(deckPayoffs(snap));
+        return out;
+    }
+
+    /** Piece names of every bound, fully-specified combo (static per deck). */
+    private Set<String> boundPieces(ComboTracker.Snapshot snap) {
+        Set<String> pieces = new java.util.LinkedHashSet<>();
+        for (ComboTracker.ComboStatus status : snap.statuses()) {
+            if (status.fullySpecified() && executorExists(status.id())) {
+                pieces.addAll(status.where().keySet());
+            }
+        }
+        return pieces;
+    }
+
+    /** The deck's payoff cards: route-coverage deck layer ∪ binding payoffs (DEPLOY breadth). */
+    private Set<String> deckPayoffs(ComboTracker.Snapshot snap) {
+        Set<String> payoffs = new java.util.LinkedHashSet<>();
+        routePlan.payoffs().values().forEach(payoffs::addAll);
+        for (ComboTracker.ComboStatus status : snap.statuses()) {
+            bindings.forCombo(status.id()).ifPresent(b -> payoffs.addAll(b.payoffs()));
+        }
+        return payoffs;
     }
 
     /**

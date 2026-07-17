@@ -53,8 +53,18 @@ public final class SeatViews {
                 untappedManaSources++;
             }
         }
+        // PR-24: true hand counts (the name set collapses duplicate basics) —
+        // own information, mulligan policy input
+        int handSize = 0;
+        int handLands = 0;
+        for (Card c : player.getCardsIn(ZoneType.Hand)) {
+            handSize++;
+            if (c.isLand()) {
+                handLands++;
+            }
+        }
         return new SeatView(seatIndex, turn, zones, librarySize, manaPool, ownBoardPower,
-                opponents, attachments, untappedManaSources);
+                opponents, attachments, untappedManaSources, handSize, handLands);
     }
 
     private static Set<String> names(Player player, ZoneType zone) {

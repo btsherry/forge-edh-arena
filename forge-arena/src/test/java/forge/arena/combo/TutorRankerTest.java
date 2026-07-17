@@ -52,6 +52,62 @@ public class TutorRankerTest {
     }
 
     @Test
+    public void conversionPendingPayoffOutranksEvenAFinishingPiece() {
+        // PR-24: shortcut fired, pool floated — Craterhoof IS the win now;
+        // fetching a second engine (Mantle at live leverage 1.0) is worth less
+        TutorRanker ranker = new TutorRanker(
+                Map.of("Craterhoof Behemoth", 0.47, "Umbral Mantle", 0.93),
+                new ComboTracker(List.of(MANTLE_DEF)),
+                Set.of("Craterhoof Behemoth"));
+        List<TutorRanker.Ranked> ranked = ranker.rank(
+                List.of("Umbral Mantle", "Craterhoof Behemoth"),
+                selvalaOnBoardMantleMissing(), TutorRanker.Urgency.CONVERSION);
+        assertEquals("Craterhoof Behemoth", ranked.get(0).card());
+        assertEquals(TutorRanker.PAYOFF_CONVERSION, ranked.get(0).score(), 1e-9);
+        assertTrue(ranked.get(0).why().contains("converts"));
+        assertEquals("Umbral Mantle", ranked.get(1).card());
+        assertEquals(1.0, ranked.get(1).score(), 1e-9);
+    }
+
+    @Test
+    public void imminentLineBoostsPayoffAboveItsStaticButBelowTheFinishingPiece() {
+        // PR-24: distance 1 — finish the line first (Mantle 1.0); the payoff
+        // jumps its own 0.47 static to 0.85 so conversion is in hand when the
+        // line fires; a high PIECE static (Staff 0.90) still edges the payoff
+        // out until the line is actually proven (CONVERSION flips that)
+        TutorRanker ranker = new TutorRanker(
+                Map.of("Craterhoof Behemoth", 0.47, "Staff of Domination", 0.90),
+                new ComboTracker(List.of(MANTLE_DEF)),
+                Set.of("Craterhoof Behemoth"));
+        List<TutorRanker.Ranked> ranked = ranker.rank(
+                List.of("Craterhoof Behemoth", "Staff of Domination", "Umbral Mantle"),
+                selvalaOnBoardMantleMissing(), TutorRanker.Urgency.IMMINENT);
+        assertEquals("Umbral Mantle", ranked.get(0).card());
+        assertEquals(1.0, ranked.get(0).score(), 1e-9);
+        assertEquals("Staff of Domination", ranked.get(1).card());
+        assertEquals(0.90, ranked.get(1).score(), 1e-9);
+        assertEquals("Craterhoof Behemoth", ranked.get(2).card());
+        assertEquals(TutorRanker.PAYOFF_IMMINENT, ranked.get(2).score(), 1e-9);
+        assertTrue(ranked.get(2).why().contains("imminent"));
+    }
+
+    @Test
+    public void urgencyNoneLeavesPayoffsAtTheirStaticWeight() {
+        // inertness of the PR-24 lever: without urgency the PR-17 ranking holds
+        TutorRanker ranker = new TutorRanker(
+                Map.of("Craterhoof Behemoth", 0.47, "Umbral Mantle", 0.93),
+                new ComboTracker(List.of(MANTLE_DEF)),
+                Set.of("Craterhoof Behemoth"));
+        List<TutorRanker.Ranked> ranked = ranker.rank(
+                List.of("Craterhoof Behemoth", "Umbral Mantle"),
+                selvalaOnBoardMantleMissing(), TutorRanker.Urgency.NONE);
+        assertEquals("Umbral Mantle", ranked.get(0).card());
+        assertEquals("Craterhoof Behemoth", ranked.get(1).card());
+        assertEquals(0.47, ranked.get(1).score(), 1e-9);
+        assertEquals("dossier tutor weight", ranked.get(1).why());
+    }
+
+    @Test
     public void emptyArtifactsAreInert() {
         // §8 inertness: no weights, no combos -> every score 0, input order kept
         TutorRanker ranker = new TutorRanker(Map.of(), new ComboTracker(List.of()));
