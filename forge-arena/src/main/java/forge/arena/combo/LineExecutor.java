@@ -37,6 +37,17 @@ public interface LineExecutor {
     Step next(LineState state, SeatView view);
 
     /**
+     * PR-29: what makes this line's yield profitable, or null. A line that
+     * validates UNPROFITABLE with a declared prerequisite asks the pilot to
+     * DEPLOY toward it (the gauntlet finding: Staff and Sabertooth lines are
+     * correct but need a big body the pilot never provided — the deck has
+     * fatties in hand; cast them). v1 vocabulary: {@code board_power}.
+     */
+    default String yieldPrereq() {
+        return null;
+    }
+
+    /**
      * The steps that make this line EXECUTABLE from the current board
      * (PR-18: tracker readiness is reachability — hand and command zone
      * count — but activation needs pieces deployed and attached). Recomputed
@@ -92,6 +103,15 @@ public interface LineExecutor {
 
         public static Step done() {
             return new Step("done", null, null, List.of());
+        }
+
+        /**
+         * PR-29: deploy toward the line's yield prerequisite — the
+         * controller resolves it with engine data (the biggest affordable
+         * creature in hand for {@code board_power}).
+         */
+        public static Step prereqDeploy() {
+            return new Step("prereq_deploy", null, null, List.of());
         }
 
         public boolean isDone() {

@@ -218,6 +218,12 @@ public final class TapForManaUntapLoop implements LineExecutor, ShortcutSource {
         return lastCycleDelta > 0 ? SimResult.profitable(VALIDATE_CYCLES) : SimResult.unprofitable();
     }
 
+    /** PR-29: the yield is GREATEST power — a bigger body makes it profitable. */
+    @Override
+    public String yieldPrereq() {
+        return "board_power";
+    }
+
     /** PR-16: a proven loop compresses to a pool injection instead of physical cycles. */
     public boolean shortcutEligible() {
         return shortcutEligible;

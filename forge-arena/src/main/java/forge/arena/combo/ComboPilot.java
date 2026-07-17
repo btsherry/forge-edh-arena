@@ -74,8 +74,14 @@ public final class ComboPilot {
             String route) {
     }
 
-    /** Bounded product of a proven-infinite loop (plan: large, engine-safe). */
-    public static final int SHORTCUT_POOL = 10_000;
+    /**
+     * Bounded product of a proven-infinite loop. PR-29 sizing: each floating
+     * mana is a pool OBJECT the engine's payment prober walks — at 10^4,
+     * stock's X evaluators (determineLeftoverMana: 99 probes) burned the
+     * game clock (the analysis-100 "crash" signature). 1,000 covers
+     * DEPLOY_X (500) plus every deploy with headroom, 10x cheaper.
+     */
+    public static final int SHORTCUT_POOL = 1_000;
 
     /**
      * Scripted X for conversion casts (PR-25): lethal pump for any table
@@ -505,6 +511,20 @@ public final class ComboPilot {
         // assembled — the engine proves the loop before anything fires
         SimResult proof = validator.apply(activeExecutor);
         if (!proof.isProfitable()) {
+            // PR-29 (the gauntlet finding): the line is CORRECT but its yield
+            // needs help — Staff/Sabertooth loops want a big body the deck
+            // has in hand. Deploy toward the prerequisite once per turn
+            // (Selvala's yield reads power, not readiness — a sick fatty
+            // still counts), then re-prove; only then abort.
+            if (activeExecutor.yieldPrereq() != null
+                    && !attemptedDeploys.contains("__prereq__")) {
+                attemptedDeploys.add("__prereq__");
+                events.accept(ArenaEvent.of("line_step", view.turn(), seat)
+                        .with("stage", "PREREQ_DEPLOY")
+                        .with("iteration", lineState.iteration()));
+                lineState = lineState.advance();
+                return Optional.of(Action.play(LineExecutor.Step.prereqDeploy()));
+            }
             abortLine(view.turn(), "validation", null);
             return Optional.empty();
         }

@@ -120,9 +120,11 @@ public class ComboPilotTest {
     }
 
     @Test
-    public void validationFailureAbortsTheEnteredLineOncePerTurn() throws Exception {
-        // PR-18: assembly-first flow — the attempt HAPPENED (assembly ran/was
-        // empty), so a post-assembly refusal is line_aborted, not an ignore
+    public void validationFailureDeploysThePrereqThenAborts() throws Exception {
+        // PR-18: the attempt HAPPENED, so post-assembly refusal is a line
+        // event, not an ignore. PR-29: an UNPROFITABLE proof with a declared
+        // yield prerequisite deploys toward it ONCE (the gauntlet finding:
+        // the loop wants a big body), re-proves, and only then aborts.
         List<ArenaEvent> events = new ArrayList<>();
         ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
                 0.0, 0, events::add);
@@ -131,18 +133,21 @@ public class ComboPilotTest {
             validations.incrementAndGet();
             return SimResult.unprofitable();
         };
+        ComboPilot.Action first = pilot.nextAction(ready(3), true, failing).orElseThrow();
+        assertEquals("prereq_deploy", first.step().action());
+        assertTrue("re-prove after the deploy, then abort",
+                pilot.nextAction(ready(3), true, failing).isEmpty());
         assertTrue(pilot.nextAction(ready(3), true, failing).isEmpty());
-        assertTrue(pilot.nextAction(ready(3), true, failing).isEmpty());
-        assertTrue(pilot.nextAction(ready(3), true, failing).isEmpty());
-        assertEquals("one validation per combo per turn", 1, validations.get());
-        assertEquals(List.of("line_entered", "line_aborted"),
+        assertEquals("one proof + one re-proof per turn", 2, validations.get());
+        assertEquals(List.of("line_entered", "line_step", "line_aborted"),
                 events.stream().map(ArenaEvent::t).toList());
-        assertEquals("validation", events.get(1).fields().get("cause"));
+        assertEquals("PREREQ_DEPLOY", events.get(1).fields().get("stage"));
+        assertEquals("validation", events.get(2).fields().get("cause"));
         assertFalse(pilot.lineActive());
-        // a NEW turn is a new decision point
-        assertTrue(pilot.nextAction(ready(4), true, failing).isEmpty());
-        assertEquals(2, validations.get());
-        assertEquals(4, events.size());
+        // a NEW turn is a new decision point (prereq attempt resets too)
+        assertEquals("prereq_deploy",
+                pilot.nextAction(ready(4), true, failing).orElseThrow().step().action());
+        assertEquals(3, validations.get());
         assertAllValid(events);
     }
 

@@ -110,6 +110,14 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         return Collections.singletonList(tutorSa);
                     }
                 }
+                // PR-29: the injected pool is PILOT-ONLY. Stock's payment
+                // layer can see floating mana, and on the fire turn it
+                // wielded 1000 mana into a Sabertooth bounce-recast-draw
+                // spiral that decked the seat (gauntlet find). With the pool
+                // live and the pilot done, pass the priority instead.
+                if (shortcutTurn == turn && player.getManaPool().totalMana() > 0) {
+                    return null;
+                }
                 List<SpellAbility> stock = super.chooseSpellAbilityToPlay();
                 // PR-26 payoff-protection veto: one-shot conversion spells
                 // (Finale class) are reserved while a bound combo exists —
@@ -166,9 +174,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
 
         /** Step → engine ability; null = failure handled, stock takes the priority. */
         private List<SpellAbility> resolveStep(LineExecutor.Step step, int turn) {
-            SpellAbility sa = step.isCast()
-                    ? AbilityResolver.resolveCast(player, step.card())
-                    : AbilityResolver.resolve(player, step.card(), step.costHint(), step.targets());
+            SpellAbility sa;
+            if ("prereq_deploy".equals(step.action())) {
+                // PR-29: the biggest affordable creature in hand — engine
+                // data (power, castability) the pilot structurally lacks
+                sa = biggestCastableCreature();
+            } else {
+                sa = step.isCast()
+                        ? AbilityResolver.resolveCast(player, step.card())
+                        : AbilityResolver.resolve(player, step.card(), step.costHint(), step.targets());
+            }
             if (sa == null) {
                 // inside a line: a piece is gone/changed or a cast is
                 // unaffordable — graceful abort, recorded, retried next turn.
@@ -194,6 +209,28 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             // asks WHICH creature to return while this ability resolves)
             pendingChoice = step.choice();
             return Collections.singletonList(sa);
+        }
+
+        /** PR-29: biggest-power castable creature spell in hand, or null. */
+        private SpellAbility biggestCastableCreature() {
+            SpellAbility best = null;
+            int bestPower = -1;
+            for (forge.game.card.Card c : player.getCardsIn(forge.game.zone.ZoneType.Hand)) {
+                if (!c.isCreature() || c.getNetPower() <= bestPower) {
+                    continue;
+                }
+                for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
+                    if (sa.isSpell()) {
+                        sa.setActivatingPlayer(player);
+                        if (forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                            best = sa;
+                            bestPower = c.getNetPower();
+                            break;
+                        }
+                    }
+                }
+            }
+            return best;
         }
 
         /** PR-28: X is pin-safe only when every X cost part is mana. */

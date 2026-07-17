@@ -101,6 +101,7 @@
     "params" : {
       "tapper" : "Sanctum Weaver",
       "tapper_cost" : "{T}",
+      "yield_prereq" : "none",
       "bouncer" : "Temur Sabertooth",
       "bounce_cost" : "{1}{G}",
       "recast_mana_value" : "2",

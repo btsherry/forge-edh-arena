@@ -55,6 +55,7 @@ public final class BounceRecastLoop implements LineExecutor, ShortcutSource {
     private final boolean shortcutEligible;
     private final int bankCycles;
     private final String entryPhase;
+    private final String yieldPrereq;
 
     public BounceRecastLoop(Map<String, String> params, String entryPhase) {
         this.tapper = require(params, "tapper");
@@ -72,6 +73,8 @@ public final class BounceRecastLoop implements LineExecutor, ShortcutSource {
         this.shortcutEligible = Boolean.parseBoolean(params.getOrDefault("shortcut", "true"));
         this.bankCycles = Integer.parseInt(params.getOrDefault("bank_cycles", "6"));
         this.entryPhase = entryPhase != null ? entryPhase : "MAIN1";
+        String prereq = params.getOrDefault("yield_prereq", "board_power");
+        this.yieldPrereq = "none".equals(prereq) ? null : prereq;
     }
 
     private static String require(Map<String, String> params, String key) {
@@ -174,6 +177,17 @@ public final class BounceRecastLoop implements LineExecutor, ShortcutSource {
         int tapYield = sim.manaPoolTotal() - before;
         int net = tapYield - cycleCost();
         return net > 0 ? SimResult.profitable(1) : SimResult.unprofitable();
+    }
+
+    /**
+     * PR-29: Selvala variants yield GREATEST power (a bigger body pays the
+     * loop); the Weaver variant yields enchantment count — its binding sets
+     * {@code yield_prereq: none} until an enchantment-deploy vocabulary
+     * exists.
+     */
+    @Override
+    public String yieldPrereq() {
+        return yieldPrereq;
     }
 
     @Override
