@@ -37,16 +37,38 @@ public final class SeatView {
         }
     }
 
+    /**
+     * PUBLIC information about one opponent (PR-16, for the LethalityPlanner):
+     * life total, poison, and battlefield card names — all open information at
+     * a real table. Structurally NO hands, NO libraries (W8 unchanged).
+     */
+    public record OpponentView(int seatIndex, int life, int poison, Set<String> battlefield) {
+        public OpponentView {
+            battlefield = Set.copyOf(battlefield);
+        }
+    }
+
     private final int seatIndex;
     private final int turn;
     private final Map<Zone, Set<String>> ownCards;
     private final int librarySize;
+    private final int manaPool;
+    private final int ownBoardPower;
+    private final java.util.List<OpponentView> opponents;
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize) {
+        this(seatIndex, turn, ownCards, librarySize, 0, 0, java.util.List.of());
+    }
+
+    public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
+            int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents) {
         this.seatIndex = seatIndex;
         this.turn = turn;
         this.ownCards = Map.copyOf(ownCards);
         this.librarySize = librarySize;
+        this.manaPool = manaPool;
+        this.ownBoardPower = ownBoardPower;
+        this.opponents = java.util.List.copyOf(opponents);
     }
 
     public int seatIndex() {
@@ -64,6 +86,21 @@ public final class SeatView {
     /** Count only — never contents, never order. */
     public int librarySize() {
         return librarySize;
+    }
+
+    /** This seat's own floating mana (own information). */
+    public int manaPool() {
+        return manaPool;
+    }
+
+    /** Summed power of this seat's creatures (public information). */
+    public int ownBoardPower() {
+        return ownBoardPower;
+    }
+
+    /** Opponents' PUBLIC state (life/poison/battlefield) — planner input. */
+    public java.util.List<OpponentView> opponents() {
+        return opponents;
     }
 
     /** First visible location in priority order; ABSENT covers the unseen library. */

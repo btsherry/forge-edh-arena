@@ -28,7 +28,21 @@ public final class SeatViews {
         zones.put(SeatView.Zone.GRAVEYARD, names(player, ZoneType.Graveyard));
         zones.put(SeatView.Zone.EXILE, names(player, ZoneType.Exile));
         int librarySize = player.getCardsIn(ZoneType.Library).size();
-        return new SeatView(seatIndex, turn, zones, librarySize);
+        // PR-16: own pool + board power, opponents' PUBLIC state (life/poison/battlefield)
+        int manaPool = player.getManaPool().totalMana();
+        int ownBoardPower = 0;
+        for (Card c : player.getCreaturesInPlay()) {
+            ownBoardPower += Math.max(0, c.getNetPower());
+        }
+        java.util.List<SeatView.OpponentView> opponents = new java.util.ArrayList<>();
+        for (Player other : player.getGame().getPlayers()) {
+            if (other == player || other.hasLost()) {
+                continue;
+            }
+            opponents.add(new SeatView.OpponentView(other.getId(), other.getLife(),
+                    other.getPoisonCounters(), names(other, ZoneType.Battlefield)));
+        }
+        return new SeatView(seatIndex, turn, zones, librarySize, manaPool, ownBoardPower, opponents);
     }
 
     private static Set<String> names(Player player, ZoneType zone) {

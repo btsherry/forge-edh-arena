@@ -76,8 +76,11 @@ public class ComboTrackerTest {
         // a card that exists only in the library is ABSENT to the view
         assertEquals(SeatView.Presence.ABSENT, v.locate("Craterhoof Behemoth"));
         assertEquals(90, v.librarySize());
-        // API whitelist: no public method may expose card lists beyond the visible zones
+        // API whitelist: no public method may expose card lists beyond the visible
+        // zones (PR-16 adds own manaPool + opponents' PUBLIC state — life/poison/
+        // battlefield; still structurally no hands, no libraries)
         Set<String> allowed = Set.of("seatIndex", "turn", "cardsIn", "librarySize", "locate",
+                "manaPool", "ownBoardPower", "opponents",
                 "equals", "hashCode", "toString", "getClass", "notify", "notifyAll", "wait");
         for (var m : SeatView.class.getMethods()) {
             assertTrue("unexpected public API on SeatView (W8): " + m.getName(),
