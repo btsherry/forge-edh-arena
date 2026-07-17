@@ -1,5 +1,15 @@
 {
-  "schema": "arena.route-library/1",
-  "features": [],
-  "payoffs": []
+  "schema" : "arena.route-library/1",
+  "features" : [ ],
+  "payoffs" : [ {
+    "card" : "Finale of Devastation",
+    "payoff_class" : "mass_pump",
+    "status" : "proposed",
+    "win_routes_version" : "win-routes/4"
+  }, {
+    "card" : "Surrak and Goreclaw",
+    "payoff_class" : "haste_targeted",
+    "status" : "proposed",
+    "win_routes_version" : "win-routes/4"
+  } ]
 }

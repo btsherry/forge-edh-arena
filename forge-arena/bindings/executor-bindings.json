@@ -1,48 +1,45 @@
 {
-  "schema": "arena.executor-bindings/1",
-  "bindings": [
-    {
-      "combo_id": "527-2816",
-      "archetype": "TapForManaUntapLoop",
-      "params": {
-        "engine": "Selvala, Heart of the Wilds",
-        "untapper": "Umbral Mantle",
-        "activation_cost": "{G}",
-        "untap_cost": "{3}",
-        "untap_ability_host": "engine",
-        "attach_cost": "{0}",
-        "engine_mana_value": "3",
-        "untapper_mana_value": "3",
-        "self_pump_per_cycle": "2",
-        "yield_expr": "GREATEST_POWER_AMONG_OWN_CREATURES",
-        "profit_invariant": "yield - 4 > 0 within 3 cycles"
-      },
-      "payoffs": ["Craterhoof Behemoth", "Concordant Crossroads", "Finale of Devastation"],
-      "entry_phase": "MAIN1",
-      "note": "Mantle grants '{3}, {Q}: +2/+2' to the EQUIPPED creature, so the untap ability is activated on the engine (untap_ability_host=engine)."
+  "schema" : "arena.executor-bindings/1",
+  "bindings" : [ {
+    "combo_id" : "527-2816",
+    "archetype" : "TapForManaUntapLoop",
+    "params" : {
+      "engine" : "Selvala, Heart of the Wilds",
+      "untapper" : "Umbral Mantle",
+      "activation_cost" : "{G}",
+      "untap_cost" : "{3}",
+      "untap_ability_host" : "engine",
+      "attach_cost" : "{0}",
+      "engine_mana_value" : "3",
+      "untapper_mana_value" : "3",
+      "self_pump_per_cycle" : "2",
+      "yield_expr" : "GREATEST_POWER_AMONG_OWN_CREATURES",
+      "profit_invariant" : "yield - 4 > 0 within 3 cycles"
     },
-    {
-      "combo_id": "527-2645",
-      "archetype": "TapForManaUntapLoop",
-      "params": {
-        "engine": "Selvala, Heart of the Wilds",
-        "untapper": "Staff of Domination",
-        "activation_cost": "{G}",
-        "untap_cost": "{3}",
-        "untap_ability_host": "untapper",
-        "untap_targets_engine": "true",
-        "untapper_reset_cost": "{1}",
-        "engine_mana_value": "3",
-        "untapper_mana_value": "3",
-        "self_pump_per_cycle": "0",
-        "yield_expr": "GREATEST_POWER_AMONG_OWN_CREATURES",
-        "profit_invariant": "yield - 5 > 0"
-      },
-      "payoffs": ["Craterhoof Behemoth", "Concordant Crossroads", "Finale of Devastation"],
-      "stages": ["MANA_LOOP", "DRAW_LOOP", "DEPLOY_WIN"],
-      "entry_phase": "MAIN1",
-      "note": "v3.1 staged line, MANA_LOOP cycle: Selvala {G},{T} for X; Staff {3},{T} untap Selvala (TARGETS — scripted, PR-15); Staff {1} untap itself. 5 mana/cycle, needs power 6. DRAW_LOOP + DEPLOY_WIN stages land with the PR-16 planner."
-    }
-  ],
-  "unbound": []
+    "payoffs" : [ "Craterhoof Behemoth", "Concordant Crossroads", "Finale of Devastation" ],
+    "entry_phase" : "MAIN1",
+    "note" : "Mantle grants '{3}, {Q}: +2/+2' to the EQUIPPED creature, so the untap ability is activated on the engine (untap_ability_host=engine)."
+  }, {
+    "combo_id" : "527-2645",
+    "archetype" : "TapForManaUntapLoop",
+    "params" : {
+      "engine" : "Selvala, Heart of the Wilds",
+      "untapper" : "Staff of Domination",
+      "activation_cost" : "{G}",
+      "untap_cost" : "{3}",
+      "untap_ability_host" : "untapper",
+      "untap_targets_engine" : "true",
+      "untapper_reset_cost" : "{1}",
+      "engine_mana_value" : "3",
+      "untapper_mana_value" : "3",
+      "self_pump_per_cycle" : "0",
+      "yield_expr" : "GREATEST_POWER_AMONG_OWN_CREATURES",
+      "profit_invariant" : "yield - 5 > 0"
+    },
+    "payoffs" : [ "Craterhoof Behemoth", "Concordant Crossroads", "Finale of Devastation" ],
+    "stages" : [ "MANA_LOOP", "DRAW_LOOP", "DEPLOY_WIN" ],
+    "entry_phase" : "MAIN1",
+    "note" : "v3.1 staged line, MANA_LOOP cycle: Selvala {G},{T} for X; Staff {3},{T} untap Selvala (TARGETS — scripted, PR-15); Staff {1} untap itself. 5 mana/cycle, needs power 6. DRAW_LOOP + DEPLOY_WIN stages land with the PR-16 planner."
+  } ],
+  "unbound" : [ "2816-5711", "1355-2645", "1355-2816", "2026-2404-2816" ]
 }
