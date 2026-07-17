@@ -45,6 +45,7 @@ public class SimHandleValidationTest {
         private final AtomicBoolean applied = new AtomicBoolean();
         final AtomicReference<SimResult> mantleResult = new AtomicReference<>();
         final AtomicReference<SimResult> hallucinatedResult = new AtomicReference<>();
+        final AtomicReference<SimResult> staffResult = new AtomicReference<>();
         final AtomicReference<String> realGameAfter = new AtomicReference<>();
         final AtomicReference<Exception> failure = new AtomicReference<>();
 
@@ -94,6 +95,16 @@ public class SimHandleValidationTest {
                         "untap_ability_host", "engine"), "MAIN1");
                 hallucinatedResult.set(hallucinated.validate(GameSimHandle.copyOf(game, p0)));
 
+                // Staff line: the untap ability TARGETS — scripted targets (PR-15)
+                // make it engine-validatable; Terra Stomper supplies power 6+
+                addCard(p0, "Staff of Domination");
+                forge.game.card.Card stomper = addCard(p0, "Terra Stomper");
+                stomper.setSickness(false);
+                game.getAction().checkStateEffects(true);
+                LineExecutor staffLine = ExecutorBindings.executorFor(
+                        bindings.forCombo("527-2645").orElseThrow()).orElseThrow();
+                staffResult.set(staffLine.validate(GameSimHandle.copyOf(game, p0)));
+
                 // copy isolation: the REAL game saw none of the ~9 activations
                 Player realP0 = game.getPlayers().get(0);
                 boolean selvalaUntapped = realP0.getCardsIn(forge.game.zone.ZoneType.Battlefield)
@@ -135,6 +146,10 @@ public class SimHandleValidationTest {
         assertEquals("wrong untap cost must be BLOCKED (W1: hallucinated bindings"
                 + " can never reach executable)", SimResult.Status.BLOCKED, hallucinated.status());
         assertEquals("untapper", hallucinated.blockedBy());
+
+        SimResult staff = probe.staffResult.get();
+        assertTrue("Staff line (targeted untap, scripted targets) must validate, got " + staff,
+                staff != null && staff.isProfitable());
 
         // ~9 ability activations happened on copies; the real game saw zero
         assertEquals("pool=0 selvalaUntapped=true", probe.realGameAfter.get());

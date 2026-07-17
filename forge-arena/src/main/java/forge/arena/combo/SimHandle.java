@@ -1,5 +1,7 @@
 package forge.arena.combo;
 
+import java.util.List;
+
 /**
  * The narrow sandbox surface executors validate against (plan §6/§9 W2):
  * a COPY of the game — activations here can never touch the real game. The
@@ -12,15 +14,20 @@ public interface SimHandle {
     /**
      * Activate an ability of the named battlefield card, matched by a cost
      * hint (e.g. "{G}" for Selvala's mana ability, "{3}" for the
-     * Mantle-granted untap-pump). Costs are paid by the engine's own AI cost
-     * payment — lands tap, floating mana spends, {Q} untap-costs untap.
+     * Mantle-granted untap-pump), with explicitly scripted targets (empty =
+     * the ability must not require targeting). Costs are paid by the
+     * engine's own AI cost payment — lands tap, floating mana spends, {Q}
+     * untap-costs untap.
      *
      * @return false when the card/ability isn't found, costs can't be paid,
-     *         or the ability needs targets (v1: unscripted targets are
-     *         nondeterministic, so they are refused — target scripting is a
-     *         Step concern, not a validation concern)
+     *         a named target is missing or illegal, or the ability needs
+     *         targets that weren't scripted
      */
-    boolean activate(String cardName, String costHint);
+    boolean activate(String cardName, String costHint, List<String> targetNames);
+
+    default boolean activate(String cardName, String costHint) {
+        return activate(cardName, costHint, List.of());
+    }
 
     /** Total floating mana in the perspective player's pool. */
     int manaPoolTotal();

@@ -25,8 +25,10 @@
         "engine": "Selvala, Heart of the Wilds",
         "untapper": "Staff of Domination",
         "activation_cost": "{G}",
-        "untap_cost": "{4}",
+        "untap_cost": "{3}",
         "untap_ability_host": "untapper",
+        "untap_targets_engine": "true",
+        "untapper_reset_cost": "{1}",
         "self_pump_per_cycle": "0",
         "yield_expr": "GREATEST_POWER_AMONG_OWN_CREATURES",
         "profit_invariant": "yield - 5 > 0"
@@ -34,7 +36,7 @@
       "payoffs": ["Craterhoof Behemoth", "Concordant Crossroads", "Finale of Devastation"],
       "stages": ["MANA_LOOP", "DRAW_LOOP", "DEPLOY_WIN"],
       "entry_phase": "MAIN1",
-      "note": "v3.1 staged line. Staff's untap-creature ability TARGETS, so engine-level validation is deferred to Step target scripting (PR-15+); math-level validation covers the profit invariant ({3} untap Selvala + {1} untap Staff = {4}/cycle, needs power 6)."
+      "note": "v3.1 staged line, MANA_LOOP cycle: Selvala {G},{T} for X; Staff {3},{T} untap Selvala (TARGETS — scripted, PR-15); Staff {1} untap itself. 5 mana/cycle, needs power 6. DRAW_LOOP + DEPLOY_WIN stages land with the PR-16 planner."
     }
   ],
   "unbound": []

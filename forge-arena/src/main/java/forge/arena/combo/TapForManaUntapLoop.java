@@ -1,5 +1,6 @@
 package forge.arena.combo;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -8,23 +9,33 @@ import forge.arena.engine.SeatView;
 /**
  * The first executor archetype (plan §6/§10 Phase 4): tap an engine
  * permanent for mana, untap it, repeat — Selvala + Umbral Mantle / Staff of
- * Domination class. Two validation layers:
+ * Domination class. One step script drives BOTH validation and live play
+ * ({@link #cycleSteps} — what was proven is what executes). Two validation
+ * layers:
  *
  * <ul>
  *   <li>{@link #mathProfitable} — the plan §8 arithmetic (net per cycle =
- *       yield − cycle cost, engine pump compounding): cheap, engine-free,
- *       used by tests and (later) the tracker's cheap pre-check;
+ *       yield − cycle cost, engine pump compounding): cheap, engine-free;
  *   <li>{@link #validate} — the real proof on a {@link SimHandle} game copy:
  *       three full cycles with the engine's own cost payment, profitable
  *       only when the FINAL cycle grows the mana pool (steady state — early
  *       cycles may be land-funded and would read as false profit) and the
  *       engine ends untapped (repeatable).
  * </ul>
+ *
+ * <p>Params: {@code engine}, {@code untapper}, {@code activation_cost},
+ * {@code untap_cost}, {@code untap_ability_host} (engine|untapper — Umbral
+ * Mantle GRANTS its ability to the equipped creature), {@code
+ * untap_targets_engine} (Staff's untap ability targets), {@code
+ * untapper_reset_cost} (Staff re-readies itself for {1}), {@code
+ * self_pump_per_cycle}, {@code bank_cycles} (PR-15 live-play primitive: run
+ * this many cycles, then hand the floated mana to stock AI — the PR-16
+ * shortcut/planner replaces counting with proving).
  */
 public final class TapForManaUntapLoop implements LineExecutor {
 
     public static final String ARCHETYPE = "TapForManaUntapLoop";
-    private static final int CYCLES = 3;
+    private static final int VALIDATE_CYCLES = 3;
 
     private final String engine;
     private final String untapper;
@@ -32,7 +43,10 @@ public final class TapForManaUntapLoop implements LineExecutor {
     private final String untapCost;
     /** Card hosting the untap ability: Mantle GRANTS it to the engine. */
     private final String untapAbilityHost;
+    private final boolean untapTargetsEngine;
+    private final String untapperResetCost;
     private final int selfPumpPerCycle;
+    private final int bankCycles;
     private final String entryPhase;
 
     public TapForManaUntapLoop(Map<String, String> params, String entryPhase) {
@@ -41,7 +55,10 @@ public final class TapForManaUntapLoop implements LineExecutor {
         this.activationCost = require(params, "activation_cost");
         this.untapCost = require(params, "untap_cost");
         this.untapAbilityHost = "engine".equals(params.get("untap_ability_host")) ? engine : untapper;
+        this.untapTargetsEngine = Boolean.parseBoolean(params.getOrDefault("untap_targets_engine", "false"));
+        this.untapperResetCost = params.get("untapper_reset_cost");
         this.selfPumpPerCycle = Integer.parseInt(params.getOrDefault("self_pump_per_cycle", "0"));
+        this.bankCycles = Integer.parseInt(params.getOrDefault("bank_cycles", "6"));
         this.entryPhase = entryPhase != null ? entryPhase : "MAIN1";
     }
 
@@ -68,6 +85,27 @@ public final class TapForManaUntapLoop implements LineExecutor {
         return entryPhase;
     }
 
+    /** The one loop cycle, as scripted steps — validation and live play both run THIS. */
+    public List<Step> cycleSteps() {
+        List<Step> steps = new ArrayList<>();
+        steps.add(Step.activate(engine, activationCost));
+        if (untapTargetsEngine) {
+            steps.add(Step.activateTargeting(untapAbilityHost, untapCost, engine));
+        } else {
+            steps.add(Step.activate(untapAbilityHost, untapCost));
+        }
+        if (untapperResetCost != null && !untapperResetCost.isBlank()) {
+            steps.add(Step.activate(untapper, untapperResetCost));
+        }
+        return steps;
+    }
+
+    /** Full cycle cost in generic-mana terms (activation + untap + reset). */
+    int cycleCost() {
+        return cmc(activationCost) + cmc(untapCost)
+                + (untapperResetCost == null || untapperResetCost.isBlank() ? 0 : cmc(untapperResetCost));
+    }
+
     /**
      * Plan §8 SelvalaMantleMathTest semantics: floating += yield − cycle
      * cost per cycle; the engine pumps itself between cycles; going negative
@@ -75,12 +113,12 @@ public final class TapForManaUntapLoop implements LineExecutor {
      * front); strictly positive floating = profitable.
      */
     public SimResult mathProfitable(int engineStartPower, int greatestOtherPower, int floatedMana) {
-        int cycleCost = cmc(activationCost) + cmc(untapCost);
+        int cost = cycleCost();
         int enginePower = engineStartPower;
         int floating = floatedMana;
-        for (int cycle = 1; cycle <= CYCLES; cycle++) {
+        for (int cycle = 1; cycle <= VALIDATE_CYCLES; cycle++) {
             int yield = Math.max(enginePower, greatestOtherPower);
-            floating += yield - cycleCost;
+            floating += yield - cost;
             if (floating < 0) {
                 return SimResult.blocked("mana");
             }
@@ -110,14 +148,17 @@ public final class TapForManaUntapLoop implements LineExecutor {
 
     @Override
     public SimResult validate(SimHandle sim) {
+        List<Step> steps = cycleSteps();
         int lastCycleDelta = 0;
-        for (int cycle = 1; cycle <= CYCLES; cycle++) {
+        for (int cycle = 1; cycle <= VALIDATE_CYCLES; cycle++) {
             int poolAtCycleStart = sim.manaPoolTotal();
-            if (!sim.activate(engine, activationCost)) {
-                return SimResult.blocked("engine");
-            }
-            if (!sim.activate(untapAbilityHost, untapCost)) {
-                return SimResult.blocked("untapper");
+            for (int i = 0; i < steps.size(); i++) {
+                Step step = steps.get(i);
+                if (!sim.activate(step.card(), step.costHint(), step.targets())) {
+                    // blocked-by names the ROLE, not the card: with
+                    // untap_ability_host=engine both steps live on the engine
+                    return SimResult.blocked(i == 0 ? "engine" : "untapper");
+                }
             }
             if (!sim.untapped(engine)) {
                 return SimResult.blocked("engine_not_untapped");
@@ -126,16 +167,18 @@ public final class TapForManaUntapLoop implements LineExecutor {
         }
         // steady state only: cycle 1-2 costs may be land-funded, which floats
         // mana without proving the loop feeds itself
-        return lastCycleDelta > 0 ? SimResult.profitable(CYCLES) : SimResult.unprofitable();
+        return lastCycleDelta > 0 ? SimResult.profitable(VALIDATE_CYCLES) : SimResult.unprofitable();
     }
 
     @Override
     public Step next(LineState state, SeatView view) {
-        // MANA_LOOP script: engine activation and untap alternate (PR-15's
-        // controller consumes this; validation above never calls it)
-        if (state.iteration() % 2 == 0) {
-            return Step.activate(engine, activationCost);
+        List<Step> steps = cycleSteps();
+        int cycle = state.iteration() / steps.size();
+        if (cycle >= bankCycles) {
+            // banking primitive: floated mana is handed back to stock AI in
+            // the same priority window (PR-16's shortcut/planner replaces this)
+            return Step.done();
         }
-        return Step.activate(untapAbilityHost, untapCost);
+        return steps.get(state.iteration() % steps.size());
     }
 }

@@ -5,11 +5,11 @@ import java.util.List;
 import forge.arena.engine.SeatView;
 
 /**
- * A parameterized combo-line archetype (plan §6, v3.1 staged form). PR-14
- * ships the validation half: {@link #validate} proves the line on a game
- * COPY before it may ever run for real. The step half ({@link #next},
- * consumed by the PR-15 ComboAwareController line mode) is scripted per
- * stage; nothing in the harness drives it yet.
+ * A parameterized combo-line archetype (plan §6, v3.1 staged form).
+ * {@link #validate} proves the line on a game COPY before it may ever run
+ * for real; {@link #next} scripts the live steps the PR-15
+ * ComboAwareController plays one priority at a time. Validation drives the
+ * SAME step script, so what was proven is exactly what gets executed.
  */
 public interface LineExecutor {
 
@@ -25,17 +25,29 @@ public interface LineExecutor {
     /** Prove the full chain on a sandbox copy; the engine is the oracle. */
     SimResult validate(SimHandle sim);
 
-    /** The next scripted action for the controller (PR-15). */
+    /** The next scripted action; {@code Step.done()} ends the line. */
     Step next(LineState state, SeatView view);
 
-    /** One scripted action. {@code activate}: card + cost hint. */
-    record Step(String action, String card, String costHint) {
+    /**
+     * One scripted action. {@code activate}: card + cost hint + explicit
+     * targets (v3.1 lesson: unscripted targets are nondeterministic — a step
+     * that needs targets names them).
+     */
+    record Step(String action, String card, String costHint, List<String> targets) {
         public static Step activate(String card, String costHint) {
-            return new Step("activate", card, costHint);
+            return new Step("activate", card, costHint, List.of());
+        }
+
+        public static Step activateTargeting(String card, String costHint, String... targets) {
+            return new Step("activate", card, costHint, List.of(targets));
         }
 
         public static Step done() {
-            return new Step("done", null, null);
+            return new Step("done", null, null, List.of());
+        }
+
+        public boolean isDone() {
+            return "done".equals(action);
         }
     }
 

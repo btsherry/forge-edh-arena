@@ -54,6 +54,19 @@ public final class EngineFacade {
             throw new IllegalArgumentException("commander pod needs 2-4 seats, got " + seats.size());
         }
 
+        // combo-aware seats emit decision telemetry to the first event sink
+        // among the subscribers (EventRecorder implements Consumer<ArenaEvent>)
+        java.util.function.Consumer<forge.arena.report.ArenaEvent> eventSink = null;
+        for (Object subscriber : extraSubscribers) {
+            if (subscriber instanceof java.util.function.Consumer) {
+                @SuppressWarnings("unchecked")
+                java.util.function.Consumer<forge.arena.report.ArenaEvent> sink =
+                        (java.util.function.Consumer<forge.arena.report.ArenaEvent>) subscriber;
+                eventSink = sink;
+                break;
+            }
+        }
+
         List<RegisteredPlayer> players = new ArrayList<>();
         int seatIndex = 0;
         for (SeatSpec seat : seats) {
@@ -65,6 +78,8 @@ public final class EngineFacade {
             String name = "seat" + seatIndex + "-" + deck.getName();
             if (seat.goldfish()) {
                 rp.setPlayer(new GoldfishLobbyPlayer(name));
+            } else if (seat.comboAware()) {
+                rp.setPlayer(comboAwareLobbyPlayer(name, seat, seatIndex, eventSink));
             } else {
                 Set<AIOption> options = seat.simulationAi()
                         ? Collections.singleton(AIOption.USE_SIMULATION)
@@ -132,6 +147,35 @@ public final class EngineFacade {
             type = ArenaGameResult.ResultType.WIN;
         }
         return new ArenaGameResult(type, winnerSeat, winnerName, winCondition, turns, durationMs, limiting);
+    }
+
+    /**
+     * Build the PR-15 combo-aware seat: pilot artifacts load once here
+     * (combos.json from the seat's dossier, the global executor bindings),
+     * events flow to the batch's recorder. Missing artifacts fail loudly at
+     * setup — a combo-aware seat silently running stock would corrupt A/B
+     * comparisons.
+     */
+    private static ComboAwareLobbyPlayer comboAwareLobbyPlayer(String name, SeatSpec seat,
+            int seatIndex, java.util.function.Consumer<forge.arena.report.ArenaEvent> eventSink) {
+        if (seat.dossierDir() == null) {
+            throw new IllegalArgumentException("combo-aware seat " + seatIndex + " needs a dossierDir");
+        }
+        final java.util.List<forge.arena.combo.ComboDef> defs;
+        final forge.arena.combo.ExecutorBindings bindings;
+        try {
+            defs = forge.arena.combo.ComboDef.load(seat.dossierDir().resolve("combos.json"));
+            bindings = forge.arena.combo.ExecutorBindings.load(
+                    forge.arena.combo.ExecutorBindings.defaultPath());
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("combo-aware seat " + seatIndex
+                    + ": artifacts unreadable (run arena prep): " + e.getMessage(), e);
+        }
+        java.util.function.Consumer<forge.arena.report.ArenaEvent> sink =
+                eventSink != null ? eventSink : event -> {
+                };
+        return new ComboAwareLobbyPlayer(name, player -> new forge.arena.combo.ComboPilot(
+                new forge.arena.combo.ComboTracker(defs), bindings, 0.0, seatIndex, sink));
     }
 
     /** After a wall-clock interrupt the game thread may need a moment to unwind. */

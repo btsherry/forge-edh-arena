@@ -27,7 +27,9 @@ public class TapForManaUntapLoopMathTest {
             "engine", "Selvala, Heart of the Wilds",
             "untapper", "Staff of Domination",
             "activation_cost", "{G}",
-            "untap_cost", "{4}",
+            "untap_cost", "{3}",
+            "untap_targets_engine", "true",
+            "untapper_reset_cost", "{1}",
             "self_pump_per_cycle", "0"), "MAIN1");
 
     @Test
@@ -54,7 +56,7 @@ public class TapForManaUntapLoopMathTest {
 
     @Test
     public void staffNeedsPowerSix() {
-        // {G} activation + {4} untap chain = 5/cycle, no pump: power 5 loops forever at zero
+        // {G} + {3} untap-Selvala + {1} untap-Staff = 5/cycle, no pump: power 5 loops at zero
         SimResult power5 = STAFF.mathProfitable(5, 0, 0);
         assertFalse("net 0 must never validate (plan §8 SelvalaStaffNeedsPowerSix)",
                 power5.isProfitable());
@@ -79,14 +81,30 @@ public class TapForManaUntapLoopMathTest {
     }
 
     @Test
-    public void manaLoopStepsAlternateEngineAndUntapHost() {
+    public void manaLoopStepsFollowTheCycleScript() {
         LineExecutor.LineState start = new LineExecutor.LineState(0, 0);
         LineExecutor.Step first = MANTLE.next(start, null);
         assertEquals("Selvala, Heart of the Wilds", first.card());
         assertEquals("{G}", first.costHint());
         LineExecutor.Step second = MANTLE.next(start.advance(), null);
-        // Mantle's ability is granted TO the engine — the step targets Selvala
+        // Mantle's ability is granted TO the engine — the step activates on Selvala
         assertEquals("Selvala, Heart of the Wilds", second.card());
         assertEquals("{3}", second.costHint());
+        assertTrue(second.targets().isEmpty());
+
+        // Staff cycles are 3 steps, the untap step TARGETS the engine
+        assertEquals(3, STAFF.cycleSteps().size());
+        LineExecutor.Step untap = STAFF.cycleSteps().get(1);
+        assertEquals("Staff of Domination", untap.card());
+        assertEquals(java.util.List.of("Selvala, Heart of the Wilds"), untap.targets());
+        assertEquals("{1}", STAFF.cycleSteps().get(2).costHint());
+    }
+
+    @Test
+    public void bankCyclesEndTheLiveLineButNeverValidation() {
+        // default 6 bank cycles x 2 steps: iteration 12 is done
+        LineExecutor.LineState banked = new LineExecutor.LineState(0, 12);
+        assertTrue(MANTLE.next(banked, null).isDone());
+        assertFalse(MANTLE.next(new LineExecutor.LineState(0, 11), null).isDone());
     }
 }
