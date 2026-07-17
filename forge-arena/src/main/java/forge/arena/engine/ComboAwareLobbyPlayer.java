@@ -74,19 +74,34 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             this.seatIndex = p.getId();
         }
 
+        private int shortcutTurn = -1;
+        private String shortcutCombo;
+        private boolean stallReported;
+
         @Override
         public List<SpellAbility> chooseSpellAbilityToPlay() {
             Game game = getGame();
             int turn = game.getPhaseHandler().getTurn();
+            watchForStall(game, turn);
             SeatView view = SeatViews.of(player, seatIndex, turn);
             boolean entryWindowOpen = game.getPhaseHandler().is(PhaseType.MAIN1, player)
                     && game.getStack().isEmpty();
-            LineExecutor.Step step = pilot.nextAction(view, entryWindowOpen,
+            ComboPilot.Action action = pilot.nextAction(view, entryWindowOpen,
                     executor -> executor.validate(GameSimHandle.copyOf(game, player)))
                     .orElse(null);
-            if (step == null) {
+            if (action == null) {
                 return super.chooseSpellAbilityToPlay();
             }
+            if (!action.isStep()) {
+                // loop shortcut (plan §6): the proof already ran on a copy —
+                // compress the loop to its bounded product and let stock AI
+                // convert along the planner's selected route
+                injectPool(action.shortcut());
+                shortcutTurn = turn;
+                shortcutCombo = action.shortcut().comboId();
+                return super.chooseSpellAbilityToPlay();
+            }
+            LineExecutor.Step step = action.step();
             SpellAbility sa = AbilityResolver.resolve(player, step.card(), step.costHint(),
                     step.targets());
             if (sa == null) {
@@ -96,6 +111,45 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 return super.chooseSpellAbilityToPlay();
             }
             return Collections.singletonList(sa);
+        }
+
+        private void injectPool(ComboPilot.ShortcutOrder order) {
+            forge.game.card.Card source = AbilityResolver.findBattlefield(player, order.engineCard());
+            byte color = forge.card.MagicColor.fromName(order.color().toLowerCase());
+            forge.game.mana.Mana[] mana = new forge.game.mana.Mana[order.amount()];
+            for (int i = 0; i < order.amount(); i++) {
+                mana[i] = new forge.game.mana.Mana(color, source, null, player);
+            }
+            player.getManaPool().addMana(mana);
+        }
+
+        /** Gate 3.6 logging half: proven-infinite with no end state within 2 turns. */
+        private void watchForStall(Game game, int turn) {
+            if (shortcutTurn < 0 || stallReported || game.isGameOver()
+                    || turn < shortcutTurn + 2) {
+                return;
+            }
+            stallReported = true;
+            StringBuilder dump = new StringBuilder("turn=").append(turn).append('\n');
+            for (forge.game.player.Player p : game.getPlayers()) {
+                dump.append(p.getName()).append(" life=").append(p.getLife())
+                        .append(" battlefield=");
+                for (forge.game.card.Card c : p.getCardsIn(forge.game.zone.ZoneType.Battlefield)) {
+                    dump.append(c.getName()).append(';');
+                }
+                dump.append('\n');
+            }
+            try {
+                String hash = Integer.toHexString(dump.toString().hashCode());
+                java.nio.file.Path dir = java.nio.file.Path.of(
+                        System.getProperty("arena.stall.dir", "stalls"));
+                java.nio.file.Files.createDirectories(dir);
+                java.nio.file.Path file = dir.resolve(hash + ".txt");
+                java.nio.file.Files.writeString(file, dump.toString());
+                pilot.reportStalled(turn, shortcutCombo, hash, file.toString());
+            } catch (java.io.IOException e) {
+                pilot.reportStalled(turn, shortcutCombo, "unhashed", "dump_failed:" + e.getMessage());
+            }
         }
 
         @Override

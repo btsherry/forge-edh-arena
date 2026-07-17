@@ -106,6 +106,8 @@ public class ComboPilotIntegrationTest {
             throw new IllegalStateException("no network in tests");
         });
 
+        Path stallDir = Files.createTempDirectory("stalls");
+        System.setProperty("arena.stall.dir", stallDir.toString());
         List<ArenaEvent> events = new CopyOnWriteArrayList<>();
         Consumer<ArenaEvent> sink = events::add;
         EngineFacade.playCommanderGame(
@@ -120,13 +122,22 @@ public class ComboPilotIntegrationTest {
         assertEquals("binding", entered.get(0).fields().get("attempted_via"));
         assertEquals(Integer.valueOf(0), entered.get(0).seat());
 
-        long steps = events.stream().filter(e -> e.t().equals("line_step")).count();
-        assertTrue("the loop must physically run (got " + steps + " steps)", steps >= 4);
+        // PR-16: the proven loop compresses — planner trace + shortcut, no stepping
+        assertTrue("route_selected must be recorded",
+                events.stream().anyMatch(e -> e.t().equals("route_selected")));
+        List<ArenaEvent> shortcuts = events.stream()
+                .filter(e -> e.t().equals("combo_shortcut")).toList();
+        assertEquals("exactly one shortcut per game here", 1, shortcuts.size());
+        assertEquals("527-2816", shortcuts.get(0).fields().get("combo"));
 
-        // no engine_error aborts — interaction/validation aborts would be
-        // legitimate game outcomes, engine errors are bugs
-        assertTrue(events.stream().filter(e -> e.t().equals("line_aborted"))
-                .noneMatch(e -> "engine_error".equals(e.fields().get("cause"))));
+        // Gate 3.6 logging half: 10k mana + a synthetic 2-card route plan does
+        // not end the game within 2 turns -> the watchdog must say so, loudly
+        List<ArenaEvent> stalled = events.stream()
+                .filter(e -> e.t().equals("combo_stalled")).toList();
+        assertEquals("proven-infinite with no end state = combo_stalled (never silence)",
+                1, stalled.size());
+        assertTrue("stall dump must exist: " + stalled.get(0).fields().get("dump_path"),
+                Files.exists(Path.of((String) stalled.get(0).fields().get("dump_path"))));
 
         // every decision event validates against the taxonomy
         try (InputStream in = Files.newInputStream(Path.of("schemas", "arena.events.1.schema.json"))) {

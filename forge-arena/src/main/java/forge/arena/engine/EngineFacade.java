@@ -163,10 +163,13 @@ public final class EngineFacade {
         }
         final java.util.List<forge.arena.combo.ComboDef> defs;
         final forge.arena.combo.ExecutorBindings bindings;
+        final forge.arena.combo.RoutePlan routePlan;
         try {
             defs = forge.arena.combo.ComboDef.load(seat.dossierDir().resolve("combos.json"));
             bindings = forge.arena.combo.ExecutorBindings.load(
                     forge.arena.combo.ExecutorBindings.defaultPath());
+            routePlan = forge.arena.combo.RoutePlan.load(
+                    seat.dossierDir().resolve("route-coverage.json"));
         } catch (java.io.IOException e) {
             throw new IllegalArgumentException("combo-aware seat " + seatIndex
                     + ": artifacts unreadable (run arena prep): " + e.getMessage(), e);
@@ -175,7 +178,7 @@ public final class EngineFacade {
                 eventSink != null ? eventSink : event -> {
                 };
         return new ComboAwareLobbyPlayer(name, player -> new forge.arena.combo.ComboPilot(
-                new forge.arena.combo.ComboTracker(defs), bindings, 0.0, seatIndex, sink));
+                new forge.arena.combo.ComboTracker(defs), bindings, routePlan, 0.0, seatIndex, sink));
     }
 
     /** After a wall-clock interrupt the game thread may need a moment to unwind. */

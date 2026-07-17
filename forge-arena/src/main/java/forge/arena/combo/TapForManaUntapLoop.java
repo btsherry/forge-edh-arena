@@ -47,6 +47,8 @@ public final class TapForManaUntapLoop implements LineExecutor {
     private final String untapperResetCost;
     private final int selfPumpPerCycle;
     private final int bankCycles;
+    private final boolean shortcutEligible;
+    private final String poolColor;
     private final String entryPhase;
 
     public TapForManaUntapLoop(Map<String, String> params, String entryPhase) {
@@ -59,6 +61,8 @@ public final class TapForManaUntapLoop implements LineExecutor {
         this.untapperResetCost = params.get("untapper_reset_cost");
         this.selfPumpPerCycle = Integer.parseInt(params.getOrDefault("self_pump_per_cycle", "0"));
         this.bankCycles = Integer.parseInt(params.getOrDefault("bank_cycles", "6"));
+        this.shortcutEligible = Boolean.parseBoolean(params.getOrDefault("shortcut", "true"));
+        this.poolColor = params.getOrDefault("pool_color", "G");
         this.entryPhase = entryPhase != null ? entryPhase : "MAIN1";
     }
 
@@ -170,13 +174,23 @@ public final class TapForManaUntapLoop implements LineExecutor {
         return lastCycleDelta > 0 ? SimResult.profitable(VALIDATE_CYCLES) : SimResult.unprofitable();
     }
 
+    /** PR-16: a proven loop compresses to a pool injection instead of physical cycles. */
+    public boolean shortcutEligible() {
+        return shortcutEligible;
+    }
+
+    /** Color of the shortcut-injected pool (the engine's production color). */
+    public String poolColor() {
+        return poolColor;
+    }
+
     @Override
     public Step next(LineState state, SeatView view) {
         List<Step> steps = cycleSteps();
         int cycle = state.iteration() / steps.size();
         if (cycle >= bankCycles) {
-            // banking primitive: floated mana is handed back to stock AI in
-            // the same priority window (PR-16's shortcut/planner replaces this)
+            // banking fallback for shortcut-ineligible lines: floated mana is
+            // handed back to stock AI in the same priority window
             return Step.done();
         }
         return steps.get(state.iteration() % steps.size());

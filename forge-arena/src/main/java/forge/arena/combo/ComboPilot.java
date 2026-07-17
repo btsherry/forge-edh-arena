@@ -34,8 +34,35 @@ import forge.arena.report.ArenaEvent;
  */
 public final class ComboPilot {
 
+    /** One pilot output: either a scripted step to play, or a shortcut order. */
+    public record Action(LineExecutor.Step step, ShortcutOrder shortcut) {
+        public boolean isStep() {
+            return step != null;
+        }
+
+        static Action play(LineExecutor.Step step) {
+            return new Action(step, null);
+        }
+
+        static Action shortcut(ShortcutOrder order) {
+            return new Action(null, order);
+        }
+    }
+
+    /**
+     * PR-16 loop shortcut (plan §5/§6): the proven loop compresses to a
+     * bounded pool injection; the planner already chose the route.
+     */
+    public record ShortcutOrder(String comboId, String engineCard, String color, int amount,
+            String route) {
+    }
+
+    /** Bounded product of a proven-infinite loop (plan: large, engine-safe). */
+    public static final int SHORTCUT_POOL = 10_000;
+
     private final ComboTracker tracker;
     private final ExecutorBindings bindings;
+    private final RoutePlan routePlan;
     private final double patience;
     private final int seat;
     private final Consumer<ArenaEvent> events;
@@ -46,12 +73,19 @@ public final class ComboPilot {
     private final Map<String, Integer> firstReadyTurn = new HashMap<>();
     private final Map<String, Integer> lastIgnoredTurn = new HashMap<>();
     private final Set<String> attemptedThisTurn = new HashSet<>();
+    private final Set<String> firedShortcuts = new HashSet<>();
     private int seenTurn = -1;
 
     public ComboPilot(ComboTracker tracker, ExecutorBindings bindings, double patience,
             int seat, Consumer<ArenaEvent> events) {
+        this(tracker, bindings, RoutePlan.empty(), patience, seat, events);
+    }
+
+    public ComboPilot(ComboTracker tracker, ExecutorBindings bindings, RoutePlan routePlan,
+            double patience, int seat, Consumer<ArenaEvent> events) {
         this.tracker = tracker;
         this.bindings = bindings;
+        this.routePlan = routePlan;
         this.patience = patience;
         this.seat = seat;
         this.events = events;
@@ -68,7 +102,7 @@ public final class ComboPilot {
      * (stock AI decides). {@code validator} runs the executor against a fresh
      * game copy — injected so this class never touches the engine.
      */
-    public Optional<LineExecutor.Step> nextAction(SeatView view, boolean entryWindowOpen,
+    public Optional<Action> nextAction(SeatView view, boolean entryWindowOpen,
             Function<LineExecutor, SimResult> validator) {
         if (view.turn() != seenTurn) {
             seenTurn = view.turn();
@@ -85,7 +119,7 @@ public final class ComboPilot {
                     .with("stage", activeExecutor.stages().get(lineState.stage()))
                     .with("iteration", lineState.iteration()));
             lineState = lineState.advance();
-            return Optional.of(step);
+            return Optional.of(Action.play(step));
         }
 
         if (!entryWindowOpen) {
@@ -97,11 +131,17 @@ public final class ComboPilot {
                     || attemptedThisTurn.contains(status.id())) {
                 continue;
             }
+            if (firedShortcuts.contains(status.id())) {
+                // pool already ordered — conversion is pending and the stall
+                // watchdog owns the window; re-firing would just be noise
+                ignore(status.id(), view.turn(), "mana_reserved");
+                continue;
+            }
             Optional<ExecutorBindings.Binding> binding = bindings.forCombo(status.id());
             Optional<LineExecutor> executor = binding.flatMap(ExecutorBindings::executorFor);
             if (executor.isEmpty()) {
-                // no binding / unknown archetype: detection-only until the
-                // PR-16 generic fallback can convert proven resources
+                // no binding / unknown archetype: detection-only until a
+                // generic fallback can convert proven resources
                 ignore(status.id(), view.turn(), "no_viable_route");
                 continue;
             }
@@ -117,17 +157,41 @@ public final class ComboPilot {
                 ignore(status.id(), view.turn(), "validation_failed");
                 continue;
             }
-            activeComboId = status.id();
-            activeExecutor = executor.get();
-            lineState = new LineExecutor.LineState(0, 0);
             events.accept(ArenaEvent.of("line_entered", view.turn(), seat)
                     .with("combo", status.id())
                     .with("binding", binding.get().comboId())
                     .with("attempted_via", "binding")
                     .with("entry_phase", executor.get().entryPhase()));
+
+            // PR-16: a proven loop compresses — plan the route, order the pool
+            if (executor.get() instanceof TapForManaUntapLoop loop && loop.shortcutEligible()) {
+                LethalityPlanner.Verdict verdict = LethalityPlanner.choose(routePlan, view, events);
+                Map<String, Object> boundedProduct = new HashMap<>();
+                boundedProduct.put("mana_" + loop.poolColor(), SHORTCUT_POOL);
+                firedShortcuts.add(status.id());
+                events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
+                        .with("combo", status.id())
+                        .with("iterations_proven", proof.cycles())
+                        .with("bounded_product", boundedProduct));
+                return Optional.of(Action.shortcut(new ShortcutOrder(status.id(),
+                        binding.get().params().get("engine"), loop.poolColor(),
+                        SHORTCUT_POOL, verdict.route())));
+            }
+
+            activeComboId = status.id();
+            activeExecutor = executor.get();
+            lineState = new LineExecutor.LineState(0, 0);
             return nextAction(view, true, validator); // first step, same window
         }
         return Optional.empty();
+    }
+
+    /** Gate 3.6 logging half: the controller's stall watchdog reports through the pilot. */
+    public void reportStalled(int turn, String binding, String stateHash, String dumpPath) {
+        events.accept(ArenaEvent.of("combo_stalled", turn, seat)
+                .with("binding", binding)
+                .with("state_hash", stateHash)
+                .with("dump_path", dumpPath));
     }
 
     /** The controller couldn't produce a step's ability — the line ends here. */

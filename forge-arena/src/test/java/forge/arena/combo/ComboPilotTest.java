@@ -43,13 +43,15 @@ public class ComboPilotTest {
     @BeforeClass
     public void fixtures() throws Exception {
         Path dir = Files.createTempDirectory("pilot-bindings");
+        // shortcut=false pins the stepping/banking path most tests exercise;
+        // the shortcut path has its own test below
         Files.writeString(dir.resolve("executor-bindings.json"), """
                 {"schema": "arena.executor-bindings/1",
                  "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
                    "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
                               "activation_cost": "{G}", "untap_cost": "{3}",
                               "untap_ability_host": "engine", "self_pump_per_cycle": "2",
-                              "bank_cycles": "2"}}],
+                              "bank_cycles": "2", "shortcut": "false"}}],
                  "unbound": []}""");
         bindings = ExecutorBindings.load(dir.resolve("executor-bindings.json"));
         try (InputStream in = Files.newInputStream(Path.of("schemas", "arena.events.1.schema.json"))) {
@@ -85,9 +87,9 @@ public class ComboPilotTest {
         ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
                 0.0, 0, events::add);
 
-        Optional<LineExecutor.Step> first = pilot.nextAction(ready(3), true, PROFITABLE);
+        Optional<ComboPilot.Action> first = pilot.nextAction(ready(3), true, PROFITABLE);
         assertTrue(pilot.lineActive());
-        assertEquals("{G}", first.orElseThrow().costHint());
+        assertEquals("{G}", first.orElseThrow().step().costHint());
         assertEquals("527-2816", pilot.activeComboId());
 
         // bank_cycles=2, 2 steps per cycle: 3 more steps, then done
@@ -180,6 +182,37 @@ public class ComboPilotTest {
         assertEquals("line_aborted", aborted.t());
         assertEquals("interaction", aborted.fields().get("cause"));
         assertEquals("Umbral Mantle", aborted.fields().get("piece_lost"));
+        assertAllValid(events);
+    }
+
+    @Test
+    public void shortcutEligibleLinePlansRoutesAndOrdersThePool() throws Exception {
+        Path dir = Files.createTempDirectory("pilot-shortcut");
+        Files.writeString(dir.resolve("executor-bindings.json"), """
+                {"schema": "arena.executor-bindings/1",
+                 "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
+                   "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
+                              "activation_cost": "{G}", "untap_cost": "{3}",
+                              "untap_ability_host": "engine", "pool_color": "G"}}],
+                 "unbound": []}""");
+        ExecutorBindings shortcutBindings = ExecutorBindings.load(dir.resolve("executor-bindings.json"));
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), shortcutBindings,
+                0.0, 0, events::add);
+
+        ComboPilot.Action action = pilot.nextAction(ready(3), true, PROFITABLE).orElseThrow();
+        assertFalse("shortcut, not a step", action.isStep());
+        assertEquals("527-2816", action.shortcut().comboId());
+        assertEquals("Selvala, Heart of the Wilds", action.shortcut().engineCard());
+        assertEquals("G", action.shortcut().color());
+        assertEquals(ComboPilot.SHORTCUT_POOL, action.shortcut().amount());
+        assertEquals("empty route plan -> explicit bank", "BANK_AND_HOLD", action.shortcut().route());
+        assertFalse("no line mode after a shortcut", pilot.lineActive());
+
+        List<String> kinds = events.stream().map(ArenaEvent::t).toList();
+        assertEquals(List.of("line_entered", "route_selected", "combo_shortcut"), kinds);
+        ArenaEvent shortcut = events.get(2);
+        assertEquals(Integer.valueOf(3), shortcut.fields().get("iterations_proven"));
         assertAllValid(events);
     }
 
