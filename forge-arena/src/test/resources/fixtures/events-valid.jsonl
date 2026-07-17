@@ -13,3 +13,6 @@
 {"t":"line_aborted","turn":8,"seat":0,"cause":"interaction","piece_lost":"Umbral Mantle"}
 {"t":"combo_stalled","turn":9,"seat":0,"binding":"csb-4520@1","rejected_routes":["SPREAD_COMBAT"],"state_hash":"ab12cd34","dump_path":"stalls/ab12cd34.txt"}
 {"t":"game_end","turn":9,"winner_seat":1,"win_condition":"combat","combo_id":"csb-4131","route":"SPREAD_COMBAT"}
+{"t":"turn_state","turn":9,"active_seat":0,"seats":[{"seat":0,"life":31,"poison":0,"hand":5,"library":81,"creatures":3,"board_power":9,"lands":6,"graveyard":4,"commander_casts":1,"lost":false}]}
+{"t":"turn_summary","turn":9,"seats":[{"seat":0,"damage_dealt":{"combat":7,"other":2},"damage_taken":0,"drawn":2,"discarded":["Fog"],"spells":3,"lands":1,"creatures_entered":2,"creatures_died":1}]}
+{"t":"land_played","turn":3,"seat":1,"desc":"seat1-purphoros played Mountain"}

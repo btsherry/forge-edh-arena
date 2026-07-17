@@ -22,7 +22,8 @@ public final class RunLogRenderer {
             "combo_ready", "combo_ignored", "combo_shortcut", "combo_stalled",
             "line_entered", "line_aborted",
             "route_selected", "route_rejected",
-            "tutor_decision", "mulligan_decision");
+            "tutor_decision", "mulligan_decision",
+            "turn_summary");
 
     private RunLogRenderer() {
     }
@@ -60,6 +61,12 @@ public final class RunLogRenderer {
             }
             case "turn_begin":
                 return "turn " + e.turn() + " begins";
+            case "turn_state":
+                return "state  " + seatRows(f, RunLogRenderer::stateRow);
+            case "turn_summary":
+                return "flow   " + seatRows(f, RunLogRenderer::flowRow);
+            case "land_played":
+                return "land   " + f.get("desc");
             case "life_change":
                 return "life   " + f.get("player") + " " + f.get("old") + " -> " + f.get("new");
             case "spell_cast":
@@ -89,5 +96,39 @@ public final class RunLogRenderer {
             default:
                 return e.t() + "  " + f;
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String seatRows(Map<String, Object> fields,
+            java.util.function.Function<Map<String, Object>, String> row) {
+        Object seats = fields.get("seats");
+        if (!(seats instanceof java.util.List<?> list)) {
+            return String.valueOf(seats);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Object o : list) {
+            if (o instanceof Map<?, ?> m) {
+                if (sb.length() > 0) {
+                    sb.append("  ");
+                }
+                sb.append(row.apply((Map<String, Object>) m));
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String stateRow(Map<String, Object> s) {
+        return "s" + s.get("seat") + ":" + s.get("life") + "hp/" + s.get("hand") + "h/"
+                + s.get("creatures") + "cr/" + s.get("board_power") + "pw";
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String flowRow(Map<String, Object> s) {
+        Map<String, Object> dealt = s.get("damage_dealt") instanceof Map
+                ? (Map<String, Object>) s.get("damage_dealt") : Map.of();
+        int dmg = ((Number) dealt.getOrDefault("combat", 0)).intValue()
+                + ((Number) dealt.getOrDefault("other", 0)).intValue();
+        return "s" + s.get("seat") + ":" + dmg + "dmg/" + s.get("drawn") + "dr/"
+                + s.get("spells") + "sp";
     }
 }

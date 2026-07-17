@@ -382,6 +382,8 @@ public GameRecord runOne(RunConfig cfg, int gameIndex) {
 
 The §7(a) auto-narrative renderer is this same renderer run post-hoc at paragraph granularity — one implementation, two moments of use.
 
+**PR-22 (2026-07-17) — play-pattern telemetry (the §7 raw material).** Two structured events per turn, both byte-deterministic: **`turn_state`** at turn begin (per seat, read from live game state: life, poison, hand/library/graveyard sizes, creatures + summed board power, lands, cumulative commander casts, lost flag) and **`turn_summary`** at turn end (per seat, accumulated by the bridge FROM the events themselves — Forge's native per-turn trackers reset during cleanup and would race the turn-end event: damage dealt split combat/other + damage taken via `GameEventPlayerDamaged`, cards drawn as COUNTS (drawn identity stays unlogged), discards by NAME (public in the graveyard; hand→graveyard approximation), spells, lands, creatures entered/died via typed zone changes). Also: `land_played` is its own event type (previously mislabeled `spell_cast`), and `zone_change` carries seat attribution (the card's controller). Quiet seats emit no summary row. `mana_spent` was considered and dropped — no cheap native tracker, payment events are noise. run.log default tier renders one compact `flow` line per turn (`s0:7dmg/2dr/3sp …`); `turn_state` detail is JSONL/verbose. Volume: +2 events/turn ≈ +25% per game — negligible at 1k-game scale. The §7 reducers (PR-23) consume exactly these.*
+
 ## 6. Combo layer — key classes
 
 ```java
