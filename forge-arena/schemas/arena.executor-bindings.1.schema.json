@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:executor-bindings:1",
+  "title": "Executor binding library (plan §5, §9 W1)",
+  "description": "Per-combo parameterizations of hand-written executor archetypes, keyed by Spellbook combo id (global — bindings are per-combo, not per-deck). Hand-authored today; Gate 3.5 bindgen emits the same format, gated by the sandbox sim-verifier (a binding that fails validate() never becomes executable). Unknown archetypes leave a combo detection-only with the generic fallback — data can never crash a batch.",
+  "type": "object",
+  "required": ["schema", "bindings", "unbound"],
+  "properties": {
+    "schema": { "const": "arena.executor-bindings/1" },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["combo_id", "archetype", "params"],
+        "properties": {
+          "combo_id": { "type": "string", "minLength": 1 },
+          "archetype": { "type": "string", "minLength": 1 },
+          "params": {
+            "type": "object",
+            "description": "Archetype-specific parameters. TapForManaUntapLoop: engine, untapper, activation_cost, untap_cost, untap_ability_host (engine|untapper — Mantle GRANTS its ability to the engine), self_pump_per_cycle, yield_expr, profit_invariant.",
+            "additionalProperties": { "type": "string" }
+          },
+          "payoffs": { "type": "array", "items": { "type": "string" }, "description": "Cards the line's win conversion leans on — LethalityPlanner input, informational here." },
+          "stages": { "type": "array", "items": { "type": "string" } },
+          "entry_phase": { "type": "string", "description": "Default MAIN1 — combat must remain available for DEPLOY_WIN endings (v3.1)." },
+          "note": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "unbound": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Combo ids deliberately left detection-only, so 'no binding' is a recorded decision, not an omission."
+    }
+  },
+  "additionalProperties": false
+}
