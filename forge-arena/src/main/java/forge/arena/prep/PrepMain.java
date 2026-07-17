@@ -56,13 +56,20 @@ public final class PrepMain {
 
     /**
      * {@code routeLibrary} null = the in-repo default; {@code autopsyClient}
-     * null = no LLM calls ever (the default — autopsy is strictly opt-in).
+     * / {@code bindgenClient} null = no LLM calls ever (the default — both
+     * are strictly opt-in).
      */
     public record Options(Ingest.Spec ingest, Path banlist, int goldfishGames,
-            SpellbookClient.Fetcher fetcher, Path routeLibrary, ClaudeClient autopsyClient) {
+            SpellbookClient.Fetcher fetcher, Path routeLibrary, ClaudeClient autopsyClient,
+            ClaudeClient bindgenClient) {
         public Options(Ingest.Spec ingest, Path banlist, int goldfishGames,
                 SpellbookClient.Fetcher fetcher) {
-            this(ingest, banlist, goldfishGames, fetcher, null, null);
+            this(ingest, banlist, goldfishGames, fetcher, null, null, null);
+        }
+
+        public Options(Ingest.Spec ingest, Path banlist, int goldfishGames,
+                SpellbookClient.Fetcher fetcher, Path routeLibrary, ClaudeClient autopsyClient) {
+            this(ingest, banlist, goldfishGames, fetcher, routeLibrary, autopsyClient, null);
         }
     }
 
@@ -135,6 +142,28 @@ public final class PrepMain {
                 gates.add(new GateOutcome("autopsy", autopsy.ranOrCached(), autopsy.detail()));
             } catch (IOException e) {
                 gates.add(new GateOutcome("autopsy", false, e.getMessage()));
+            }
+        }
+
+        // Gate 3.5 bindgen (PR-20): opt-in — generate + sim-verify bindings
+        // for this deck's unbound combos (cache-first: zero repeat calls)
+        if (options.bindgenClient() != null && !coverageStatus.equals("not_run")) {
+            try {
+                java.io.File deckFile = dossier.resolve(
+                        ((com.fasterxml.jackson.databind.node.ObjectNode) new ObjectMapper()
+                                .readTree(dossier.resolve("dossier.json").toFile()))
+                                .get("artifacts").get("deck").get("path").asText()).toFile();
+                forge.arena.bindgen.BindGen.Result bindgen = forge.arena.bindgen.BindGen.run(
+                        dossier, forge.arena.combo.ExecutorBindings.defaultPath(),
+                        options.bindgenClient(),
+                        new forge.arena.engine.BindingVerifier(deckFile));
+                gates.add(new GateOutcome("bindgen", true,
+                        bindgen.generated() + " generated+verified, " + bindgen.failedVerification()
+                                + " failed, " + bindgen.cached() + " cached, "
+                                + bindgen.proposals() + " proposals"));
+                bindgen.notes().forEach(n -> System.out.println("bindgen: " + n));
+            } catch (IOException e) {
+                gates.add(new GateOutcome("bindgen", false, e.getMessage()));
             }
         }
 
@@ -214,6 +243,7 @@ public final class PrepMain {
         int goldfishGames = 3;
         boolean offline = false;
         boolean autopsy = false;
+        boolean bindgen = false;
         List<String> commanders = new ArrayList<>();
         for (int i = 1; i < args.length; i++) {
             switch (args[i]) {
@@ -228,6 +258,7 @@ public final class PrepMain {
                 case "--goldfish-games" -> goldfishGames = Integer.parseInt(args[++i]);
                 case "--offline" -> offline = true;
                 case "--autopsy" -> autopsy = true;
+                case "--bindgen" -> bindgen = true;
                 default -> {
                     System.err.println("unknown option: " + args[i]);
                     usage();
@@ -259,9 +290,12 @@ public final class PrepMain {
 
         // fail fast on a missing API key BEFORE any gate runs, not after goldfish
         ClaudeClient autopsyClient = null;
-        if (autopsy) {
+        ClaudeClient bindgenClient = null;
+        if (autopsy || bindgen) {
             try {
-                autopsyClient = ClaudeClient.fromEnvironment();
+                ClaudeClient client = ClaudeClient.fromEnvironment();
+                autopsyClient = autopsy ? client : null;
+                bindgenClient = bindgen ? client : null;
             } catch (IllegalStateException e) {
                 System.err.println(e.getMessage());
                 System.exit(2);
@@ -271,7 +305,7 @@ public final class PrepMain {
         PrepResult result = prep(new Options(
                 new Ingest.Spec(input, id, out, source, bracket, name, notes,
                         commanders.isEmpty() ? null : commanders),
-                banlist, goldfishGames, fetcher, null, autopsyClient));
+                banlist, goldfishGames, fetcher, null, autopsyClient, bindgenClient));
 
         System.out.println();
         for (GateOutcome gate : result.gates()) {
@@ -302,5 +336,9 @@ public final class PrepMain {
         System.err.println("--autopsy: on blocked/unroutable coverage, ONE Claude call proposes"
                 + " classifications into the route library (needs " + ClaudeClient.API_KEY_ENV
                 + "; proposals are inert until approved)");
+        System.err.println("--bindgen: Gate 3.5 — generate + SIM-VERIFY executor bindings for"
+                + " this deck's unbound combos (one call per distinct combo ever, cache-first;"
+                + " needs " + ClaudeClient.API_KEY_ENV + "; a binding that fails the engine's"
+                + " verification never becomes executable)");
     }
 }

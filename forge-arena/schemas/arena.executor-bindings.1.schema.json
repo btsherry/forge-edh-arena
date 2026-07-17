@@ -23,7 +23,19 @@
           "payoffs": { "type": "array", "items": { "type": "string" }, "description": "Cards the line's win conversion leans on — LethalityPlanner input, informational here." },
           "stages": { "type": "array", "items": { "type": "string" } },
           "entry_phase": { "type": "string", "description": "Default MAIN1 — combat must remain available for DEPLOY_WIN endings (v3.1)." },
-          "note": { "type": "string" }
+          "note": { "type": "string" },
+          "provenance": {
+            "type": "object",
+            "description": "Present on bindgen-generated bindings (Gate 3.5): reproducibility record per plan §11.",
+            "required": ["generated_by", "model", "request_sha256", "sim_cycles"],
+            "properties": {
+              "generated_by": { "type": "string" },
+              "model": { "type": "string" },
+              "request_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "sim_cycles": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          }
         },
         "additionalProperties": false
       }
