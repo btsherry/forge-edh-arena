@@ -55,11 +55,19 @@ public interface LineExecutor {
      * (PR-25): explicit X for X-cost casts — the AI's own X choice is
      * pool-blind (game 78: Finale cast at small X with 10^4 floating), so
      * conversion casts pin it; null = no opinion, applied only when the
-     * resolved spell actually has X in its cost.
+     * resolved spell actually has X in its cost. {@code choice} (PR-27a):
+     * a RESOLUTION-TIME choice hint — Sabertooth's bounce is a Hidden
+     * ChangeZone choice, not a cast-time target, so the step names the card
+     * the controller must pick when the engine asks; null = no hint.
      */
-    record Step(String action, String card, String costHint, List<String> targets, Integer x) {
+    record Step(String action, String card, String costHint, List<String> targets, Integer x,
+            String choice) {
         public Step(String action, String card, String costHint, List<String> targets) {
-            this(action, card, costHint, targets, null);
+            this(action, card, costHint, targets, null, null);
+        }
+
+        public Step(String action, String card, String costHint, List<String> targets, Integer x) {
+            this(action, card, costHint, targets, x, null);
         }
 
         public static Step activate(String card, String costHint) {
@@ -68,6 +76,10 @@ public interface LineExecutor {
 
         public static Step activateTargeting(String card, String costHint, String... targets) {
             return new Step("activate", card, costHint, List.of(targets));
+        }
+
+        public static Step activateChoosing(String card, String costHint, String choice) {
+            return new Step("activate", card, costHint, List.of(), null, choice);
         }
 
         public static Step cast(String card) {

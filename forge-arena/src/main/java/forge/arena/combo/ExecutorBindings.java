@@ -104,6 +104,9 @@ public final class ExecutorBindings {
         if (TapForManaUntapLoop.ARCHETYPE.equals(binding.archetype())) {
             return Optional.of(new TapForManaUntapLoop(binding.params(), binding.entryPhase()));
         }
+        if (BounceRecastLoop.ARCHETYPE.equals(binding.archetype())) {
+            return Optional.of(new BounceRecastLoop(binding.params(), binding.entryPhase()));
+        }
         return Optional.empty();
     }
 }

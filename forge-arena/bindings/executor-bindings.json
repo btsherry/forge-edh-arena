@@ -40,6 +40,79 @@
     "stages" : [ "MANA_LOOP", "DRAW_LOOP", "DEPLOY_WIN" ],
     "entry_phase" : "MAIN1",
     "note" : "v3.1 staged line, MANA_LOOP cycle: Selvala {G},{T} for X; Staff {3},{T} untap Selvala (TARGETS — scripted, PR-15); Staff {1} untap itself. 5 mana/cycle, needs power 6. DRAW_LOOP + DEPLOY_WIN stages land with the PR-16 planner."
+  }, {
+    "combo_id" : "215-527-876",
+    "archetype" : "BounceRecastLoop",
+    "params" : {
+      "tapper" : "Selvala, Heart of the Wilds",
+      "tapper_cost" : "{G}",
+      "bouncer" : "Temur Sabertooth",
+      "bounce_cost" : "{1}{G}",
+      "recast_mana_value" : "3",
+      "haste_piece" : "Lightning Greaves",
+      "haste_mode" : "equip",
+      "equip_cost" : "{0}",
+      "tapper_mana_value" : "3",
+      "bouncer_mana_value" : "4",
+      "haste_mana_value" : "2"
+    },
+    "payoffs" : [ "Craterhoof Behemoth", "Concordant Crossroads", "Finale of Devastation" ],
+    "entry_phase" : "MAIN1",
+    "note" : "PR-27a hand-authored from the bindgen proposal: tap Selvala for X (greatest power), Sabertooth {1}{G} bounces her (resolution CHOICE — Step choice hint), recast {1}{G}{G}, re-equip Greaves {0} for haste. Net X-6; validation-gated on board power."
+  }, {
+    "combo_id" : "215-527-1322",
+    "archetype" : "BounceRecastLoop",
+    "params" : {
+      "tapper" : "Selvala, Heart of the Wilds",
+      "tapper_cost" : "{G}",
+      "bouncer" : "Temur Sabertooth",
+      "bounce_cost" : "{1}{G}",
+      "recast_mana_value" : "3",
+      "haste_piece" : "Concordant Crossroads",
+      "haste_mode" : "static",
+      "tapper_mana_value" : "3",
+      "bouncer_mana_value" : "4",
+      "haste_mana_value" : "1"
+    },
+    "payoffs" : [ "Craterhoof Behemoth", "Concordant Crossroads", "Finale of Devastation" ],
+    "entry_phase" : "MAIN1",
+    "note" : "Crossroads variant: static haste, no per-cycle step. Net X-6."
+  }, {
+    "combo_id" : "215-527-713",
+    "archetype" : "BounceRecastLoop",
+    "params" : {
+      "tapper" : "Selvala, Heart of the Wilds",
+      "tapper_cost" : "{G}",
+      "bouncer" : "Temur Sabertooth",
+      "bounce_cost" : "{1}{G}",
+      "recast_mana_value" : "3",
+      "haste_piece" : "Surrak and Goreclaw",
+      "haste_mode" : "static",
+      "tapper_mana_value" : "3",
+      "bouncer_mana_value" : "4",
+      "haste_mana_value" : "6"
+    },
+    "payoffs" : [ "Craterhoof Behemoth", "Concordant Crossroads", "Finale of Devastation" ],
+    "entry_phase" : "MAIN1",
+    "note" : "Surrak variant: the recast Selvala's ETB trigger grants haste — per-cycle static in effect. Surrak's 6 power also feeds Selvala's yield (X≥6 → net ≥ 0; any pump/counter pushes positive)."
+  }, {
+    "combo_id" : "215-1322-1355",
+    "archetype" : "BounceRecastLoop",
+    "params" : {
+      "tapper" : "Sanctum Weaver",
+      "tapper_cost" : "{T}",
+      "bouncer" : "Temur Sabertooth",
+      "bounce_cost" : "{1}{G}",
+      "recast_mana_value" : "2",
+      "haste_piece" : "Concordant Crossroads",
+      "haste_mode" : "static",
+      "tapper_mana_value" : "2",
+      "bouncer_mana_value" : "4",
+      "haste_mana_value" : "1"
+    },
+    "payoffs" : [ "Craterhoof Behemoth", "Concordant Crossroads", "Finale of Devastation" ],
+    "entry_phase" : "MAIN1",
+    "note" : "Weaver variant: {T} for X = enchantments you control; recast {1}{G}. Net X-5; validation-gated on enchantment count."
   } ],
   "unbound" : [ "2816-5711", "1355-2645", "1355-2816", "2026-2404-2816" ]
 }

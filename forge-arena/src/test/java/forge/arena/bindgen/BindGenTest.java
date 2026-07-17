@@ -104,9 +104,16 @@ public class BindGenTest {
         ExecutorBindings reloaded = ExecutorBindings.load(f[1]);
         assertTrue(reloaded.forCombo("9999-1111").isPresent());
         assertEquals("{2}", reloaded.forCombo("9999-1111").orElseThrow().params().get("untap_cost"));
-        // provenance travels with the generated binding
+        // provenance travels with the generated binding (found by id — the
+        // shipped library grows over time and indices are not stable)
         var raw = MAPPER.readTree(f[1].toFile());
-        var generated = raw.get("bindings").get(2);
+        com.fasterxml.jackson.databind.JsonNode generated = null;
+        for (var b : raw.get("bindings")) {
+            if ("9999-1111".equals(b.get("combo_id").asText())) {
+                generated = b;
+            }
+        }
+        assertTrue("generated binding must be in the file", generated != null);
         assertEquals("bindgen/1", generated.get("provenance").get("generated_by").asText());
         assertEquals(64, generated.get("provenance").get("request_sha256").asText().length());
     }

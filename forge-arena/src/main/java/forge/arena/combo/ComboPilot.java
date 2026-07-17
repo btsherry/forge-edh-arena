@@ -492,9 +492,12 @@ public final class ComboPilot {
             abortLine(view.turn(), "validation", null);
             return Optional.empty();
         }
-        if (activeExecutor instanceof TapForManaUntapLoop loop && loop.shortcutEligible()) {
+        if (activeExecutor instanceof ShortcutSource loop && loop.shortcutEligible()) {
             String comboId = activeComboId;
-            String engineCard = activeBinding.params().get("engine");
+            // pool source: the loop's mana producer — "engine" (TapForMana)
+            // or "tapper" (BounceRecast, PR-27a)
+            String engineCard = activeBinding.params().getOrDefault("engine",
+                    activeBinding.params().get("tapper"));
             LethalityPlanner.Verdict verdict = LethalityPlanner.choose(routePlan, view, events);
             Map<String, Object> boundedProduct = new HashMap<>();
             boundedProduct.put("mana_" + loop.poolColor(), SHORTCUT_POOL);

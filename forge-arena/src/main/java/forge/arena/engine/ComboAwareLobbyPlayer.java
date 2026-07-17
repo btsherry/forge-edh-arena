@@ -78,11 +78,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private String shortcutCombo;
         private String shortcutRoute;
         private boolean stallReported;
+        /** PR-27a: the active step's resolution-choice hint (Sabertooth bounce). */
+        private String pendingChoice;
 
         @Override
         public List<SpellAbility> chooseSpellAbilityToPlay() {
             Game game = getGame();
             int turn = game.getPhaseHandler().getTurn();
+            // a new priority means the prior step's resolution is done — a
+            // stale choice hint must never steer an unrelated choice
+            pendingChoice = null;
             watchForStall(game, turn);
             SeatView view = SeatViews.of(player, seatIndex, turn);
             boolean entryWindowOpen = game.getPhaseHandler().is(PhaseType.MAIN1, player)
@@ -173,6 +178,9 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     && sa.getPayCosts().hasXInAnyCostPart()) {
                 sa.setXManaCostPaid(step.x());
             }
+            // PR-27a: arm the resolution-choice hint (Sabertooth's bounce
+            // asks WHICH creature to return while this ability resolves)
+            pendingChoice = step.choice();
             return Collections.singletonList(sa);
         }
 
@@ -404,6 +412,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 forge.game.zone.ZoneType destination, List<forge.game.zone.ZoneType> origin,
                 SpellAbility sa, forge.game.card.CardCollection fetchList, int min, int max,
                 forge.game.player.DelayedReveal delayedReveal, String selectPrompt, Player decider) {
+            // PR-27a: an armed step choice (Sabertooth bounce — "return
+            // another creature you control") is answered exactly once
+            if (pendingChoice != null && decider == player) {
+                for (forge.game.card.Card card : fetchList) {
+                    if (card.getName().equals(pendingChoice)) {
+                        pendingChoice = null;
+                        return List.of(card);
+                    }
+                }
+            }
             // TutorRanker hook (PR-18: the REAL library-search seam — the first
             // e2e run proved chooseSingleEntityForEffect never fires for AI
             // hidden-origin searches). Single-pick searches we decide only.

@@ -32,7 +32,22 @@ public class ExecutorBindingsTest {
         }
 
         ExecutorBindings bindings = ExecutorBindings.load(file);
-        assertEquals(2, bindings.size());
+        // 2 TapForManaUntapLoop (hand, PR-14) + 4 BounceRecastLoop (PR-27a)
+        assertEquals(6, bindings.size());
+
+        // PR-27a: every Sabertooth-family binding builds its executor, and
+        // the Crossroads variant reproduces the proposal's arithmetic
+        for (String id : java.util.List.of("215-527-876", "215-527-1322",
+                "215-527-713", "215-1322-1355")) {
+            ExecutorBindings.Binding b = bindings.forCombo(id).orElseThrow();
+            assertEquals(BounceRecastLoop.ARCHETYPE,
+                    ExecutorBindings.executorFor(b).orElseThrow().archetype());
+        }
+        BounceRecastLoop crossroads = (BounceRecastLoop) ExecutorBindings.executorFor(
+                bindings.forCombo("215-527-1322").orElseThrow()).orElseThrow();
+        assertTrue("X=7 nets +1", crossroads.mathProfitable(7, 0).isProfitable());
+        assertTrue("X=6 breaks even — refused",
+                !crossroads.mathProfitable(6, 0).isProfitable());
 
         // Mantle line: untap ability hosted on the ENGINE (granted by equipment)
         ExecutorBindings.Binding mantle = bindings.forCombo("527-2816").orElseThrow();

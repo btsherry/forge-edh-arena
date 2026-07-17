@@ -32,7 +32,7 @@ import forge.arena.engine.SeatView;
  * this many cycles, then hand the floated mana to stock AI — the PR-16
  * shortcut/planner replaces counting with proving).
  */
-public final class TapForManaUntapLoop implements LineExecutor {
+public final class TapForManaUntapLoop implements LineExecutor, ShortcutSource {
 
     public static final String ARCHETYPE = "TapForManaUntapLoop";
     private static final int VALIDATE_CYCLES = 3;
