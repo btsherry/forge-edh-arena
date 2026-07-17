@@ -32,8 +32,13 @@ public class ExecutorBindingsTest {
         }
 
         ExecutorBindings bindings = ExecutorBindings.load(file);
-        // 2 TapForManaUntapLoop (hand, PR-14) + 4 BounceRecastLoop (PR-27a)
-        assertEquals(6, bindings.size());
+        // 2 TapForManaUntapLoop (PR-14) + 4 BounceRecastLoop (PR-27a)
+        // + 2 SpellCopyLoop (PR-27b)
+        assertEquals(8, bindings.size());
+        for (String id : java.util.List.of("147-1235", "147-6785")) {
+            assertEquals(SpellCopyLoop.ARCHETYPE, ExecutorBindings.executorFor(
+                    bindings.forCombo(id).orElseThrow()).orElseThrow().archetype());
+        }
 
         // PR-27a: every Sabertooth-family binding builds its executor, and
         // the Crossroads variant reproduces the proposal's arithmetic

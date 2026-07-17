@@ -107,6 +107,9 @@ public final class ExecutorBindings {
         if (BounceRecastLoop.ARCHETYPE.equals(binding.archetype())) {
             return Optional.of(new BounceRecastLoop(binding.params(), binding.entryPhase()));
         }
+        if (SpellCopyLoop.ARCHETYPE.equals(binding.archetype())) {
+            return Optional.of(new SpellCopyLoop(binding.params(), binding.entryPhase()));
+        }
         return Optional.empty();
     }
 }

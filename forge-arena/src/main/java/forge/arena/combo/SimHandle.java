@@ -37,4 +37,21 @@ public interface SimHandle {
 
     /** True when the named battlefield card exists and is untapped. */
     boolean untapped(String cardName);
+
+    /**
+     * PR-27b: put ONE fresh copy of the named card onto the perspective
+     * player's battlefield WITH TRIGGERS ACTIVE — the engine-real probe of
+     * an entry's consequences (a Dualcaster entering under Purphoros pings
+     * the table, amplifiers priced by the rules engine). Copy-side only.
+     *
+     * @return false when the card name doesn't resolve in the card DB
+     */
+    default boolean injectCopy(String cardName) {
+        return false;
+    }
+
+    /** Summed life of the perspective player's surviving opponents. */
+    default int opponentsLifeTotal() {
+        return 0;
+    }
 }

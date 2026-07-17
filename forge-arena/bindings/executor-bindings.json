@@ -113,6 +113,36 @@
     "payoffs" : [ "Craterhoof Behemoth", "Concordant Crossroads", "Finale of Devastation" ],
     "entry_phase" : "MAIN1",
     "note" : "Weaver variant: {T} for X = enchantments you control; recast {1}{G}. Net X-5; validation-gated on enchantment count."
+  }, {
+    "combo_id" : "147-1235",
+    "archetype" : "SpellCopyLoop",
+    "params" : {
+      "copy_spell" : "Twinflame",
+      "copier" : "Dualcaster Mage",
+      "damage_engines" : "Purphoros, God of the Forge; Agate Instigator; Terror of the Peaks",
+      "copy_spell_mana_value" : "2",
+      "copier_mana_value" : "3",
+      "engine_mana_value" : "4",
+      "flood_count" : "30"
+    },
+    "payoffs" : [ ],
+    "entry_phase" : "MAIN1",
+    "note" : "PR-27b hand-authored: Twinflame + Dualcaster ETB chain under a battlefield damage engine. The flood compresses the Spellbook-attested loop; validation engine-proves one entry's pings on the game copy."
+  }, {
+    "combo_id" : "147-6785",
+    "archetype" : "SpellCopyLoop",
+    "params" : {
+      "copy_spell" : "Devastating Onslaught",
+      "copier" : "Dualcaster Mage",
+      "damage_engines" : "Purphoros, God of the Forge; Agate Instigator; Terror of the Peaks",
+      "copy_spell_mana_value" : "11",
+      "copier_mana_value" : "3",
+      "engine_mana_value" : "4",
+      "flood_count" : "30"
+    },
+    "payoffs" : [ ],
+    "entry_phase" : "MAIN1",
+    "note" : "Onslaught variant of the Dualcaster chain (the affordability gate prices the 11-mana copy spell honestly — this line fires late or with ritual support)."
   } ],
   "unbound" : [ "2816-5711", "1355-2645", "1355-2816", "2026-2404-2816" ]
 }

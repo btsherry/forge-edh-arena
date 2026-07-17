@@ -35,19 +35,35 @@ import forge.arena.report.ArenaEvent;
  */
 public final class ComboPilot {
 
-    /** One pilot output: either a scripted step to play, or a shortcut order. */
-    public record Action(LineExecutor.Step step, ShortcutOrder shortcut) {
+    /** One pilot output: a scripted step, a mana shortcut, or a token flood. */
+    public record Action(LineExecutor.Step step, ShortcutOrder shortcut, TokenFlood flood) {
+        public Action(LineExecutor.Step step, ShortcutOrder shortcut) {
+            this(step, shortcut, null);
+        }
+
         public boolean isStep() {
             return step != null;
         }
 
         static Action play(LineExecutor.Step step) {
-            return new Action(step, null);
+            return new Action(step, null, null);
         }
 
         static Action shortcut(ShortcutOrder order) {
-            return new Action(null, order);
+            return new Action(null, order, null);
         }
+
+        static Action flood(TokenFlood order) {
+            return new Action(null, null, order);
+        }
+    }
+
+    /**
+     * PR-27b: the compressed order for a proven token loop — put {@code
+     * count} real copies of {@code copier} onto the battlefield with
+     * triggers ACTIVE; the rules engine prices every ping and amplifier.
+     */
+    public record TokenFlood(String comboId, String copier, int count) {
     }
 
     /**
@@ -491,6 +507,25 @@ public final class ComboPilot {
         if (!proof.isProfitable()) {
             abortLine(view.turn(), "validation", null);
             return Optional.empty();
+        }
+        if (activeExecutor instanceof SpellCopyLoop copyLoop) {
+            // PR-27b: token product — compress to a flood order; the route
+            // is DIRECT damage through the battlefield engine
+            String comboId = activeComboId;
+            LethalityPlanner.Verdict verdict = LethalityPlanner.choose(routePlan, view, events);
+            firedShortcuts.add(comboId);
+            firedBinding = activeBinding;
+            currentRoute = verdict.route();
+            lastPlanTurn = view.turn();
+            Map<String, Object> boundedProduct = new HashMap<>();
+            boundedProduct.put("token_entries", copyLoop.floodCount());
+            events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
+                    .with("combo", comboId)
+                    .with("iterations_proven", proof.cycles())
+                    .with("bounded_product", boundedProduct));
+            TokenFlood order = new TokenFlood(comboId, copyLoop.copier(), copyLoop.floodCount());
+            exitLine();
+            return Optional.of(Action.flood(order));
         }
         if (activeExecutor instanceof ShortcutSource loop && loop.shortcutEligible()) {
             String comboId = activeComboId;

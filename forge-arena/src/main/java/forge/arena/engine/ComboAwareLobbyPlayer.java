@@ -128,6 +128,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 }
                 return stock;
             }
+            if (!action.isStep() && action.flood() != null) {
+                // PR-27b token flood: N real copier entries with triggers
+                // ACTIVE — the rules engine prices every ping and amplifier;
+                // the win (or the stall, watchdog-guarded) is the engine's
+                injectFlood(action.flood());
+                shortcutTurn = turn;
+                shortcutCombo = action.flood().comboId();
+                shortcutRoute = "DIRECT_DAMAGE_LOOP";
+                return super.chooseSpellAbilityToPlay();
+            }
             if (!action.isStep()) {
                 // loop shortcut (plan §6): the proof already ran on a copy —
                 // compress the loop to its bounded product
@@ -225,6 +235,33 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 }
             }
             return null;
+        }
+
+        /**
+         * PR-27b: the flood — real copies via the T0 §4.4b programmatic
+         * pattern with triggers ACTIVE, one entry at a time so each ETB's
+         * pings resolve before the next body lands; stop early the moment
+         * the game ends. Bounded by the binding's flood_count.
+         */
+        private void injectFlood(ComboPilot.TokenFlood order) {
+            Game game = getGame();
+            forge.item.PaperCard paper = forge.StaticData.instance().getCommonCards()
+                    .getCard(order.copier());
+            if (paper == null) {
+                return;
+            }
+            for (int i = 0; i < order.count() && !game.isGameOver(); i++) {
+                forge.game.card.Card copy = forge.game.card.Card.fromPaperCard(paper, player);
+                // a card materialized from NO zone takes a non-triggering
+                // path in GameAction — stage it quietly in hand, then make a
+                // REAL hand->battlefield entry; the live priority loop runs
+                // the queued triggers after this priority returns
+                game.getTriggerHandler().setSuppressAllTriggers(true);
+                game.getAction().moveTo(forge.game.zone.ZoneType.Hand, copy, null, null);
+                game.getTriggerHandler().setSuppressAllTriggers(false);
+                game.getAction().moveToPlay(copy, null, null);
+                game.getAction().checkStateEffects(true);
+            }
         }
 
         private void injectPool(ComboPilot.ShortcutOrder order) {
