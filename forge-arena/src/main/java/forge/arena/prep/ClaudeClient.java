@@ -93,7 +93,11 @@ public final class ClaudeClient {
         message.put("content", user);
         Map<String, Object> body = new java.util.LinkedHashMap<>();
         body.put("model", model);
-        body.put("max_tokens", 4096);
+        // Claude 5 models spend response budget on thinking blocks before any
+        // text: 4096 starved the first live stall autopsy into "no text blocks
+        // (stop_reason=max_tokens)" (2026-07-17). Billing is per generated
+        // token, so a high cap costs nothing on short answers.
+        body.put("max_tokens", 32768);
         // no temperature: the API deprecated it for Claude 5 models (HTTP 400,
         // observed 2026-07-17); determinism comes from the closed-enum schema
         // gates + sim verification, never from sampling settings
