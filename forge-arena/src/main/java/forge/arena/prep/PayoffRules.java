@@ -28,7 +28,17 @@ public final class PayoffRules {
     public static final String CANT_LOSE = "cant_lose";          // Platinum Angel class
     public static final String HASTE_STATIC = "haste_static";    // Concordant Crossroads / Fervor
     public static final String HASTE_ONESHOT = "haste_oneshot";  // Finale / Overrun-with-haste class
-    public static final String HASTE_TARGETED = "haste_targeted"; // Lightning Greaves class
+    public static final String HASTE_TARGETED = "haste_targeted"; // Surrak ETB-grant class
+    /**
+     * win-routes/6 — the haste SPLIT, forced by the 300-game funnel where
+     * SPREAD_COMBAT was rejected 99 times against 26 selections with a haste
+     * source sitting in hand. An EQUIPMENT/aura grant is usable off a banked
+     * pool (cast it, equip it, a creature already on the battlefield swings
+     * this turn); an ETB-trigger granter only hastens creatures that enter
+     * AFTER it, so in hand it does nothing for an army already deployed.
+     * Same old class, two different truths — the planner needs them apart.
+     */
+    public static final String HASTE_EQUIP = "haste_equip";       // Lightning Greaves class
     public static final String MASS_PUMP = "mass_pump";          // Craterhoof / Finale / Stampede
     public static final String PING_EACH_OPPONENT = "ping_each_opponent"; // Purphoros / Impact Tremors
     public static final String PING_ANY_TARGET = "ping_any_target";       // Walking Ballista / Niv-Mizzet
@@ -60,7 +70,8 @@ public final class PayoffRules {
      */
     public static final java.util.List<String> ASSIGNABLE_CLASSES = java.util.List.of(
             ORACLE_WIN, ALT_WIN, CANT_LOSE, HASTE_STATIC, HASTE_ONESHOT, HASTE_TARGETED,
-            MASS_PUMP, PING_EACH_OPPONENT, PING_ANY_TARGET, X_DAMAGE, DRAIN_ON_TRIGGER,
+            HASTE_EQUIP, MASS_PUMP, PING_EACH_OPPONENT, PING_ANY_TARGET, X_DAMAGE,
+            DRAIN_ON_TRIGGER,
             X_DRAIN_EACH_OPPONENT, SELF_DRAW_ENGINE, DRAW_ENGINE_PERMANENT, MILL_OPPONENTS);
 
     /**
@@ -79,6 +90,7 @@ public final class PayoffRules {
             HASTE_STATIC, java.util.Set.of(ConversionFlag.NEEDS_COMBAT),
             HASTE_ONESHOT, java.util.Set.of(ConversionFlag.NEEDS_COMBAT),
             HASTE_TARGETED, java.util.Set.of(ConversionFlag.NEEDS_COMBAT),
+            HASTE_EQUIP, java.util.Set.of(ConversionFlag.NEEDS_COMBAT),
             MILL_OPPONENTS, java.util.Set.of(ConversionFlag.RESOLVES_DELAYED));
 
     /** The class's conversion flags (empty for single-target/utility classes). */
@@ -100,8 +112,9 @@ public final class PayoffRules {
             new Rule(CANT_LOSE, "you can't lose the game|you can’t lose the game"),
             new Rule(HASTE_STATIC, "all creatures have haste|creatures you control have haste"),
             new Rule(HASTE_ONESHOT, "creatures you control [^.]*gain haste"),
-            new Rule(HASTE_TARGETED, "equipped creature has haste"
-                    + "|target creature [^.]*gains? haste"
+            new Rule(HASTE_EQUIP, "equipped creature has haste"
+                    + "|enchanted creature has haste"),
+            new Rule(HASTE_TARGETED, "target creature [^.]*gains? haste"
                     + "|it gains haste"),
             new Rule(MASS_PUMP, "creatures you control [^.]*get \\+"),
             new Rule(PING_EACH_OPPONENT, "deals? (\\d+|x) damage to each opponent"),

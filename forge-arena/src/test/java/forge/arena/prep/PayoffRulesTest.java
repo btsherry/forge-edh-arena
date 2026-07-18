@@ -58,9 +58,15 @@ public class PayoffRulesTest {
                 + "and put it onto the battlefield. If you search your library this way, shuffle. "
                 + "If X is 10 or more, creatures you control get +X/+X and gain haste until end of turn.",
                 PayoffRules.HASTE_ONESHOT, PayoffRules.MASS_PUMP);
-        // Lightning Greaves
+        // Lightning Greaves — win-routes/6 puts equipment in its OWN class:
+        // it is usable from hand off a banked pool (cast, equip, swing),
+        // unlike an ETB-trigger granter which only hastens later arrivals
         hits("Equipped creature has haste and shroud. (It can't be the target of spells or "
-                + "abilities.)\\nEquip {0}", PayoffRules.HASTE_TARGETED);
+                + "abilities.)\\nEquip {0}", PayoffRules.HASTE_EQUIP);
+        // Surrak class stays haste_targeted: worthless in hand to an army
+        // already on the battlefield
+        hits("Whenever another creature you control enters, it gains haste until end of turn.",
+                PayoffRules.HASTE_TARGETED);
     }
 
     @Test

@@ -36,7 +36,7 @@
       "card": "Aetherflux Reservoir",
       "payoff_class": "ping_any_target",
       "status": "approved",
-      "win_routes_version": "win-routes/5"
+      "win_routes_version": "win-routes/6"
     },
     {
       "card": "Concordant Crossroads",
@@ -48,7 +48,7 @@
       "card": "Rhonas the Indomitable",
       "payoff_class": "mass_pump",
       "status": "approved",
-      "win_routes_version": "win-routes/5"
+      "win_routes_version": "win-routes/6"
     }
   ]
 }

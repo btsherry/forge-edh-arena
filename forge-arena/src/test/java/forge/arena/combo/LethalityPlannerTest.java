@@ -210,13 +210,40 @@ public class LethalityPlannerTest {
                 events.get(events.size() - 1).fields().get("predicates");
         assertEquals("targeted_on_battlefield", predicates.get("haste_kind"));
 
-        // in HAND it grants nothing this turn — not a haste source yet
+        // in HAND it grants nothing this turn — an ETB-trigger granter only
+        // hastens creatures that enter AFTER it, so an army already on the
+        // battlefield gains nothing (this is why haste_equip had to split
+        // out of this class: an equipment in hand IS usable, a Surrak is not)
         List<ArenaEvent> events2 = new ArrayList<>();
         assertEquals("BANK_AND_HOLD", LethalityPlanner.choose(plan,
                 view(Set.of(), Set.of("Surrak and Goreclaw", "Craterhoof Behemoth"), 6, 30),
                 events2::add).route());
         assertAllValid(events);
         assertAllValid(events2);
+    }
+
+    @Test
+    public void equipmentHasteInHandCountsBecauseThePoolCanCastIt() throws Exception {
+        // PR-41 / win-routes/6, straight from the 300-game funnel: the green
+        // deck had SPREAD_COMBAT rejected 99 times against 26 selections,
+        // every rejection haste_source_not_visible, with Lightning Greaves in
+        // hand and a thousand floating mana. Cast it, equip it, the creature
+        // already on board swings — that is what banking a loop is FOR.
+        RoutePlan plan = new RoutePlan(
+                List.of(new RoutePlan.PlannedRoute("SPREAD_COMBAT", "conversion", "supported",
+                        List.of("Lightning Greaves"))),
+                Map.of("haste_equip", List.of("Lightning Greaves"),
+                        "mass_pump", List.of("Craterhoof Behemoth")));
+        List<ArenaEvent> events = new ArrayList<>();
+        LethalityPlanner.Verdict verdict = LethalityPlanner.choose(plan,
+                view(Set.of(), Set.of("Lightning Greaves", "Craterhoof Behemoth"), 6, 30),
+                events::add);
+        assertEquals("SPREAD_COMBAT", verdict.route());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> predicates = (Map<String, Object>)
+                events.get(events.size() - 1).fields().get("predicates");
+        assertEquals("equip_castable", predicates.get("haste_kind"));
+        assertAllValid(events);
     }
 
     @Test

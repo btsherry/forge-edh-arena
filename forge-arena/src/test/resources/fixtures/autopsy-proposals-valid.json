@@ -2,7 +2,7 @@
   "schema": "arena.autopsy-proposals/1",
   "deck_id": "t",
   "deck_hash": "aabbccdd11223344",
-  "win_routes_version": "win-routes/5",
+  "win_routes_version": "win-routes/6",
   "model": "claude-fable-5",
   "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "features": [

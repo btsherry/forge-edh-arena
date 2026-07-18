@@ -103,6 +103,26 @@ public final class LethalityPlanner {
                             SeatView.Presence.BATTLEFIELD);
                     hasteKind = haste != null ? "targeted_on_battlefield" : null;
                 }
+                // PR-41 haste v3 (the 300-game funnel): SPREAD_COMBAT was
+                // REJECTED 99 times against 26 selections for the green deck,
+                // every rejection haste_source_not_visible, while Lightning
+                // Greaves sat in HAND and a thousand mana sat in the pool.
+                //
+                // The long-deferred haste split, now forced by evidence: an
+                // EQUIPMENT grant works from hand off a banked pool (cast it,
+                // equip it, the creature already on board attacks this turn),
+                // whereas an ETB-trigger granter only hastens creatures that
+                // enter AFTER it and is therefore worthless in hand for an
+                // army already deployed. One class, two different truths.
+                if (haste == null) {
+                    haste = firstIn(plan.payoffCards("haste_equip"), view,
+                            SeatView.Presence.HAND);
+                    hasteKind = haste != null ? "equip_castable" : null;
+                }
+                if (haste == null) {
+                    haste = firstVisible(plan.payoffCards("haste_equip"), view);
+                    hasteKind = haste != null ? "equip_visible" : null;
+                }
                 String pump = firstVisible(plan.payoffCards("mass_pump"), view);
                 predicates.put("haste_source", haste);
                 predicates.put("haste_kind", hasteKind);
