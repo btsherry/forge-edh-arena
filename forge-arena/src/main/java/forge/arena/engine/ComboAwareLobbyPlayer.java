@@ -497,6 +497,13 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
          * sees the injected pool, so the conversion fetch runs at a huge X.
          * One attempt per card per turn — a refused cast never loops.
          */
+        /**
+         * X for a pool-funded tutor. Big enough to fetch anything in a
+         * Commander deck, small enough that the payment prober is not walking
+         * hundreds of pool objects (the PR-29 wall-clock lesson).
+         */
+        static final int POOL_TUTOR_X = 20;
+
         private SpellAbility findCastableTutor(int turn, java.util.Set<String> reserved) {
             if (turn != tutorTriedTurn) {
                 tutorTriedTurn = turn;
@@ -512,14 +519,31 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         continue;
                     }
                     sa.setActivatingPlayer(player);
+                    // PR-41d — the oldest engine trap in this project, hit
+                    // again: determineLeftoverMana and canPayCost are
+                    // DECISION-layer helpers and the decision layer cannot
+                    // see floating mana (only the payment layer can). After a
+                    // loop fires, the seat's lands are tapped and its pool
+                    // holds a thousand mana — so an X-cost tutor computed
+                    // X<=0 and was skipped, every single time. That is why
+                    // 166 games produced ZERO tutor decisions while the green
+                    // deck's every route failure read "mass_pump absent" with
+                    // Craterhoof sitting in the library.
+                    int pool = player.getManaPool().totalMana();
                     if (sa.getPayCosts() != null && sa.getPayCosts().hasXInAnyCostPart()) {
-                        int x = forge.ai.ComputerUtilMana.determineLeftoverMana(sa, player, false);
+                        int x = pool > 1
+                                // leave room for coloured pips; a fetch only
+                                // needs to cover the biggest creature's cost
+                                ? Math.min(pool - 1, POOL_TUTOR_X)
+                                : forge.ai.ComputerUtilMana.determineLeftoverMana(sa, player, false);
                         if (x <= 0) {
                             continue;
                         }
                         sa.setXManaCostPaid(x);
                     }
-                    if (!forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                    // with a live pool the affordability gate is likewise
+                    // blind — trust the payment layer, which does see it
+                    if (pool == 0 && !forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
                         continue;
                     }
                     tutorTried.add(c.getName());
