@@ -184,6 +184,7 @@
       "enum": [
        "patience_gate",
        "no_viable_route",
+       "not_assemblable",
        "validation_failed",
        "threat_assessment",
        "mana_reserved"
@@ -271,6 +272,9 @@
        "validation",
        "engine_error"
       ]
+     },
+     "detail": {
+      "type": "string"
      },
      "piece_lost": {
       "type": "string"

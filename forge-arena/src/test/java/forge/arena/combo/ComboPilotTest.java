@@ -226,6 +226,33 @@ public class ComboPilotTest {
     }
 
     @Test
+    public void boundButUnassemblableIsNotTheSameAsUnbound() throws Exception {
+        // PR-40: these were one reason code, and the conflation badly
+        // overstated the coverage gap — the first live funnel showed the
+        // fully-bound Scepter loop as the TOP "no_viable_route" entry (13
+        // times) when it was simply mid-assembly. A transient board state
+        // must never read as "this deck has no executor for that combo".
+        ComboDef scepter = new ComboDef("4821-5261", List.of(
+                new ComboDef.Piece("Isochron Scepter", false),
+                new ComboDef.Piece("Dramatic Reversal", false)), 0);
+        ExecutorBindings shipped = ExecutorBindings.load(ExecutorBindings.defaultPath());
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(scepter)), shipped,
+                0.0, 0, events::add);
+        // scepter deployed but nothing imprinted: reachable, not assemblable
+        SeatView view = new SeatView(0, 3, Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of("Isochron Scepter"),
+                SeatView.Zone.HAND, Set.of("Dramatic Reversal"),
+                SeatView.Zone.COMMAND, Set.of(),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 80);
+        assertTrue(pilot.nextAction(view, true, PROFITABLE).isEmpty());
+        assertEquals("combo_ignored", events.get(0).t());
+        assertEquals("not_assemblable", events.get(0).fields().get("reason"));
+        assertAllValid(events);
+    }
+
+    @Test
     public void unboundComboIsIgnoredAsNoViableRoute() throws Exception {
         ComboDef unbound = new ComboDef("999-999", List.of(
                 new ComboDef.Piece("Umbral Mantle", false)), 0);

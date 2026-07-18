@@ -232,7 +232,19 @@ public final class PrepMain {
             System.exit(check.ok() ? 0 : 1);
         }
 
-        Path input = Path.of(args[0]);
+        // PR-45: a Moxfield URL is fetched into a temp decklist and then
+        // takes the ORDINARY ingest path — no special-casing downstream, so
+        // a dropped-in deck is gated exactly like a hand-written one
+        Path input;
+        if (args[0].contains("moxfield.com")) {
+            java.util.List<String> lines = forge.arena.ingest.MoxfieldClient.fetchDeckList(
+                    args[0], forge.arena.ingest.MoxfieldClient.httpFetcher());
+            input = java.nio.file.Files.createTempFile("moxfield-", ".txt");
+            java.nio.file.Files.write(input, lines);
+            System.out.println("fetched moxfield deck: " + lines.size() + " list lines");
+        } else {
+            input = Path.of(args[0]);
+        }
         String id = null;
         Path out = Path.of("decks");
         String source = "homebrew";
@@ -328,6 +340,7 @@ public final class PrepMain {
     }
 
     private static void usage() {
+        System.err.println("<input> may be a decklist file OR a Moxfield deck URL");
         System.err.println("usage: PrepMain <input> --id <deck-id> [--commander <name>]..."
                 + " [--out <dir>] [--source homebrew|netdeck] [--bracket N] [--name <n>]"
                 + " [--notes <t>] [--banlist <file>] [--goldfish-games N] [--offline]"

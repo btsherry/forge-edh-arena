@@ -127,7 +127,9 @@ public final class RunLogRenderer {
             case "line_entered":
                 return "line   " + f.get("combo") + " via " + f.get("attempted_via") + "  entered " + f.get("entry_phase");
             case "line_aborted":
-                return "ABORT  line (" + f.get("cause") + (f.get("piece_lost") != null ? ", lost " + f.get("piece_lost") : "") + ")";
+                return "ABORT  line (" + f.get("cause")
+                        + (f.get("detail") != null ? ": " + f.get("detail") : "")
+                        + (f.get("piece_lost") != null ? ", lost " + f.get("piece_lost") : "") + ")";
             case "combo_shortcut":
                 return "loop   " + f.get("combo") + " proven x" + f.get("iterations_proven") + " -> " + f.get("bounded_product");
             case "route_selected":

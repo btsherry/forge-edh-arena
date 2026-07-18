@@ -52,7 +52,22 @@ public final class BatchStats {
         public int readyGames;
         public int attemptedGames;
         public int shortcutGames;
-        public int convertedGames;
+        /**
+         * The seat fired a combo and eventually won this game. NOT a
+         * conversion measure: an adversarial review of the pilot pointed out
+         * that a deck which fires on turn 16, fizzles, and then wins on turn
+         * 34 with ordinary combat scores here exactly like a combo kill.
+         * That is how the project's headline "25% conversion" was computed.
+         */
+        public int eventualWinAfterFire;
+        /**
+         * The honest one: the seat fired and the GAME ENDED with that seat
+         * winning on the fire turn or the turn after (a combo that needs one
+         * attack step still counts). This is the Phase-6 exit metric.
+         */
+        public int sameTurnConversions;
+        /** Why validation proofs refused, from line_aborted.detail (PR-40). */
+        public final Map<String, Integer> abortDetails = new TreeMap<>();
         public final List<Integer> hesitations = new ArrayList<>();
         public final Map<String, Integer> ignoredReasons = new TreeMap<>();
         public final Map<String, Integer> routesSelected = new TreeMap<>();
@@ -125,14 +140,15 @@ public final class BatchStats {
             }
             Path eventLog = batchDir.resolve(record.path("event_log").asText(""));
             if (Files.exists(eventLog)) {
-                reduceGameEvents(eventLog, seats, winnerSeat, decks);
+                reduceGameEvents(eventLog, seats, winnerSeat, decks,
+                        record.path("turns").asInt(-1));
             }
         }
         return decks;
     }
 
     private static void reduceGameEvents(Path eventLog, List<String> seats, int winnerSeat,
-            Map<String, DeckStats> decks) throws IOException {
+            Map<String, DeckStats> decks, int gameTurns) throws IOException {
         Map<String, Integer> firstReady = new LinkedHashMap<>();
         Map<String, Integer> entered = new LinkedHashMap<>();
         for (String line : Files.readAllLines(eventLog)) {
@@ -170,6 +186,15 @@ public final class BatchStats {
                 case "combo_shortcut" -> entered.putIfAbsent(deckName, e.path("turn").asInt());
                 case "combo_ignored" -> deck.ignoredReasons
                         .merge(e.path("reason").asText("?"), 1, Integer::sum);
+                case "line_aborted" -> {
+                    // PR-40: the abort's DETAIL is the actionable half —
+                    // "validation" alone was logged 48 times against 6 fires
+                    // in the first live funnel with no way to triage it
+                    String cause = e.path("cause").asText("?");
+                    String detail = e.path("detail").asText("");
+                    deck.abortDetails.merge(
+                            detail.isEmpty() ? cause : cause + ":" + detail, 1, Integer::sum);
+                }
                 case "route_selected" -> deck.routesSelected
                         .merge(e.path("route").asText("?"), 1, Integer::sum);
                 case "route_rejected" -> deck.routesRejected
@@ -180,7 +205,14 @@ public final class BatchStats {
             if (t.equals("combo_shortcut")) {
                 deck.shortcutGames++;
                 if (winnerSeat == seat) {
-                    deck.convertedGames++; // shortcut fired AND the seat won
+                    deck.eventualWinAfterFire++;
+                    // the honest measure: did the fire actually END the game?
+                    // one extra turn is allowed for a combo that still needs
+                    // its attack step
+                    int fireTurn = e.path("turn").asInt(-1);
+                    if (gameTurns >= 0 && fireTurn >= 0 && gameTurns <= fireTurn + 1) {
+                        deck.sameTurnConversions++;
+                    }
                 }
             }
         }
@@ -224,11 +256,18 @@ public final class BatchStats {
                 double hesitation = d.hesitations.isEmpty() ? 0
                         : d.hesitations.stream().mapToInt(Integer::intValue).average().orElse(0);
                 sb.append(String.format(
-                        "%nfunnel      %-24s ready=%d attempted=%d shortcut=%d converted=%d"
+                        "%nfunnel      %-24s ready=%d attempted=%d FIRED=%d"
+                                + " sameTurnWin=%d (eventualWin=%d)"
                                 + " hesitation=%.1f ignored=%s routes+=%s routes-=%s",
                         entry.getKey(), d.readyGames, d.attemptedGames, d.shortcutGames,
-                        d.convertedGames, hesitation, d.ignoredReasons, d.routesSelected,
-                        d.routesRejected));
+                        d.sameTurnConversions, d.eventualWinAfterFire, hesitation,
+                        d.ignoredReasons, d.routesSelected, d.routesRejected));
+                if (!d.abortDetails.isEmpty()) {
+                    // the actionable half of the funnel: the first live batch
+                    // lost 48 lines here against 6 fires
+                    sb.append(String.format("%naborts      %-24s %s",
+                            entry.getKey(), d.abortDetails));
+                }
             }
             if (d.wins > 0) {
                 sb.append(String.format("%nwins        %-24s turns=%s conditions=%s seatWins=%s",

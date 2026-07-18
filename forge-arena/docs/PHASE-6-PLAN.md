@@ -128,6 +128,43 @@ The conversion module went live in `runs/pr38-conversion` (seed 3033, paired wit
 | Mid-loop elimination breaks the loop | Already prevented | The alive-opponent set is re-derived every iteration (CR 800.4a) |
 | Missing pre-flight "dry run" validation | Already exists | Validation-on-a-game-copy before every fire is the architecture's core gate |
 
+## 10. The measured funnel, and the PR plan it dictates (2026-07-18)
+
+The first 47 games of `runs/pr39-conversion` produced the first honest end-to-end funnel. It re-orders everything:
+
+| Stage | Games / count | Reading |
+|---|---|---|
+| combo READY (pieces reachable) | 29 / 47 | detection is healthy |
+| line ENTERED (assembly begun) | 21 | entry is healthy |
+| **combo FIRED** | **6** | **this is the wall** |
+| `line_aborted(validation)` | **48** | eight aborts per fire |
+| `combo_ignored(no_viable_route)` | 91 | unbound combos, i.e. coverage |
+| median turn: ready → entered → fired | 10 → 16 → 16 | assembly is not the delay; PROOF is |
+
+Two conclusions, both counter to where the phase started. First, **conversion was never the top bottleneck — firing is.** The conversion module is correct and now demonstrably works (`DIG_ACTIVATE` fires live), but it can only act on the 6 fires it is given. Second, the loss is concentrated at a single gate: the validation proof refuses eight times for every time it passes, **and until now the log recorded only the word "validation" for all 48** — no piece, no reason, nothing to fix.
+
+### PR sequence (revised against this evidence)
+
+| PR | Content | Why here |
+|---|---|---|
+| **40** | **Validation diagnostics** — carry the `SimResult` blocked-by reason (or `unprofitable`) into `line_aborted.detail`, render it in run.log, schema it | Nothing else can be prioritised until the 48 are triaged. Cheapest possible unblock |
+| **41** | **Fix the dominant validation failure(s)** — data-driven from PR-40's output | The single biggest win available; scope set by evidence, not guesswork |
+| **42** | **`SelfTopdeckRecastLoop`** archetype (Sensei's Top family, the second bindgen cluster) | Attacks `no_viable_route` (91), and its product is CARDS — it feeds the dig path directly |
+| **43** | **Measurement integrity** — same-turn conversion + the funnel above computed by `BatchStats` itself, rotation-aware | This funnel had to be hand-written; the harness should report it every run, and "fired seat later won" must stop counting as conversion |
+| **44** | **Robustness & upstream safety** — deck-swap regression test, `ARENA-PATCH`/UPSTREAM-PATCHES audit, upstream `AiAttackController` recursion guard | Protects the investment: swapping decks must never break the engine, and Forge merges must stay clean |
+| **45** | **Moxfield ingestion** — `prep.sh --moxfield <url>` | The actual front door for "drop in any deck"; also the only way to falsify our generality claims against decks we did not tune on |
+
+### Execution status of the revised sequence
+
+| PR | State |
+|---|---|
+| 40 validation diagnostics | **done** — `line_aborted.detail` carries the proof's verdict; also split `no_viable_route` into a real coverage gap vs the transient `not_assemblable` (the conflation had the fully-bound Scepter loop showing as the top "unrouted" combo 13 times) |
+| 41 fix dominant validation cause | **waiting on data** — the next batch is the first to carry abort details |
+| 42 `SelfTopdeckRecastLoop` | **deferred, justification pending** — that family is only 6 of 34 bindgen proposals; the review's "group before you build" point stands |
+| 43 measurement integrity | **done** — `sameTurnConversions` (fire turn vs win turn) split from the old `eventualWinAfterFire`; abort-detail rollup in the report; reducers were already rotation-aware |
+| 44 robustness | **done (deck-swap half)** — `DeckSwapSafetyTest`: all 12 pod permutations reach a clean end state, an empty-artifact pilot emits ZERO decisions, a foreign dossier never fires a line. Upstream recursion guard still open |
+| 45 Moxfield ingestion | **done** — `MoxfieldClient` (injected transport, offline fixtures, v3 + legacy shapes, loud failure on schema change) and `prep.sh <moxfield-url>` routes through the ordinary ingest path |
+
 ## Version log
 - v1 (2026-07-18): initial draft from batch evidence + playbook + coverage audit. Research docs pending.
 - v2 (2026-07-18): Gemini adversarial round 1 adjudicated — command-zone scan, same-turn-conversion exit metric, PR 37/38 swap, instant-speed scoping note, phase-transition flags, loop-interruption-by-step-model; game-ai-architectures.md folded (utility+HTN hybrid, distance-to-fire landmark, worst-case determinization, receding horizon); bindgen sweep results folded (34 proposals → CastRecastDrawLoop + CastBounceLoop clusters).

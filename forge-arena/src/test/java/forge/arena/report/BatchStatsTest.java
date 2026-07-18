@@ -73,7 +73,13 @@ public class BatchStatsTest {
         assertEquals(2, selvala.readyGames);
         assertEquals(1, selvala.attemptedGames);
         assertEquals(1, selvala.shortcutGames);
-        assertEquals(1, selvala.convertedGames);
+        // PR-43, and this fixture is exactly the case the split exists for:
+        // the seat fires on turn 5 and the game ends on turn 7 with that seat
+        // winning. The old measure counted this as a conversion; it is not
+        // one — two turns of ordinary play happened in between. The honest
+        // measure says so.
+        assertEquals(1, selvala.eventualWinAfterFire);
+        assertEquals(0, selvala.sameTurnConversions);
         assertEquals(java.util.List.of(2), selvala.hesitations);
         assertEquals(Map.of("mana_reserved", 1), selvala.ignoredReasons);
         assertEquals(Map.of("SPREAD_COMBAT", 1), selvala.routesSelected);

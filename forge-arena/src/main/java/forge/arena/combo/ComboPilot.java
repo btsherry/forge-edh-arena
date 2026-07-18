@@ -429,10 +429,15 @@ public final class ComboPilot {
                 continue;
             }
             // PR-18 (first e2e finding): tracker readiness is REACHABILITY;
-            // an unassemblable line (piece in graveyard/unseen) is no route
+            // an unassemblable line (piece in graveyard/unseen) is no route.
+            // PR-40: this is a TRANSIENT state, not a coverage gap, and
+            // reporting both as "no_viable_route" badly overstated how many
+            // combos lack an executor — the first funnel showed a fully
+            // bound combo (the Scepter loop) as the top "unrouted" entry 13
+            // times, when it was simply mid-assembly.
             List<LineExecutor.Step> assembly = executor.get().assemblySteps(view);
             if (assembly == null) {
-                ignore(status.id(), view.turn(), "no_viable_route");
+                ignore(status.id(), view.turn(), "not_assemblable");
                 continue;
             }
             // PR-19 (second e2e batch finding): don't attempt a line whose
@@ -656,7 +661,12 @@ public final class ComboPilot {
             Function<LineExecutor, SimResult> validator) {
         List<LineExecutor.Step> assembly = activeExecutor.assemblySteps(view);
         if (assembly == null) {
-            abortLine(view.turn(), "validation", null);
+            // PR-40: say WHY. A batch that logs only "validation" cannot
+            // distinguish "the pieces moved out from under us" from "the
+            // proof ran and the loop was unprofitable" — and the first live
+            // funnel showed 48 of these against 6 fires, the single largest
+            // loss in the whole pipeline, with no way to diagnose it.
+            abortLine(view.turn(), "validation", null, "not_assemblable");
             return Optional.empty();
         }
         if (!assembly.isEmpty()) {
@@ -696,7 +706,11 @@ public final class ComboPilot {
                 lineState = lineState.advance();
                 return Optional.of(Action.play(LineExecutor.Step.prereqDeploy()));
             }
-            abortLine(view.turn(), "validation", null);
+            // the proof RAN and refused: carry its verdict out so a batch can
+            // be triaged (which piece blocked, or "the loop simply does not
+            // net positive from here") instead of 48 anonymous aborts
+            abortLine(view.turn(), "validation", null,
+                    proof.blockedBy() != null ? "blocked:" + proof.blockedBy() : "unprofitable");
             return Optional.empty();
         }
         if (activeExecutor instanceof SpellCopyLoop copyLoop) {
@@ -899,9 +913,24 @@ public final class ComboPilot {
 
     /** The controller couldn't produce a step's ability — the line ends here. */
     public void abortLine(int turn, String cause, String pieceLost) {
+        abortLine(turn, cause, pieceLost, null);
+    }
+
+    /**
+     * @param detail PR-40: WHY the line ended, when the cause alone is not
+     *               actionable. For a validation abort this is the
+     *               {@link SimResult}'s blocked-by reason (which piece or
+     *               quantity refused) or {@code unprofitable} — without it a
+     *               batch reports 48 identical "validation" lines and no
+     *               path to a fix.
+     */
+    public void abortLine(int turn, String cause, String pieceLost, String detail) {
         ArenaEvent event = ArenaEvent.of("line_aborted", turn, seat).with("cause", cause);
         if (pieceLost != null) {
             event.with("piece_lost", pieceLost);
+        }
+        if (detail != null) {
+            event.with("detail", detail);
         }
         events.accept(event);
         exitLine();
