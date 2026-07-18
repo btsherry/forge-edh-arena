@@ -271,6 +271,7 @@ public final class ComboPilot {
         ComboTracker.Snapshot snap = tracker.recompute(view);
         Set<String> out = new java.util.LinkedHashSet<>(boundPieces(snap));
         out.addAll(deckPayoffs(snap));
+        out.addAll(pairedPlayCards()); // PR-31: pairs survive discard/tuck too
         return out;
     }
 
@@ -407,7 +408,69 @@ public final class ComboPilot {
                     .with("entry_phase", executor.get().entryPhase()));
             return assemblyAction(view, validator);
         }
-        return preAssembly(view);
+        return pairedPlays(view).or(() -> preAssembly(view));
+    }
+
+    // PR-31: paired plays (wipe + instant shield) — binding-driven, no loop
+    private String pendingProtection;
+    private final Set<String> firedPairs = new HashSet<>();
+
+    /** The shield the controller must cast while our trigger is on the stack. */
+    public String pendingProtection() {
+        return pendingProtection;
+    }
+
+    /** The controller reports the response cast (or its failure); the pair ends. */
+    public void protectionResolved(int turn, boolean cast) {
+        if (pendingProtection == null) {
+            return;
+        }
+        if (cast) {
+            events.accept(ArenaEvent.of("line_step", turn, seat)
+                    .with("stage", "PAIRED_PROTECT")
+                    .with("iteration", 0));
+        } else {
+            events.accept(ArenaEvent.of("line_aborted", turn, seat)
+                    .with("cause", "interaction")
+                    .with("piece_lost", pendingProtection));
+        }
+        pendingProtection = null;
+    }
+
+    /**
+     * PR-31: fire a paired play — both cards in hand, mana for BOTH, a board
+     * worth punishing — casting the trigger now and arming the protection
+     * for the on-stack response. Once per pair per game.
+     */
+    private Optional<Action> pairedPlays(SeatView view) {
+        if (pendingProtection != null) {
+            return Optional.empty();
+        }
+        for (ExecutorBindings.Binding binding : bindings.all()) {
+            if (!PairedPlay.ARCHETYPE.equals(binding.archetype())
+                    || firedPairs.contains(binding.comboId())
+                    || attemptedThisTurn.contains(binding.comboId())) {
+                continue;
+            }
+            Optional<LineExecutor> executor = ExecutorBindings.executorFor(binding);
+            if (executor.isEmpty() || !(executor.get() instanceof PairedPlay pair)
+                    || !pair.playable(view) || !pair.worthFiring(view)) {
+                continue;
+            }
+            attemptedThisTurn.add(binding.comboId());
+            firedPairs.add(binding.comboId());
+            pendingProtection = pair.protectionCard();
+            events.accept(ArenaEvent.of("line_entered", view.turn(), seat)
+                    .with("combo", binding.comboId())
+                    .with("binding", binding.comboId())
+                    .with("attempted_via", "binding")
+                    .with("entry_phase", pair.entryPhase()));
+            events.accept(ArenaEvent.of("line_step", view.turn(), seat)
+                    .with("stage", "PAIRED_CAST")
+                    .with("iteration", 0));
+            return Optional.of(Action.play(LineExecutor.Step.cast(pair.triggerCard())));
+        }
+        return Optional.empty();
     }
 
     /**
@@ -464,6 +527,32 @@ public final class ComboPilot {
      */
     public Set<String> conversionPayoffNames(SeatView view) {
         return deckPayoffs(tracker.recompute(view));
+    }
+
+    /** PR-31: both halves of every paired play — stock must never cast them. */
+    private Set<String> pairedPlayCards() {
+        Set<String> cards = new java.util.LinkedHashSet<>();
+        for (ExecutorBindings.Binding binding : bindings.all()) {
+            if (PairedPlay.ARCHETYPE.equals(binding.archetype())
+                    && ExecutorBindings.executorFor(binding).orElse(null)
+                            instanceof PairedPlay pair) {
+                cards.add(pair.triggerCard());
+                cards.add(pair.protectionCard());
+            }
+        }
+        return cards;
+    }
+
+    /** PR-31: everything the veto reserves — one-shot payoffs ∪ paired plays. */
+    public Set<String> reservedCastNames(SeatView view) {
+        Set<String> reserved = new java.util.LinkedHashSet<>(conversionPayoffNames(view));
+        reserved.addAll(pairedPlayCards());
+        return reserved;
+    }
+
+    /** PR-31: does the veto have anything to guard? */
+    public boolean hasReservedPlays(SeatView view) {
+        return hasBoundCombo(view) || !pairedPlayCards().isEmpty();
     }
 
     /**

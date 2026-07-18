@@ -97,9 +97,9 @@ public class BindGenTest {
         assertEquals(2, verifications.get());
         assertEquals(1, result.generated());
         assertEquals(0, result.failedVerification());
-        // the fixture contains 527-2816 (cached in the library copy); 527-2645
-        // is NOT a fixture combo, and 4821-5261 is template-skipped
-        assertEquals(1, result.cached());
+        // the fixture contains 527-2816 AND (since PR-32) 4821-5261, both
+        // present in the shipped library copy -> two cache hits
+        assertEquals(2, result.cached());
 
         ExecutorBindings reloaded = ExecutorBindings.load(f[1]);
         assertTrue(reloaded.forCombo("9999-1111").isPresent());

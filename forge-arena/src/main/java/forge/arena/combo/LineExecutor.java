@@ -101,6 +101,11 @@ public interface LineExecutor {
             return new Step("cast", card, null, List.of(), x);
         }
 
+        /** PR-32: cast with a resolution-time choice (Scepter's imprint). */
+        public static Step castChoosing(String card, String choice) {
+            return new Step("cast", card, null, List.of(), null, choice);
+        }
+
         public static Step done() {
             return new Step("done", null, null, List.of());
         }

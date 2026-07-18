@@ -144,6 +144,44 @@
     "payoffs" : [ ],
     "entry_phase" : "MAIN1",
     "note" : "Onslaught variant of the Dualcaster chain (the affordability gate prices the 11-mana copy spell honestly — this line fires late or with ritual support)."
+  }, {
+    "combo_id" : "pp-doomskar-maneuver",
+    "archetype" : "PairedPlay",
+    "params" : {
+      "trigger_card" : "Doomskar",
+      "protection_card" : "Flawless Maneuver",
+      "trigger_mana_value" : "5",
+      "protection_mana_value" : "3"
+    },
+    "payoffs" : [ ],
+    "entry_phase" : "MAIN1",
+    "note" : "PR-31 (Ben's Giada insight): one-sided sweep as a PAIR — cast the wipe only with the shield in hand and its mana reserved, shield cast in response on-stack. Not a Spellbook combo; detection is binding-driven (pp- prefix)."
+  }, {
+    "combo_id" : "pp-hour-akroma",
+    "archetype" : "PairedPlay",
+    "params" : {
+      "trigger_card" : "Hour of Revelation",
+      "protection_card" : "Akroma's Will",
+      "trigger_mana_value" : "6",
+      "protection_mana_value" : "4"
+    },
+    "payoffs" : [ ],
+    "entry_phase" : "MAIN1",
+    "note" : "Second Giada pair: Hour of Revelation (cheap with 10+ nonlands out) + Akroma's Will (protection + the alpha-strike mode)."
+  }, {
+    "combo_id" : "4821-5261",
+    "archetype" : "ImprintCopyLoop",
+    "params" : {
+      "scepter" : "Isochron Scepter",
+      "imprint" : "Dramatic Reversal",
+      "activation_cost" : "{2}",
+      "scepter_mana_value" : "2",
+      "imprint_mana_value" : "2",
+      "pool_color" : "U"
+    },
+    "payoffs" : [ ],
+    "entry_phase" : "MAIN1",
+    "note" : "PR-32 (Urza primer core line): Scepter+Reversal — activate {2}, the copy untaps everything, rocks re-fund; validation = one engine activation succeeding AND leaving the scepter untapped (the copy-chain proof)."
   } ],
   "unbound" : [ "2816-5711", "1355-2645", "1355-2816", "2026-2404-2816" ]
 }

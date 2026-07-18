@@ -78,17 +78,32 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private String shortcutCombo;
         private String shortcutRoute;
         private boolean stallReported;
-        /** PR-27a: the active step's resolution-choice hint (Sabertooth bounce). */
+        /** PR-27a/32: the active step's resolution-choice hint (bounce, imprint). */
         private String pendingChoice;
+        private int pendingChoiceTurn = -1;
 
         @Override
         public List<SpellAbility> chooseSpellAbilityToPlay() {
             Game game = getGame();
             int turn = game.getPhaseHandler().getTurn();
-            // a new priority means the prior step's resolution is done — a
-            // stale choice hint must never steer an unrelated choice
-            pendingChoice = null;
+            // PR-32 fix: resolution-time choices (Scepter's imprint trigger)
+            // resolve AFTER later priorities — the hint persists until
+            // consumed, replaced by a newer step, or the turn changes; it can
+            // only ever steer a choice list containing exactly its card
+            if (pendingChoice != null && turn != pendingChoiceTurn) {
+                pendingChoice = null;
+            }
             watchForStall(game, turn);
+            // PR-31: an armed paired-play protection fires at the first
+            // priority with our trigger on the stack — cast it in response
+            if (pilot.pendingProtection() != null && !game.getStack().isEmpty()) {
+                SpellAbility protection = AbilityResolver.resolveCast(
+                        player, pilot.pendingProtection());
+                pilot.protectionResolved(turn, protection != null);
+                if (protection != null) {
+                    return Collections.singletonList(protection);
+                }
+            }
             SeatView view = SeatViews.of(player, seatIndex, turn);
             boolean entryWindowOpen = game.getPhaseHandler().is(PhaseType.MAIN1, player)
                     && game.getStack().isEmpty();
@@ -135,12 +150,12 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 // pool-blind small X in the window between abort and refire.
                 // Permanent payoffs deploy freely (a battlefield Crossroads
                 // makes SPREAD_COMBAT better, not worse).
-                if (stock != null && pilot.hasBoundCombo(view)) {
+                if (stock != null && pilot.hasReservedPlays(view)) {
                     for (SpellAbility sa : stock) {
                         forge.game.card.Card host = sa.getHostCard();
                         if (sa.isSpell() && host != null && !host.getType().isPermanent()
-                                && pilot.conversionPayoffNames(view).contains(host.getName())) {
-                            return null; // pass — the payoff waits for conversion
+                                && pilot.reservedCastNames(view).contains(host.getName())) {
+                            return null; // pass — reserved for the pilot's play
                         }
                     }
                 }
@@ -215,9 +230,12 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     && sa.getPayCosts().hasXInAnyCostPart() && manaOnlyX(sa.getPayCosts())) {
                 sa.setXManaCostPaid(step.x());
             }
-            // PR-27a: arm the resolution-choice hint (Sabertooth's bounce
-            // asks WHICH creature to return while this ability resolves)
-            pendingChoice = step.choice();
+            // PR-27a: arm the resolution-choice hint (Sabertooth's bounce,
+            // Scepter's imprint) — persists within the turn until consumed
+            if (step.choice() != null) {
+                pendingChoice = step.choice();
+                pendingChoiceTurn = getGame().getPhaseHandler().getTurn();
+            }
             return Collections.singletonList(sa);
         }
 

@@ -91,6 +91,11 @@ public final class ExecutorBindings {
         return unbound;
     }
 
+    /** All bindings (PR-31: PairedPlay detection is binding-driven). */
+    public java.util.Collection<Binding> all() {
+        return byComboId.values();
+    }
+
     public int size() {
         return byComboId.size();
     }
@@ -109,6 +114,12 @@ public final class ExecutorBindings {
         }
         if (SpellCopyLoop.ARCHETYPE.equals(binding.archetype())) {
             return Optional.of(new SpellCopyLoop(binding.params(), binding.entryPhase()));
+        }
+        if (PairedPlay.ARCHETYPE.equals(binding.archetype())) {
+            return Optional.of(new PairedPlay(binding.params(), binding.entryPhase()));
+        }
+        if (ImprintCopyLoop.ARCHETYPE.equals(binding.archetype())) {
+            return Optional.of(new ImprintCopyLoop(binding.params(), binding.entryPhase()));
         }
         return Optional.empty();
     }

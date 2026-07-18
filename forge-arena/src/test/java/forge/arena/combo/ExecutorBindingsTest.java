@@ -32,9 +32,13 @@ public class ExecutorBindingsTest {
         }
 
         ExecutorBindings bindings = ExecutorBindings.load(file);
-        // 2 TapForManaUntapLoop (PR-14) + 4 BounceRecastLoop (PR-27a)
-        // + 2 SpellCopyLoop (PR-27b)
-        assertEquals(8, bindings.size());
+        // 2 TapForManaUntapLoop + 4 BounceRecastLoop + 2 SpellCopyLoop
+        // + 2 PairedPlay (PR-31) + 1 ImprintCopyLoop (PR-32)
+        assertEquals(11, bindings.size());
+        assertEquals(PairedPlay.ARCHETYPE, ExecutorBindings.executorFor(
+                bindings.forCombo("pp-doomskar-maneuver").orElseThrow()).orElseThrow().archetype());
+        assertEquals(ImprintCopyLoop.ARCHETYPE, ExecutorBindings.executorFor(
+                bindings.forCombo("4821-5261").orElseThrow()).orElseThrow().archetype());
         for (String id : java.util.List.of("147-1235", "147-6785")) {
             assertEquals(SpellCopyLoop.ARCHETYPE, ExecutorBindings.executorFor(
                     bindings.forCombo(id).orElseThrow()).orElseThrow().archetype());
