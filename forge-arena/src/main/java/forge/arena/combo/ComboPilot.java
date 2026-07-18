@@ -789,6 +789,20 @@ public final class ComboPilot {
         return Optional.of(new CombatOrder(currentRoute, killOrder));
     }
 
+    /**
+     * PR-34 (research adoption: continuous lethal-check at every combat —
+     * the survey's first lesson from every competition it covered): the
+     * controller found a GUARANTEED kill by combat math and forces the
+     * alpha; the pilot records the decision. Telemetry only — the math
+     * needs per-creature engine data SeatView deliberately hides.
+     */
+    public void reportLethalAlpha(int turn, int targetSeat, int guaranteed, int targetLife) {
+        events.accept(ArenaEvent.of("lethal_alpha", turn, seat)
+                .with("target_seat", targetSeat)
+                .with("guaranteed_damage", guaranteed)
+                .with("target_life", targetLife));
+    }
+
     /** Gate 3.6 logging half: the controller's stall watchdog reports through the pilot. */
     public void reportStalled(int turn, String binding, String stateHash, String dumpPath) {
         events.accept(ArenaEvent.of("combo_stalled", turn, seat)

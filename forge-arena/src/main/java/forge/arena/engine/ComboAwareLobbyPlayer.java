@@ -423,15 +423,84 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 if (order != null && scriptAttack(order, combat)) {
                     return;
                 }
+                // PR-34 continuous lethal-check (the long-200 finding: 25%
+                // fire→win, BANK_AND_HOLD the most common post-fire route,
+                // win-turn median 31 — the boards get there, the combat
+                // never closes): every own combat, if worst-case math
+                // GUARANTEES a kill right now, take it — combo or no combo
+                ComboPilot.CombatOrder lethal = lethalAlphaOrder(turn);
+                if (lethal != null && scriptAttack(lethal, combat)) {
+                    return;
+                }
             }
             super.declareAttackers(attacker, combat);
         }
 
         /**
+         * PR-34: a kill order when combat math GUARANTEES an elimination
+         * right now, else null. Worst case per opponent: they block and
+         * fully absorb our TOP-power B attackers (B = their untapped
+         * creatures); if the remaining power still meets their life, the
+         * kill cannot be combat-tricked below lethal by blocks alone. A
+         * conservative lower bound — trample, menace, and flash blockers
+         * all shift it in known directions; guarantee beats greed.
+         */
+        private ComboPilot.CombatOrder lethalAlphaOrder(int turn) {
+            List<forge.game.card.Card> ready = new java.util.ArrayList<>();
+            for (forge.game.card.Card c : player.getCreaturesInPlay()) {
+                if (forge.game.combat.CombatUtil.canAttack(c)) {
+                    ready.add(c);
+                }
+            }
+            if (ready.isEmpty()) {
+                return null;
+            }
+            List<Player> alive = new java.util.ArrayList<>();
+            for (Player p : getGame().getPlayers()) {
+                if (p != player && !p.hasLost()) {
+                    alive.add(p);
+                }
+            }
+            alive.sort(java.util.Comparator.comparingInt(Player::getLife));
+            for (Player opp : alive) {
+                List<Integer> powers = new java.util.ArrayList<>();
+                for (forge.game.card.Card c : ready) {
+                    if (forge.game.combat.CombatUtil.canAttack(c, opp)) {
+                        powers.add(Math.max(0, c.getNetPower()));
+                    }
+                }
+                powers.sort(java.util.Collections.reverseOrder());
+                int blockers = 0;
+                for (forge.game.card.Card c : opp.getCreaturesInPlay()) {
+                    if (!c.isTapped()) {
+                        blockers++;
+                    }
+                }
+                int guaranteed = 0;
+                for (int i = blockers; i < powers.size(); i++) {
+                    guaranteed += powers.get(i);
+                }
+                if (guaranteed >= opp.getLife() && guaranteed > 0) {
+                    List<Integer> killOrder = new java.util.ArrayList<>();
+                    killOrder.add(opp.getId());
+                    for (Player p : alive) {
+                        if (p != opp) {
+                            killOrder.add(p.getId());
+                        }
+                    }
+                    pilot.reportLethalAlpha(turn, opp.getId(), guaranteed, opp.getLife());
+                    return new ComboPilot.CombatOrder("LETHAL_ALPHA", killOrder);
+                }
+            }
+            return null;
+        }
+
+        /**
          * Assign attackers per the pilot's directive: biggest hitters first,
          * lethal-then-spill down the kill order (the commander sequence puts
-         * all pressure on the head). False = nothing could attack — stock
-         * declares instead.
+         * all pressure on the head; LETHAL_ALPHA too — the guarantee was
+         * computed all-in, spilling would dilute it below lethal). False =
+         * nothing could attack — stock declares instead.
          */
         private boolean scriptAttack(ComboPilot.CombatOrder order,
                 forge.game.combat.Combat combat) {
@@ -454,7 +523,8 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             }
             attackers.sort(java.util.Comparator.comparingInt(
                     forge.game.card.Card::getNetPower).reversed());
-            boolean commanderRoute = "COMMANDER_DMG_SEQUENCE".equals(order.route());
+            boolean commanderRoute = "COMMANDER_DMG_SEQUENCE".equals(order.route())
+                    || "LETHAL_ALPHA".equals(order.route());
             int targetIndex = 0;
             long assignedPower = 0;
             boolean any = false;
