@@ -1,15 +1,54 @@
 {
-  "schema" : "arena.route-library/1",
-  "features" : [ ],
-  "payoffs" : [ {
-    "card" : "Finale of Devastation",
-    "payoff_class" : "mass_pump",
-    "status" : "proposed",
-    "win_routes_version" : "win-routes/4"
-  }, {
-    "card" : "Surrak and Goreclaw",
-    "payoff_class" : "haste_targeted",
-    "status" : "proposed",
-    "win_routes_version" : "win-routes/4"
-  } ]
+  "schema": "arena.route-library/1",
+  "features": [],
+  "payoffs": [
+    {
+      "card": "Finale of Devastation",
+      "payoff_class": "mass_pump",
+      "status": "proposed",
+      "win_routes_version": "win-routes/4"
+    },
+    {
+      "card": "Surrak and Goreclaw",
+      "payoff_class": "haste_targeted",
+      "status": "proposed",
+      "win_routes_version": "win-routes/4"
+    },
+    {
+      "card": "Umbral Mantle",
+      "payoff_class": "mass_pump",
+      "status": "proposed",
+      "win_routes_version": "win-routes/4"
+    },
+    {
+      "card": "Goldvein Hydra",
+      "payoff_class": "x_damage",
+      "status": "proposed",
+      "win_routes_version": "win-routes/4"
+    },
+    {
+      "card": "Craterhoof Behemoth",
+      "payoff_class": "mass_pump",
+      "status": "proposed",
+      "win_routes_version": "win-routes/4"
+    },
+    {
+      "card": "Aetherflux Reservoir",
+      "payoff_class": "ping_any_target",
+      "status": "approved",
+      "win_routes_version": "win-routes/4"
+    },
+    {
+      "card": "Concordant Crossroads",
+      "payoff_class": "haste_static",
+      "status": "proposed",
+      "win_routes_version": "win-routes/4"
+    },
+    {
+      "card": "Rhonas the Indomitable",
+      "payoff_class": "mass_pump",
+      "status": "approved",
+      "win_routes_version": "win-routes/4"
+    }
+  ]
 }

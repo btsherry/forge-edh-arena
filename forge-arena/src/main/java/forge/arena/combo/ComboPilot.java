@@ -117,6 +117,11 @@ public final class ComboPilot {
     private final Map<String, Integer> lastIgnoredTurn = new HashMap<>();
     private final Set<String> attemptedThisTurn = new HashSet<>();
     private final Set<String> firedShortcuts = new HashSet<>();
+    // PR-35 (stall-autopsy find): the fire turn per combo — the re-fire
+    // suppression is WINDOW-bounded, not permanent; a t21 reservation was
+    // still suppressing the engine at t33 while the seat ground out
+    // unpumped commander attacks
+    private final Map<String, Integer> firedTurns = new HashMap<>();
     private int seenTurn = -1;
     private String lastAssemblySignature;
     private int assemblyRepeats;
@@ -374,9 +379,18 @@ public final class ComboPilot {
             }
             if (firedShortcuts.contains(status.id())) {
                 // pool already ordered — conversion is pending and the stall
-                // watchdog owns the window; re-firing would just be noise
-                ignore(status.id(), view.turn(), "mana_reserved");
-                continue;
+                // watchdog owns the window; re-firing inside it is noise.
+                // PR-35: but ONLY inside it — past 2 own turns with no win,
+                // conversion has failed and the engine is still on the
+                // battlefield; re-enter, re-prove, re-fire (fresh pool on
+                // the attack/deploy turn). The old permanent suppression
+                // left proven engines idle for the rest of the game.
+                Integer firedAt = firedTurns.get(status.id());
+                int refireWindow = 2 * (view.opponents().size() + 1);
+                if (firedAt == null || view.turn() - firedAt < refireWindow) {
+                    ignore(status.id(), view.turn(), "mana_reserved");
+                    continue;
+                }
             }
             Optional<ExecutorBindings.Binding> binding = bindings.forCombo(status.id());
             Optional<LineExecutor> executor = binding.flatMap(ExecutorBindings::executorFor);
@@ -663,6 +677,7 @@ public final class ComboPilot {
             String comboId = activeComboId;
             LethalityPlanner.Verdict verdict = LethalityPlanner.choose(routePlan, view, events);
             firedShortcuts.add(comboId);
+            firedTurns.put(comboId, view.turn());
             firedBinding = activeBinding;
             currentRoute = verdict.route();
             lastPlanTurn = view.turn();
@@ -686,6 +701,7 @@ public final class ComboPilot {
             Map<String, Object> boundedProduct = new HashMap<>();
             boundedProduct.put("mana_" + loop.poolColor(), SHORTCUT_POOL);
             firedShortcuts.add(comboId);
+            firedTurns.put(comboId, view.turn());
             // PR-25: conversion state — the binding's payoffs stay deploy
             // candidates after the line exits, and the verdict feeds combat
             firedBinding = activeBinding;

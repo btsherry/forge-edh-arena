@@ -299,6 +299,44 @@ public class ComboPilotTest {
     }
 
     @Test
+    public void failedConversionRefiresPastTheWindowNotForever() throws Exception {
+        // PR-35 (stall-autopsy find): a t21 reservation was still suppressing
+        // the proven engine at t33 while the seat ground out unpumped
+        // commander attacks. Suppression is now the stall window (2 own
+        // turns), after which the line re-enters and re-fires fresh.
+        Path dir = Files.createTempDirectory("pilot-refire");
+        Files.writeString(dir.resolve("executor-bindings.json"), """
+                {"schema": "arena.executor-bindings/1",
+                 "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
+                   "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
+                              "activation_cost": "{G}", "untap_cost": "{3}",
+                              "untap_ability_host": "engine", "pool_color": "G"}}],
+                 "unbound": []}""");
+        ExecutorBindings shortcutBindings = ExecutorBindings.load(dir.resolve("executor-bindings.json"));
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), shortcutBindings,
+                0.0, 0, events::add);
+
+        // fire at t3, line exits after the (payoff-less) deploy
+        assertFalse(pilot.nextAction(ready(3), true, PROFITABLE).orElseThrow().isStep());
+        assertTrue(pilot.nextAction(ready(3), true, PROFITABLE).isEmpty());
+        assertFalse(pilot.lineActive());
+
+        // t4: inside the window (2 own turns, no opponents in this view) —
+        // still reserved, no re-entry
+        assertTrue(pilot.nextAction(ready(4), true, PROFITABLE).isEmpty());
+        assertEquals(1, events.stream().filter(e -> e.t().equals("combo_ignored")
+                && "mana_reserved".equals(e.fields().get("reason"))).count());
+
+        // t5: past the window with no win — the engine re-enters and REFIRES
+        ComboPilot.Action refire = pilot.nextAction(ready(5), true, PROFITABLE).orElseThrow();
+        assertFalse("a re-fire orders a fresh pool", refire.isStep());
+        assertEquals("527-2816", refire.shortcut().comboId());
+        assertEquals(2, events.stream().filter(e -> e.t().equals("combo_shortcut")).count());
+        assertAllValid(events);
+    }
+
+    @Test
     public void unaffordableFirstCastIsManaReservedNotAnAbortSpam() throws Exception {
         Path dir = Files.createTempDirectory("pilot-afford");
         Files.writeString(dir.resolve("executor-bindings.json"), """

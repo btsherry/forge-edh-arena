@@ -129,8 +129,18 @@ public class ComboPilotIntegrationTest {
                 events.stream().anyMatch(e -> e.t().equals("route_selected")));
         List<ArenaEvent> shortcuts = events.stream()
                 .filter(e -> e.t().equals("combo_shortcut")).toList();
-        assertEquals("exactly one shortcut per game here", 1, shortcuts.size());
-        assertEquals("527-2816", shortcuts.get(0).fields().get("combo"));
+        // PR-35: an unconverted fire legitimately REFIRES once the stall
+        // window (2 own turns) passes — this fixture game never converts,
+        // so multiple fires are correct; they must just be window-spaced,
+        // never same-window spam
+        assertTrue("at least one shortcut fires", !shortcuts.isEmpty());
+        for (ArenaEvent s : shortcuts) {
+            assertEquals("527-2816", s.fields().get("combo"));
+        }
+        for (int i = 1; i < shortcuts.size(); i++) {
+            int gap = shortcuts.get(i).turn() - shortcuts.get(i - 1).turn();
+            assertTrue("refires must be window-spaced (gap=" + gap + ")", gap >= 2);
+        }
 
         // Gate 3.6 logging half: 10k mana + a synthetic 2-card route plan does
         // not end the game within the window (PR-25: 2 of the seat's OWN
