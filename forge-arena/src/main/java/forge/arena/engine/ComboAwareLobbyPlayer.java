@@ -541,9 +541,12 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         }
                         sa.setXManaCostPaid(x);
                     }
-                    // with a live pool the affordability gate is likewise
-                    // blind — trust the payment layer, which does see it
-                    if (pool == 0 && !forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                    // canPayCost is NOT blind — it reaches the payment layer,
+                    // which is why pool-funded payoff casts have always
+                    // worked through AbilityResolver.resolveCast (the Finale
+                    // golden proves it). Only the X ESTIMATE above was
+                    // broken. Keep the real affordability gate.
+                    if (!forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
                         continue;
                     }
                     tutorTried.add(c.getName());
