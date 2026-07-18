@@ -23,12 +23,26 @@ public final class RunLogRenderer {
             "line_entered", "line_aborted",
             "route_selected", "route_rejected",
             "tutor_decision", "mulligan_decision",
-            "turn_summary");
+            "turn_summary",
+            // Phase 6 observability: the default log is what a human reads
+            // when asking "what happened in this game?" — the per-turn board
+            // snapshot (life/hand/creatures/power for every seat) and the
+            // conversion decisions belong there, not behind VERBOSE
+            "turn_state", "conversion_step", "outlet_drill", "lethal_alpha");
 
     private RunLogRenderer() {
     }
 
     public static Optional<String> render(ArenaEvent e, String workerId, int gameIndex, Tier tier) {
+        return render(e, workerId, gameIndex, tier, null);
+    }
+
+    /**
+     * @param seatNames deck id per seat for THIS game (seating rotates, so a
+     *                  bare seat index is ambiguous across games), or null
+     */
+    public static Optional<String> render(ArenaEvent e, String workerId, int gameIndex, Tier tier,
+            java.util.List<String> seatNames) {
         if (tier != Tier.VERBOSE && !DEFAULT_TIER_TYPES.contains(e.t())) {
             return Optional.empty();
         }
@@ -38,13 +52,32 @@ public final class RunLogRenderer {
             sb.append(" t").append(e.turn());
         }
         if (e.seat() != null) {
-            sb.append(" s").append(e.seat());
+            sb.append(' ').append(seatLabel(e.seat(), seatNames));
         }
-        sb.append("] ").append(detail(e));
+        sb.append("] ").append(detail(e, seatNames));
         return Optional.of(sb.toString());
     }
 
-    private static String detail(ArenaEvent e) {
+    /** "s2/urza" when the seating is known, else plain "s2". */
+    private static String seatLabel(Object seat, java.util.List<String> seatNames) {
+        String label = "s" + seat;
+        if (seatNames == null || !(seat instanceof Number n)) {
+            return label;
+        }
+        int idx = n.intValue();
+        if (idx < 0 || idx >= seatNames.size()) {
+            return label;
+        }
+        return label + "/" + shortDeck(seatNames.get(idx));
+    }
+
+    /** "selvala-heart-of-the-wilds" -> "selvala": readable at a glance. */
+    private static String shortDeck(String deckId) {
+        int dash = deckId.indexOf('-');
+        return dash > 0 ? deckId.substring(0, dash) : deckId;
+    }
+
+    private static String detail(ArenaEvent e, java.util.List<String> seatNames) {
         Map<String, Object> f = e.fields();
         switch (e.t()) {
             case "game_start":
@@ -62,9 +95,23 @@ public final class RunLogRenderer {
             case "turn_begin":
                 return "turn " + e.turn() + " begins";
             case "turn_state":
-                return "state  " + seatRows(f, RunLogRenderer::stateRow);
+                return "state  " + seatRows(f, s -> stateRow(s, seatNames));
             case "turn_summary":
-                return "flow   " + seatRows(f, RunLogRenderer::flowRow);
+                return "flow   " + seatRows(f, s -> flowRow(s, seatNames));
+            // Phase 6 conversion telemetry: WHY a banked engine did or did
+            // not become a win — the question the long-200 post-mortem had
+            // to infer from route names alone
+            case "conversion_step":
+                return "CONVERT " + f.get("kind") + "  " + f.get("card")
+                        + "  (" + f.get("outlet_class")
+                        + (f.get("x") != null ? ", X=" + f.get("x") : "") + ")";
+            case "outlet_drill":
+                return "drill  " + f.get("outlet") + " -> "
+                        + seatLabel(f.get("target_seat"), seatNames);
+            case "lethal_alpha":
+                return "ALPHA  " + f.get("guaranteed_damage") + " guaranteed -> "
+                        + seatLabel(f.get("target_seat"), seatNames)
+                        + " (" + f.get("target_life") + "hp)";
             case "land_played":
                 return "land   " + f.get("desc");
             case "life_change":
@@ -117,18 +164,19 @@ public final class RunLogRenderer {
         return sb.toString();
     }
 
-    private static String stateRow(Map<String, Object> s) {
-        return "s" + s.get("seat") + ":" + s.get("life") + "hp/" + s.get("hand") + "h/"
-                + s.get("creatures") + "cr/" + s.get("board_power") + "pw";
+    private static String stateRow(Map<String, Object> s, java.util.List<String> seatNames) {
+        return seatLabel(s.get("seat"), seatNames) + ":" + s.get("life") + "hp/"
+                + s.get("hand") + "h/" + s.get("creatures") + "cr/"
+                + s.get("board_power") + "pw";
     }
 
     @SuppressWarnings("unchecked")
-    private static String flowRow(Map<String, Object> s) {
+    private static String flowRow(Map<String, Object> s, java.util.List<String> seatNames) {
         Map<String, Object> dealt = s.get("damage_dealt") instanceof Map
                 ? (Map<String, Object>) s.get("damage_dealt") : Map.of();
         int dmg = ((Number) dealt.getOrDefault("combat", 0)).intValue()
                 + ((Number) dealt.getOrDefault("other", 0)).intValue();
-        return "s" + s.get("seat") + ":" + dmg + "dmg/" + s.get("drawn") + "dr/"
-                + s.get("spells") + "sp";
+        return seatLabel(s.get("seat"), seatNames) + ":" + dmg + "dmg/"
+                + s.get("drawn") + "dr/" + s.get("spells") + "sp";
     }
 }
