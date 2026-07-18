@@ -4,11 +4,11 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * win-routes/4 feature classification — the code form of WIN-ROUTES.md §2.
+ * win-routes/5 feature classification — the code form of WIN-ROUTES.md §2.
  * Ordered, first-match-wins, case-insensitive. Keep in lockstep with the doc;
  * a rules change bumps the version there and here together.
  *
- * <p>win-routes/4: each rule carries a stable {@code ruleId} so the deck-level
+ * <p>win-routes/5: each rule carries a stable {@code ruleId} so the deck-level
  * coverage layer (WIN-ROUTES §2b, {@link DeckCoverage}) can map RESOURCE
  * feature classes onto conversion routes. Feature patterns are unchanged
  * from win-routes/3; the version bump covers the new §2b payoff/conversion
@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
  */
 public final class RouteRules {
 
-    public static final String VERSION = "win-routes/4";
+    public static final String VERSION = "win-routes/5";
 
     /** The closed category set (WIN-ROUTES §2). */
     public static final List<String> CATEGORIES = List.of("WIN_TRIGGER", "LETHAL", "RESOURCE",

@@ -6,7 +6,7 @@
       "category": "LETHAL",
       "routes": ["SUMMON_CTHULHU"],
       "status": "approved",
-      "win_routes_version": "win-routes/4"
+      "win_routes_version": "win-routes/5"
     }
   ],
   "payoffs": []

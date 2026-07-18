@@ -125,4 +125,39 @@ public class PayoffRulesTest {
         assertEquals(List.of("Concordant Crossroads", "Fervor"), found.get(PayoffRules.HASTE_STATIC));
         assertEquals(1, found.size());
     }
+
+    @Test
+    public void v5OutletClasses() {
+        // Exsanguinate — the playbook's premium class: one resolution, whole
+        // table, life LOSS (dodges damage prevention)
+        hits("Each opponent loses X life. You gain life equal to the life lost this way.",
+                PayoffRules.X_DRAIN_EACH_OPPONENT);
+        // Torment of Hailfire — repeat-X structure, fixed per-iteration loss
+        hits("Repeat the following process X times. Each opponent loses 3 life unless "
+                + "that player sacrifices a nonland permanent or discards a card.",
+                PayoffRules.X_DRAIN_EACH_OPPONENT);
+        // Blue Sun's Zenith — the DIG (self-targetable X draw)
+        hits("Target player draws X cards. Shuffle Blue Sun's Zenith into its owner's library.",
+                PayoffRules.SELF_DRAW_ENGINE);
+        // Staff of Domination's activated draw
+        hits("{5}, {T}: Draw a card.\\n{1}: Untap Staff of Domination.",
+                PayoffRules.SELF_DRAW_ENGINE);
+        // mill-out is DELAYED, not a same-turn kill
+        hits("Target player mills X cards.", PayoffRules.MILL_OPPONENTS);
+    }
+
+    @Test
+    public void v5ConversionFlags() {
+        assertTrue(PayoffRules.flags(PayoffRules.X_DRAIN_EACH_OPPONENT)
+                .contains(PayoffRules.ConversionFlag.HITS_ALL_OPPONENTS));
+        assertTrue(PayoffRules.flags(PayoffRules.PING_EACH_OPPONENT)
+                .contains(PayoffRules.ConversionFlag.HITS_ALL_OPPONENTS));
+        assertTrue(PayoffRules.flags(PayoffRules.MASS_PUMP)
+                .contains(PayoffRules.ConversionFlag.NEEDS_COMBAT));
+        assertTrue(PayoffRules.flags(PayoffRules.MILL_OPPONENTS)
+                .contains(PayoffRules.ConversionFlag.RESOLVES_DELAYED));
+        // single-target sinks carry no table-wide claim
+        assertTrue(PayoffRules.flags(PayoffRules.PING_ANY_TARGET).isEmpty());
+        assertTrue(PayoffRules.flags("unknown_class").isEmpty());
+    }
 }

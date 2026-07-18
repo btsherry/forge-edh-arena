@@ -34,6 +34,13 @@ public final class PayoffRules {
     public static final String PING_ANY_TARGET = "ping_any_target";       // Walking Ballista / Niv-Mizzet
     public static final String X_DAMAGE = "x_damage";            // Fireball class (infinite-mana sink)
     public static final String DRAIN_ON_TRIGGER = "drain_on_trigger";     // Blood Artist / Zulaport class
+    // win-routes/5 (Phase 6, the conversion-playbook outlet taxonomy):
+    /** Exsanguinate/Torment class — ONE resolution ends the whole table. */
+    public static final String X_DRAIN_EACH_OPPONENT = "x_drain_each_opponent";
+    /** Blue Sun's / Stroke class + activated draw — the DIG engine (§1.11). */
+    public static final String SELF_DRAW_ENGINE = "self_draw_engine";
+    /** Mill-out class — a DELAYED win (they lose on their next draw). */
+    public static final String MILL_OPPONENTS = "mill_opponents";
     /** Pseudo-class injected by DeckCoverage when a commander is a creature. */
     public static final String COMMANDER_CREATURE = "commander_creature";
 
@@ -43,7 +50,31 @@ public final class PayoffRules {
      */
     public static final java.util.List<String> ASSIGNABLE_CLASSES = java.util.List.of(
             ORACLE_WIN, ALT_WIN, CANT_LOSE, HASTE_STATIC, HASTE_ONESHOT, HASTE_TARGETED,
-            MASS_PUMP, PING_EACH_OPPONENT, PING_ANY_TARGET, X_DAMAGE, DRAIN_ON_TRIGGER);
+            MASS_PUMP, PING_EACH_OPPONENT, PING_ANY_TARGET, X_DAMAGE, DRAIN_ON_TRIGGER,
+            X_DRAIN_EACH_OPPONENT, SELF_DRAW_ENGINE, MILL_OPPONENTS);
+
+    /**
+     * Phase-6 conversion flags, CLASS-level facts the ConversionPlanner
+     * reads (playbook §6): does one resolution clear the table, does the
+     * win need combat, does it resolve a turn later. Deterministic
+     * constants — never per-card analysis.
+     */
+    public enum ConversionFlag { HITS_ALL_OPPONENTS, NEEDS_COMBAT, RESOLVES_DELAYED }
+
+    private static final Map<String, java.util.Set<ConversionFlag>> FLAGS = Map.of(
+            X_DRAIN_EACH_OPPONENT, java.util.Set.of(ConversionFlag.HITS_ALL_OPPONENTS),
+            PING_EACH_OPPONENT, java.util.Set.of(ConversionFlag.HITS_ALL_OPPONENTS),
+            DRAIN_ON_TRIGGER, java.util.Set.of(ConversionFlag.HITS_ALL_OPPONENTS),
+            MASS_PUMP, java.util.Set.of(ConversionFlag.NEEDS_COMBAT),
+            HASTE_STATIC, java.util.Set.of(ConversionFlag.NEEDS_COMBAT),
+            HASTE_ONESHOT, java.util.Set.of(ConversionFlag.NEEDS_COMBAT),
+            HASTE_TARGETED, java.util.Set.of(ConversionFlag.NEEDS_COMBAT),
+            MILL_OPPONENTS, java.util.Set.of(ConversionFlag.RESOLVES_DELAYED));
+
+    /** The class's conversion flags (empty for single-target/utility classes). */
+    public static java.util.Set<ConversionFlag> flags(String payoffClass) {
+        return FLAGS.getOrDefault(payoffClass, java.util.Set.of());
+    }
 
     private record Rule(String payoffClass, Pattern pattern) {
         Rule(String payoffClass, String regex) {
@@ -71,7 +102,20 @@ public final class PayoffRules {
                     + "|deals? x damage divided [^.]*among any number of targets"),
             new Rule(DRAIN_ON_TRIGGER,
                     "whenever [^.]*(dies|enters|leaves the battlefield|is put into a graveyard)"
-                    + "[^.]*loses? (\\d+|x) life"));
+                    + "[^.]*loses? (\\d+|x) life"),
+            // win-routes/5 — the playbook taxonomy's premium class: one
+            // resolution, no combat, no prevention (life LOSS, not damage);
+            // the second alternation catches Torment's repeat-X structure
+            new Rule(X_DRAIN_EACH_OPPONENT, "each opponent loses x life"
+                    + "|repeat the following process x times\\. each opponent loses \\d+ life"),
+            // the DIG: X-draw pointable at self, or a repeatable activated
+            // draw ("{cost}: draw a card" — the colon guards against
+            // triggered/static draw text matching)
+            new Rule(SELF_DRAW_ENGINE, "(target player|you) draws? x cards"
+                    + "|draw x cards"
+                    + "|: [^.]*draws? (a|one|two|three) cards?"),
+            new Rule(MILL_OPPONENTS, "(target player|each opponent) mills x"
+                    + "|target opponent mills x"));
 
     private PayoffRules() {
     }

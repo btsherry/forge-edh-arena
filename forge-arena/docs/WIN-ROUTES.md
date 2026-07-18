@@ -84,7 +84,7 @@ Ordered, first-match-wins, case-insensitive. Applied per deck to the `produces` 
 
 Validation snapshot (2026-07-15, full Spellbook vocabulary, 1,246 features — scratchpad exercise, not a workflow step): 9 WIN_TRIGGER, 48 LETHAL, 539 RESOURCE, 126 LOCK_DISRUPTION, 14 TABLE_HAZARD, ~30% long-tail UNROUTABLE (mostly H-status stax/prison helpers and C-status cast-from-zone effects — the per-deck + LLM-fallback path exists precisely for this tail).
 
-## 2b. Payoff/enabler classes & the conversion table (`win-routes/4`, deck-level layer)
+## 2b. Payoff/enabler classes & the conversion table (`win-routes/5`, deck-level layer)
 
 §2 classifies what a combo *produces*; this section classifies what the 99 can *convert with*. Matching runs against each card's oracle text (lowercased; Forge's literal `\n` separators flattened); a card may hit any number of classes. Code form: `PayoffRules.java`, kept in lockstep like §2.
 
@@ -101,7 +101,12 @@ Validation snapshot (2026-07-15, full Spellbook vocabulary, 1,246 features — s
 | `ping_any_target` | `deals N/X damage to any target` | Walking Ballista, Niv-Mizzet |
 | `x_damage` | `deals X damage to (any target\|target player/opponent\|each opponent)` · `deals X damage divided … among any number of targets` — player-capable scopes only; Polukranos-class creature-scoped X damage must not match | Fireball, Banefire (the infinite-mana sink) |
 | `drain_on_trigger` | `whenever … (dies\|enters\|leaves…) … loses N life` | Blood Artist, Zulaport Cutthroat |
+| `x_drain_each_opponent` | `each opponent loses x life` — v5, the conversion playbook's PREMIUM class: one resolution ends the table, life LOSS dodges prevention | Exsanguinate, Torment of Hailfire |
+| `self_draw_engine` | `(target player\|you) draws X cards` · `draw X cards` · activated `: … draw a/one/two/three card(s)` — v5, the DIG class (playbook §1.11): spend the pool on cards when no outlet is in hand | Blue Sun's Zenith, Stroke of Genius, Staff of Domination |
+| `mill_opponents` | `(target player\|each opponent\|target opponent) mills X` — v5, DELAYED win (they lose on their next draw, CR 104) | Blue Sun's Zenith (at them), Maddening Cacophony |
 | `commander_creature` | *pseudo-class:* commander type line contains Creature | (type-line fact, not oracle text) |
+
+*v5 amendment (2026-07-18, Phase 6 PR-36): three outlet classes from docs/research/combo-conversion-playbook.md land, plus CLASS-level conversion flags (`PayoffRules.flags`): `HITS_ALL_OPPONENTS` (x_drain_each_opponent, ping_each_opponent, drain_on_trigger), `NEEDS_COMBAT` (mass_pump + the haste family), `RESOLVES_DELAYED` (mill_opponents). The §2 feature patterns are UNCHANGED from v4; approved route-library entries carry forward re-pinned to v5.*
 
 **Conversion table** — which routes a RESOURCE feature class (§2 rule id) can reach, and the payoff classes the 99 must supply. Requirement groups are AND-ed; within a group, *full* alternatives give `supported`, *partial*-only gives `partial` (usable, hazards priced), nothing gives `unsupported`:
 
