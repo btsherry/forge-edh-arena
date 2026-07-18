@@ -74,7 +74,18 @@ final class AbilityResolver {
             if (!sa.isActivatedAbility() || !sa.usesTargeting()) {
                 continue;
             }
-            if (sa.getPayCosts() == null || !costMatches(sa.getPayCosts().toString(), costHint)) {
+            // PR-38: a null cost hint means DISCOVER the outlet's ability
+            // structurally — the pilot names the card (from the deck's own
+            // payoff artifacts) and the engine layer finds the activation
+            // that can actually hurt a player. Damage or life loss only;
+            // "any target" abilities that merely tap or draw are not sinks.
+            if (costHint == null) {
+                if (sa.getApi() != forge.game.ability.ApiType.DealDamage
+                        && sa.getApi() != forge.game.ability.ApiType.LoseLife) {
+                    continue;
+                }
+            } else if (sa.getPayCosts() == null
+                    || !costMatches(sa.getPayCosts().toString(), costHint)) {
                 continue;
             }
             sa.setActivatingPlayer(player);

@@ -36,9 +36,14 @@ import forge.arena.report.ArenaEvent;
 public final class ComboPilot {
 
     /** One pilot output: a scripted step, a mana shortcut, or a token flood. */
-    public record Action(LineExecutor.Step step, ShortcutOrder shortcut, TokenFlood flood) {
+    public record Action(LineExecutor.Step step, ShortcutOrder shortcut, TokenFlood flood,
+            DrillOrder drill) {
+        public Action(LineExecutor.Step step, ShortcutOrder shortcut, TokenFlood flood) {
+            this(step, shortcut, flood, null);
+        }
+
         public Action(LineExecutor.Step step, ShortcutOrder shortcut) {
-            this(step, shortcut, null);
+            this(step, shortcut, null, null);
         }
 
         public boolean isStep() {
@@ -46,16 +51,29 @@ public final class ComboPilot {
         }
 
         static Action play(LineExecutor.Step step) {
-            return new Action(step, null, null);
+            return new Action(step, null, null, null);
         }
 
         static Action shortcut(ShortcutOrder order) {
-            return new Action(null, order, null);
+            return new Action(null, order, null, null);
         }
 
         static Action flood(TokenFlood order) {
-            return new Action(null, null, order);
+            return new Action(null, null, order, null);
         }
+
+        static Action drill(DrillOrder order) {
+            return new Action(null, null, null, order);
+        }
+    }
+
+    /**
+     * PR-38: arm the PR-37 loop-to-lethal drill on a battlefield sink. The
+     * controller validates one activation on a game copy before committing
+     * and discovers the ability structurally (no cost hint travels here —
+     * the pilot names the OUTLET, the engine layer knows the mechanics).
+     */
+    public record DrillOrder(String outletCard) {
     }
 
     /**
@@ -363,6 +381,16 @@ public final class ComboPilot {
             if (view.turn() != lastPlanTurn) {
                 lastPlanTurn = view.turn();
                 currentRoute = LethalityPlanner.choose(routePlan, view, events).route();
+            }
+            // PR-38 (Phase 6 A2): the conversion state machine runs BEFORE
+            // the route gate. A banked pool with a reachable outlet is a win
+            // regardless of which combat route the planner picked, and
+            // BANK_AND_HOLD — the most common post-fire route in the
+            // long-200 batch (30 of 94 selections) — used to mean "do
+            // nothing at all", which is precisely the 25% conversion rate.
+            Optional<Action> converted = convert(view);
+            if (converted.isPresent()) {
+                return converted;
             }
             if (!"BANK_AND_HOLD".equals(currentRoute)) {
                 Optional<Action> deploy = conversionDeploy(view);
@@ -746,6 +774,34 @@ public final class ComboPilot {
         }
         exitLine();
         return Optional.empty();
+    }
+
+    /**
+     * PR-38 (Phase 6 A2): route the banked pool through the conversion state
+     * machine — table-wide killer, else loop-to-lethal drill, else dig for
+     * an outlet. Every choice is recorded so a batch can be audited for
+     * WHY a conversion did or did not happen (the long-200 post-mortem had
+     * to infer this from route names alone).
+     */
+    private Optional<Action> convert(SeatView view) {
+        java.util.LinkedHashSet<String> bindingPayoffs = deployCandidates(firedBinding);
+        ConversionPlanner.Plan plan = ConversionPlanner.choose(
+                view, routePlan, bindingPayoffs, attemptedDeploys);
+        if (plan.kind() == ConversionPlanner.Kind.NONE) {
+            return Optional.empty();
+        }
+        attemptedDeploys.add(plan.card());
+        events.accept(ArenaEvent.of("conversion_step", view.turn(), seat)
+                .with("kind", plan.kind().name())
+                .with("card", plan.card())
+                .with("outlet_class", plan.outletClass())
+                .with("x", plan.x()));
+        return switch (plan.kind()) {
+            case TABLE_WIDE, DIG -> Optional.of(Action.play(
+                    LineExecutor.Step.castX(plan.card(), plan.x())));
+            case DRILL -> Optional.of(Action.drill(new DrillOrder(plan.card())));
+            default -> Optional.empty();
+        };
     }
 
     /**

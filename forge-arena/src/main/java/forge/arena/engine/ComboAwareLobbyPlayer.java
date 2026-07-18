@@ -227,6 +227,21 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 }
                 return stock;
             }
+            if (!action.isStep() && action.drill() != null) {
+                // PR-38: the planner picked a single-target sink. PROVE it on
+                // a copy first (an "any target" ability that cannot actually
+                // drop a life total must never arm a 200-iteration drill),
+                // then arm and fire the first activation in this same window.
+                String outlet = action.drill().outletCard();
+                if (GameSimHandle.copyOf(game, player).activateAtOpponent(outlet, null)) {
+                    armDrill(new DrillOrder(outlet, null));
+                    List<SpellAbility> first = drillStep(turn);
+                    if (first != null) {
+                        return first;
+                    }
+                }
+                return super.chooseSpellAbilityToPlay();
+            }
             if (!action.isStep() && action.flood() != null) {
                 // PR-27b token flood: N real copier entries with triggers
                 // ACTIVE — the rules engine prices every ping and amplifier;

@@ -30,7 +30,10 @@
     "mulligan_decision",
     "turn_state",
     "turn_summary",
-    "land_played"
+    "land_played",
+    "lethal_alpha",
+    "outlet_drill",
+    "conversion_step"
    ]
   },
   "turn": {
@@ -615,6 +618,96 @@
     "properties": {
      "desc": {
       "type": "string"
+     }
+    }
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "t": {
+      "const": "lethal_alpha"
+     }
+    }
+   },
+   "then": {
+    "required": [
+     "seat",
+     "target_seat",
+     "guaranteed_damage",
+     "target_life"
+    ],
+    "properties": {
+     "target_seat": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "guaranteed_damage": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "target_life": {
+      "type": "integer"
+     }
+    }
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "t": {
+      "const": "outlet_drill"
+     }
+    }
+   },
+   "then": {
+    "required": [
+     "seat",
+     "outlet",
+     "target_seat"
+    ],
+    "properties": {
+     "outlet": {
+      "type": "string"
+     },
+     "target_seat": {
+      "type": "integer",
+      "minimum": 0
+     }
+    }
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "t": {
+      "const": "conversion_step"
+     }
+    }
+   },
+   "then": {
+    "required": [
+     "seat",
+     "kind",
+     "card"
+    ],
+    "properties": {
+     "kind": {
+      "enum": [
+       "TABLE_WIDE",
+       "DRILL",
+       "DIG"
+      ]
+     },
+     "card": {
+      "type": "string"
+     },
+     "outlet_class": {
+      "type": "string"
+     },
+     "x": {
+      "type": "integer",
+      "minimum": 0
      }
     }
    }
