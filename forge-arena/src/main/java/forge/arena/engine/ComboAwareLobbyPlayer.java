@@ -324,6 +324,41 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             return resolved != null ? resolved : super.chooseSpellAbilityToPlay();
         }
 
+        /**
+         * PR-41b: WHY a scripted step could not be turned into an ability.
+         * These aborts were the single largest unexplained loss in the
+         * 300-game funnel — 141 for one deck, 136 for another, all recorded
+         * as the bare word "validation" with no way to tell a mana problem
+         * from a missing piece. Cheap to compute, and it splits the two.
+         */
+        private String stepFailure(LineExecutor.Step step) {
+            String card = step.card();
+            if (card == null) {
+                return "no_card";
+            }
+            if (step.isCast()) {
+                boolean present = false;
+                for (forge.game.zone.ZoneType zone : List.of(
+                        forge.game.zone.ZoneType.Hand, forge.game.zone.ZoneType.Command)) {
+                    for (forge.game.card.Card c : player.getCardsIn(zone)) {
+                        if (c.getName().equals(card)) {
+                            present = true;
+                        }
+                    }
+                }
+                // present but unresolvable == the cost could not be paid;
+                // absent == the piece moved (drawn away, countered, exiled)
+                return present ? "cast_unaffordable" : "cast_card_not_in_hand";
+            }
+            forge.game.card.Card onBoard = AbilityResolver.findBattlefield(player, card);
+            if (onBoard == null) {
+                return "activate_card_not_on_battlefield";
+            }
+            return step.targets().isEmpty()
+                    ? "activate_ability_not_found"
+                    : "activate_target_illegal";
+        }
+
         /** Step → engine ability; null = failure handled, stock takes the priority. */
         private List<SpellAbility> resolveStep(LineExecutor.Step step, int turn) {
             SpellAbility sa;
@@ -343,7 +378,8 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 // deploys): soft skip — there is no line to abort, and the
                 // per-turn dedupe already prevents a retry loop
                 if (pilot.lineActive()) {
-                    pilot.abortLine(turn, step.isCast() ? "validation" : "interaction", step.card());
+                    pilot.abortLine(turn, step.isCast() ? "validation" : "interaction",
+                            step.card(), stepFailure(step));
                 }
                 return null;
             }
