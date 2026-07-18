@@ -167,14 +167,15 @@ public class GoldfishGauntletTest {
                     List.of("Temur Sabertooth", "Concordant Crossroads",
                             "Terra Stomper", "Finale of Devastation"),
                     List.of())},
-            // PR-31/32 WIP (known-red, parked at session wrap — see memory):
-            // giada: stock interference persists despite the cast reservation
-            //   (probe/stock interplay needs a live trace with seat identity);
-            // urza: the imprint is a MAY-trigger stock's confirmAction
-            //   declines before any card choice appears — needs a
-            //   confirmAction override honoring pendingChoice.
-            // Re-enable by uncommenting; the fire assertions are correct.
-            /* {new Row("giada-paired-wipe", "giada-font-of-hope.dck", 10,
+            // PR-33: the two PR-31/32 parked rows, re-enabled. Giada: the
+            // veto now catches foretell (stock exiled Doomskar face-down at
+            // t3) and worthFiring's floor is 8 distinct names (a 0/0 died
+            // and the flat 12 never fired). Urza: confirmAction honors the
+            // armed choice, line-card optionals answer yes (Scepter's Play
+            // effect is Optional + AI:RemoveDeck:All), playSaFromPlayEffect
+            // casts the copy, the sim copy restores imprint/exiledWith
+            // links, and the pool source comes from the executor.
+            {new Row("giada-paired-wipe", "giada-font-of-hope.dck", 10,
                     List.of("Doomskar", "Flawless Maneuver"), List.of(),
                     List.of("Terra Stomper", "Craterhoof Behemoth", "Llanowar Elves",
                             "Reclamation Sage", "Temur Sabertooth", "Sanctum Weaver",
@@ -183,7 +184,7 @@ public class GoldfishGauntletTest {
             {new Row("urza-scepter", "urza-lord-high-artificer.dck", 6,
                     List.of("Isochron Scepter", "Dramatic Reversal"),
                     List.of("Sol Ring", "Sol Ring", "Sol Ring"),
-                    List.of(), false)}, */
+                    List.of(), false)},
         };
     }
 
@@ -259,7 +260,7 @@ public class GoldfishGauntletTest {
                 || (e.t().equals("line_step")
                         && "PAIRED_PROTECT".equals(e.fields().get("stage")))).count();
         assertTrue("[" + row.name() + "] the combo must FIRE with pieces present; events: "
-                + events.stream().map(ArenaEvent::t).toList(), fires >= 1);
+                + events.stream().map(e -> e.t() + e.fields()).toList(), fires >= 1);
         if (!row.expectWin()) {
             return;
         }

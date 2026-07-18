@@ -37,6 +37,25 @@ public final class GameSimHandle implements SimHandle {
         GameCopier copier = new GameCopier(game);
         Game sim = copier.makeCopy();
         Player simPlayer = (Player) copier.find(perspective);
+        // PR-33 copy-fidelity shim (urza find): GameCopier drops the imprint
+        // list, the host's exiledCards list, and the exiledWith back-link,
+        // so on the copy an imprinted Isochron Scepter reads empty and its
+        // Play ability's Card.IsImprinted+ExiledWithSource filter fizzles
+        // (the property needs hasExiledCard AND exiledWith). Restore all
+        // three links between the copied counterparts.
+        for (Player original : game.getPlayers()) {
+            for (Card host : original.getCardsIn(forge.game.zone.ZoneType.Battlefield)) {
+                for (Card imprinted : host.getImprintedCards()) {
+                    Card simHost = (Card) copier.find(host);
+                    Card simImprinted = (Card) copier.find(imprinted);
+                    if (simHost != null && simImprinted != null) {
+                        simHost.addImprintedCard(simImprinted);
+                        simHost.addExiledCard(simImprinted);
+                        simImprinted.setExiledWith(simHost);
+                    }
+                }
+            }
+        }
         // make the copy self-consistent before anything queries it: static
         // layers (granted abilities — the Mantle pump on Selvala) apply here
         sim.getAction().checkStateEffects(true);
@@ -57,7 +76,36 @@ public final class GameSimHandle implements SimHandle {
         boolean played = ComputerUtil.handlePlayingSpellAbility(player, sa, () -> {
         });
         if (played) {
-            GameSimulator.resolveStack(sim, player.getWeakestOpponent());
+            // PR-33 (urza find): the scripted activation's resolution may
+            // carry optional parts ("you MAY copy the exiled card / you MAY
+            // cast the copy") — the copy's stock controller declines them
+            // (Isochron Scepter is even scripted AI:RemoveDeck:All) and the
+            // proof dies with the scepter tapped. Validation asks "if I say
+            // yes to my own optionals, is the loop profitable?" — answer yes
+            // for the drive, and let the executor's profit assertion catch
+            // any yes that hurts. Mirrors the live controller's line-scoped
+            // confirmAction override.
+            forge.ai.PlayerControllerAi yes = new forge.ai.PlayerControllerAi(
+                    sim, player, player.getLobbyPlayer()) {
+                @Override
+                public boolean confirmAction(SpellAbility confirmSa,
+                        forge.game.player.PlayerActionConfirmMode mode, String message,
+                        List<String> options, Card cardToShow,
+                        java.util.Map<String, Object> params) {
+                    return true;
+                }
+
+                @Override
+                public boolean playSaFromPlayEffect(SpellAbility tgtSa) {
+                    // the "may cast the copy" half: stock asks its brain
+                    // (canPlayFromEffectAI) which won't-plays Dramatic
+                    // Reversal — during the scripted drive, just cast it
+                    return ComputerUtil.playStack(tgtSa, player, sim);
+                }
+            };
+            yes.setUseSimulation(true);
+            player.runWithController(
+                    () -> GameSimulator.resolveStack(sim, player.getWeakestOpponent()), yes);
         }
         return played;
     }

@@ -115,6 +115,11 @@ public final class ImprintCopyLoop implements LineExecutor, ShortcutSource {
     }
 
     @Override
+    public List<String> lineCards() {
+        return List.of(scepter, imprint);
+    }
+
+    @Override
     public boolean shortcutEligible() {
         return shortcutEligible;
     }
@@ -122,6 +127,11 @@ public final class ImprintCopyLoop implements LineExecutor, ShortcutSource {
     @Override
     public String poolColor() {
         return poolColor;
+    }
+
+    @Override
+    public String poolSourceCard() {
+        return scepter;
     }
 
     @Override

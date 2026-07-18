@@ -182,6 +182,17 @@ public final class ComboPilot {
     }
 
     /**
+     * PR-33: the active line's operating cards, or empty when no line runs.
+     * The controller answers YES to optional confirms hosted by these cards
+     * while the line is live (the urza find: Isochron Scepter's Play effect
+     * is Optional$ True and stock declines it).
+     */
+    public Set<String> activeLineCards() {
+        return activeExecutor == null ? Set.of()
+                : new java.util.LinkedHashSet<>(activeExecutor.lineCards());
+    }
+
+    /**
      * PR-24 payoff visibility: how urgently this seat needs win conversion.
      * CONVERSION once a shortcut fired or a line is deploying (the floated
      * pool needs a payoff, not a second engine); IMMINENT while a bound,
@@ -667,10 +678,10 @@ public final class ComboPilot {
         }
         if (activeExecutor instanceof ShortcutSource loop && loop.shortcutEligible()) {
             String comboId = activeComboId;
-            // pool source: the loop's mana producer — "engine" (TapForMana)
-            // or "tapper" (BounceRecast, PR-27a)
-            String engineCard = activeBinding.params().getOrDefault("engine",
-                    activeBinding.params().get("tapper"));
+            // PR-33: the executor names its own pool source (the old
+            // engine→tapper params-guess was null for the Scepter loop and
+            // NPE'd Mana's constructor mid-game)
+            String engineCard = loop.poolSourceCard();
             LethalityPlanner.Verdict verdict = LethalityPlanner.choose(routePlan, view, events);
             Map<String, Object> boundedProduct = new HashMap<>();
             boundedProduct.put("mana_" + loop.poolColor(), SHORTCUT_POOL);

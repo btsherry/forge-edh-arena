@@ -71,6 +71,13 @@ public final class SpellCopyLoop implements LineExecutor {
     }
 
     @Override
+    public List<String> lineCards() {
+        List<String> cards = new java.util.ArrayList<>(List.of(copySpell, copier));
+        cards.addAll(damageEngines);
+        return cards;
+    }
+
+    @Override
     public List<String> stages() {
         return List.of("ASSEMBLY", "TOKEN_FLOOD");
     }

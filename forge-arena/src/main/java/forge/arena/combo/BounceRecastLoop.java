@@ -91,6 +91,12 @@ public final class BounceRecastLoop implements LineExecutor, ShortcutSource {
     }
 
     @Override
+    public List<String> lineCards() {
+        return hastePiece != null ? List.of(tapper, bouncer, hastePiece)
+                : List.of(tapper, bouncer);
+    }
+
+    @Override
     public List<String> stages() {
         return List.of("ASSEMBLY", "MANA_LOOP", "DEPLOY");
     }
@@ -198,6 +204,11 @@ public final class BounceRecastLoop implements LineExecutor, ShortcutSource {
     @Override
     public String poolColor() {
         return poolColor;
+    }
+
+    @Override
+    public String poolSourceCard() {
+        return tapper;
     }
 
     @Override

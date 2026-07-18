@@ -48,6 +48,18 @@ public interface LineExecutor {
     }
 
     /**
+     * PR-33 (urza gauntlet find): the card names this line operates on.
+     * While the line is live, optional confirms ("you may...") hosted by
+     * these cards answer YES — the stock default declines them (Isochron
+     * Scepter's Play effect is Optional and its script even carries
+     * AI:RemoveDeck:All), silently voiding the loop both live and on the
+     * validation copy.
+     */
+    default List<String> lineCards() {
+        return List.of();
+    }
+
+    /**
      * The steps that make this line EXECUTABLE from the current board
      * (PR-18: tracker readiness is reachability — hand and command zone
      * count — but activation needs pieces deployed and attached). Recomputed

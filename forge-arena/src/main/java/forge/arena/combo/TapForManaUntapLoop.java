@@ -87,6 +87,11 @@ public final class TapForManaUntapLoop implements LineExecutor, ShortcutSource {
     }
 
     @Override
+    public List<String> lineCards() {
+        return List.of(engine, untapper);
+    }
+
+    @Override
     public List<String> stages() {
         return List.of("ASSEMBLY", "MANA_LOOP", "DEPLOY");
     }
@@ -232,6 +237,11 @@ public final class TapForManaUntapLoop implements LineExecutor, ShortcutSource {
     /** Color of the shortcut-injected pool (the engine's production color). */
     public String poolColor() {
         return poolColor;
+    }
+
+    @Override
+    public String poolSourceCard() {
+        return engine;
     }
 
     @Override

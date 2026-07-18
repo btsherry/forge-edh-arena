@@ -153,7 +153,14 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 if (stock != null && pilot.hasReservedPlays(view)) {
                     for (SpellAbility sa : stock) {
                         forge.game.card.Card host = sa.getHostCard();
-                        if (sa.isSpell() && host != null && !host.getType().isPermanent()
+                        // PR-33 (giada trace): foretelling SPENDS the card
+                        // just as surely as casting — stock exiled Doomskar
+                        // face-down at t3 and wiped uncoordinated at t5,
+                        // sailing straight past the cast-only veto
+                        boolean spends = sa.isForetelling()
+                                || (sa.isSpell() && host != null
+                                        && !host.getType().isPermanent());
+                        if (spends && host != null
                                 && pilot.reservedCastNames(view).contains(host.getName())) {
                             return null; // pass — reserved for the pilot's play
                         }
@@ -381,6 +388,20 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
 
         private void injectPool(ComboPilot.ShortcutOrder order) {
             forge.game.card.Card source = AbilityResolver.findBattlefield(player, order.engineCard());
+            if (source == null) {
+                // PR-33 hardening: Mana's constructor NPEs on a null source
+                // card — if the named producer left the battlefield between
+                // the order and the injection, cite any own permanent (the
+                // source is provenance, the loop was already proven)
+                for (forge.game.card.Card c : player.getCardsIn(
+                        forge.game.zone.ZoneType.Battlefield)) {
+                    source = c;
+                    break;
+                }
+                if (source == null) {
+                    return; // no battlefield at all — nothing to cite, no pool
+                }
+            }
             byte color = forge.card.MagicColor.fromName(order.color().toLowerCase());
             forge.game.mana.Mana[] mana = new forge.game.mana.Mana[order.amount()];
             for (int i = 0; i < order.amount(); i++) {
@@ -502,6 +523,47 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             } catch (java.io.IOException e) {
                 pilot.reportStalled(turn, shortcutCombo, "unhashed", "dump_failed:" + e.getMessage());
             }
+        }
+
+        @Override
+        public boolean confirmAction(SpellAbility sa,
+                forge.game.player.PlayerActionConfirmMode mode, String message,
+                List<String> options, forge.game.card.Card cardToShow,
+                java.util.Map<String, Object> params) {
+            // PR-33 (urza gauntlet find): an optional trigger the pilot's own
+            // step armed a resolution choice for (Isochron Scepter's "you may
+            // imprint...") — stock's default DECLINES the may before any card
+            // choice appears, silently killing the line. While the hint is
+            // live this turn, the answer to "may I?" is yes; the armed
+            // chooseCardsForZoneChange hook then steers the card pick.
+            if (pendingChoice != null && sa != null && sa.isTrigger()
+                    && getGame().getPhaseHandler().getTurn() == pendingChoiceTurn) {
+                return true;
+            }
+            // PR-33, the same find's second half: while a line is LIVE, an
+            // optional effect hosted by the line's own cards is part of the
+            // proven loop — the Scepter's "you may copy / you may cast the
+            // copy" resolves mid-line, and stock's default (the script even
+            // says AI:RemoveDeck:All) declines it
+            if (sa != null && sa.getHostCard() != null && pilot.lineActive()
+                    && pilot.activeLineCards().contains(sa.getHostCard().getName())) {
+                return true;
+            }
+            return super.confirmAction(sa, mode, message, options, cardToShow, params);
+        }
+
+        @Override
+        public boolean playSaFromPlayEffect(SpellAbility tgtSa) {
+            // PR-33: the "may cast the copy" half of a line card's Play
+            // effect — stock's brain (canPlayFromEffectAI) won't-plays
+            // Dramatic Reversal; while the line is live, the cast IS the
+            // proven loop, so play it
+            forge.game.card.Card host = tgtSa != null ? tgtSa.getHostCard() : null;
+            if (host != null && pilot.lineActive()
+                    && pilot.activeLineCards().contains(host.getName())) {
+                return ComputerUtil.playStack(tgtSa, player, getGame());
+            }
+            return super.playSaFromPlayEffect(tgtSa);
         }
 
         @Override

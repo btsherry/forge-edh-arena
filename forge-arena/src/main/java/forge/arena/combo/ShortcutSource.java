@@ -14,4 +14,12 @@ public interface ShortcutSource {
 
     /** Color of the injected pool (the loop's production color). */
     String poolColor();
+
+    /**
+     * PR-33 (urza find): the battlefield card the injected pool's Mana
+     * objects cite as their source. The old params-guess ("engine" then
+     * "tapper") returned null for the Scepter loop and NPE'd Mana's
+     * constructor mid-game — the executor names its own source instead.
+     */
+    String poolSourceCard();
 }

@@ -87,16 +87,26 @@ public final class PairedPlay implements LineExecutor {
     }
 
     /**
-     * Coarse v1 timing: opponents' combined visible battlefield (lands
-     * included — the view is name-level) at real mid-game scale. Bounded by
-     * the once-per-pair-per-game and both-cards+mana gates.
+     * Coarse v1 timing: opponents' combined visible battlefield at real
+     * mid-game scale. The view is a NAME set per opponent — duplicates
+     * (basics, token swarms) collapse, so the count undercounts wide
+     * boards and the floor stays low: 8 distinct names across the table
+     * is an established multiplayer board (the PR-33 gauntlet trace: a
+     * 12-creature injected board read 11 after a 0/0 died, and the old
+     * flat 12 never fired). Bounded by the once-per-pair-per-game and
+     * both-cards+mana gates.
      */
     public boolean worthFiring(SeatView view) {
         int theirs = 0;
         for (SeatView.OpponentView opp : view.opponents()) {
             theirs += opp.battlefield().size();
         }
-        return theirs >= 12;
+        return theirs >= 8;
+    }
+
+    @Override
+    public List<String> lineCards() {
+        return List.of(triggerCard, protectionCard);
     }
 
     @Override
