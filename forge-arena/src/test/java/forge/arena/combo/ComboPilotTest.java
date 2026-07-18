@@ -565,6 +565,30 @@ public class ComboPilotTest {
     }
 
     @Test
+    public void entryRunwayIsTheCheapestBoundLinesTotalCost() throws Exception {
+        Path dir = Files.createTempDirectory("pilot-runway");
+        Files.writeString(dir.resolve("executor-bindings.json"), """
+                {"schema": "arena.executor-bindings/1",
+                 "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
+                   "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
+                              "activation_cost": "{G}", "untap_cost": "{3}",
+                              "untap_ability_host": "engine",
+                              "engine_mana_value": "3", "untapper_mana_value": "3"}}],
+                 "unbound": []}""");
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)),
+                ExecutorBindings.load(dir.resolve("executor-bindings.json")),
+                0.0, 0, e -> {
+                });
+        assertEquals("Selvala 3 + Mantle 3", 6,
+                pilot.entryRunway(mullView(Set.of(), SELVALA_CMD, 0, 0)));
+        // no bound combo -> no runway opinion (inertness)
+        ComboPilot unbound = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)),
+                ExecutorBindings.load(Path.of("/nonexistent")), 0.0, 0, e -> {
+                });
+        assertEquals(0, unbound.entryRunway(mullView(Set.of(), SELVALA_CMD, 0, 0)));
+    }
+
+    @Test
     public void combatOrderIsInertWithoutAFiredShortcut() {
         ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)), bindings,
                 0.0, 0, e -> {

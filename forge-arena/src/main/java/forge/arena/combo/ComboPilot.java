@@ -477,6 +477,35 @@ public final class ComboPilot {
     }
 
     /**
+     * PR-30 (research survey: "set a mana-runway target; ramp before
+     * durdle"): the cheapest bound line's total entry cost — the sum of its
+     * pieces' cast estimates, minimized over bound combos. Below this in
+     * untapped sources, the pilot prefers casting mana producers. 0 = no
+     * bound combo or no estimates = no runway opinion.
+     */
+    public int entryRunway(SeatView view) {
+        int runway = 0;
+        for (ComboTracker.ComboStatus status : tracker.recompute(view).statuses()) {
+            if (!status.fullySpecified()) {
+                continue;
+            }
+            Optional<LineExecutor> executor = bindings.forCombo(status.id())
+                    .flatMap(ExecutorBindings::executorFor);
+            if (executor.isEmpty()) {
+                continue;
+            }
+            int total = 0;
+            for (String piece : status.where().keySet()) {
+                total += executor.get().castCostEstimate(piece);
+            }
+            if (total > 0 && (runway == 0 || total < runway)) {
+                runway = total;
+            }
+        }
+        return runway;
+    }
+
+    /**
      * The ASSEMBLY stage (PR-18): deploy reachable pieces until the line is
      * executable, THEN prove it on a copy. Validation failure after assembly
      * is a line abort (the attempt happened and is recorded), not an ignore.

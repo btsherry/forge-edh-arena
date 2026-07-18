@@ -97,6 +97,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             ComboPilot.Action action = pilot.nextAction(view, entryWindowOpen, validator)
                     .orElse(null);
             if (action == null) {
+                // PR-30 ramp runway (research: "ramp before durdle"): below
+                // the cheapest bound line's entry cost in untapped sources,
+                // cast a mana producer from hand before stock decides
+                if (entryWindowOpen && pilot.hasBoundCombo(view)
+                        && view.untappedManaSources() < pilot.entryRunway(view)) {
+                    SpellAbility ramp = findCastableRamp(turn);
+                    if (ramp != null) {
+                        return Collections.singletonList(ramp);
+                    }
+                }
                 // PR-26: pilot-initiated tutor cast — stock cast zero tutors
                 // in 100 observed games; the fetch target is decided by the
                 // existing chooseCardsForZoneChange hook (ranked by urgency)
@@ -209,6 +219,43 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             // asks WHICH creature to return while this ability resolves)
             pendingChoice = step.choice();
             return Collections.singletonList(sa);
+        }
+
+        private int rampTriedTurn = -1;
+        private final java.util.Set<String> rampTried = new java.util.HashSet<>();
+
+        /**
+         * PR-30: a castable mana producer in hand (a card carrying its own
+         * mana abilities — dorks, rocks), found structurally, cheapest
+         * first; one attempt per card per turn.
+         */
+        private SpellAbility findCastableRamp(int turn) {
+            if (turn != rampTriedTurn) {
+                rampTriedTurn = turn;
+                rampTried.clear();
+            }
+            SpellAbility best = null;
+            int bestCost = Integer.MAX_VALUE;
+            for (forge.game.card.Card c : player.getCardsIn(forge.game.zone.ZoneType.Hand)) {
+                if (c.getManaAbilities().isEmpty() || rampTried.contains(c.getName())
+                        || c.getCMC() >= bestCost) {
+                    continue;
+                }
+                for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
+                    if (sa.isSpell()) {
+                        sa.setActivatingPlayer(player);
+                        if (forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                            best = sa;
+                            bestCost = c.getCMC();
+                            break;
+                        }
+                    }
+                }
+            }
+            if (best != null) {
+                rampTried.add(best.getHostCard().getName());
+            }
+            return best;
         }
 
         /** PR-29: biggest-power castable creature spell in hand, or null. */
