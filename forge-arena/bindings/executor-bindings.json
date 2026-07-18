@@ -183,5 +183,5 @@
     "entry_phase" : "MAIN1",
     "note" : "PR-32 (Urza primer core line): Scepter+Reversal — activate {2}, the copy untaps everything, rocks re-fund; validation = one engine activation succeeding AND leaving the scepter untapped (the copy-chain proof)."
   } ],
-  "unbound" : [ "2816-5711", "1355-2645", "1355-2816", "2026-2404-2816" ]
+  "unbound" : [ "2816-5711", "1355-2645", "1355-2816", "2026-2404-2816", "4131-5390", "4131-5149", "2585-5149" ]
 }
