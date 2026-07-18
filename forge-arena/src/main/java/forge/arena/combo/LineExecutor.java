@@ -93,6 +93,18 @@ public interface LineExecutor {
             this(action, card, costHint, targets, x, null);
         }
 
+        /**
+         * PR-41c: activate a deployed draw engine as the conversion module's
+         * DIG. Distinct from a plain activate because a dig is the LAST
+         * resort: the controller must try a real tutor first, since fetching
+         * the payoff outright beats drawing one card and hoping. The first
+         * live measurement of the dig path showed 14 digs and ZERO tutor
+         * decisions across 166 games — the dig was starving the better line.
+         */
+        public static Step digActivate(String card) {
+            return new Step("dig_activate", card, null, List.of());
+        }
+
         public static Step activate(String card, String costHint) {
             return new Step("activate", card, costHint, List.of());
         }

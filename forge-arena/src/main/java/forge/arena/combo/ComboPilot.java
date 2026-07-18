@@ -815,9 +815,10 @@ public final class ComboPilot {
                     LineExecutor.Step.castX(plan.card(), plan.x())));
             case DRILL -> Optional.of(Action.drill(new DrillOrder(plan.card())));
             // a deployed draw engine is ACTIVATED, not cast: the controller
-            // finds its draw ability structurally (ApiType.Draw)
+            // finds its draw ability structurally (ApiType.Draw), and tries a
+            // real tutor first — fetching the payoff beats drawing one card
             case DIG_ACTIVATE -> Optional.of(Action.play(
-                    LineExecutor.Step.activate(plan.card(), null)));
+                    LineExecutor.Step.digActivate(plan.card())));
             default -> Optional.empty();
         };
     }

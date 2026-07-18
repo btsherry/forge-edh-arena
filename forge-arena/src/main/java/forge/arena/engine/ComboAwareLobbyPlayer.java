@@ -362,7 +362,21 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         /** Step → engine ability; null = failure handled, stock takes the priority. */
         private List<SpellAbility> resolveStep(LineExecutor.Step step, int turn) {
             SpellAbility sa;
-            if ("prereq_deploy".equals(step.action())) {
+            if ("dig_activate".equals(step.action())) {
+                // PR-41c: a dig is the LAST resort. With a banked pool, a
+                // tutor that FETCHES the payoff ends the game; drawing one
+                // card only hopes to. The first live dig measurement showed
+                // 14 digs and ZERO tutor decisions in 166 games — the
+                // conversion module had quietly starved the better line, so
+                // the tutor gets first refusal here, where castability
+                // (the engine's business) can actually be tested.
+                SpellAbility tutor = findCastableTutor(turn,
+                        pilot.conversionPayoffNames(SeatViews.of(player, seatIndex, turn)));
+                if (tutor != null) {
+                    return Collections.singletonList(tutor);
+                }
+                sa = AbilityResolver.resolve(player, step.card(), null, List.of());
+            } else if ("prereq_deploy".equals(step.action())) {
                 // PR-29: the biggest affordable creature in hand — engine
                 // data (power, castability) the pilot structurally lacks
                 sa = biggestCastableCreature();
