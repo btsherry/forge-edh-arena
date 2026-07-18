@@ -59,6 +59,35 @@ final class AbilityResolver {
         return null;
     }
 
+    /**
+     * PR-37 (Phase 6 A3): the player-target variant — an outlet activation
+     * aimed at an OPPONENT (Ballista/Reservoir class, "any target"). Same
+     * search as {@link #resolve}, but the scripted target is a player.
+     */
+    static SpellAbility resolveAtPlayer(Player player, String cardName, String costHint,
+            Player targetPlayer) {
+        Card card = findBattlefield(player, cardName);
+        if (card == null) {
+            return null;
+        }
+        for (SpellAbility sa : card.getAllPossibleAbilities(player, false)) {
+            if (!sa.isActivatedAbility() || !sa.usesTargeting()) {
+                continue;
+            }
+            if (sa.getPayCosts() == null || !costMatches(sa.getPayCosts().toString(), costHint)) {
+                continue;
+            }
+            sa.setActivatingPlayer(player);
+            sa.resetTargets();
+            if (!sa.canTarget(targetPlayer)) {
+                return null;
+            }
+            sa.getTargets().add(targetPlayer);
+            return sa;
+        }
+        return null;
+    }
+
     static Card findBattlefield(Player player, String cardName) {
         for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
             if (c.getName().equals(cardName)) {
@@ -101,6 +130,11 @@ final class AbilityResolver {
      * distinguishes Staff's {1}/{3}/{5} abilities unambiguously.
      */
     static boolean costMatches(String costString, String costHint) {
+        // PR-37: non-mana costs (counter removal, sacrifice) carry no brace
+        // symbols — a braceless hint matches by raw substring instead
+        if (!costHint.contains("{")) {
+            return costString.toLowerCase().contains(costHint.toLowerCase());
+        }
         String normalizedCost = "{" + costString.toLowerCase()
                 .replace("{", " ").replace("}", " ").replaceAll("[,:]", " ").trim()
                 .replaceAll("\\s+", "}{") + "}";

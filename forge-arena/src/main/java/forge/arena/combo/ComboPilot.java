@@ -819,6 +819,16 @@ public final class ComboPilot {
                 .with("target_life", targetLife));
     }
 
+    /**
+     * PR-37 (Phase 6 A3): one loop-to-lethal drill activation was returned —
+     * the outlet fired at a specific opponent. Telemetry only.
+     */
+    public void reportDrillStep(int turn, String outlet, int targetSeat) {
+        events.accept(ArenaEvent.of("outlet_drill", turn, seat)
+                .with("outlet", outlet)
+                .with("target_seat", targetSeat));
+    }
+
     /** Gate 3.6 logging half: the controller's stall watchdog reports through the pilot. */
     public void reportStalled(int turn, String binding, String stateHash, String dumpPath) {
         events.accept(ArenaEvent.of("combo_stalled", turn, seat)

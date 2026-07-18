@@ -111,6 +111,25 @@ public final class GameSimHandle implements SimHandle {
     }
 
     @Override
+    public boolean activateAtOpponent(String cardName, String costHint) {
+        int before = opponentsLifeTotal();
+        Player target = player.getWeakestOpponent();
+        if (target == null) {
+            return false;
+        }
+        SpellAbility sa = AbilityResolver.resolveAtPlayer(player, cardName, costHint, target);
+        if (sa == null) {
+            return false;
+        }
+        boolean played = ComputerUtil.handlePlayingSpellAbility(player, sa, () -> {
+        });
+        if (played) {
+            GameSimulator.resolveStack(sim, player.getWeakestOpponent());
+        }
+        return played && opponentsLifeTotal() < before;
+    }
+
+    @Override
     public int manaPoolTotal() {
         return player.getManaPool().totalMana();
     }

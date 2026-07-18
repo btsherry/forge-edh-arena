@@ -63,7 +63,60 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
     public void hear(LobbyPlayer player, String message) {
     }
 
-    static final class ComboAwareController extends PlayerControllerAi {
+    public static final class ComboAwareController extends PlayerControllerAi {
+
+        /**
+         * PR-37 (Phase 6 A3): an armed loop-to-lethal DRILL — repeat the
+         * outlet's activation, one per priority window (the step model is
+         * the interrupt handler: opponent interaction lands between
+         * iterations and a lost outlet simply fails to resolve next pass),
+         * aimed at the lowest-life alive opponent, until nobody is left or
+         * the activation stops resolving. Armed by the ConversionPlanner
+         * (PR-38); package-armed directly in tests.
+         */
+        public record DrillOrder(String outletCard, String costHint) {
+        }
+
+        private DrillOrder activeDrill;
+        private int drillIterations;
+        /** Bounded per game — a runaway drill is a stall, not a win. */
+        static final int DRILL_BOUND = 200;
+
+        public void armDrill(DrillOrder order) {
+            activeDrill = order;
+            drillIterations = 0;
+        }
+
+        /** The next drill activation, or null (disarms when done/failed). */
+        private List<SpellAbility> drillStep(int turn) {
+            if (activeDrill == null) {
+                return null;
+            }
+            if (drillIterations >= DRILL_BOUND || getGame().isGameOver()) {
+                activeDrill = null;
+                return null;
+            }
+            Player target = null;
+            for (Player p : getGame().getPlayers()) {
+                if (p != player && !p.hasLost()
+                        && (target == null || p.getLife() < target.getLife())) {
+                    target = p;
+                }
+            }
+            if (target == null) {
+                activeDrill = null; // table cleared — the win is the engine's
+                return null;
+            }
+            SpellAbility sa = AbilityResolver.resolveAtPlayer(
+                    player, activeDrill.outletCard(), activeDrill.costHint(), target);
+            if (sa == null) {
+                activeDrill = null; // outlet gone or cost unpayable — stop honestly
+                return null;
+            }
+            drillIterations++;
+            pilot.reportDrillStep(turn, activeDrill.outletCard(), target.getId());
+            return Collections.singletonList(sa);
+        }
 
         private final ComboPilot pilot;
         private final int seatIndex;
@@ -112,6 +165,12 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             ComboPilot.Action action = pilot.nextAction(view, entryWindowOpen, validator)
                     .orElse(null);
             if (action == null) {
+                // PR-37: an armed drill outranks every other passive lever —
+                // it IS the conversion in progress
+                List<SpellAbility> drill = drillStep(turn);
+                if (drill != null) {
+                    return drill;
+                }
                 // PR-30 ramp runway (research: "ramp before durdle"): below
                 // the cheapest bound line's entry cost in untapped sources,
                 // cast a mana producer from hand before stock decides

@@ -29,6 +29,16 @@ public interface SimHandle {
         return activate(cardName, costHint, List.of());
     }
 
+    /**
+     * PR-37 (Phase 6 A3): one outlet activation aimed at an OPPONENT on the
+     * copy — the loop-to-lethal proof. True only when the activation
+     * resolved AND some opponent's life total dropped (an outlet that
+     * cannot actually hurt anyone must never arm the drill).
+     */
+    default boolean activateAtOpponent(String cardName, String costHint) {
+        return false;
+    }
+
     /** Total floating mana in the perspective player's pool. */
     int manaPoolTotal();
 
