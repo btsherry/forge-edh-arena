@@ -913,6 +913,56 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             return tucked;
         }
 
+        /**
+         * PR-41f — THE tutor seam, found by measurement. Green Sun's Zenith
+         * was cast 27 times in 101 games and Craterhoof entered 11 times,
+         * while {@code tutor_decision} stayed at ZERO: the ranked hook was
+         * never consulted, so every fetch target was the stock AI's pick.
+         *
+         * <p>Forge routes a ONE-card library search through
+         * {@code chooseSingleCardForZoneChange} (singular) and a
+         * multi-card one through {@code chooseCardsForZoneChange} (plural).
+         * PR-18 already moved this hook once — from
+         * chooseSingleEntityForEffect to the plural form — and landed one
+         * seam short. This is the singular form.
+         */
+        @Override
+        public forge.game.card.Card chooseSingleCardForZoneChange(
+                forge.game.zone.ZoneType destination, List<forge.game.zone.ZoneType> origin,
+                SpellAbility sa, forge.game.card.CardCollection fetchList,
+                forge.game.player.DelayedReveal delayedReveal, String selectPrompt,
+                boolean isOptional, Player decider) {
+            // an armed step choice wins outright (the PR-27a seam)
+            if (pendingChoice != null && decider == player) {
+                for (forge.game.card.Card card : fetchList) {
+                    if (card.getName().equals(pendingChoice)) {
+                        pendingChoice = null;
+                        return card;
+                    }
+                }
+            }
+            if (sa != null && decider == player && origin != null
+                    && origin.contains(forge.game.zone.ZoneType.Library) && !fetchList.isEmpty()) {
+                java.util.List<String> names = new java.util.ArrayList<>();
+                for (forge.game.card.Card card : fetchList) {
+                    names.add(card.getName());
+                }
+                int turn = getGame().getPhaseHandler().getTurn();
+                var ranked = pilot.rankTutor(sa.getHostCard().getName(), names,
+                        SeatViews.of(player, seatIndex, turn));
+                if (!ranked.isEmpty()) {
+                    String best = ranked.get(0).card();
+                    for (forge.game.card.Card card : fetchList) {
+                        if (card.getName().equals(best)) {
+                            return card;
+                        }
+                    }
+                }
+            }
+            return super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList,
+                    delayedReveal, selectPrompt, isOptional, decider);
+        }
+
         @Override
         public List<forge.game.card.Card> chooseCardsForZoneChange(
                 forge.game.zone.ZoneType destination, List<forge.game.zone.ZoneType> origin,
