@@ -37,6 +37,17 @@ final class AbilityResolver {
             if (!sa.isActivatedAbility()) {
                 continue;
             }
+            // PR-38: a null cost hint on a NON-targeting step means "find the
+            // draw ability" — the conversion module's dig path names a
+            // deployed engine (Sensei's Top, Staff of Domination) and the
+            // engine layer discovers how it draws. Structural, not a list.
+            if (costHint == null) {
+                if (sa.getApi() != forge.game.ability.ApiType.Draw || sa.usesTargeting()) {
+                    continue;
+                }
+                sa.setActivatingPlayer(player);
+                return sa;
+            }
             if (sa.getPayCosts() == null || !costMatches(sa.getPayCosts().toString(), costHint)) {
                 continue;
             }

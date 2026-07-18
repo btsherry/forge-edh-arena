@@ -50,8 +50,16 @@ public final class ConversionPlanner {
         TABLE_WIDE,
         /** Arm the loop-to-lethal drill on a battlefield sink (PR-37). */
         DRILL,
-        /** Spend the pool on cards and re-enter with a bigger hand. */
+        /** Cast an X-draw spell: spend the pool on cards, re-enter bigger. */
         DIG,
+        /**
+         * Activate a battlefield draw engine instead of casting one. The
+         * first live conversion batch proved this is the common case: every
+         * dig engine across all four decks is a PERMANENT (Sensei's Top,
+         * Staff of Domination, The One Ring), so a cast-only dig was dead
+         * code that fired once, on a creature, at a meaningless X.
+         */
+        DIG_ACTIVATE,
         /** Nothing conversion-specific — the deploy path keeps the turn. */
         NONE
     }
@@ -117,10 +125,18 @@ public final class ConversionPlanner {
         // passing the turn with a live engine (the playbook's first law).
         // The deck-out guard is a hard floor, never a preference.
         if (view.librarySize() > LIBRARY_FLOOR) {
+            int x = Math.max(1, Math.min(view.librarySize() - LIBRARY_FLOOR, DIG_CAP));
+            // a deployed draw engine is activated in place — no cast, no X
+            for (String engine : routePlan.payoffCards(PayoffRules.DRAW_ENGINE_PERMANENT)) {
+                if (view.cardsIn(SeatView.Zone.BATTLEFIELD).contains(engine)
+                        && !attempted.contains(engine)) {
+                    return new Plan(Kind.DIG_ACTIVATE, engine, 0,
+                            PayoffRules.DRAW_ENGINE_PERMANENT);
+                }
+            }
             String dig = firstReachable(view, routePlan.payoffCards(
-                    PayoffRules.SELF_DRAW_ENGINE), attempted, true);
+                    PayoffRules.SELF_DRAW_ENGINE), attempted, false);
             if (dig != null) {
-                int x = Math.max(1, Math.min(view.librarySize() - LIBRARY_FLOOR, DIG_CAP));
                 return new Plan(Kind.DIG, dig, x, PayoffRules.SELF_DRAW_ENGINE);
             }
         }

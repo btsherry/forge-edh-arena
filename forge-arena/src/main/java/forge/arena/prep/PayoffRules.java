@@ -37,8 +37,18 @@ public final class PayoffRules {
     // win-routes/5 (Phase 6, the conversion-playbook outlet taxonomy):
     /** Exsanguinate/Torment class — ONE resolution ends the whole table. */
     public static final String X_DRAIN_EACH_OPPONENT = "x_drain_each_opponent";
-    /** Blue Sun's / Stroke class + activated draw — the DIG engine (§1.11). */
+    /** Blue Sun's / Stroke class — a CASTABLE X-draw spell (the dig, §1.11). */
     public static final String SELF_DRAW_ENGINE = "self_draw_engine";
+    /**
+     * The same dig, but hosted on a PERMANENT with an activated draw ability
+     * (Sensei's Divining Top, Staff of Domination, The One Ring). Split from
+     * {@link #SELF_DRAW_ENGINE} because the conversion module reaches them
+     * differently — one is cast with a big X, the other is activated
+     * repeatedly on the battlefield — and the first live conversion batch
+     * proved the distinction matters: every dig engine in all four decks
+     * turned out to be a permanent, so a cast-only dig path was dead code.
+     */
+    public static final String DRAW_ENGINE_PERMANENT = "draw_engine_permanent";
     /** Mill-out class — a DELAYED win (they lose on their next draw). */
     public static final String MILL_OPPONENTS = "mill_opponents";
     /** Pseudo-class injected by DeckCoverage when a commander is a creature. */
@@ -51,7 +61,7 @@ public final class PayoffRules {
     public static final java.util.List<String> ASSIGNABLE_CLASSES = java.util.List.of(
             ORACLE_WIN, ALT_WIN, CANT_LOSE, HASTE_STATIC, HASTE_ONESHOT, HASTE_TARGETED,
             MASS_PUMP, PING_EACH_OPPONENT, PING_ANY_TARGET, X_DAMAGE, DRAIN_ON_TRIGGER,
-            X_DRAIN_EACH_OPPONENT, SELF_DRAW_ENGINE, MILL_OPPONENTS);
+            X_DRAIN_EACH_OPPONENT, SELF_DRAW_ENGINE, DRAW_ENGINE_PERMANENT, MILL_OPPONENTS);
 
     /**
      * Phase-6 conversion flags, CLASS-level facts the ConversionPlanner
@@ -120,6 +130,33 @@ public final class PayoffRules {
     private PayoffRules() {
     }
 
+    /**
+     * Type-aware classification (PR-39 live find). {@link #SELF_DRAW_ENGINE}
+     * is the conversion module's DIG class and the module converts it by
+     * CASTING it with a big X, so it must be a one-shot X-draw spell.
+     * Oracle text alone cannot tell those from permanents whose activated
+     * ability happens to draw — the first live batch classified a creature
+     * ("{T}, Sacrifice another creature: ... draw X cards") as a dig engine
+     * and the pilot tried to cast a 4-drop creature at X=20. Permanent-based
+     * dig engines are real, but they need an ACTIVATION path the module does
+     * not have yet; until then they must not masquerade as castable digs.
+     */
+    public static List<String> classifyCard(String oracleText, String typeLine) {
+        List<String> hits = classifyCard(oracleText);
+        if (hits.contains(SELF_DRAW_ENGINE) && typeLine != null && !typeLine.isBlank()) {
+            String types = typeLine.toLowerCase();
+            if (!types.contains("instant") && !types.contains("sorcery")) {
+                // a permanent's draw is reached by ACTIVATION, not by casting
+                // it with a big X — reclassify rather than discard, so the
+                // deck keeps its dig engines
+                hits = new ArrayList<>(hits);
+                hits.remove(SELF_DRAW_ENGINE);
+                hits.add(DRAW_ENGINE_PERMANENT);
+            }
+        }
+        return hits;
+    }
+
     /** Classes hit by one card's oracle text (ALT_WIN suppressed when ORACLE_WIN hits). */
     public static List<String> classifyCard(String oracleText) {
         // Forge card text separates lines with a LITERAL backslash-n; flatten
@@ -149,7 +186,8 @@ public final class PayoffRules {
         Map<String, List<String>> found = new LinkedHashMap<>();
         for (JsonNode card : deckCards.get("cards")) {
             String name = card.get("name").asText();
-            for (String payoffClass : classifyCard(card.path("oracle_text").asText(""))) {
+            for (String payoffClass : classifyCard(card.path("oracle_text").asText(""),
+                    card.path("type_line").asText(""))) {
                 List<String> names = found.computeIfAbsent(payoffClass, k -> new ArrayList<>());
                 if (!names.contains(name)) {
                     names.add(name);

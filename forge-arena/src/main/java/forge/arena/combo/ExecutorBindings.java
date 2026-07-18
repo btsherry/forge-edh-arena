@@ -121,6 +121,9 @@ public final class ExecutorBindings {
         if (ImprintCopyLoop.ARCHETYPE.equals(binding.archetype())) {
             return Optional.of(new ImprintCopyLoop(binding.params(), binding.entryPhase()));
         }
+        if (CastBounceManaLoop.ARCHETYPE.equals(binding.archetype())) {
+            return Optional.of(new CastBounceManaLoop(binding.params(), binding.entryPhase()));
+        }
         return Optional.empty();
     }
 }

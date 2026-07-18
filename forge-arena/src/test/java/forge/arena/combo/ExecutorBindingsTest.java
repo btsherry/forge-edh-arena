@@ -34,7 +34,19 @@ public class ExecutorBindingsTest {
         ExecutorBindings bindings = ExecutorBindings.load(file);
         // 2 TapForManaUntapLoop + 4 BounceRecastLoop + 2 SpellCopyLoop
         // + 2 PairedPlay (PR-31) + 1 ImprintCopyLoop (PR-32)
-        assertEquals(11, bindings.size());
+        // + 3 CastBounceManaLoop (PR-39: the Tidespout family, the largest
+        //   cluster in the bindgen sweep and the reason Urza sat 22/23 unbound)
+        assertEquals(14, bindings.size());
+        for (String id : java.util.List.of("542-5034", "542-2364", "542-2585")) {
+            ExecutorBindings.Binding tidespout = bindings.forCombo(id).orElseThrow();
+            assertEquals(CastBounceManaLoop.ARCHETYPE, ExecutorBindings.executorFor(tidespout)
+                    .orElseThrow().archetype());
+        }
+        // Sol Ring nets +1 per cycle ({C}{C} for a {1} recast); a rock that
+        // only broke even would be refused before any line fired
+        CastBounceManaLoop solRing = (CastBounceManaLoop) ExecutorBindings.executorFor(
+                bindings.forCombo("542-5034").orElseThrow()).orElseThrow();
+        assertTrue("Sol Ring nets +1", solRing.mathProfitable().isProfitable());
         assertEquals(PairedPlay.ARCHETYPE, ExecutorBindings.executorFor(
                 bindings.forCombo("pp-doomskar-maneuver").orElseThrow()).orElseThrow().archetype());
         assertEquals(ImprintCopyLoop.ARCHETYPE, ExecutorBindings.executorFor(

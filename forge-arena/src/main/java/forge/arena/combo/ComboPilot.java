@@ -800,6 +800,10 @@ public final class ComboPilot {
             case TABLE_WIDE, DIG -> Optional.of(Action.play(
                     LineExecutor.Step.castX(plan.card(), plan.x())));
             case DRILL -> Optional.of(Action.drill(new DrillOrder(plan.card())));
+            // a deployed draw engine is ACTIVATED, not cast: the controller
+            // finds its draw ability structurally (ApiType.Draw)
+            case DIG_ACTIVATE -> Optional.of(Action.play(
+                    LineExecutor.Step.activate(plan.card(), null)));
             default -> Optional.empty();
         };
     }

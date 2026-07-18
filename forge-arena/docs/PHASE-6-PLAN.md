@@ -105,6 +105,29 @@ Order rationale: A before C (conversion multiplies existing fires; speed multipl
 - Are the exit bars right? (fire-turn ≤ 12 may be aggressive for 3-piece combos.)
 - Gemini review rounds appended below.
 
+## 9. Execution log — what the first live conversion batch taught us
+
+The conversion module went live in `runs/pr38-conversion` (seed 3033, paired with long-200 / pr34-validation). Three findings inside the first 20 games changed the design, and they are recorded here because each one is the kind of thing only a real batch surfaces:
+
+1. **The dig path was dead code, and worse, mis-firing.** The very first `CONVERT` line in the log read `DIG Disciple of Freyalise (self_draw_engine, X=20)` — a *creature* with a sacrifice-to-draw ability, which the pilot tried to **cast** at X=20. The oracle-text rule for the dig class had matched a permanent. Auditing all four decks' route-coverage then showed the deeper truth: **every dig engine in every deck is a permanent** (Sensei's Divining Top, Staff of Domination, The One Ring, Throne of Eldraine). A cast-only dig path could never have fired correctly for any of them. Fix: split `draw_engine_permanent` out of `self_draw_engine` (type-aware classification), and add `DIG_ACTIVATE`, which activates a deployed engine in place — the ability discovered structurally by `ApiType.Draw`.
+
+2. **No deck in the pod owns a `x_drain_each_opponent` card.** The premium table-wide class is correctly specified and will simply never fire for these four decks — they do not play Exsanguinate/Torment effects. This is honest coverage data, not a bug, and it re-weights the phase: **the drill is the live conversion path here**, because Urza *does* have Aetherflux Reservoir and Giada *does* have Walking Ballista, both `ping_any_target`.
+
+3. **Seat labels in run.log were ambiguous.** Seating rotates per game, so `s0` meant a different deck every game — the same trap that produced a wrong per-deck win table when long-200 was first analysed. Fixed in PR-42a; every seat reference now reads `s2/urza`.
+
+### Adversarial review adjudication (independent Gemini pass on the running system)
+
+| Finding | Verdict | Action |
+|---|---|---|
+| Unkillable target soft-locks the drill (prevention / "can't lose" absorbs all 200 iterations) | **Real bug** | Fixed: a target whose life fails to move is retired from the rotation |
+| Token-flood bound of 30 cannot kill a 4-player table with plain bodies | **Real coverage gap, not a silent failure** | `SpellCopyLoop.validate` already *requires* an injected copy to drop opponents' life, so a non-lethal token deck is refused, never fired-and-fizzled. Combat-token decks need the combat route; noted for a later bound-by-lethality pass |
+| Measurement conflates "the seat that fired later won" with "the combo won" | **Real measurement flaw** | All future analysis uses **same-turn conversion** (fire turn vs win turn), the exit-bar metric |
+| Dig floor blocks Thassa's-Oracle devotion lines | **Real, but not yet reachable** | No `oracle_win` execution path exists; revisit with that PR |
+| X=500 table-wide is a suicide vector for symmetric spells | Already prevented | The class regex is `each opponent loses X life` — "each player" wording never matches |
+| Mana pool empties before the payoff resolves | Already prevented | Fire and convert happen in the same main phase (CR 500.5); an unpayable cast soft-aborts rather than crashing |
+| Mid-loop elimination breaks the loop | Already prevented | The alive-opponent set is re-derived every iteration (CR 800.4a) |
+| Missing pre-flight "dry run" validation | Already exists | Validation-on-a-game-copy before every fire is the architecture's core gate |
+
 ## Version log
 - v1 (2026-07-18): initial draft from batch evidence + playbook + coverage audit. Research docs pending.
 - v2 (2026-07-18): Gemini adversarial round 1 adjudicated — command-zone scan, same-turn-conversion exit metric, PR 37/38 swap, instant-speed scoping note, phase-transition flags, loop-interruption-by-step-model; game-ai-architectures.md folded (utility+HTN hybrid, distance-to-fire landmark, worst-case determinization, receding horizon); bindgen sweep results folded (34 proposals → CastRecastDrawLoop + CastBounceLoop clusters).

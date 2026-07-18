@@ -81,10 +81,27 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private int drillIterations;
         /** Bounded per game — a runaway drill is a stall, not a win. */
         static final int DRILL_BOUND = 200;
+        /**
+         * Opponents the drill has proven it cannot hurt (adversarial review
+         * find): a target with damage prevention, "can't lose the game", or
+         * protection would otherwise absorb every one of the 200 bounded
+         * iterations while the real threats sat untouched. Two consecutive
+         * activations that fail to move a life total retire that target.
+         */
+        private final java.util.Set<Integer> drillImmune = new java.util.HashSet<>();
+        private int drillLastTargetSeat = -1;
+        private int drillLastTargetLife = Integer.MIN_VALUE;
+        private int drillNoProgress;
+        /** Consecutive resolved activations that moved nothing = immune. */
+        static final int DRILL_NO_PROGRESS_LIMIT = 3;
 
         public void armDrill(DrillOrder order) {
             activeDrill = order;
             drillIterations = 0;
+            drillImmune.clear();
+            drillLastTargetSeat = -1;
+            drillLastTargetLife = Integer.MIN_VALUE;
+            drillNoProgress = 0;
         }
 
         /** The next drill activation, or null (disarms when done/failed). */
@@ -96,17 +113,46 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 activeDrill = null;
                 return null;
             }
+            // Did the previous activation actually move the life total it
+            // aimed at? If not, that opponent is unkillable by this outlet
+            // (prevention / protection / "can't lose") and is retired rather
+            // than absorbing the whole bound.
+            //
+            // Only judge with an EMPTY STACK. The controller regains priority
+            // while its own activation is still on the stack, so an
+            // unconditional check reads the pre-resolution life total, calls
+            // a perfectly good outlet immune on its first shot, and disarms
+            // the drill after one activation — which is exactly what the
+            // regression suite caught.
+            if (drillLastTargetSeat >= 0 && getGame().getStack().isEmpty()) {
+                for (Player p : getGame().getPlayers()) {
+                    if (p.getId() == drillLastTargetSeat && !p.hasLost()
+                            && p.getLife() >= drillLastTargetLife
+                            && ++drillNoProgress >= DRILL_NO_PROGRESS_LIMIT) {
+                        drillImmune.add(drillLastTargetSeat);
+                        drillNoProgress = 0;
+                    }
+                }
+            }
+            // the alive set is re-derived EVERY iteration: eliminating a
+            // player removes them and their permanents immediately (CR
+            // 800.4a), which can change what is legal next pass
             Player target = null;
             for (Player p : getGame().getPlayers()) {
-                if (p != player && !p.hasLost()
+                if (p != player && !p.hasLost() && !drillImmune.contains(p.getId())
                         && (target == null || p.getLife() < target.getLife())) {
                     target = p;
                 }
             }
             if (target == null) {
-                activeDrill = null; // table cleared — the win is the engine's
+                activeDrill = null; // table cleared, or nothing left we can hurt
                 return null;
             }
+            if (target.getId() != drillLastTargetSeat) {
+                drillNoProgress = 0; // new target, fresh judgement
+            }
+            drillLastTargetSeat = target.getId();
+            drillLastTargetLife = target.getLife();
             SpellAbility sa = AbilityResolver.resolveAtPlayer(
                     player, activeDrill.outletCard(), activeDrill.costHint(), target);
             if (sa == null) {

@@ -147,6 +147,25 @@ public class PayoffRulesTest {
     }
 
     @Test
+    public void digClassIsRestrictedToCastableXDrawSpells() {
+        // PR-39 live find: the first conversion batch classified a CREATURE
+        // ("{T}, Sacrifice another creature: You gain X life and draw X
+        // cards") as a dig engine, and the pilot tried to CAST it at X=20.
+        // The dig path converts by casting, so only instants/sorceries
+        // qualify until an activation path exists.
+        String disciple = "{T}, Sacrifice another creature: You gain X life and draw X cards, "
+                + "where X is the sacrificed creature's toughness.";
+        assertTrue("text alone still matches",
+                PayoffRules.classifyCard(disciple).contains(PayoffRules.SELF_DRAW_ENGINE));
+        assertFalse("a creature is not a castable dig",
+                PayoffRules.classifyCard(disciple, "Creature — Elf Druid")
+                        .contains(PayoffRules.SELF_DRAW_ENGINE));
+        assertTrue("an X-draw instant is",
+                PayoffRules.classifyCard("Target player draws X cards.", "Instant")
+                        .contains(PayoffRules.SELF_DRAW_ENGINE));
+    }
+
+    @Test
     public void v5ConversionFlags() {
         assertTrue(PayoffRules.flags(PayoffRules.X_DRAIN_EACH_OPPONENT)
                 .contains(PayoffRules.ConversionFlag.HITS_ALL_OPPONENTS));
