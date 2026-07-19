@@ -713,6 +713,26 @@ public final class ComboPilot {
                     proof.blockedBy() != null ? "blocked:" + proof.blockedBy() : "unprofitable");
             return Optional.empty();
         }
+        if (activeExecutor instanceof LifegainPingLoop pingLoop) {
+            // PR-47: this loop's product is not a resource to bank — it is
+            // PERMISSION TO KEEP ACTIVATING. Hand the proven pinger to the
+            // PR-37 drill, which already knows how to kill a table one
+            // activation per priority window.
+            String comboId = activeComboId;
+            firedShortcuts.add(comboId);
+            firedTurns.put(comboId, view.turn());
+            firedBinding = activeBinding;
+            currentRoute = "DIRECT_DAMAGE_LOOP";
+            lastPlanTurn = view.turn();
+            Map<String, Object> product = new HashMap<>();
+            product.put("drill_outlet", pingLoop.pinger());
+            events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
+                    .with("combo", comboId)
+                    .with("iterations_proven", proof.cycles())
+                    .with("bounded_product", product));
+            exitLine();
+            return Optional.of(Action.drill(new DrillOrder(pingLoop.pinger())));
+        }
         if (activeExecutor instanceof SpellCopyLoop copyLoop) {
             // PR-27b: token product — compress to a flood order; the route
             // is DIRECT damage through the battlefield engine

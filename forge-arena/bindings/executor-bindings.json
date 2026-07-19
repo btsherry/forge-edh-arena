@@ -266,6 +266,30 @@
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "1274-3693",
+      "archetype": "LifegainPingLoop",
+      "params": {
+        "pinger": "Walking Ballista",
+        "lifegain_engine": "Heliod, Sun-Crowned",
+        "pinger_mana_value": "2",
+        "engine_mana_value": "3"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "2919-3693",
+      "archetype": "LifegainPingLoop",
+      "params": {
+        "pinger": "Walking Ballista",
+        "lifegain_engine": "Archangel of Thune",
+        "pinger_mana_value": "2",
+        "engine_mana_value": "5"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
     }
   ],
   "unbound": [
