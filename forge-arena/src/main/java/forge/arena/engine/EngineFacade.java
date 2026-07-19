@@ -119,7 +119,7 @@ public final class EngineFacade {
         long started = System.currentTimeMillis();
         ArenaGameResult.LimitingFactor limiting = null;
         try {
-            TimeLimitedCodeBlock.runWithTimeout(() -> match.startGame(game), limits.wallClockSec(), TimeUnit.SECONDS);
+            runGameOnDeepStack(() -> match.startGame(game), limits.wallClockSec());
         } catch (TimeoutException te) {
             limiting = ArenaGameResult.LimitingFactor.WALL_CLOCK;
             game.setGameOver(GameEndReason.Draw);
@@ -158,6 +158,57 @@ public final class EngineFacade {
             type = ArenaGameResult.ResultType.WIN;
         }
         return new ArenaGameResult(type, winnerSeat, winnerName, winCondition, turns, durationMs, limiting);
+    }
+
+    /**
+     * Thread stack for the game loop. Forge checks target legality by
+     * walking every card in the game, and that walk recurses deeply once a
+     * board is large — which a combo harness GUARANTEES, because bounded
+     * loop products are exactly how this project converts (token floods,
+     * huge pools, wide boards). On the JVM's default stack that overflows:
+     * 16 of 183 games in the last batch died with StackOverflowError, and
+     * one worker took a JVM-level SIGSEGV, costing about a sixth of every
+     * batch's sample.
+     *
+     * <p>Deliberately NOT patched in Forge. The recursion is legitimate
+     * work on a big board, not an upstream bug, and this project has to
+     * stay mergeable with upstream — so the fix is arena-side: give the
+     * game loop a thread with room to do it.
+     */
+    private static final int GAME_THREAD_STACK_BYTES = 64 * 1024 * 1024;
+
+    /**
+     * Run the game on a deep-stack thread with the same timeout contract
+     * {@code TimeLimitedCodeBlock} provided (interrupt on expiry, propagate
+     * the cause otherwise), because a single-thread executor gives no way
+     * to size the stack.
+     */
+    private static void runGameOnDeepStack(Runnable body, long timeoutSec) throws Exception {
+        java.util.concurrent.atomic.AtomicReference<Throwable> failure =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Thread gameThread = new Thread(null, () -> {
+            try {
+                body.run();
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, "arena-game", GAME_THREAD_STACK_BYTES);
+        gameThread.setDaemon(true);
+        gameThread.start();
+        gameThread.join(TimeUnit.SECONDS.toMillis(timeoutSec));
+        if (gameThread.isAlive()) {
+            gameThread.interrupt();
+            throw new TimeoutException("wall clock " + timeoutSec + "s");
+        }
+        Throwable t = failure.get();
+        if (t instanceof Exception e) {
+            throw e;
+        }
+        if (t != null) {
+            // StackOverflowError and friends are Errors, not Exceptions —
+            // wrap so the harness records a crash instead of killing the JVM
+            throw new IllegalStateException("game thread died: " + t, t);
+        }
     }
 
     /**
