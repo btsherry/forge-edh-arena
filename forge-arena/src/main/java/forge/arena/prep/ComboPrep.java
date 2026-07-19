@@ -239,6 +239,26 @@ public final class ComboPrep {
         MAPPER.writerWithDefaultPrettyPrinter()
                 .writeValue(dossierDir.resolve("route-coverage.json").toFile(), coverageJson);
 
+        // --- paired-plays.json (PR-48) ---
+        // Strategic pairings a combo database will never list: a sweeper plus
+        // an instant-speed shield that covers what it destroys. Read out of
+        // card text, scope-checked, deck-scoped.
+        List<PairedPlayFinder.Pair> pairs = PairedPlayFinder.find(deckCards);
+        ObjectNode pairedJson = MAPPER.createObjectNode();
+        pairedJson.put("schema", "arena.paired-plays/1");
+        pairedJson.put("deck_hash", index.get("deck_hash").asText());
+        var pairArray = pairedJson.putArray("pairs");
+        for (PairedPlayFinder.Pair pair : pairs) {
+            ObjectNode node = pairArray.addObject();
+            node.put("id", pair.id());
+            node.put("trigger_card", pair.wipe());
+            node.put("protection_card", pair.protection());
+            node.put("wipe_scope", pair.wipeScope().name());
+            node.put("combined_mana_value", pair.combinedManaValue());
+        }
+        MAPPER.writerWithDefaultPrettyPrinter()
+                .writeValue(dossierDir.resolve("paired-plays.json").toFile(), pairedJson);
+
         // --- dossier index ---
         ((ObjectNode) index.get("status")).put("route_coverage", status);
         ((ObjectNode) index.get("versions")).put("spellbook_snapshot", snapshot.fetchedDate());

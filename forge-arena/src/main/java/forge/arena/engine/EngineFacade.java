@@ -230,7 +230,9 @@ public final class EngineFacade {
         try {
             defs = forge.arena.combo.ComboDef.load(seat.dossierDir().resolve("combos.json"));
             bindings = forge.arena.combo.ExecutorBindings.load(
-                    forge.arena.combo.ExecutorBindings.defaultPath());
+                    forge.arena.combo.ExecutorBindings.defaultPath())
+                    // PR-48: the deck's own generated wipe+shield pairs
+                    .withPairedPlays(seat.dossierDir().resolve("paired-plays.json"));
             routePlan = forge.arena.combo.RoutePlan.load(
                     seat.dossierDir().resolve("route-coverage.json"));
             tutorWeights = forge.arena.combo.TutorRanker.loadWeights(

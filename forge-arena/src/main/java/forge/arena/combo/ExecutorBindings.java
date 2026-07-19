@@ -83,6 +83,36 @@ public final class ExecutorBindings {
         return new ExecutorBindings(byId, unbound);
     }
 
+    /**
+     * PR-48: fold a deck's generated paired plays into the global library.
+     * Pairs are DECK-scoped by nature (they name two cards in one 99), so
+     * they live in the dossier rather than the shared bindings file, and
+     * the pilot sees one merged view. Hand-authored entries win on id
+     * collision — a human decision is never silently overwritten.
+     */
+    public ExecutorBindings withPairedPlays(Path pairedPlaysJson) throws IOException {
+        if (!Files.exists(pairedPlaysJson)) {
+            return this;
+        }
+        JsonNode root = MAPPER.readTree(pairedPlaysJson.toFile());
+        Map<String, Binding> merged = new LinkedHashMap<>(byComboId);
+        for (JsonNode pair : root.path("pairs")) {
+            String id = pair.path("id").asText();
+            if (id.isBlank() || merged.containsKey(id)) {
+                continue;
+            }
+            Map<String, String> params = new LinkedHashMap<>();
+            params.put("trigger_card", pair.path("trigger_card").asText());
+            params.put("protection_card", pair.path("protection_card").asText());
+            params.put("trigger_mana_value", String.valueOf(
+                    pair.path("combined_mana_value").asInt(0)));
+            params.put("protection_mana_value", "0");
+            merged.put(id, new Binding(id, PairedPlay.ARCHETYPE, params,
+                    List.of(), "MAIN1", List.of()));
+        }
+        return new ExecutorBindings(merged, unbound);
+    }
+
     public Optional<Binding> forCombo(String comboId) {
         return Optional.ofNullable(byComboId.get(comboId));
     }
