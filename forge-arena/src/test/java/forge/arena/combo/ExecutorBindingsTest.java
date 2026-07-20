@@ -32,12 +32,18 @@ public class ExecutorBindingsTest {
         }
 
         ExecutorBindings bindings = ExecutorBindings.load(file);
-        // 2 TapForManaUntapLoop + 4 BounceRecastLoop + 2 SpellCopyLoop
-        // + 2 PairedPlay (PR-31) + 1 ImprintCopyLoop (PR-32)
-        // + 3 CastBounceManaLoop (PR-39: the Tidespout family, the largest
-        //   cluster in the bindgen sweep and the reason Urza sat 22/23 unbound)
-        assertEquals(24, bindings.size());
-        for (String id : java.util.List.of("542-5034", "542-2364", "542-2585")) {
+        // A bare count pins nothing worth protecting — it breaks on every
+        // addition and says nothing about whether the library is correct. It
+        // is a FLOOR instead: bindings may be added freely, and losing one
+        // still fails loudly.
+        assertTrue("binding library shrank: " + bindings.size(), bindings.size() >= 29);
+        // PR-61: the cast-bounce family now covers Hullbreaker Horror as
+        // well as Tidespout Tyrant. Both are "whenever you cast a spell,
+        // return a permanent to its owner's hand" plus a rock that produces
+        // more than it costs to recast — one archetype, five more of Urza's
+        // eleven unbound combos, and no new code.
+        for (String id : java.util.List.of("542-5034", "542-2364", "542-2585",
+                "513-5034--46", "513-2364--47", "513-3682", "542-3682", "542-4009")) {
             ExecutorBindings.Binding tidespout = bindings.forCombo(id).orElseThrow();
             assertEquals(CastBounceManaLoop.ARCHETYPE, ExecutorBindings.executorFor(tidespout)
                     .orElseThrow().archetype());

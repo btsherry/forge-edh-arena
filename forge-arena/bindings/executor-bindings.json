@@ -400,6 +400,81 @@
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "513-5034--46",
+      "archetype": "CastBounceManaLoop",
+      "params": {
+        "bouncer": "Hullbreaker Horror",
+        "rock": "Sol Ring",
+        "rock_cost": "1",
+        "rock_mana": "2",
+        "rock_tap_cost": "{T}",
+        "pool_color": "C",
+        "shortcut": "true"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "513-2364--47",
+      "archetype": "CastBounceManaLoop",
+      "params": {
+        "bouncer": "Hullbreaker Horror",
+        "rock": "Mana Vault",
+        "rock_cost": "1",
+        "rock_mana": "3",
+        "rock_tap_cost": "{T}",
+        "pool_color": "C",
+        "shortcut": "true"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "513-3682",
+      "archetype": "CastBounceManaLoop",
+      "params": {
+        "bouncer": "Hullbreaker Horror",
+        "rock": "Mox Amber",
+        "rock_cost": "0",
+        "rock_mana": "1",
+        "rock_tap_cost": "{T}",
+        "pool_color": "U",
+        "shortcut": "true"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "542-3682",
+      "archetype": "CastBounceManaLoop",
+      "params": {
+        "bouncer": "Tidespout Tyrant",
+        "rock": "Mox Amber",
+        "rock_cost": "0",
+        "rock_mana": "1",
+        "rock_tap_cost": "{T}",
+        "pool_color": "U",
+        "shortcut": "true"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "542-4009",
+      "archetype": "CastBounceManaLoop",
+      "params": {
+        "bouncer": "Tidespout Tyrant",
+        "rock": "Mox Opal",
+        "rock_cost": "0",
+        "rock_mana": "1",
+        "rock_tap_cost": "{T}",
+        "pool_color": "U",
+        "shortcut": "true"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
     }
   ],
   "unbound": [
