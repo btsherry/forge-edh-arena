@@ -504,6 +504,45 @@
         "Purphoros, God of the Forge"
       ],
       "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "1355-2816",
+      "archetype": "TapForManaUntapLoop",
+      "params": {
+        "engine": "Sanctum Weaver",
+        "untapper": "Umbral Mantle",
+        "activation_cost": "{T}",
+        "untap_cost": "{3}",
+        "untap_ability_host": "engine",
+        "attach_cost": "{0}",
+        "pool_color": "G",
+        "engine_mana_value": "2",
+        "untapper_mana_value": "3",
+        "yield_expr": "ENCHANTMENTS_YOU_CONTROL",
+        "profit_invariant": "enchantments*yield - 3 > 0"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "1355-2645",
+      "archetype": "TapForManaUntapLoop",
+      "params": {
+        "engine": "Sanctum Weaver",
+        "untapper": "Staff of Domination",
+        "activation_cost": "{T}",
+        "untap_cost": "{3}",
+        "untap_ability_host": "untapper",
+        "untap_targets_engine": "true",
+        "untapper_reset_cost": "{1}",
+        "pool_color": "G",
+        "engine_mana_value": "2",
+        "untapper_mana_value": "3",
+        "yield_expr": "ENCHANTMENTS_YOU_CONTROL",
+        "profit_invariant": "enchantments - 4 > 0"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
     }
   ],
   "unbound": [
