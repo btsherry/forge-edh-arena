@@ -65,11 +65,68 @@ The distinction I would draw is between **vocabulary and execution paths**:
 - The *executable branches* keyed off classes no deck has (`TABLE_WIDE`, `DIG`)
   are genuinely untested code, and Gemini is right that they are liability.
 
-**Recommendation: keep the vocabulary, delete the untested branches.** But
-this trades hygiene against the drop-in-any-deck goal, and that goal is
-Ben's to weigh, so it is called out rather than decided quietly.
+**DECIDED (Ben): keep the vocabulary, delete the untested branches.** The
+classification vocabulary is the ingestion contract for decks we have not
+seen; the untested execution branches are liability.
 
 ---
+
+## The finding that changes PR-2, and possibly the whole diagnosis
+
+Ben pointed at Urza's own card, and it reframes the Urza failure.
+
+```
+A:AB$ Shuffle | Cost$ 5 | ... Shuffle your library, then exile the top card.
+                              Until end of turn, you may play that card
+                              without paying its mana cost.
+SVar:DBPlay: ... MayPlayWithoutManaCost$ True
+```
+
+With infinite mana, `{5}` is a **repeatable free-cast engine**: each
+activation plays another card off the top for nothing. Repeated, it plays out
+the deck. And Urza is a COMMANDER — always available from the command zone,
+with infinite mana paying any amount of commander tax. The root precondition
+of his whole plan is therefore always satisfiable, regardless of draws.
+
+That completes the line exactly:
+
+```
+GOAL  three opponents dead
+  <- Aetherflux Reservoir activated x3        pre: 50 life each
+  <- life >= 50                               <- Aetherflux gains 1 life per
+                                                 spell cast this turn,
+                                                 cumulative (storm-shaped)
+  <- many spells cast this turn               <- Urza {5} activated repeatedly,
+                                                 each activation = one free cast
+  <- infinite mana                            <- any bound mana combo
+  <- Urza on battlefield                      <- command zone, tax paid by
+                                                 the infinite mana
+```
+
+**And prep cannot see any of it.** Urza's payoff classes are
+`ping_any_target` and `life_cost_outlet` (both Aetherflux),
+`draw_engine_permanent`, `haste_equip`, and `commander_creature` — a generic
+tag. There is **no payoff class in `PayoffRules` for "repeatable activated
+ability that converts mana into free casts."** The pilot ends up holding
+infinite mana, holding Aetherflux, and having no representation of the one
+ability that connects them.
+
+### What this does to the diagnosis
+
+We characterized Urza as "four steps from engine to kill". That was
+generous: **step two has no representation in our model at all.** The gap is
+in the VOCABULARY, not (or not only) in forward-versus-backward reasoning.
+
+This is a materially cheaper hypothesis than the planner, and it is testable
+on its own. A new deck-agnostic payoff class — any repeatable activated
+ability granting `MayPlayWithoutManaCost` or equivalent — plus a conversion
+step that spends banked mana on it, might connect infinite mana to the kill
+without any planner at all.
+
+**It does not replace PR-2, it sharpens it.** The Paper Test now has a
+concrete script to hand-write, which raises its value: it becomes a test of
+whether the ENGINE SEAMS can execute this known-correct line, with the
+planning question isolated out.
 
 ## PR-2 — The Urza Paper Test (GO / NO-GO GATE)
 
@@ -163,6 +220,19 @@ A deliberately modest bar — Urza converting at all would be the first
 evidence in this project that a multi-step deck can be piloted to a win.
 
 ---
+
+## PR-2b — the free-cast payoff class (promoted by the Urza finding)
+
+A new deck-agnostic payoff class for repeatable abilities that convert mana
+into casts (`MayPlayWithoutManaCost` and equivalents), plus a conversion
+step that spends a banked pool on it. Classified from oracle text and Forge
+card data like every other class — no card names in code.
+
+Sequenced immediately after the Paper Test because the test will tell us
+whether the resulting line is executable at all. If the test passes, this is
+plausibly the smallest change that moves Urza off zero, and it may make
+PR-3/4/5 unnecessary for this deck — which is worth knowing before building
+a planner.
 
 ## Deferred, with reasons (the other four of the requested ten)
 
