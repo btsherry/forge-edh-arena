@@ -269,6 +269,49 @@ executors' `SimResult.profitable(n)` validation, which is precisely a product
 measurement on a copy. We are generalizing the working pattern, not importing
 a new one.
 
+## Urza: the setup/payload split (second Gemini consultation)
+
+Gemini's verdict on "predict the loop's product": it collapses back into
+needing a scalar, because knowing you hold 10,000 mana and your whole deck
+does not tell you whether that is better than passing.
+
+**Half accepted.** The gap is real, but the resolution is not a scalar. A
+loop product does not need to be *scored* — it needs to be checked against a
+known **precondition**. Aetherflux Reservoir's requirement is "life >= 50".
+That is a threshold printed on the card, discovered by prep, not a weight
+anyone tuned. So the question stays factual:
+
+> Does the loop's product satisfy the outlet's precondition?
+
+No board scoring, no averaging, no tuning. Same class of answer as
+`SimResult.profitable(n)`, which already works.
+
+**Accepted in full — compress the SETUP, never the payload.** Urza's mana and
+draw loop can be shortcut to its bounded product; nothing downstream cares
+how it got there. But Aetherflux's life comes from the per-cast trigger, and
+the storm-count math is non-linear (1, 3, 6, 10, 15...). Compressing the
+loop discards exactly the triggers the payoff feeds on. At 35 ms per
+prediction we are not compute-bound, so the payload gets stepped for real.
+This is what PR-51's `castTriggerPayoffPresent` guard was built to do, and it
+has never been validated — **verify the existing mechanism before building a
+new one.**
+
+**Rejected: a hardcoded post-combo Aetherflux routine.** Gemini's concrete
+proposal was to detect DECK_ACCESS and hand control to a rigid script that
+casts Aetherflux, spams spells to 50+ life, and fires. It would probably
+work, for this one deck, and it violates the project's first constraint: no
+deck-specific logic in main code. The reviewer did not know that constraint.
+The salvageable shape — *when an outlet's precondition is unmet, keep acting
+toward it instead of idling* — is expressible through the payoff-class
+vocabulary prep already produces (`life_cost_outlet`), so any dropped-in deck
+with that shape gets the same behaviour and no card names appear in code.
+
+**Generalized lesson, accepted and worth more than the specific fix:** never
+let a simulation advance across a priority boundary without suppressing or
+replacing the stock hooks. Cross one and the telemetry describes what a
+default bot would do, not what the pilot intends. That is precisely the
+turn-12 "attacked for zero" result, stated as a rule.
+
 ## What this does NOT do
 
 - No in-loop search, no minimax, no rollouts. One prediction, one decision.
