@@ -31,8 +31,17 @@ public final class SeatViews {
         // PR-16: own pool + board power, opponents' PUBLIC state (life/poison/battlefield)
         int manaPool = player.getManaPool().totalMana();
         int ownBoardPower = 0;
+        // PR-54: power that could actually be declared as attackers this
+        // turn. isSick() already folds in haste (sickness && !HASTE), so an
+        // untapped creature that is not sick can attack — no haste card
+        // needed, and no haste card helps a creature that is merely tapped.
+        int attackReadyPower = 0;
         for (Card c : player.getCreaturesInPlay()) {
-            ownBoardPower += Math.max(0, c.getNetPower());
+            int power = Math.max(0, c.getNetPower());
+            ownBoardPower += power;
+            if (!c.isSick() && !c.isTapped()) {
+                attackReadyPower += power;
+            }
         }
         java.util.List<SeatView.OpponentView> opponents = new java.util.ArrayList<>();
         for (Player other : player.getGame().getPlayers()) {
@@ -64,7 +73,8 @@ public final class SeatViews {
             }
         }
         return new SeatView(seatIndex, turn, zones, librarySize, manaPool, ownBoardPower,
-                opponents, attachments, untappedManaSources, handSize, handLands);
+                opponents, attachments, untappedManaSources, handSize, handLands,
+                attackReadyPower);
     }
 
     private static Set<String> names(Player player, ZoneType zone) {

@@ -59,6 +59,7 @@ public final class SeatView {
     private final int untappedManaSources;
     private final int handSize;
     private final int handLands;
+    private final int attackReadyPower;
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize) {
         this(seatIndex, turn, ownCards, librarySize, 0, 0, java.util.List.of(), Map.of(), 0, 0, 0);
@@ -84,10 +85,26 @@ public final class SeatView {
                 ownAttachments, untappedManaSources, 0, 0);
     }
 
+    /**
+     * Convenience overload: with no sickness information supplied, the whole
+     * board is assumed able to attack. Callers that know better (the engine
+     * adapter, which reads real sickness) pass the value explicitly; a test
+     * that says "8 power" and nothing about sickness means a board that can
+     * swing, so defaulting to 0 here would quietly invert its intent.
+     */
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
             int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents,
             Map<String, String> ownAttachments, int untappedManaSources, int handSize,
             int handLands) {
+        this(seatIndex, turn, ownCards, librarySize, manaPool, ownBoardPower, opponents,
+                ownAttachments, untappedManaSources, handSize, handLands, ownBoardPower);
+    }
+
+    public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
+            int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents,
+            Map<String, String> ownAttachments, int untappedManaSources, int handSize,
+            int handLands, int attackReadyPower) {
+        this.attackReadyPower = attackReadyPower;
         this.seatIndex = seatIndex;
         this.turn = turn;
         this.ownCards = Map.copyOf(ownCards);
@@ -126,6 +143,21 @@ public final class SeatView {
     /** Summed power of this seat's creatures (public information). */
     public int ownBoardPower() {
         return ownBoardPower;
+    }
+
+    /**
+     * Summed power of only those creatures that could be declared as
+     * attackers RIGHT NOW — untapped and not summoning-sick (PR-54).
+     *
+     * <p>This is the difference between owning a board and being able to
+     * swing with it, and conflating the two cost the green deck 99 of its
+     * 125 combat evaluations across a 300-game batch. Haste matters only for
+     * creatures that arrived THIS turn; a board deployed on earlier turns
+     * attacks perfectly well without any haste source at all (CR 302.6).
+     * The planner asks this question instead of hunting for a haste card.
+     */
+    public int attackReadyPower() {
+        return attackReadyPower;
     }
 
     /**

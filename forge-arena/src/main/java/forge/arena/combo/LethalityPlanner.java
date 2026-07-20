@@ -128,13 +128,30 @@ public final class LethalityPlanner {
                 predicates.put("haste_kind", hasteKind);
                 predicates.put("mass_pump", pump);
                 predicates.put("own_board_power", view.ownBoardPower());
+                predicates.put("attack_ready_power", view.attackReadyPower());
                 predicates.put("table_life", tableLife);
-                if (haste == null) {
-                    return "haste_source_not_visible";
+
+                // PR-54 — the haste bug, and it was a rules bug, not a search
+                // bug. v2 and v3 both treated "no haste source" as fatal and
+                // spent their effort widening the hunt for a haste card. But
+                // haste is only ever needed by creatures that arrived THIS
+                // turn: a board deployed on earlier turns attacks perfectly
+                // well without one (CR 302.6). The green deck was rejected
+                // 99 times out of 125 for lacking a card it did not need,
+                // while an untapped, long-deployed board sat there able to
+                // swing. Ask the board whether it can attack, not the deck
+                // whether it owns a haste card.
+                boolean canSwingNow = view.attackReadyPower() > 0;
+                if (!canSwingNow && haste == null) {
+                    // nothing may attack AND nothing can be granted haste:
+                    // only now is the route genuinely unavailable
+                    return "no_attack_ready_creatures_and_no_haste";
                 }
-                // v1 alpha approximation: raw board power, or a visible mass
-                // pump backed by the (infinite) pool — Finale/Craterhoof class
-                if (pump == null && view.ownBoardPower() < tableLife) {
+                // The alpha estimate counts only creatures that may actually
+                // be declared. A mass pump backed by the proven pool scales
+                // whatever attacks (Craterhoof/Finale class); if nothing can
+                // attack, no amount of pump is damage.
+                if (pump == null && view.attackReadyPower() < tableLife) {
                     return "projected_alpha_below_table_life";
                 }
                 return null;

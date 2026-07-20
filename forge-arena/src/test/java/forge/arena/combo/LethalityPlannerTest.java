@@ -1,6 +1,7 @@
 package forge.arena.combo;
 
 import static org.testng.AssertJUnit.assertEquals;
+import static org.testng.AssertJUnit.assertNull;
 import static org.testng.AssertJUnit.assertTrue;
 
 import java.io.InputStream;
@@ -61,6 +62,26 @@ public class LethalityPlannerTest {
                 List.of(new SeatView.OpponentView(1, oppLife, 0, Set.of()),
                         new SeatView.OpponentView(2, oppLife, 0, Set.of()),
                         new SeatView.OpponentView(3, oppLife, 0, Set.of())));
+    }
+
+    /**
+     * A board that owns power but cannot swing with ANY of it — every
+     * creature summoning-sick or tapped. This is the only state in which a
+     * haste source is what stands between the seat and an attack, so the
+     * haste-classification tests use it to isolate that question (PR-54).
+     */
+    private static SeatView sickView(Set<String> battlefield, Set<String> hand, int boardPower,
+            int oppLife) {
+        return new SeatView(0, 7, Map.of(
+                SeatView.Zone.BATTLEFIELD, battlefield,
+                SeatView.Zone.HAND, hand,
+                SeatView.Zone.COMMAND, Set.of(),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 60, 10000, boardPower,
+                List.of(new SeatView.OpponentView(1, oppLife, 0, Set.of()),
+                        new SeatView.OpponentView(2, oppLife, 0, Set.of()),
+                        new SeatView.OpponentView(3, oppLife, 0, Set.of())),
+                Map.of(), 0, 0, 0, /* attackReadyPower */ 0);
     }
 
     private void assertAllValid(List<ArenaEvent> events) throws Exception {
@@ -174,21 +195,53 @@ public class LethalityPlannerTest {
                 Map.of("haste_oneshot", List.of("Finale of Devastation"),
                         "mass_pump", List.of("Craterhoof Behemoth")));
         List<ArenaEvent> events = new ArrayList<>();
-        // Finale already spent (graveyard is not a castable zone)
+        // Finale already spent (graveyard is not a castable zone), and every
+        // creature is sick or tapped — so haste is genuinely the blocker
         LethalityPlanner.Verdict verdict = LethalityPlanner.choose(plan,
-                new SeatView(0, 7, Map.of(
-                        SeatView.Zone.BATTLEFIELD, Set.of("Selvala, Heart of the Wilds"),
-                        SeatView.Zone.HAND, Set.of("Craterhoof Behemoth"),
-                        SeatView.Zone.COMMAND, Set.of(),
-                        SeatView.Zone.GRAVEYARD, Set.of("Finale of Devastation"),
-                        SeatView.Zone.EXILE, Set.of()), 60, 10000, 9,
-                        List.of(new SeatView.OpponentView(1, 40, 0, Set.of()))),
+                sickView(Set.of("Selvala, Heart of the Wilds"),
+                        Set.of("Craterhoof Behemoth"), 9, 40),
                 events::add);
         assertEquals("BANK_AND_HOLD", verdict.route());
         ArenaEvent rejected = events.stream()
                 .filter(e -> e.t().equals("route_rejected")).findFirst().orElseThrow();
-        assertEquals("haste_source_not_visible", rejected.fields().get("failed_predicate"));
+        assertEquals("no_attack_ready_creatures_and_no_haste",
+                rejected.fields().get("failed_predicate"));
         assertAllValid(events);
+    }
+
+    @Test
+    public void aDeployedBoardAttacksWithoutAnyHasteSource() throws Exception {
+        // PR-54, the rules bug that cost the green deck 99 of 125 combat
+        // evaluations: haste is only needed by creatures that arrived THIS
+        // turn. A board deployed on earlier turns swings without it (CR
+        // 302.6), so an untapped, unsick board must never be rejected for
+        // "no haste source" — the deck owns no haste card in this plan at all.
+        RoutePlan plan = new RoutePlan(
+                List.of(new RoutePlan.PlannedRoute("SPREAD_COMBAT", "conversion", "supported",
+                        List.of("Craterhoof Behemoth"))),
+                Map.of("mass_pump", List.of("Craterhoof Behemoth")));
+        List<ArenaEvent> events = new ArrayList<>();
+        LethalityPlanner.Verdict verdict = LethalityPlanner.choose(plan,
+                view(Set.of("Selvala, Heart of the Wilds"),
+                        Set.of("Craterhoof Behemoth"), 9, 40),
+                events::add);
+        assertEquals("SPREAD_COMBAT", verdict.route());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> predicates = (Map<String, Object>)
+                events.get(events.size() - 1).fields().get("predicates");
+        // "absent" is the telemetry rendering of a null predicate — the route
+        // was selected with NO haste source of any kind, which is the point
+        assertEquals("absent", predicates.get("haste_source"));
+        assertEquals(9, predicates.get("attack_ready_power"));
+
+        // and the same board, all of it sick or tapped, is correctly rejected
+        List<ArenaEvent> sick = new ArrayList<>();
+        assertEquals("BANK_AND_HOLD", LethalityPlanner.choose(plan,
+                sickView(Set.of("Selvala, Heart of the Wilds"),
+                        Set.of("Craterhoof Behemoth"), 9, 40),
+                sick::add).route());
+        assertAllValid(events);
+        assertAllValid(sick);
     }
 
     @Test
@@ -213,10 +266,12 @@ public class LethalityPlannerTest {
         // in HAND it grants nothing this turn — an ETB-trigger granter only
         // hastens creatures that enter AFTER it, so an army already on the
         // battlefield gains nothing (this is why haste_equip had to split
-        // out of this class: an equipment in hand IS usable, a Surrak is not)
+        // out of this class: an equipment in hand IS usable, a Surrak is not).
+        // Shown on a board that cannot swing on its own, so the Surrak is the
+        // only thing that could have enabled the attack.
         List<ArenaEvent> events2 = new ArrayList<>();
         assertEquals("BANK_AND_HOLD", LethalityPlanner.choose(plan,
-                view(Set.of(), Set.of("Surrak and Goreclaw", "Craterhoof Behemoth"), 6, 30),
+                sickView(Set.of(), Set.of("Surrak and Goreclaw", "Craterhoof Behemoth"), 6, 30),
                 events2::add).route());
         assertAllValid(events);
         assertAllValid(events2);
