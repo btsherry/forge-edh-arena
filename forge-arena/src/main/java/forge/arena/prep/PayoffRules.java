@@ -78,6 +78,34 @@ public final class PayoffRules {
     public static final String DAMAGE_AMPLIFIER = "damage_amplifier";
 
     /**
+     * PR-B: a mana source whose output is RESTRICTED to a subset of spells
+     * (Mishra's Workshop {@code Spell.Artifact}, Throne of Eldraine
+     * {@code Spell.ChosenColor+MonoColor}).
+     *
+     * <p>Tagged as ordinary big mana, these silently overstate a combo turn:
+     * the blue deck believed it could activate its commander's {@code {5}}
+     * off mana that legally cannot pay for it, because the commander is not
+     * an artifact and not a monocoloured spell. The pilot must not count
+     * restricted mana toward an unrestricted cost.
+     */
+    public static final String RESTRICTED_MANA_ABILITY = "restricted_mana_ability";
+
+    /**
+     * PR-B: a static that reduces the cost of ACTIVATED ABILITIES, which is
+     * not the same thing as reducing spell costs (Power Artifact, Forensic
+     * Gadgeteer: {@code Type$ Ability}).
+     *
+     * <p>Kept separate from {@link #COST_REDUCER} because conflating them
+     * breaks the blue deck's primary loop in both directions: read as spell
+     * reduction the untap cost stays {@code {3}} and the loop computes as net
+     * zero, and the {@code MinMana$ 1} floor decides whether a given rock
+     * loops at all — Basalt Monolith's {@code {3}} becomes {@code {2}}
+     * against a 3-mana tap (infinite), Grim Monolith's {@code {4}} becomes
+     * {@code {3}} (net zero, NOT infinite).
+     */
+    public static final String ABILITY_COST_REDUCER = "ability_cost_reducer";
+
+    /**
      * PR-A: a permanent that lets unspent mana survive a phase change
      * (Omnath: {@code S:Mode$ UnspentMana}).
      *
@@ -175,6 +203,12 @@ public final class PayoffRules {
             // win-routes/5 — the playbook taxonomy's premium class: one
             // resolution, no combat, no prevention (life LOSS, not damage);
             // the second alternation catches Torment's repeat-X structure
+            // PR-B: mana that cannot pay for arbitrary costs.
+            new Rule(RESTRICTED_MANA_ABILITY, "spend this mana only to"
+                    + "|spend only mana of the chosen color"),
+            // PR-B: ability-cost reduction is NOT spell-cost reduction
+            new Rule(ABILITY_COST_REDUCER,
+                    "activated abilit(y|ies) costs? \\{?\\d+\\}? less to activate"),
             // PR-C: damage amplifiers. Additive ("deals 2 more") and
             // multiplicative ("deals double"/"twice that much") are one
             // CLASS but must stay distinguishable downstream, so the

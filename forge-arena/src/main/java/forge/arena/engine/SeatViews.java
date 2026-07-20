@@ -59,7 +59,22 @@ public final class SeatViews {
             }
             if (!c.isTapped() && !c.getManaAbilities().isEmpty()
                     && !(c.isCreature() && c.hasSickness())) {
-                untappedManaSources++;
+                // PR-B: a source whose mana can only pay for a SUBSET of
+                // spells is not general mana. Mishra's Workshop
+                // (RestrictValid$ Spell.Artifact) and Throne of Eldraine
+                // (Spell.ChosenColor+MonoColor) were counted as ordinary big
+                // mana, so the blue deck believed it could activate its
+                // commander's {5} off mana that legally cannot pay for it.
+                boolean restricted = false;
+                for (forge.game.spellability.SpellAbility ma : c.getManaAbilities()) {
+                    if (ma.hasParam("RestrictValid")) {
+                        restricted = true;
+                        break;
+                    }
+                }
+                if (!restricted) {
+                    untappedManaSources++;
+                }
             }
         }
         // PR-24: true hand counts (the name set collapses duplicate basics) —
