@@ -1,0 +1,1806 @@
+{
+ "schema": "arena.capability-registry/1",
+ "promotion_rule": "proposed by >=3 DISTINCT decks AND consulted by a pilot decision",
+ "note": "utility counter not yet implemented; recurrence only",
+ "total": 142,
+ "promote": 1,
+ "classes": {
+  "graveyard_recursion": {
+   "recurrence_decks": 3,
+   "decks": [
+    "giada-font-of-hope",
+    "selvala-heart-of-the-wilds",
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Academy Ruins",
+    "Bala Ged Recovery",
+    "Bruna, the Fading Light",
+    "Buried Ruin",
+    "Eternal Witness",
+    "Hall of Heliod's Generosity"
+   ],
+   "definition": "Returns a card from your own graveyard to your hand or battlefield.",
+   "script_evidence": "A:SP$ ChangeZone | ValidTgts$ Card.YouOwn | Origin$ Graveyard | Destination$ Hand",
+   "status": "PROMOTE"
+  },
+  "combat_damage_trigger": {
+   "recurrence_decks": 2,
+   "decks": [
+    "giada-font-of-hope",
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Battle Angels of Tyr",
+    "Goldlust Triad"
+   ],
+   "definition": "A triggered ability that fires only when this permanent deals combat damage to a player, after blockers and damage are resolved.",
+   "script_evidence": "T:Mode$ DamageDone | ValidSource$ Card.Self | CombatDamage$ True | ValidTarget$ Player",
+   "status": "CANDIDATE"
+  },
+  "conditional_mana_ability": {
+   "recurrence_decks": 2,
+   "decks": [
+    "purphoros-god-of-the-forge2",
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Mox Opal",
+    "Sceptre of Eternal Glory"
+   ],
+   "definition": "A mana ability whose activation is gated by a board-state check evaluated at activation time, so it is not always legal to activate.",
+   "script_evidence": "CheckSVar$ X | SVarCompare$ GE3",
+   "status": "CANDIDATE"
+  },
+  "mass_land_destruction": {
+   "recurrence_decks": 2,
+   "decks": [
+    "giada-font-of-hope",
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Ravages of War",
+    "Ruination"
+   ],
+   "definition": "Destroys every land on the battlefield matching a filter, symmetrically across all players.",
+   "script_evidence": "A:SP$ DestroyAll | ValidCards$ Land.nonBasic",
+   "status": "CANDIDATE"
+  },
+  "mass_protection_grant": {
+   "recurrence_decks": 2,
+   "decks": [
+    "giada-font-of-hope",
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Akroma's Will",
+    "Heroic Intervention"
+   ],
+   "definition": "A one-shot effect that grants protective keywords (hexproof, indestructible) to all permanents you control until end of turn, without changing power or toughness.",
+   "script_evidence": "SP$ PumpAll | ValidCards$ Permanent.YouCtrl | KW$ Hexproof & Indestructible",
+   "status": "CANDIDATE"
+  },
+  "modal_dfc_land": {
+   "recurrence_decks": 2,
+   "decks": [
+    "giada-font-of-hope",
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Emeria's Call",
+    "Kabira Takedown",
+    "Sea Gate Restoration",
+    "Sink into Stupor"
+   ],
+   "definition": "A card whose alternate face is a land that can be played instead of casting the front face.",
+   "script_evidence": "AlternateMode:Modal",
+   "status": "CANDIDATE"
+  },
+  "protection_grant": {
+   "recurrence_decks": 2,
+   "decks": [
+    "giada-font-of-hope",
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Asceticism",
+    "Collective Resistance",
+    "Mother of Runes",
+    "Teferi's Protection",
+    "The One Ring"
+   ],
+   "definition": "Grants hexproof, indestructible, or regeneration to one or more creatures without altering their power or toughness.",
+   "script_evidence": "S:Mode$ Continuous | Affected$ Creature.YouCtrl | AddKeyword$ Hexproof",
+   "status": "CANDIDATE"
+  },
+  "restricted_mana_ability": {
+   "recurrence_decks": 2,
+   "decks": [
+    "purphoros-god-of-the-forge2",
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Throne of Eldraine"
+   ],
+   "definition": "A mana ability whose output carries a RestrictValid/ManaRestriction clause limiting which spells or abilities the mana may pay for.",
+   "script_evidence": "RestrictValid$ Spell.ChosenColor+MonoColor",
+   "status": "CANDIDATE"
+  },
+  "self_damage_on_activation": {
+   "recurrence_decks": 2,
+   "decks": [
+    "purphoros-god-of-the-forge2",
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Ancient Tomb"
+   ],
+   "definition": "Activating this ability deals damage to its controller as a resolution sub-ability, not as an activation cost.",
+   "script_evidence": "SVar:DBPain:DB$ DealDamage | NumDmg$ 2 | Defined$ You",
+   "status": "CANDIDATE"
+  },
+  "ability_activation_trigger": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Rings of Brighthearth"
+   ],
+   "definition": "A permanent whose triggered ability fires whenever its controller activates an ability, as distinct from casting a spell.",
+   "script_evidence": "T:Mode$ AbilityCast | ValidActivatingPlayer$ You | ValidSA$ SpellAbility.!ManaAbility",
+   "status": "PROVISIONAL"
+  },
+  "ability_granter": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Umbral Mantle"
+   ],
+   "definition": "A static ability that gives another permanent an activated ability defined on this card.",
+   "script_evidence": "AddAbility$ UmbralPump",
+   "status": "PROVISIONAL"
+  },
+  "ability_stripping_aura": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Kenrith's Transformation"
+   ],
+   "definition": "A static continuous effect on an attached permanent that removes all its abilities and sets its base power and toughness, leaving the permanent on the battlefield.",
+   "script_evidence": "RemoveAllAbilities$ True",
+   "status": "PROVISIONAL"
+  },
+  "activated_ability_cost_reducer": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Forensic Gadgeteer",
+    "Power Artifact"
+   ],
+   "definition": "A static effect reducing the cost of activated abilities of artifacts you control by {1}, with a floor of one mana.",
+   "script_evidence": "S:Mode$ ReduceCost | ValidCard$ Artifact.YouCtrl | Type$ Ability | Amount$ 1 | MinMana$ 1",
+   "status": "PROVISIONAL"
+  },
+  "afflict": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Neheb, the Eternal"
+   ],
+   "definition": "A keyword triggered ability that causes the defending player to lose a fixed amount of life whenever this creature becomes blocked.",
+   "script_evidence": "K:Afflict:3",
+   "status": "PROVISIONAL"
+  },
+  "ai_removedeck_flag": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Sheltering Ancient",
+    "Sylvan Library",
+    "Utopia Sprawl",
+    "Wild Growth"
+   ],
+   "definition": "Forge metadata marking this card as excluded from AI deck generation, signalling the built-in AI has no handling logic for it.",
+   "script_evidence": "AI:RemoveDeck:All",
+   "status": "PROVISIONAL"
+  },
+  "alternative_cost_self": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Flare of Fortitude",
+    "Flawless Maneuver"
+   ],
+   "definition": "The spell may be cast by paying a stated alternative cost instead of its mana cost.",
+   "script_evidence": "Mode$ AlternativeCost | ValidSA$ Spell.Self | EffectZone$ All | Cost$ Sac<1/Creature.White+!token/a nontoken white creature>",
+   "status": "PROVISIONAL"
+  },
+  "bounce_permanent_to_hand": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Drafna, Founder of Lat-Nam",
+    "Hullbreaker Horror"
+   ],
+   "definition": "A repeatable activated ability that returns a permanent you control from the battlefield to your hand.",
+   "script_evidence": "ValidTgts$ Artifact.YouCtrl | Origin$ Battlefield | Destination$ Hand",
+   "status": "PROVISIONAL"
+  },
+  "buyback_recursion": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Reiterate"
+   ],
+   "definition": "An additional cost that returns this card to its owner's hand as it resolves, making the spell repeatable within a single turn.",
+   "script_evidence": "K:Buyback:3",
+   "status": "PROVISIONAL"
+  },
+  "cheat_creatures_from_hand": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Smuggler's Surprise"
+   ],
+   "definition": "An effect that puts creature cards from hand directly onto the battlefield without casting them.",
+   "script_evidence": "ModeCost$ 4 G | Origin$ Hand | Destination$ Battlefield",
+   "status": "PROVISIONAL"
+  },
+  "chosen_type_cost_reducer": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Cloud Key"
+   ],
+   "definition": "A static cost reduction that applies only to spells matching a card type chosen as this permanent enters, not to a type fixed by the script.",
+   "script_evidence": "S:Mode$ ReduceCost | ValidCard$ Card.ChosenType | Type$ Spell | Activator$ You | Amount$ 1",
+   "status": "PROVISIONAL"
+  },
+  "combat_damage_to_player_trigger": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Ragavan, Nimble Pilferer"
+   ],
+   "definition": "A trigger that fires only when this creature deals combat damage to a player, not when it is declared as an attacker.",
+   "script_evidence": "Mode$ DamageDone | ValidSource$ Card.Self | ValidTarget$ Player | CombatDamage$ True",
+   "status": "PROVISIONAL"
+  },
+  "conditional_attack_restriction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Rhonas the Indomitable"
+   ],
+   "definition": "A static ability that prevents this creature from attacking or blocking unless a board condition is met.",
+   "script_evidence": "Mode$ CantAttack,CantBlock | ValidCard$ Card.Self",
+   "status": "PROVISIONAL"
+  },
+  "cost_reduction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Pearl Medallion",
+    "Vanquish the Horde"
+   ],
+   "definition": "A static ability that reduces the generic mana cost of matching spells.",
+   "script_evidence": "Mode$ ReduceCost | ValidCard$ Card.White",
+   "status": "PROVISIONAL"
+  },
+  "cost_reduction_self": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Blasphemous Act",
+    "Chandra's Incinerator"
+   ],
+   "definition": "A static effect that reduces this spell's own mana cost by a dynamically computed amount X.",
+   "script_evidence": "S:Mode$ ReduceCost | ValidCard$ Card.Self | Type$ Spell | Amount$ X",
+   "status": "PROVISIONAL"
+  },
+  "cost_reduction_static": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Herald of War",
+    "Hour of Revelation"
+   ],
+   "definition": "A static ability that reduces the mana cost of spells its controller casts.",
+   "script_evidence": "S:Mode$ ReduceCost | ValidCard$ Angel,Human | Type$ Spell | Activator$ You | Amount$ X",
+   "status": "PROVISIONAL"
+  },
+  "counter_spell": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Muddle the Mixture",
+    "Pact of Negation",
+    "Swan Song"
+   ],
+   "definition": "A spell that counters a target spell on the stack.",
+   "script_evidence": "SP$ Counter",
+   "status": "PROVISIONAL"
+  },
+  "counterspell": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Counterspell",
+    "Fierce Guardianship",
+    "Force of Negation",
+    "Force of Will",
+    "Jwari Disruption",
+    "Mana Drain"
+   ],
+   "definition": "A spell ability that counters a target spell on the stack.",
+   "script_evidence": "A:SP$ Counter | TargetType$ Spell | ValidTgts$ Card",
+   "status": "PROVISIONAL"
+  },
+  "damage_bonus_static": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Torbran, Thane of Red Fell"
+   ],
+   "definition": "A static damage-replacement effect that adds a fixed amount to each instance of damage a qualifying source deals to opponents or their permanents.",
+   "script_evidence": "SVar:X:ReplaceCount$DamageAmount/Plus.2",
+   "status": "PROVISIONAL"
+  },
+  "damage_doubler": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Twinflame Tyrant"
+   ],
+   "definition": "A static damage-replacement effect that multiplies each instance of damage dealt to opponents or their permanents rather than adding a fixed amount.",
+   "script_evidence": "SVar:X:ReplaceCount$DamageAmount/Twice",
+   "status": "PROVISIONAL"
+  },
+  "damage_undirected_players": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Wheel of Misfortune"
+   ],
+   "definition": "Deals damage to a runtime-determined set of players via Defined$ Remembered with no ValidTgts, where the damage amount is also resolved at runtime from a hidden number choice.",
+   "script_evidence": "DB$ DealDamage | Defined$ Remembered | NumDmg$ Count$ChosenNumber",
+   "status": "PROVISIONAL"
+  },
+  "death_replacement_protection": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Cosmic Intervention"
+   ],
+   "definition": "Replaces battlefield-to-graveyard moves of the caster's permanents with exile, returning them to the battlefield at the beginning of the next end step.",
+   "script_evidence": "SVar:ReplaceGrave:Event$ Moved | ValidCard$ Permanent.YouCtrl | Origin$ Battlefield | Destination$ Graveyard | ReplaceWith$ Exile",
+   "status": "PROVISIONAL"
+  },
+  "delayed_mana_burst": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Mana Drain"
+   ],
+   "definition": "A delayed trigger that adds colourless mana equal to a remembered value at the beginning of your next main phase, rather than an activatable mana source.",
+   "script_evidence": "SVar:AddMana:DB$ Mana | Produced$ C | Amount$ X",
+   "status": "PROVISIONAL"
+  },
+  "delayed_token_sacrifice": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Devastating Onslaught"
+   ],
+   "definition": "Tokens the effect creates are sacrificed at the beginning of the next end step via a delayed trigger set up by the same ability.",
+   "script_evidence": "NumCopies$ X | PumpKeywords$ Haste | AtEOT$ Sacrifice",
+   "status": "PROVISIONAL"
+  },
+  "devotion_scaled_mana": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Nykthos, Shrine to Nyx"
+   ],
+   "definition": "An activated mana ability whose output equals your devotion to a chosen color rather than a fixed amount.",
+   "script_evidence": "SVar:X:Count$Devotion.Chosen",
+   "status": "PROVISIONAL"
+  },
+  "discard_land_to_enter": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Mox Diamond"
+   ],
+   "definition": "A replacement effect on entering the battlefield requiring a land card to be discarded, otherwise the permanent is put into the graveyard instead.",
+   "script_evidence": "SVar:PayBeforeETB:DB$ Discard | DiscardValid$ Land | Mode$ TgtChoose | RememberDiscarded$ True | Optional$ True",
+   "status": "PROVISIONAL"
+  },
+  "does_not_untap": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Basalt Monolith",
+    "Grim Monolith",
+    "Mana Vault"
+   ],
+   "definition": "A replacement effect that prevents this permanent from untapping during its controller's untap step.",
+   "script_evidence": "R:Event$ Untap | ValidCard$ Card.Self | ValidStepTurnToController$ You | Layer$ CantHappen",
+   "status": "PROVISIONAL"
+  },
+  "draw_step_trigger": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Sylvan Library"
+   ],
+   "definition": "A trigger that fires at the beginning of its controller's draw step.",
+   "script_evidence": "T:Mode$ Phase | Phase$ Draw | ValidPlayer$ You",
+   "status": "PROVISIONAL"
+  },
+  "enters_as_copy": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Cursed Mirror"
+   ],
+   "definition": "A replacement effect applied as the permanent enters that makes it enter as a copy of a chosen creature already on the battlefield.",
+   "script_evidence": "K:ETBReplacement:Copy:DBCopy:Optional",
+   "status": "PROVISIONAL"
+  },
+  "enters_with_x_counters": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Genesis Hydra",
+    "Goldvein Hydra"
+   ],
+   "definition": "The permanent enters the battlefield with a number of +1/+1 counters equal to the X paid in its mana cost.",
+   "script_evidence": "K:etbCounter:P1P1:X",
+   "status": "PROVISIONAL"
+  },
+  "extra_combat_phase": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Fear of Missing Out"
+   ],
+   "definition": "Adds an additional combat phase after the current phase.",
+   "script_evidence": "DB$ AddPhase | ExtraPhase$ Combat | AfterPhase$ EndCombat",
+   "status": "PROVISIONAL"
+  },
+  "extra_turn": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Nexus of Fate"
+   ],
+   "definition": "A spell that adds an additional turn after the current one.",
+   "script_evidence": "SP$ AddTurn | NumTurns$ 1",
+   "status": "PROVISIONAL"
+  },
+  "fight_removal": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Bridgeworks Battle",
+    "Khalni Ambush"
+   ],
+   "definition": "Removal that resolves as a mutual damage exchange between a creature you control and a creature you don't, sized by their powers.",
+   "script_evidence": "SVar:DBFight:DB$ Fight | Defined$ ParentTarget | ValidTgts$ Creature.YouDontCtrl",
+   "status": "PROVISIONAL"
+  },
+  "flash_grant": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Emergence Zone"
+   ],
+   "definition": "Creates an effect letting you cast spells this turn as though they had flash, changing timing permission only.",
+   "script_evidence": "SVar:QuickSpell:Mode$ CastWithFlash | ValidCard$ Card | ValidSA$ Spell | Caster$ You",
+   "status": "PROVISIONAL"
+  },
+  "flashback_recast": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Echo of Eons"
+   ],
+   "definition": "A keyword on this card allowing it to be cast from your graveyard for an alternative cost, then exiled.",
+   "script_evidence": "K:Flashback:2 U",
+   "status": "PROVISIONAL"
+  },
+  "foretell": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Cosmic Intervention",
+    "Doomskar"
+   ],
+   "definition": "The card may be exiled face down from hand for {2} on an earlier turn and cast on a later turn for a cheaper foretell cost.",
+   "script_evidence": "K:Foretell:1 W",
+   "status": "PROVISIONAL"
+  },
+  "free_alternative_cost": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Fierce Guardianship",
+    "Force of Negation",
+    "Force of Will"
+   ],
+   "definition": "A static alternative cost letting this spell be cast for {0} while a stated condition holds.",
+   "script_evidence": "Cost$ 0 | EffectZone$ All | IsPresent$ Card.IsCommander+YouCtrl",
+   "status": "PROVISIONAL"
+  },
+  "graveyard_copy_activated": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Shifting Woodland"
+   ],
+   "definition": "A repeatable activated ability that makes this permanent become a copy of a target permanent card in a graveyard until end of turn.",
+   "script_evidence": "AB$ Clone | Cost$ 2 G G | TgtZone$ Graveyard",
+   "status": "PROVISIONAL"
+  },
+  "graveyard_recast_cost_reduced_by_power": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Nature's Rhythm"
+   ],
+   "definition": "A keyword granting a second cast of this card from the graveyard for an alternative cost that may be reduced by generic mana equal to the power of a creature you tap.",
+   "script_evidence": "K:Harmonize:X G G G G",
+   "status": "PROVISIONAL"
+  },
+  "graveyard_replacement_shuffle": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Nexus of Fate"
+   ],
+   "definition": "A replacement effect that shuffles this card into its owner's library instead of letting it reach the graveyard.",
+   "script_evidence": "R:Event$ Moved | Destination$ Graveyard | ValidCard$ Card.Self | ReplaceWith$ DBShuffle",
+   "status": "PROVISIONAL"
+  },
+  "improvise_grant": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Archway of Innovation"
+   ],
+   "definition": "Grants the improvise keyword to the next spell you cast this turn, letting untapped artifacts be tapped to pay generic mana for it.",
+   "script_evidence": "AddKeyword$ Improvise",
+   "status": "PROVISIONAL"
+  },
+  "indestructible_static": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "The One Ring"
+   ],
+   "definition": "A permanent with the printed Indestructible keyword, which survives any DestroyAll effect.",
+   "script_evidence": "K:Indestructible",
+   "status": "PROVISIONAL"
+  },
+  "investigate": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Wojek Investigator"
+   ],
+   "definition": "A trigger that creates Clue artifact tokens, each of which can later be sacrificed for {2} to draw a card.",
+   "script_evidence": "SVar:TrigInvestigate:DB$ Investigate | Num$ X",
+   "status": "PROVISIONAL"
+  },
+  "land_animation": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Destiny Spinner"
+   ],
+   "definition": "An activated ability that turns a land you control into a creature whose power and toughness are derived from a board count.",
+   "script_evidence": "A:AB$ Animate | Cost$ 3 G | ValidTgts$ Land.YouCtrl | TgtPrompt$ Select target land you control | Power$ X | Toughness$ X | Types$ Creature,Elemental | Keywords$ Trample & Haste",
+   "status": "PROVISIONAL"
+  },
+  "land_aura_mana_boost": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Fertile Ground"
+   ],
+   "definition": "An Aura that adds extra mana through a TapsForMana trigger on the enchanted land, rather than through an activated ability of its own.",
+   "script_evidence": "T:Mode$ TapsForMana | ValidCard$ Card.AttachedBy | Execute$ TrigMana | Static$ True",
+   "status": "PROVISIONAL"
+  },
+  "land_mana_amplifier": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Overgrowth"
+   ],
+   "definition": "A static triggered ability on an Aura that adds extra mana whenever the enchanted land is tapped for mana.",
+   "script_evidence": "T:Mode$ TapsForMana | ValidCard$ Card.AttachedBy | Execute$ TrigMana | Static$ True",
+   "status": "PROVISIONAL"
+  },
+  "land_type_granter": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Yavimaya, Cradle of Growth"
+   ],
+   "definition": "A static ability that adds a land subtype to every land on the battlefield.",
+   "script_evidence": "Affected$ Land | AddType$ Forest",
+   "status": "PROVISIONAL"
+  },
+  "life_for_cost_reduction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Defiler of Vigor"
+   ],
+   "definition": "An optional additional cost of paying life that reduces a spell's cost by a specific colored mana symbol.",
+   "script_evidence": "S:Mode$ OptionalCost | ValidCard$ Permanent.Green | ValidSA$ Spell | Activator$ You | Cost$ PayLife<2> | ReduceColor$ G",
+   "status": "PROVISIONAL"
+  },
+  "life_gain_per_spell_cast": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Aetherflux Reservoir"
+   ],
+   "definition": "A cast trigger that gains life equal to the running count of spells cast this turn, so life gained grows quadratically with the number of casts in a turn.",
+   "script_evidence": "SVar:X:Count$ThisTurnCast_Card.YouCtrl",
+   "status": "PROVISIONAL"
+  },
+  "lifegain": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Righteous Valkyrie",
+    "Seraph Sanctuary",
+    "Serra Paragon"
+   ],
+   "definition": "An effect that causes you to gain a quantity of life.",
+   "script_evidence": "SVar:TrigGainLife:DB$ GainLife | Defined$ You | LifeAmount$ X",
+   "status": "PROVISIONAL"
+  },
+  "lifegain_effect": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Archivist of Oghma",
+    "Battle Angels of Tyr",
+    "Inspiring Overseer"
+   ],
+   "definition": "An effect that causes its controller to gain life.",
+   "script_evidence": "SVar:TrigGainLife:DB$ GainLife | LifeAmount$ 1 | SubAbility$ DBDraw",
+   "status": "PROVISIONAL"
+  },
+  "lifegain_payoff": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Resplendent Angel",
+    "Righteous Valkyrie",
+    "Serra Ascendant"
+   ],
+   "definition": "A trigger or static ability whose effect is gated on life gained this turn or on current life total relative to a threshold.",
+   "script_evidence": "CheckSVar$ YouLifeGained | SVarCompare$ GE5",
+   "status": "PROVISIONAL"
+  },
+  "lifegain_trigger": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Archangel of Thune",
+    "Exemplar of Light",
+    "Heliod, Sun-Crowned"
+   ],
+   "definition": "A triggered ability that fires whenever its controller gains life.",
+   "script_evidence": "T:Mode$ LifeGained | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ TrigPutCounter",
+   "status": "PROVISIONAL"
+  },
+  "lifelink_grant": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Heliod, Sun-Crowned"
+   ],
+   "definition": "A repeatable activated ability that grants lifelink to another creature.",
+   "script_evidence": "A:AB$ Pump | Cost$ 1 W | ValidTgts$ Creature.Other | KW$ Lifelink",
+   "status": "PROVISIONAL"
+  },
+  "mana_amplifier_aura": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Utopia Sprawl",
+    "Wild Growth",
+    "Wolfwillow Haven"
+   ],
+   "definition": "A permanent attached to a land that triggers when that land is tapped for mana and adds additional mana, rather than producing mana through an activated ability of its own.",
+   "script_evidence": "Mode$ TapsForMana | ValidCard$ Card.AttachedBy",
+   "status": "PROVISIONAL"
+  },
+  "mana_pool_persistence": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Omnath, Locus of Mana"
+   ],
+   "definition": "A static effect that stops mana of a given type from emptying from your mana pool as steps and phases end.",
+   "script_evidence": "S:Mode$ UnspentMana | ValidPlayer$ You | ManaType$ Green",
+   "status": "PROVISIONAL"
+  },
+  "manland_animate": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Lair of the Hydra"
+   ],
+   "definition": "An activated ability that turns this land into an X/X creature until end of turn, where X is the mana paid.",
+   "script_evidence": "A:AB$ Animate | Cost$ X G XMin1 | Defined$ Self | Power$ X | Toughness$ X",
+   "status": "PROVISIONAL"
+  },
+  "mass_bounce": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Wash Out"
+   ],
+   "definition": "A spell that returns every permanent matching a chosen filter from the battlefield to its owner's hand.",
+   "script_evidence": "DB$ ChangeZoneAll | ChangeType$ Permanent.ChosenColor | Origin$ Battlefield | Destination$ Hand",
+   "status": "PROVISIONAL"
+  },
+  "mass_bounce_overload": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Cyclonic Rift"
+   ],
+   "definition": "A targeted bounce spell with an alternative overload cost that replaces targeting with an each-permanent one-sided sweep.",
+   "script_evidence": "K:Overload:6 U",
+   "status": "PROVISIONAL"
+  },
+  "mass_control_return": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Homeward Path"
+   ],
+   "definition": "An activated ability that returns every creature to the control of its owner.",
+   "script_evidence": "A:AB$ GainControlVariant | Cost$ T | AILogic$ GainControlOwns | AllValid$ Creature | ChangeController$ CardOwner",
+   "status": "PROVISIONAL"
+  },
+  "mass_damage_all_creatures": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Blasphemous Act"
+   ],
+   "definition": "A single untargeted spell ability that deals a fixed amount of damage to every creature on the battlefield, including the caster's own.",
+   "script_evidence": "A:SP$ DamageAll | NumDmg$ 13 | ValidCards$ Creature",
+   "status": "PROVISIONAL"
+  },
+  "mass_destroy_creatures": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Catastrophe",
+    "Doomskar",
+    "Final Showdown"
+   ],
+   "definition": "A one-shot spell effect that destroys every creature on the battlefield, including the caster's own.",
+   "script_evidence": "SVar:DBKillCreatures:DB$ DestroyAll | ValidCards$ Creature | NoRegen$ True",
+   "status": "PROVISIONAL"
+  },
+  "mass_destroy_lands": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Armageddon",
+    "Catastrophe"
+   ],
+   "definition": "A one-shot spell effect that destroys every land on the battlefield, including the caster's own.",
+   "script_evidence": "SP$ DestroyAll | ValidCards$ Land",
+   "status": "PROVISIONAL"
+  },
+  "mass_destroy_nonland_permanents": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Hour of Revelation"
+   ],
+   "definition": "A one-shot spell effect that destroys every nonland permanent on the battlefield, including the caster's own artifacts and enchantments.",
+   "script_evidence": "A:SP$ DestroyAll | ValidCards$ Permanent.nonLand",
+   "status": "PROVISIONAL"
+  },
+  "mass_destruction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Ondu Inversion",
+    "Vanquish the Horde"
+   ],
+   "definition": "A one-shot spell ability that destroys every permanent matching a type filter with no target selection.",
+   "script_evidence": "SP$ DestroyAll | ValidCards$ Permanent.nonLand",
+   "status": "PROVISIONAL"
+  },
+  "mass_exile": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Farewell"
+   ],
+   "definition": "A one-shot spell effect that moves every permanent of a chosen type from the battlefield to exile rather than destroying it.",
+   "script_evidence": "SVar:ExileAllCreatures:DB$ ChangeZoneAll | ChangeType$ Creature | Origin$ Battlefield | Destination$ Exile",
+   "status": "PROVISIONAL"
+  },
+  "mass_indestructible_grant": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Akroma's Will",
+    "Avacyn, Angel of Hope",
+    "Flare of Fortitude",
+    "Flawless Maneuver",
+    "Grand Crescendo"
+   ],
+   "definition": "Grants indestructible to every creature or permanent its controller controls.",
+   "script_evidence": "DB$ PumpAll | ValidCards$ Creature.YouCtrl | KW$ Lifelink & Indestructible & Protection from each color",
+   "status": "PROVISIONAL"
+  },
+  "mass_phase_out": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Teferi's Protection"
+   ],
+   "definition": "An effect that phases out every permanent you control at once, removing them from the battlefield's existence until your next untap step.",
+   "script_evidence": "SVar:DBPhases:DB$ Phases | Defined$ Valid Permanent.YouCtrl",
+   "status": "PROVISIONAL"
+  },
+  "mass_protection": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Smuggler's Surprise"
+   ],
+   "definition": "An effect granting hexproof and/or indestructible to a group of creatures without altering their power or toughness.",
+   "script_evidence": "KW$ Hexproof & Indestructible",
+   "status": "PROVISIONAL"
+  },
+  "mass_untap_nonland": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Dramatic Reversal"
+   ],
+   "definition": "Untaps every nonland permanent you control at once, with no target and no per-permanent cost.",
+   "script_evidence": "A:SP$ UntapAll | ValidCards$ Permanent.nonLand+YouCtrl",
+   "status": "PROVISIONAL"
+  },
+  "meld_transform": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Gisela, the Broken Blade"
+   ],
+   "definition": "Exiles two specified permanents its controller owns and controls and replaces them with a single melded card.",
+   "script_evidence": "SVar:Meld:DB$ Meld | Name$ Brisela, Voice of Nightmares | Primary$ Gisela, the Broken Blade | Secondary$ Bruna, the Fading Light",
+   "status": "PROVISIONAL"
+  },
+  "modal_dfc": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Ondu Inversion",
+    "Witch Enchanter"
+   ],
+   "definition": "A double-faced card whose alternate face is a land that can be played instead of casting the front face.",
+   "script_evidence": "AlternateMode:Modal",
+   "status": "PROVISIONAL"
+  },
+  "modal_dfc_land_back": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Glasspool Mimic",
+    "Jwari Disruption"
+   ],
+   "definition": "A double-faced card whose alternate face is a land that can be played as a land drop instead of casting the front face.",
+   "script_evidence": "AlternateMode:Modal",
+   "status": "PROVISIONAL"
+  },
+  "noncombat_damage_doubler": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Solphim, Mayhem Dominus"
+   ],
+   "definition": "A static replacement effect that doubles the amount of noncombat damage sources you control deal to opponents and permanents they control.",
+   "script_evidence": "SVar:X:ReplaceCount$DamageAmount/Twice",
+   "status": "PROVISIONAL"
+  },
+  "noncombat_damage_trigger": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Chandra's Incinerator"
+   ],
+   "definition": "A battlefield trigger that fires whenever a source its controller controls deals noncombat damage to an opponent, and redirects that same amount at a creature or planeswalker that opponent controls.",
+   "script_evidence": "T:Mode$ DamageDone | ValidSource$ Card.YouCtrl,Emblem.YouCtrl | ValidTarget$ Opponent | CombatDamage$ False",
+   "status": "PROVISIONAL"
+  },
+  "one_shot_sacrifice_mana": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Lotus Petal"
+   ],
+   "definition": "A mana ability whose activation cost includes sacrificing the source, so it can be used at most once.",
+   "script_evidence": "A:AB$ Mana | Cost$ T Sac<1/CARDNAME> | Produced$ Any",
+   "status": "PROVISIONAL"
+  },
+  "opening_hand_battlefield_start": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Gemstone Caverns"
+   ],
+   "definition": "A replacement effect applied before the first turn that puts this card onto the battlefield from the opening hand at the cost of exiling another card from hand.",
+   "script_evidence": "K:MayEffectFromOpeningHand:FromOpeningHand:!PlayFirst",
+   "status": "PROVISIONAL"
+  },
+  "opening_hand_free_start": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Gemstone Caverns"
+   ],
+   "definition": "A keyword letting this card begin the game already on the battlefield from your opening hand when you are not the starting player, at the cost of exiling another card.",
+   "script_evidence": "K:MayEffectFromOpeningHand:FromOpeningHand:!PlayFirst",
+   "status": "PROVISIONAL"
+  },
+  "opponent_cant_cast": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Ranger-Captain of Eos",
+    "Silence"
+   ],
+   "definition": "An effect that installs a CantBeCast static locking opponents out of casting for the turn.",
+   "script_evidence": "Mode$ CantBeCast | ValidCard$ Card.nonCreature | Caster$ Opponent",
+   "status": "PROVISIONAL"
+  },
+  "opponent_cast_restriction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Tidal Barracuda"
+   ],
+   "definition": "A static effect that prevents opponents from casting spells under a stated condition.",
+   "script_evidence": "S:Mode$ CantBeCast | ValidCard$ Card | Condition$ PlayerTurn | Caster$ Opponent",
+   "status": "PROVISIONAL"
+  },
+  "opponent_draw_damage_trigger": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Razorkin Needlehead"
+   ],
+   "definition": "A trigger that fires once per card an opponent draws and deals damage to that specific opponent.",
+   "script_evidence": "T:Mode$ Drawn | ValidCard$ Card.OppOwn | TriggerZones$ Battlefield | Execute$ TrigDamage",
+   "status": "PROVISIONAL"
+  },
+  "opponent_draw_trigger": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Consecrated Sphinx"
+   ],
+   "definition": "A triggered ability that fires each time an opponent draws a card, rather than on a phase, cast, or zone-change event.",
+   "script_evidence": "T:Mode$ Drawn | ValidCard$ Card.OppOwn | TriggerZones$ Battlefield",
+   "status": "PROVISIONAL"
+  },
+  "opponent_restriction_static": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Drannith Magistrate",
+    "Grand Abolisher",
+    "Linvala, Keeper of Silence"
+   ],
+   "definition": "A static ability that prevents opponents from casting spells or activating abilities.",
+   "script_evidence": "S:Mode$ CantBeCast | ValidCard$ Card.!wasCastFromTheirHand | Caster$ Opponent",
+   "status": "PROVISIONAL"
+  },
+  "p1p1_counter_placer": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Archangel of Thune",
+    "Exemplar of Light",
+    "Giada, Font of Hope",
+    "Heliod, Sun-Crowned",
+    "Herald of War"
+   ],
+   "definition": "Puts one or more +1/+1 counters on creatures its controller controls.",
+   "script_evidence": "DB$ PutCounterAll | ValidCards$ Creature.YouCtrl | CounterType$ P1P1 | CounterNum$ 1",
+   "status": "PROVISIONAL"
+  },
+  "permanent_pump_counter": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Archdruid's Charm",
+    "Defiler of Vigor"
+   ],
+   "definition": "An effect that raises a creature's power via +1/+1 counters, which persist across turns rather than expiring at end of turn.",
+   "script_evidence": "SVar:DBPutCounter:DB$ PutCounter | ValidTgts$ Creature.YouCtrl | CounterType$ P1P1",
+   "status": "PROVISIONAL"
+  },
+  "permanent_removal": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Vandalblast"
+   ],
+   "definition": "A spell that destroys one or more permanents matching a ValidTgts restriction.",
+   "script_evidence": "SP$ Destroy | ValidTgts$ Artifact.YouDontCtrl",
+   "status": "PROVISIONAL"
+  },
+  "phase_based_mass_untap": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Unwinding Clock"
+   ],
+   "definition": "A static effect that untaps a set of permanents automatically during a specified step, with no activation and no cost.",
+   "script_evidence": "S:Mode$ UntapOtherPlayer | ValidCard$ Artifact.YouCtrl",
+   "status": "PROVISIONAL"
+  },
+  "phase_out_own_permanents": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Clever Concealment"
+   ],
+   "definition": "Makes any number of the caster's own nonland permanents phase out until their controller's next turn.",
+   "script_evidence": "SP$ Phases | ValidTgts$ Permanent.nonLand+YouCtrl | TgtPrompt$ Select any number of target nonland permanents you control",
+   "status": "PROVISIONAL"
+  },
+  "postcombat_mana_trigger": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Neheb, the Eternal"
+   ],
+   "definition": "A triggered ability that fires at the beginning of each of the controller's postcombat main phases and adds mana equal to the total life opponents have lost this turn.",
+   "script_evidence": "T:Mode$ Phase | Phase$ Main2 | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ TrigMana",
+   "status": "PROVISIONAL"
+  },
+  "power_from_floating_mana": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Omnath, Locus of Mana"
+   ],
+   "definition": "A static effect that gives this creature +1/+1 for each unspent mana of a given type in your mana pool.",
+   "script_evidence": "SVar:X:Count$ManaPool:green",
+   "status": "PROVISIONAL"
+  },
+  "power_scaled_draw": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Disciple of Freyalise"
+   ],
+   "definition": "Draws a number of cards equal to a creature's power rather than a fixed amount.",
+   "script_evidence": "SVar:DBDraw:DB$ Draw | NumCards$ X\nSVar:X:Sacrificed$CardPower",
+   "status": "PROVISIONAL"
+  },
+  "random_discard_self": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Gamble"
+   ],
+   "definition": "You discard a card chosen at random from your own hand as part of the effect's resolution.",
+   "script_evidence": "SVar:DBDiscard:DB$ Discard | Defined$ You | NumCards$ 1 | Mode$ Random",
+   "status": "PROVISIONAL"
+  },
+  "reflected_mana_ability": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Chrome Mox",
+    "Mox Amber"
+   ],
+   "definition": "A mana ability whose producible colours are derived at resolution from another object's colours, producing nothing when no such object exists.",
+   "script_evidence": "A:AB$ ManaReflected | Cost$ T | Valid$ Defined.Imprinted | ColorOrType$ Color | ReflectProperty$ Is",
+   "status": "PROVISIONAL"
+  },
+  "restricted_indestructible_grant": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Emeria's Call"
+   ],
+   "definition": "Grants indestructible only to a filtered subset of the creatures its controller controls, not to the whole board.",
+   "script_evidence": "SVar:DBPumpAll:DB$ PumpAll | ValidCards$ Creature.nonAngel+YouCtrl | KW$ Indestructible | Duration$ UntilYourNextTurn",
+   "status": "PROVISIONAL"
+  },
+  "restricted_mana": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Throne of Eldraine"
+   ],
+   "definition": "A mana ability whose output may only be spent on spells matching a restriction filter.",
+   "script_evidence": "RestrictValid$ Spell.ChosenColor+MonoColor",
+   "status": "PROVISIONAL"
+  },
+  "restricted_mana_use": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Castle Garenbrig",
+    "Delighted Halfling"
+   ],
+   "definition": "A mana ability whose output carries a RestrictValid clause limiting which spells or abilities the mana may be spent on.",
+   "script_evidence": "A:AB$ Mana | Cost$ 2 G G T | Produced$ G | Amount$ 6 | RestrictValid$ Spell.Creature,Activated.Creature+inZoneBattlefield",
+   "status": "PROVISIONAL"
+  },
+  "restricted_use_mana": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Cavern of Souls",
+    "Mishra's Workshop"
+   ],
+   "definition": "A mana ability whose output carries a RestrictValid clause limiting it to a narrow class of spells and forbidding it from paying for activated abilities.",
+   "script_evidence": "RestrictValid$ Spell.Creature+ChosenType",
+   "status": "PROVISIONAL"
+  },
+  "restricted_use_mana_ability": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Cavern of Souls",
+    "Giada, Font of Hope"
+   ],
+   "definition": "A mana ability whose mana may only be spent on a restricted class of spells.",
+   "script_evidence": "AB$ Mana | Cost$ T | Produced$ Any | RestrictValid$ Spell.Creature+ChosenType | AddsNoCounter$ True",
+   "status": "PROVISIONAL"
+  },
+  "retarget_spell_or_ability": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Deflecting Swat"
+   ],
+   "definition": "Changes the targets of a spell or ability already on the stack.",
+   "script_evidence": "SP$ ChangeTargets | TargetType$ Spell,Activated,Triggered | Optional$ True | ValidTgts$ Card,Emblem",
+   "status": "PROVISIONAL"
+  },
+  "ritual_mana": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Mana Geyser"
+   ],
+   "definition": "A one-shot spell ability that adds mana on resolution, from the stack, with no permanent left behind to tap.",
+   "script_evidence": "A:SP$ Mana | Produced$ R | Amount$ X",
+   "status": "PROVISIONAL"
+  },
+  "sacrifice_creature_cost": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Greater Good",
+    "Life's Legacy",
+    "Momentous Fall"
+   ],
+   "definition": "An ability whose activation cost includes sacrificing a creature you control.",
+   "script_evidence": "Cost$ Sac<1/Creature>",
+   "status": "PROVISIONAL"
+  },
+  "saga_chapter_progression": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Urza's Saga"
+   ],
+   "definition": "A permanent that gains its abilities in sequence as lore counters accumulate and sacrifices itself after the final chapter.",
+   "script_evidence": "K:Chapter:3:Animate1,Animate2,Tutor",
+   "status": "PROVISIONAL"
+  },
+  "self_activation_cost_reduction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Boseiju, Who Endures"
+   ],
+   "definition": "A card whose own activated ability costs less to activate based on a board count, with no effect on the cost of other spells or abilities.",
+   "script_evidence": "ReduceCost$ X | ActivationZone$ Hand",
+   "status": "PROVISIONAL"
+  },
+  "self_alternative_cost": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Deflecting Swat",
+    "Flare of Duplication"
+   ],
+   "definition": "A static alternative cost on the card itself allowing it to be cast for a cost other than its mana cost when a stated condition holds.",
+   "script_evidence": "Mode$ AlternativeCost | ValidSA$ Spell | ValidCard$ Card.Self | ValidPlayer$ You | Cost$ 0",
+   "status": "PROVISIONAL"
+  },
+  "self_bounce_mana_ability": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Grinning Ignus"
+   ],
+   "definition": "An activated mana ability whose cost returns its own source permanent to its owner's hand, so each subsequent activation first requires paying the card's full mana cost to recast it.",
+   "script_evidence": "Cost$ R Return<1/CARDNAME>",
+   "status": "PROVISIONAL"
+  },
+  "self_bounce_repeatable": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Temur Sabertooth"
+   ],
+   "definition": "A repeatable activated ability that returns another creature you control from the battlefield to its owner's hand.",
+   "script_evidence": "AB$ ChangeZone | Cost$ 1 G | Origin$ Battlefield | Destination$ Hand",
+   "status": "PROVISIONAL"
+  },
+  "self_cost_reduction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Gnoll War Band"
+   ],
+   "definition": "A static ability on the card itself that reduces its own casting cost by a variable amount computed from game state.",
+   "script_evidence": "S:Mode$ ReduceCost | ValidCard$ Card.Self | Type$ Spell | Amount$ X",
+   "status": "PROVISIONAL"
+  },
+  "self_cost_reduction_affinity": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Emry, Lurker of the Loch"
+   ],
+   "definition": "A keyword reducing only this card's own casting cost by the number of artifacts its controller controls.",
+   "script_evidence": "K:Affinity:Artifact",
+   "status": "PROVISIONAL"
+  },
+  "self_counter_accumulator": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Managorger Hydra"
+   ],
+   "definition": "A triggered ability that puts a +1/+1 counter on this permanent each time its trigger condition occurs, permanently raising its power.",
+   "script_evidence": "SVar:TrigPutCounter:DB$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1",
+   "status": "PROVISIONAL"
+  },
+  "self_flicker_loop": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Norin the Wary"
+   ],
+   "definition": "A triggered ability that exiles this permanent and, via a chained delayed trigger, returns it to the battlefield at the beginning of the next end step, producing a free repeated enters-the-battlefield event.",
+   "script_evidence": "Destination$ Exile | RememberChanged$ True | SubAbility$ DelTrig",
+   "status": "PROVISIONAL"
+  },
+  "self_mill": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Emry, Lurker of the Loch"
+   ],
+   "definition": "Moves a fixed number of cards from the top of your own library to your graveyard.",
+   "script_evidence": "SVar:TrigMill:DB$ Mill | NumCards$ 4 | Defined$ You",
+   "status": "PROVISIONAL"
+  },
+  "set_base_power_toughness": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Allosaurus Shepherd"
+   ],
+   "definition": "An effect that sets affected creatures' base power and toughness to a fixed value rather than applying an additive modifier.",
+   "script_evidence": "A:AB$ AnimateAll | Cost$ 4 G G | ValidCards$ Creature.Elf+YouCtrl | Power$ 5 | Toughness$ 5",
+   "status": "PROVISIONAL"
+  },
+  "shroud_grant": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Lightning Greaves"
+   ],
+   "definition": "Grants the equipped creature shroud, making it untargetable by any spell or ability, including its controller's own.",
+   "script_evidence": "AddKeyword$ Haste & Shroud",
+   "status": "PROVISIONAL"
+  },
+  "single_target_indestructible_grant": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Final Showdown"
+   ],
+   "definition": "Grants indestructible to exactly one creature its controller chooses.",
+   "script_evidence": "SVar:DBPump:DB$ Pump | Defined$ ChosenCard | KW$ Indestructible",
+   "status": "PROVISIONAL"
+  },
+  "spell_copy": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Dualcaster Mage",
+    "Flare of Duplication",
+    "Reiterate",
+    "Return the Favor"
+   ],
+   "definition": "Copies a target instant or sorcery spell currently on the stack, optionally with new targets.",
+   "script_evidence": "DB$ CopySpellAbility | ValidTgts$ Instant,Sorcery | TargetType$ Spell | MayChooseTarget$ True",
+   "status": "PROVISIONAL"
+  },
+  "spell_cost_reduction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Ruby Medallion"
+   ],
+   "definition": "A static effect that reduces the generic mana cost of qualifying spells you cast by a fixed amount.",
+   "script_evidence": "S:Mode$ ReduceCost | ValidCard$ Card.Red | Type$ Spell | Activator$ You | Amount$ 1",
+   "status": "PROVISIONAL"
+  },
+  "spell_uncounterable_static": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Allosaurus Shepherd",
+    "Destiny Spinner",
+    "Frenzied Baloth"
+   ],
+   "definition": "A static replacement effect that makes a defined set of spells unable to be countered.",
+   "script_evidence": "R:Event$ Counter | ValidSA$ Spell.Green+YouCtrl | Layer$ CantHappen | ActiveZones$ Battlefield",
+   "status": "PROVISIONAL"
+  },
+  "static_anthem": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Angel of Jubilation",
+    "Lyra Dawnbringer",
+    "Righteous Valkyrie"
+   ],
+   "definition": "A continuous static modifier that increases the power and toughness of other creatures its controller controls.",
+   "script_evidence": "S:Mode$ Continuous | Affected$ Creature.nonBlack+Other+YouCtrl | AddPower$ 1 | AddToughness$ 1",
+   "status": "PROVISIONAL"
+  },
+  "static_cast_restriction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Dosan the Falling Leaf"
+   ],
+   "definition": "A static effect that prevents players from casting spells while they are not the active player.",
+   "script_evidence": "S:Mode$ CantBeCast | ValidCard$ Card | Caster$ Player.NonActive",
+   "status": "PROVISIONAL"
+  },
+  "symmetric_cost_restriction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Angel of Jubilation"
+   ],
+   "definition": "A static ability that stops ALL players, including its controller, from paying life or sacrificing creatures as a cost.",
+   "script_evidence": "S:Mode$ CantPayLife | ValidPlayer$ Player | ValidCause$ Spell,Activated | ForCost$ True",
+   "status": "PROVISIONAL"
+  },
+  "symmetric_draw_step_trigger": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Howling Mine"
+   ],
+   "definition": "A triggered ability that fires at the beginning of each player's draw step, including opponents', conditional on this permanent being untapped.",
+   "script_evidence": "T:Mode$ Phase | Phase$ Draw | ValidPlayer$ Player",
+   "status": "PROVISIONAL"
+  },
+  "symmetric_wheel": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Reforge the Soul"
+   ],
+   "definition": "Every player, including opponents, discards their hand and then draws a fixed number of cards.",
+   "script_evidence": "SVar:DBEachDraw:DB$ Draw | Defined$ Player | NumCards$ 7",
+   "status": "PROVISIONAL"
+  },
+  "target_redirect": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Return the Favor"
+   ],
+   "definition": "Changes the target of a target spell or ability that has a single target.",
+   "script_evidence": "DB$ ChangeTargets | ModeCost$ 1 | TargetType$ SpellAbility.singleTarget",
+   "status": "PROVISIONAL"
+  },
+  "targeted_permanent_answer": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Chaos Warp"
+   ],
+   "definition": "A targeted spell that removes any one permanent from the battlefield by shuffling it into its owner's library, then reveals that owner's top card and puts it onto the battlefield if it is a permanent card.",
+   "script_evidence": "A:SP$ ChangeZone | Origin$ Battlefield | Destination$ Library | ValidTgts$ Permanent",
+   "status": "PROVISIONAL"
+  },
+  "targeted_permanent_destroy": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Wild Magic Surge"
+   ],
+   "definition": "A spell ability that destroys one targeted permanent an opponent controls.",
+   "script_evidence": "SP$ Destroy | ValidTgts$ Permanent.OppCtrl",
+   "status": "PROVISIONAL"
+  },
+  "targeted_protection_grant": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Giver of Runes"
+   ],
+   "definition": "A repeatable ability that gives one other creature its controller controls protection from a chosen color or from colorless.",
+   "script_evidence": "A:AB$ Protection | Cost$ T | ValidTgts$ Creature.Other+YouCtrl | TgtPrompt$ Select target creature you control | Gains$ Choice",
+   "status": "PROVISIONAL"
+  },
+  "treasure_maker": {
+   "recurrence_decks": 1,
+   "decks": [
+    "giada-font-of-hope"
+   ],
+   "cards": [
+    "Smothering Tithe"
+   ],
+   "definition": "An effect that creates Treasure tokens, which are sacrificial one-shot any-color mana sources rather than bodies.",
+   "script_evidence": "TokenScript$ c_a_treasure_sac",
+   "status": "PROVISIONAL"
+  },
+  "tutor_to_battlefield": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Arcum Dagsson"
+   ],
+   "definition": "A library search whose found card is put directly onto the battlefield rather than into hand, and which resolves for the controller of the sacrificed creature.",
+   "script_evidence": "Origin$ Library | Destination$ Battlefield | ChangeType$ Artifact.nonCreature",
+   "status": "PROVISIONAL"
+  },
+  "tutor_to_hand": {
+   "recurrence_decks": 1,
+   "decks": [
+    "purphoros-god-of-the-forge2"
+   ],
+   "cards": [
+    "Gamble",
+    "Reckless Handling"
+   ],
+   "definition": "Searches your library for a card and puts it into your hand.",
+   "script_evidence": "SP$ ChangeZone | Origin$ Library | NoShuffle$ True | Destination$ Hand | ChangeType$ Card | ChangeNum$ 1",
+   "status": "PROVISIONAL"
+  },
+  "uncounterable_grant": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Mistrise Village"
+   ],
+   "definition": "Creates a delayed effect making the next spell you cast this turn unable to be countered.",
+   "script_evidence": "SVar:AntiMagic:Event$ Counter | ValidCard$ Card.IsRemembered | ValidSA$ Spell | Layer$ CantHappen",
+   "status": "PROVISIONAL"
+  },
+  "untap_all_each_opponent_turn": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Seedborn Muse"
+   ],
+   "definition": "A static ability that untaps all permanents its controller controls during every other player's untap step, with no cost and no activation.",
+   "script_evidence": "Mode$ UntapOtherPlayer | ValidCard$ Permanent.YouCtrl",
+   "status": "PROVISIONAL"
+  },
+  "untap_cost_ability": {
+   "recurrence_decks": 1,
+   "decks": [
+    "selvala-heart-of-the-wilds"
+   ],
+   "cards": [
+    "Umbral Mantle"
+   ],
+   "definition": "An activated ability whose cost includes the untap symbol, requiring the permanent to be tapped-to-untap as payment rather than untapping anything as an effect.",
+   "script_evidence": "Cost$ 3 Q",
+   "status": "PROVISIONAL"
+  },
+  "untap_restriction": {
+   "recurrence_decks": 1,
+   "decks": [
+    "urza-lord-high-artificer"
+   ],
+   "cards": [
+    "Static Orb",
+    "Winter Orb"
+   ],
+   "definition": "A static effect that caps how many permanents each player may untap during their untap step.",
+   "script_evidence": "AddKeyword$ UntapAdjust:Permanent:2",
+   "status": "PROVISIONAL"
+  }
+ }
+}
