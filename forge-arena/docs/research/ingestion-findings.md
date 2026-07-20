@@ -106,6 +106,54 @@ whether they ever mattered in a game.
 
 Both, with the per-card cache making the whole-deck pass affordable.
 
+## MEASURED: the script-extraction prototype
+
+Built as a throwaway (`scripts/capability-prototype.py`) to answer one
+question before committing to the Java work: how much of the blind spot does
+the structured script close with no LLM at all?
+
+| deck | nonland | understood before | after | still blind |
+|---|---|---|---|---|
+| Urza | 70 | 27 | **39** | 31 |
+| Selvala | 72 | 16 | **40** | 32 |
+| Purphoros | 68 | 20 | **38** | 30 |
+| Giada | 70 | 11 | **31** | 39 |
+
+**Coverage roughly doubles; for Selvala and Giada it nearly triples.** No
+LLM, no hallucination surface, ~25 regex patterns over structured fields.
+
+And the case that started this:
+
+```
+URZA CAPABILITIES: [etb_trigger, free_cast_grant,
+                    has_activated_ability, mana_ability]
+```
+
+`free_cast_grant` is found automatically. The ability that was invisible —
+that a human had to point out — falls out of parsing the file Forge already
+ships, with no rule written about Urza.
+
+### What the remaining blindness tells us
+
+The ~30-39 still-blind cards per deck parsed fine and matched none of the
+prototype's 25 patterns: Arcum Dagsson, Cloud Key, Consecrated Sphinx,
+Blasphemous Act, Archangel of Thune. Those are a cost reducer, a draw
+trigger, a board wipe — **all mechanically expressible; the prototype's
+vocabulary is simply thin.** So the residual gap is breadth of extraction,
+not a limit of the approach, and it is exactly the population PR-D (LLM
+enrichment) should be pointed at rather than at the whole deck.
+
+One real defect for the Java version: "Birgi, God of Storytelling (no script
+found)" — double-faced card names need proper normalization.
+
+### The capability histogram is itself a finding
+
+Across the four decks: `mana_ability` 36, `etb_trigger` 29,
+`mana_ability_big` 19, `cast_trigger` 17, `untap` 16. Those are precisely
+the raw materials our 8 combo archetypes are built from — which suggests
+archetype BINDING could eventually be derived from capabilities rather than
+hand-authored per combo.
+
 ## What this does to the Phase 8 planner question
 
 Phase 8 proposed typing combos with post-conditions to feed a backward
