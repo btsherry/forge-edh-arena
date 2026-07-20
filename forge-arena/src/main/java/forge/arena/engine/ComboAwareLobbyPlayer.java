@@ -36,6 +36,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         ComboPilot create(Player player);
     }
 
+    /**
+     * PR-58: run the alpha-strike prediction alongside the existing combat
+     * predicate and record both. Observation only — no decision reads it.
+     * On by default so batches produce the fidelity ledger; set
+     * {@code -Darena.predict.observe=false} to measure the wall-clock cost
+     * of having it off.
+     */
+    static final boolean PREDICT_OBSERVE =
+            !"false".equals(System.getProperty("arena.predict.observe"));
+
     private final PilotFactory pilotFactory;
 
     public ComboAwareLobbyPlayer(String name, PilotFactory pilotFactory) {
@@ -646,6 +656,13 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             // = stock combat untouched (inertness).
             if (attacker == player) {
                 int turn = getGame().getPhaseHandler().getTurn();
+                // PR-58 (Phase 7): predict, RECORD, decide nothing. We are
+                // already at declare-attackers here, which is the only moment
+                // the copy's combat can still be scripted — so this is the
+                // one seam where a real alpha-strike prediction is possible.
+                // Behaviour is unchanged until the fidelity ledger says the
+                // predictions are worth trusting.
+                observeAlphaPrediction(turn);
                 ComboPilot.CombatOrder order = pilot.combatOrder(
                         SeatViews.of(player, seatIndex, turn)).orElse(null);
                 if (order != null && scriptAttack(order, combat)) {
@@ -662,6 +679,54 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 }
             }
             super.declareAttackers(attacker, combat);
+        }
+
+        /**
+         * PR-58 (Phase 7 stage 2, the fidelity ledger): ask the engine
+         * whether attacking with everything kills anyone, and RECORD the
+         * answer next to what the existing predicate decided. Changes no
+         * decision.
+         *
+         * <p>This exists because an A/B win rate cannot tell a right
+         * prediction from a wrong one that happened to win anyway, and a
+         * confidently wrong prediction is worse than an honest proxy. The
+         * numbers this emits — how often the engine says "this kills" while
+         * the predicate says "do not attack" — are what decide whether the
+         * cutover is justified at all.
+         *
+         * <p>Gated on the cheap read-model so it costs nothing on the turns
+         * it cannot matter: no creatures, or not enough power on the board to
+         * kill the weakest opponent even unblocked.
+         */
+        private void observeAlphaPrediction(int turn) {
+            if (!PREDICT_OBSERVE) {
+                return;
+            }
+            int power = 0;
+            for (forge.game.card.Card c : player.getCreaturesInPlay()) {
+                if (forge.game.combat.CombatUtil.canAttack(c)) {
+                    power += Math.max(0, c.getNetPower());
+                }
+            }
+            int weakest = Integer.MAX_VALUE;
+            for (Player p : getGame().getPlayers()) {
+                if (p != player && !p.hasLost()) {
+                    weakest = Math.min(weakest, p.getLife());
+                }
+            }
+            if (power == 0 || weakest == Integer.MAX_VALUE || power < weakest) {
+                return; // cannot kill anyone even unblocked — nothing to ask
+            }
+            KillPredictor.Prediction p = KillPredictor.predictAlphaStrike(
+                    getGame(), player, pl -> getGame().getPlayers().indexOf(pl),
+                    KillPredictor.DEFAULT_TIMEOUT_MS);
+            pilot.observe(forge.arena.report.ArenaEvent.of("alpha_prediction", turn, seatIndex)
+                    .with("attack_ready_power", power)
+                    .with("weakest_opponent_life", weakest)
+                    .with("predicted_kill", p.killsSomeone())
+                    .with("predicted_dead_seats", p.deadSeats())
+                    .with("timed_out", p.timedOut())
+                    .with("elapsed_ms", p.elapsedMs()));
         }
 
         /**

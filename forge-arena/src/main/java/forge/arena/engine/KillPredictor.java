@@ -77,6 +77,108 @@ public final class KillPredictor {
     }
 
     /**
+     * Would attacking with EVERYTHING kill anyone? Must be called while the
+     * game is already at declare-attackers (i.e. from inside a
+     * {@code declareAttackers} seam).
+     *
+     * <p><b>Why the phase requirement is not an inconvenience but the whole
+     * design.</b> The obvious approach — copy the game and
+     * {@code devAdvanceToPhase(COMBAT_DAMAGE)} — was measured and does not
+     * answer our question. That advance runs {@code onPhaseBegin} for every
+     * phase it crosses, so the COPY's own controllers declare the attack, and
+     * the verdict describes what stock AI would have done. Measured on live
+     * Selvala boards: at turn 12, holding 9 creatures and 29 power, the
+     * passive simulation attacked for zero.
+     *
+     * <p>Injecting our own attackers AFTER that advance does not work either
+     * — also measured, also zero: by the time the phase has begun the
+     * declaration is resolved and further attackers are simply illegal.
+     *
+     * <p>So the copy must be taken while the live game is ALREADY at
+     * declare-attackers, with the declaration still open. Then we script the
+     * alpha into the copy's own {@link forge.game.combat.Combat} and let the
+     * engine resolve blockers and damage from there. The result describes
+     * OUR attack, which is the only thing worth predicting.
+     */
+    public static Prediction predictAlphaStrike(Game game, Player attacker,
+            java.util.function.ToIntFunction<Player> seatOf, long timeoutMs) {
+        long started = System.currentTimeMillis();
+        AtomicReference<List<Integer>> dead = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        Thread worker = new Thread(() -> {
+            try {
+                GameCopier copier = new GameCopier(game);
+                Game copy = copier.makeCopy();
+                copy.getAction().checkStateEffects(true);
+                Player me = (Player) copier.find(attacker);
+                forge.game.combat.Combat combat = copy.getCombat();
+                if (me == null || combat == null) {
+                    return; // nothing to script — reported as no-answer below
+                }
+                // Spread the alpha the way the live pilot would: lowest life
+                // first, so the prediction matches the attack it is
+                // predicting rather than some other attack.
+                List<Player> victims = new ArrayList<>();
+                for (Player p : copy.getPlayers()) {
+                    if (p != me && !p.hasLost()) {
+                        victims.add(p);
+                    }
+                }
+                victims.sort(java.util.Comparator.comparingInt(Player::getLife));
+                int declared = 0;
+                for (forge.game.card.Card c : me.getCreaturesInPlay()) {
+                    for (Player victim : victims) {
+                        if (forge.game.combat.CombatUtil.canAttack(c, victim)) {
+                            combat.addAttacker(c, victim);
+                            declared++;
+                            break;
+                        }
+                    }
+                }
+                if (declared == 0) {
+                    dead.set(List.of());
+                    return;
+                }
+                copy.getPhaseHandler().devAdvanceToPhase(PhaseType.COMBAT_DAMAGE);
+                List<Integer> died = new ArrayList<>();
+                for (Player original : game.getPlayers()) {
+                    if (original == attacker) {
+                        continue;
+                    }
+                    Player copied = (Player) copier.find(original);
+                    if (copied != null && (copied.hasLost() || copied.getLife() <= 0)) {
+                        died.add(seatOf.applyAsInt(original));
+                    }
+                }
+                dead.set(died);
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, "arena-predict-alpha");
+        worker.setDaemon(true);
+        worker.start();
+        try {
+            worker.join(timeoutMs);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            return Prediction.abandoned(System.currentTimeMillis() - started);
+        }
+        long elapsed = System.currentTimeMillis() - started;
+        if (worker.isAlive()) {
+            worker.interrupt();
+            return Prediction.abandoned(elapsed);
+        }
+        if (failure.get() != null || dead.get() == null) {
+            return Prediction.abandoned(elapsed);
+        }
+        List<Integer> died = dead.get();
+        return died.isEmpty()
+                ? Prediction.none(elapsed)
+                : new Prediction(true, List.copyOf(died), false, elapsed);
+    }
+
+    /**
      * Would attacking right now kill anyone? Advances a COPY through combat
      * and reports who is dead on the other side. The live game is never
      * touched.

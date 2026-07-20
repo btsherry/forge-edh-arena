@@ -85,6 +85,47 @@ catastrophic per priority window (`ArenaLimits` allows 2000 priority passes per
 turn — that would be 80 seconds of prediction per turn). **The gating discipline
 is the design**, not an optimization to add later.
 
+## MEASURED: what the copy actually simulates (PR-58 finding)
+
+The original draft assumed "copy the game, advance to COMBAT_DAMAGE, read
+who died" answers *does my attack kill?* **It does not, and this was
+measured rather than argued.**
+
+`devAdvanceToPhase` runs `onPhaseBegin` for every phase it crosses. The
+declare-attackers hook is what makes a controller declare — so by the time
+the copy reaches COMBAT_DAMAGE, **the copy's own AI has chosen the attack**.
+The verdict describes what stock AI would have done, not what we intend to do.
+
+Measured on live Selvala boards, own turns only:
+
+| Turn | Creatures | Power | Life before | After passive sim |
+|------|-----------|-------|-------------|-------------------|
+| 7  | 2 | 2  | 40 / 40 | 40 / 40 |
+| 9  | 4 | 6  | 40 / 38 | 40 / 38 |
+| 11 | 6 | 9  | 40 / 32 | 40 / **26** |
+| 12 | 9 | 29 | 40 / 26 | 40 / 26 |
+
+At turn 12 the seat held **9 creatures and 29 power and the simulation
+attacked for zero**. A decision built on that would have concluded "attacking
+does nothing" and passed the turn — the identical failure to the proxies this
+phase exists to remove, but now wearing a simulation's authority.
+
+**Injecting our own attackers after the advance does not work either** (also
+measured, also zero): once the phase has begun the declaration is resolved,
+and `CombatUtil.canAttack` refuses every further attacker.
+
+### The consequence for the design
+
+The copy must be taken while the live game is **already at declare-attackers,
+with the declaration still open**. There is exactly one place that is true:
+inside our own `declareAttackers` seam. So the prediction lives there,
+scripts the alpha into the copy's own `Combat`, and lets the engine resolve
+blockers and damage from there.
+
+This is a narrower primitive than the draft imagined, and a correct one.
+`KillPredictor.predictAlphaStrike` documents the phase requirement as a
+precondition rather than an inconvenience.
+
 ## Where predictions are allowed to run
 
 **Gated on state, not on a counter** (Gemini review, accepted — the original

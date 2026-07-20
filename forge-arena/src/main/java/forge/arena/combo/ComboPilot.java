@@ -150,6 +150,16 @@ public final class ComboPilot {
     private String currentRoute;
     private int lastPlanTurn = -1;
     private final Set<String> attemptedDeploys = new HashSet<>();
+    /**
+     * Engine-layer observation sink (PR-58). The pilot owns the seat's event
+     * stream, so an observation made down in the engine — where the game
+     * objects live — still lands in the one ordered record of what this seat
+     * saw and did. Observations only: this never feeds a decision.
+     */
+    public void observe(ArenaEvent event) {
+        events.accept(event);
+    }
+
     /** State fingerprint the live route was computed from (PR-56). */
     private String lastPlanState;
 
