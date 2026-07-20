@@ -43,6 +43,13 @@ def capabilities(text: str):
     # --- mana ---
     for m in re.finditer(r"A:AB\$ Mana \|([^\n]*)", blob):
         body = m.group(1)
+        # A self-bouncing mana ability (Grinning Ignus: Return<1/CARDNAME>)
+        # is NOT a repeatable mana source — a subagent flagged that tagging
+        # it mana_ability "would imply a false infinite-mana loop", i.e. the
+        # extractor would have invented a phantom combo.
+        if "Return<1/CARDNAME>" in body:
+            caps.add("self_bounce_mana_ability")
+            continue
         amt = re.search(r"Amount\$ (\w+)", body)
         caps.add("mana_ability")
         if amt and amt.group(1).isdigit() and int(amt.group(1)) >= 2:
@@ -61,8 +68,13 @@ def capabilities(text: str):
         caps.add("lifeloss_outlet")
     if re.search(r"AB\$ GainLife", blob):
         caps.add("lifegain")
-    if re.search(r"Cost\$[^|\n]*PayLife<", blob):
-        caps.add("life_cost_ability")
+    # Only OUR life. Subagent finding: Terror of the Peaks carries
+    # PayLife<3> inside a RaiseCost static with Activator$ Player.Opponent
+    # — it TAXES opponents, it does not cost us life. Matching PayLife
+    # anywhere in the script inverted the card's meaning.
+    for line in a_lines:
+        if re.search(r"Cost\$[^|\n]*PayLife<", line) and "Player.Opponent" not in line:
+            caps.add("life_cost_ability")
 
     # --- card flow ---
     if re.search(r"AB\$ Draw", blob):
@@ -114,8 +126,11 @@ def capabilities(text: str):
     if "CantLoseForZeroOrLessLife" in blob or "SkipLoseGame" in blob:
         caps.add("cant_lose")
 
-    # repeatable = an activated ability at all (A: lines are activated)
-    if any(l.startswith("A:") for l in a_lines):
+    # Repeatable = a genuinely ACTIVATED ability. Subagent finding: the
+    # A: prefix covers both "A:AB$" (activated) and "A:SP$" (a spell
+    # ability on an instant/sorcery). Tagging the latter invited the
+    # executor to try activating a sorcery from the battlefield.
+    if any(l.startswith("A:AB$") for l in a_lines):
         caps.add("has_activated_ability")
     return caps
 
