@@ -33,6 +33,42 @@ final class AbilityResolver {
         // getAllPossibleAbilities walks the CURRENT state, so abilities
         // granted by attachments/statics (the Mantle pump lives on Selvala
         // only while equipped) are included
+        // PR-60: among abilities that match the cost hint, prefer the one
+        // that produces the MOST mana.
+        //
+        // The search below returns the first match, which silently picks the
+        // wrong ability whenever a card has two mana abilities at the same
+        // cost. Fanatic of Rhonas is the case that surfaced it: "{T}: Add
+        // {G}" and "Ferocious — {T}: Add {G}{G}{G}{G}" both cost {T}, so a
+        // loop binding got the one-mana version, netted negative against a
+        // {3} untap cost, and was correctly rejected as unprofitable — a
+        // working combo, invisible because we asked for the wrong ability.
+        //
+        // A combo that names a card and a cost always wants that cost's
+        // best yield; nobody scripts a loop around the weaker half of a
+        // card. Deck-agnostic (no names, no card list) and mana-only: every
+        // other ability class keeps first-match, because "most" is only
+        // meaningful for a quantity.
+        SpellAbility bestMana = null;
+        int bestYield = -1;
+        for (SpellAbility sa : card.getAllPossibleAbilities(player, false)) {
+            if (!sa.isActivatedAbility() || costHint == null || !sa.isManaAbility()
+                    || sa.getPayCosts() == null
+                    || !costMatches(sa.getPayCosts().toString(), costHint)
+                    || sa.usesTargeting() != !targetNames.isEmpty()) {
+                continue;
+            }
+            int yield = manaYield(sa);
+            if (yield > bestYield) {
+                bestYield = yield;
+                bestMana = sa;
+            }
+        }
+        if (bestMana != null) {
+            bestMana.setActivatingPlayer(player);
+            return bestMana;
+        }
+
         for (SpellAbility sa : card.getAllPossibleAbilities(player, false)) {
             if (!sa.isActivatedAbility()) {
                 continue;
@@ -68,6 +104,31 @@ final class AbilityResolver {
             return sa;
         }
         return null;
+    }
+
+    /**
+     * How much mana an ability produces per activation, as a comparable
+     * number (PR-60). Reads the card script's own {@code Amount}, which
+     * defaults to 1 when absent — Sol Ring is {@code Produced$ C | Amount$
+     * 2}, Fanatic of Rhonas's weak half is {@code Produced$ G} with no
+     * Amount at all.
+     *
+     * <p>A variable amount ({@code Amount$ X}, Sanctum Weaver's
+     * enchantment count) scores 1: unknowable without evaluating the board,
+     * and deliberately never allowed to WIN a comparison on a guess. It
+     * still resolves normally when it is the only ability at that cost,
+     * and the executor's copy-validation measures its real yield anyway.
+     */
+    private static int manaYield(SpellAbility sa) {
+        String amount = sa.getParam("Amount");
+        if (amount == null) {
+            return 1;
+        }
+        try {
+            return Integer.parseInt(amount.trim());
+        } catch (NumberFormatException notAConstant) {
+            return 1;
+        }
     }
 
     /**

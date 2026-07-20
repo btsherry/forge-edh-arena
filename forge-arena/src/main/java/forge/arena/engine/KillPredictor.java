@@ -56,28 +56,41 @@ public final class KillPredictor {
      * time — a bigger game state to copy, and six workers contending for
      * cores. Overridable via {@code -Darena.predict.timeout.ms} so the true
      * distribution can be measured rather than truncated by the cap.
+     *
+     * <p>Re-measured with an 8 s budget so nothing was truncated: p50 316 ms,
+     * p90 683 ms, max 1331 ms. 2000 ms clears the observed maximum with
+     * headroom for contention, and at the gate's measured rate (~2.6
+     * predictions per game) the worst case is well under a second of a
+     * ~110 s game.
      */
     public static final long DEFAULT_TIMEOUT_MS =
-            Long.getLong("arena.predict.timeout.ms", 250);
+            Long.getLong("arena.predict.timeout.ms", 2000);
 
     /**
      * The engine's answer.
      *
      * @param killsSomeone at least one opponent died in the simulated combat
      * @param deadSeats    seat indices of the opponents that died
-     * @param timedOut     the simulation was abandoned — verdict UNKNOWN, not
-     *                     "no". Callers must fall back, never treat as false.
+     * @param timedOut     no verdict was produced — UNKNOWN, not "no".
+     *                     Callers must fall back, never treat as false.
+     * @param cause        why there is no verdict, for telemetry: {@code
+     *                     "timeout"}, {@code "threw"}, {@code "no_combat"}
+     *                     (called outside declare-attackers), or {@code
+     *                     "ok"}. Lumping these together hid a real signal —
+     *                     a first run reported "timeouts" whose elapsed
+     *                     times were far below the budget, which is not a
+     *                     timeout at all.
      * @param elapsedMs    wall clock actually spent, for budget telemetry
      */
     public record Prediction(boolean killsSomeone, List<Integer> deadSeats, boolean timedOut,
-            long elapsedMs) {
+            String cause, long elapsedMs) {
 
         public static Prediction none(long elapsedMs) {
-            return new Prediction(false, List.of(), false, elapsedMs);
+            return new Prediction(false, List.of(), false, "ok", elapsedMs);
         }
 
-        public static Prediction abandoned(long elapsedMs) {
-            return new Prediction(false, List.of(), true, elapsedMs);
+        public static Prediction abandoned(String cause, long elapsedMs) {
+            return new Prediction(false, List.of(), true, cause, elapsedMs);
         }
     }
 
@@ -170,20 +183,25 @@ public final class KillPredictor {
             worker.join(timeoutMs);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            return Prediction.abandoned(System.currentTimeMillis() - started);
+            return Prediction.abandoned("interrupted", System.currentTimeMillis() - started);
         }
         long elapsed = System.currentTimeMillis() - started;
         if (worker.isAlive()) {
             worker.interrupt();
-            return Prediction.abandoned(elapsed);
+            return Prediction.abandoned("timeout", elapsed);
         }
-        if (failure.get() != null || dead.get() == null) {
-            return Prediction.abandoned(elapsed);
+        if (failure.get() != null) {
+            return Prediction.abandoned("threw", elapsed);
+        }
+        if (dead.get() == null) {
+            // no Combat object: called outside declare-attackers, so there
+            // was never a declaration to script
+            return Prediction.abandoned("no_combat", elapsed);
         }
         List<Integer> died = dead.get();
         return died.isEmpty()
                 ? Prediction.none(elapsed)
-                : new Prediction(true, List.copyOf(died), false, elapsed);
+                : new Prediction(true, List.copyOf(died), false, "ok", elapsed);
     }
 
     /**
@@ -236,7 +254,7 @@ public final class KillPredictor {
             worker.join(timeoutMs);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            return Prediction.abandoned(System.currentTimeMillis() - started);
+            return Prediction.abandoned("interrupted", System.currentTimeMillis() - started);
         }
         long elapsed = System.currentTimeMillis() - started;
         if (worker.isAlive()) {
@@ -245,16 +263,16 @@ public final class KillPredictor {
             // on a throwaway copy, so leaking it costs CPU but corrupts
             // nothing that the live game can see.
             worker.interrupt();
-            return Prediction.abandoned(elapsed);
+            return Prediction.abandoned("timeout", elapsed);
         }
         if (failure.get() != null) {
             // A prediction that threw is a prediction we do not have. Same
             // contract as a timeout: unknown, fall back — never "no".
-            return Prediction.abandoned(elapsed);
+            return Prediction.abandoned("threw", elapsed);
         }
         List<Integer> died = dead.get();
         return died == null || died.isEmpty()
                 ? Prediction.none(elapsed)
-                : new Prediction(true, List.copyOf(died), false, elapsed);
+                : new Prediction(true, List.copyOf(died), false, "ok", elapsed);
     }
 }

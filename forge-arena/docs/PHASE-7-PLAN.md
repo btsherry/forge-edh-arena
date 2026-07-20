@@ -300,6 +300,34 @@ Generalized: **any budget must be measured in the environment that will pay
 it.** A number from a clean single-threaded fixture is not a number about a
 6-worker batch.
 
+## MEASURED: the shadow ledger cannot validate itself
+
+First real fidelity data (7 games, 15 predictions, budget raised so nothing
+truncates):
+
+- **6 predictions said "this attack kills someone"**
+- **every one of them was on a turn the old path did NOT attack**
+- **none was followed by a win**
+
+The first two numbers are the case for cutting over: the engine keeps finding
+lethal attacks the predicate declines. The third looks damning and **proves
+nothing**, which is a flaw in the ledger's design rather than a result.
+
+When the old path declines the attack, the predicted action is never taken —
+so "did a win follow?" cannot distinguish *the copy was lying* from *the copy
+was right and nobody acted on it*. Both produce exactly the same row. A
+shadow observation can only validate a prediction whose action actually gets
+executed.
+
+So Gemini's critique of shadow mode lands harder than either of us argued:
+not merely wasteful, but **unable in principle to answer the fidelity
+question for a prediction that changes no behaviour**. The fidelity ledger
+keeps its value only once the predictor decides — measuring predicted-kill
+against actual-outcome on attacks that really happen.
+
+That makes the A/B the next step rather than a later one, and it must carry
+the ledger with it.
+
 ## Urza: the setup/payload split (second Gemini consultation)
 
 Gemini's verdict on "predict the loop's product": it collapses back into
