@@ -49,7 +49,7 @@ public final class WorkerMain {
         }
         JsonNode lim = cfg.get("limits");
         ArenaLimits limits = new ArenaLimits(
-                lim.path("turns").asInt(30),
+                lim.path("turns").asInt(BatchMain.DEFAULT_TURN_CAP),
                 lim.path("wall_clock_sec").asInt(600),
                 lim.path("priority_passes_per_turn").asInt(2000));
         long seedBase = cfg.get("seed_base").asLong();

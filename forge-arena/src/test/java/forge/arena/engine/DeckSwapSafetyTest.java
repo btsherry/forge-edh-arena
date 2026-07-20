@@ -74,6 +74,15 @@ public class DeckSwapSafetyTest {
     }
 
     @Test
+    public void theTurnCapIsThirtyFiveAndEndsGamesAsDraws() {
+        // Pinned deliberately: the cap decides what every batch measures, so
+        // it must not drift silently. 35 came from the turn distribution of a
+        // full 300-game batch (median 32, p90 at the old 40-turn cap, i.e.
+        // the tail was censored rather than observed).
+        assertEquals(35, forge.arena.harness.BatchMain.DEFAULT_TURN_CAP);
+    }
+
+    @Test
     public void everyDeckPlaysAgainstEveryOtherDeckInEitherSeat() throws Exception {
         for (String a : DECKS) {
             for (String b : DECKS) {

@@ -74,6 +74,16 @@
                     <workingDirectory>${project.basedir}</workingDirectory>
                     <!-- always run arena tests, even when the reactor build passes -DskipTests for the forge deps -->
                     <skipTests>false</skipTests>
+                    <!--
+                      The suite plays real games, and a combo harness builds
+                      very large boards on purpose, so the fork had grown to a
+                      ~6GB unbounded G1 heap and started dying intermittently
+                      inside G1ConcurrentMark::mark_in_next_bitmap - a JVM
+                      crash under memory pressure, not a test failure. Bound
+                      the heap and use the simpler collector: predictable
+                      memory beats a heap that can grow until the GC folds.
+                    -->
+                    <argLine>-Xmx4g -XX:+UseParallelGC</argLine>
                 </configuration>
             </plugin>
         </plugins>
