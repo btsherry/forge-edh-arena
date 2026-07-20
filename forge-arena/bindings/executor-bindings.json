@@ -299,13 +299,14 @@
       "archetype": "TapForManaUntapLoop",
       "params": {
         "engine": "Basalt Monolith",
-        "untapper": "Power Artifact",
+        "untapper": "Basalt Monolith",
         "activation_cost": "{T}",
-        "untap_cost": "{1}",
+        "untap_cost": "{3}",
         "untap_ability_host": "engine",
         "pool_color": "C",
         "engine_mana_value": "3",
-        "untapper_mana_value": "2"
+        "untapper_mana_value": "0",
+        "cost_reducer": "Power Artifact"
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
@@ -315,13 +316,14 @@
       "archetype": "TapForManaUntapLoop",
       "params": {
         "engine": "Grim Monolith",
-        "untapper": "Power Artifact",
+        "untapper": "Grim Monolith",
         "activation_cost": "{T}",
-        "untap_cost": "{2}",
+        "untap_cost": "{4}",
         "untap_ability_host": "engine",
         "pool_color": "C",
         "engine_mana_value": "2",
-        "untapper_mana_value": "2"
+        "untapper_mana_value": "0",
+        "cost_reducer": "Power Artifact"
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
