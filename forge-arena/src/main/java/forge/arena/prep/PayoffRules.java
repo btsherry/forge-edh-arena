@@ -59,6 +59,13 @@ public final class PayoffRules {
      * turned out to be a permanent, so a cast-only dig path was dead code.
      */
     public static final String DRAW_ENGINE_PERMANENT = "draw_engine_permanent";
+    /**
+     * Aetherflux class: an activated damage outlet whose cost is LIFE, paid
+     * by a lifegain trigger that fires per spell cast. It is only reachable
+     * if the loop's casts actually happen, so its presence forbids
+     * compressing the loop that feeds it (PR-51).
+     */
+    public static final String LIFE_COST_OUTLET = "life_cost_outlet";
     /** Mill-out class — a DELAYED win (they lose on their next draw). */
     public static final String MILL_OPPONENTS = "mill_opponents";
     /** Pseudo-class injected by DeckCoverage when a commander is a creature. */
@@ -72,7 +79,8 @@ public final class PayoffRules {
             ORACLE_WIN, ALT_WIN, CANT_LOSE, HASTE_STATIC, HASTE_ONESHOT, HASTE_TARGETED,
             HASTE_EQUIP, MASS_PUMP, PING_EACH_OPPONENT, PING_ANY_TARGET, X_DAMAGE,
             DRAIN_ON_TRIGGER,
-            X_DRAIN_EACH_OPPONENT, SELF_DRAW_ENGINE, DRAW_ENGINE_PERMANENT, MILL_OPPONENTS);
+            X_DRAIN_EACH_OPPONENT, SELF_DRAW_ENGINE, DRAW_ENGINE_PERMANENT, MILL_OPPONENTS,
+            LIFE_COST_OUTLET);
 
     /**
      * Phase-6 conversion flags, CLASS-level facts the ConversionPlanner
@@ -137,6 +145,9 @@ public final class PayoffRules {
             new Rule(SELF_DRAW_ENGINE, "(target player|you) draws? x cards"
                     + "|draw x cards"
                     + "|: [^.]*draws? (a|one|two|three) cards?"),
+            // "Pay N life: ... deals N damage to any target" — the cost is
+            // life, so the loop that pays for it must actually be played out
+            new Rule(LIFE_COST_OUTLET, "pay \\d+ life: [^.]*deals \\d+ damage"),
             new Rule(MILL_OPPONENTS, "(target player|each opponent) mills x"
                     + "|target opponent mills x"));
 

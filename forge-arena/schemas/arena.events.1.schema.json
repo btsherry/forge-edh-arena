@@ -33,7 +33,8 @@
     "land_played",
     "lethal_alpha",
     "outlet_drill",
-    "conversion_step"
+    "conversion_step",
+    "distance_to_fire"
    ]
   },
   "turn": {
@@ -622,6 +623,27 @@
     "properties": {
      "desc": {
       "type": "string"
+     }
+    }
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "t": {
+      "const": "distance_to_fire"
+     }
+    }
+   },
+   "then": {
+    "required": [
+     "seat",
+     "distance"
+    ],
+    "properties": {
+     "distance": {
+      "type": "integer",
+      "minimum": 0
      }
     }
    }

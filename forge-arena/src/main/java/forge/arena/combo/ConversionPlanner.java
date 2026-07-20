@@ -110,6 +110,18 @@ public final class ConversionPlanner {
                     PayoffRules.X_DRAIN_EACH_OPPONENT);
         }
 
+        // (1b) LIFE-COST OUTLET (Aetherflux class) — a table-killer once its
+        // life cost is affordable. Ranked directly under the one-resolution
+        // drain because it is still damage-free of combat, but it only works
+        // when the loop that pays for it was played out rather than
+        // compressed (PR-51 keeps those iterations real).
+        for (String battery : routePlan.payoffCards(PayoffRules.LIFE_COST_OUTLET)) {
+            if (view.cardsIn(SeatView.Zone.BATTLEFIELD).contains(battery)
+                    && !attempted.contains(battery)) {
+                return new Plan(Kind.DRILL, battery, 0, PayoffRules.LIFE_COST_OUTLET);
+            }
+        }
+
         // (2) DRILL — a repeatable single-target sink already on the
         // battlefield. The controller validates one activation on a game
         // copy before committing (an outlet that cannot actually drop a

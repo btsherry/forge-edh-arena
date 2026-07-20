@@ -271,6 +271,14 @@ public final class ComboPilot {
         } else if (!payoffs.isEmpty() && lands >= 3 && nonlands >= 2) {
             keep = true;
             reason = "payoff_with_lands";
+        } else if (!pieces.isEmpty() && lands >= 2 && outletReachable(view)) {
+            // PR-51 (playbook §5): weight OUTLET presence as a keep reason.
+            // A hand that assembles the engine and can never cash it is this
+            // project's headline failure reproduced at the mulligan — the
+            // green deck fired 58 times and converted twice, every route
+            // rejection reading "no payoff available".
+            keep = true;
+            reason = "piece_with_outlet";
         } else if (pieces.isEmpty() && payoffs.isEmpty() && mulligansTaken == 0 && firstMullFree) {
             keep = false;
             reason = "dig_for_pieces";
@@ -770,7 +778,20 @@ public final class ComboPilot {
             exitLine();
             return Optional.of(Action.flood(order));
         }
-        if (activeExecutor instanceof ShortcutSource loop && loop.shortcutEligible()) {
+        // PR-51: the compression is LOSSY, and sometimes the discarded part
+        // is the win. A mana shortcut replaces N real iterations with one
+        // pool injection, which silently throws away every side effect those
+        // iterations would have produced — cast triggers above all. Urza's
+        // Aetherflux Reservoir costs 50 life to fire and the deck starts at
+        // 40; the only thing that ever pays for it is Aetherflux's OWN cast
+        // trigger gaining life once per spell cast this turn. Compress the
+        // loop and those casts never happen, so the outlet is unusable and
+        // the seat banks a thousand mana it can never spend.
+        //
+        // So: when the deck holds a payoff that feeds on the very thing the
+        // compression discards, step the loop for real instead.
+        if (activeExecutor instanceof ShortcutSource loop && loop.shortcutEligible()
+                && !castTriggerPayoffPresent(view)) {
             String comboId = activeComboId;
             // PR-33: the executor names its own pool source (the old
             // engine→tapper params-guess was null for the Scepter loop and
@@ -878,6 +899,89 @@ public final class ComboPilot {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * PR-51: does this seat hold a payoff that only works if the loop's
+     * iterations REALLY HAPPEN? Today that means a life-cost damage outlet
+     * (the Aetherflux class): its cost is paid by a cast trigger, so the
+     * casts must occur rather than being compressed away. Deck-agnostic —
+     * it reads the route-coverage payoff classes, like everything else.
+     */
+    private boolean castTriggerPayoffPresent(SeatView view) {
+        for (String card : routePlan.payoffCards(
+                forge.arena.prep.PayoffRules.LIFE_COST_OUTLET)) {
+            if (view.locate(card) == SeatView.Presence.BATTLEFIELD) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * PR-51: can this hand actually CASH an engine — is any outlet class
+     * reachable from hand, battlefield or command zone? Artifact-driven, so
+     * a dropped-in deck is judged by its own payoff classes.
+     */
+    private boolean outletReachable(SeatView view) {
+        for (String outletClass : List.of(
+                forge.arena.prep.PayoffRules.X_DRAIN_EACH_OPPONENT,
+                forge.arena.prep.PayoffRules.PING_ANY_TARGET,
+                forge.arena.prep.PayoffRules.LIFE_COST_OUTLET,
+                forge.arena.prep.PayoffRules.PING_EACH_OPPONENT,
+                forge.arena.prep.PayoffRules.MASS_PUMP)) {
+            for (String card : routePlan.payoffCards(outletClass)) {
+                SeatView.Presence where = view.locate(card);
+                if (where == SeatView.Presence.HAND
+                        || where == SeatView.Presence.BATTLEFIELD
+                        || where == SeatView.Presence.COMMAND) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * PR-51 (architecture survey §Q4, the Churchill-Buro landmark bound):
+     * MIN TURNS UNTIL SOME BOUND LINE COULD FIRE — the count of pieces not
+     * yet reachable plus the mana still to find, taken over the closest
+     * line. It is an admissible lower bound (never optimistic), which is
+     * what makes it usable as a planning signal rather than a guess.
+     *
+     * <p>Deliberately NOT emitted from the decision path. Distance is an
+     * OBSERVATION, and this codebase separates those from decisions — the
+     * detection bridge records what is TRUE, the pilot records what it
+     * CHOSE. Emitting it here shifted every positional assertion in the
+     * decision tests, which is the suite correctly defending that split.
+     * Exposed as API for the arbiter (architecture survey Q3/Q4, where it
+     * is the dominant signal) and for the observation side to publish.
+     */
+    public int distanceToFire(SeatView view) {
+        int best = Integer.MAX_VALUE;
+        for (ComboTracker.ComboStatus status : tracker.recompute(view).statuses()) {
+            if (!status.fullySpecified() || !executorExists(status.id())) {
+                continue;
+            }
+            int missing = status.distance();
+            int manaGap = 0;
+            Optional<ExecutorBindings.Binding> binding = bindings.forCombo(status.id());
+            if (binding.isPresent()) {
+                Optional<LineExecutor> executor = binding.flatMap(ExecutorBindings::executorFor);
+                if (executor.isPresent()) {
+                    int need = 0;
+                    for (String piece : status.where().keySet()) {
+                        need += executor.get().castCostEstimate(piece);
+                    }
+                    manaGap = Math.max(0,
+                            need - (view.manaPool() + view.untappedManaSources()));
+                }
+            }
+            // one turn per missing piece (a draw or a tutor), one per land
+            // drop still needed — the admissible floor, not a forecast
+            best = Math.min(best, missing + manaGap);
+        }
+        return best == Integer.MAX_VALUE ? -1 : best;
     }
 
     /** Binding payoffs (live or fired) ∪ the route plan's payoff classes. */

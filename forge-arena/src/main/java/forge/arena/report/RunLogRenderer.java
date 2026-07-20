@@ -28,7 +28,8 @@ public final class RunLogRenderer {
             // when asking "what happened in this game?" — the per-turn board
             // snapshot (life/hand/creatures/power for every seat) and the
             // conversion decisions belong there, not behind VERBOSE
-            "turn_state", "conversion_step", "outlet_drill", "lethal_alpha");
+            "turn_state", "conversion_step", "outlet_drill", "lethal_alpha",
+            "distance_to_fire");
 
     private RunLogRenderer() {
     }
@@ -101,6 +102,8 @@ public final class RunLogRenderer {
             // Phase 6 conversion telemetry: WHY a banked engine did or did
             // not become a win — the question the long-200 post-mortem had
             // to infer from route names alone
+            case "distance_to_fire":
+                return "dist   " + f.get("distance") + " to fire";
             case "conversion_step":
                 return "CONVERT " + f.get("kind") + "  " + f.get("card")
                         + "  (" + f.get("outlet_class")
