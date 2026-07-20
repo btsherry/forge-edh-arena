@@ -189,4 +189,26 @@ public class PayoffRulesTest {
         assertTrue(PayoffRules.flags(PayoffRules.PING_ANY_TARGET).isEmpty());
         assertTrue(PayoffRules.flags("unknown_class").isEmpty());
     }
+
+    @Test
+    public void damageAmplifiersAreClassifiedAndPurphorosHimselfIsNot() {
+        // PR-C. The red deck's primer calls these central: "amplifiers turn
+        // modest token waves into table-wide kills". Our lethality check
+        // counted none of them and under-projected by up to 4x, declining
+        // attacks and drills that were genuinely lethal.
+        hits("If a red source you control would deal damage to an opponent or a permanent "
+                + "an opponent controls, it deals that much damage plus 2 instead.",
+                PayoffRules.DAMAGE_AMPLIFIER);                       // Torbran, additive
+        hits("If a source you control would deal noncombat damage to an opponent or a "
+                + "permanent an opponent controls, it deals double that damage instead.",
+                PayoffRules.DAMAGE_AMPLIFIER);                       // Solphim, multiplicative
+
+        // the DAMAGE SOURCE itself must not read as an amplifier — otherwise
+        // the projection multiplies by the very effect it is measuring
+        java.util.List<String> purphoros = PayoffRules.classifyCard(
+                "Whenever another creature you control enters, Purphoros, God of the Forge "
+                + "deals 2 damage to each opponent.");
+        assertFalse("the damage source is not its own amplifier",
+                purphoros.contains(PayoffRules.DAMAGE_AMPLIFIER));
+    }
 }

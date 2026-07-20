@@ -684,6 +684,55 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
          */
 
         /**
+         * PR-C: apply our damage amplifiers to a projected damage figure.
+         *
+         * <p>The red deck's amplifiers were counted as nothing, so lethality
+         * under-projected by up to 4x and declined attacks and drill
+         * activations that were genuinely lethal.
+         *
+         * <p><b>Composition order is the whole subtlety.</b> When several
+         * replacement effects apply to one damage event the AFFECTED PLAYER
+         * chooses their order, and the two orders differ:
+         *
+         * <pre>
+         *   additive first        (2+2) x 2 = 8
+         *   multiplicative first  (2x2) + 2 = 6
+         * </pre>
+         *
+         * The opponent picks whichever keeps them alive, so a projection that
+         * must never over-claim has to assume the WORSE one — multipliers
+         * first, then additions, and claim 6. Assuming 8 is the Phase 7
+         * failure repeating: attack on a projection the opponent can
+         * invalidate, they survive at 2, and we are tapped out against a
+         * table of three.
+         */
+        private int amplified(int base) {
+            if (base <= 0) {
+                return base;
+            }
+            int multiplier = 1;
+            int bonus = 0;
+            for (forge.game.card.Card c : player.getCardsIn(
+                    forge.game.zone.ZoneType.Battlefield)) {
+                if (!pilot.amplifierNames().contains(c.getName())) {
+                    continue;
+                }
+                String text = c.getOracleText() == null ? "" : c.getOracleText().toLowerCase();
+                if (text.contains("double that damage") || text.contains("twice that much")) {
+                    multiplier *= 2;
+                } else {
+                    java.util.regex.Matcher m = java.util.regex.Pattern
+                            .compile("plus (\\d+)|(\\d+) more damage").matcher(text);
+                    if (m.find()) {
+                        bonus += Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2));
+                    }
+                }
+            }
+            // multipliers FIRST, then additions: the opponent's choice
+            return base * multiplier + bonus;
+        }
+
+        /**
          * PR-34: a kill order when combat math GUARANTEES an elimination
          * right now, else null. Worst case per opponent: they block and
          * fully absorb our TOP-power B attackers (B = their untapped
@@ -727,6 +776,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 for (int i = blockers; i < powers.size(); i++) {
                     guaranteed += powers.get(i);
                 }
+                guaranteed = amplified(guaranteed);
                 if (guaranteed >= opp.getLife() && guaranteed > 0) {
                     List<Integer> killOrder = new java.util.ArrayList<>();
                     killOrder.add(opp.getId());

@@ -151,6 +151,14 @@ public final class ComboPilot {
     private int lastPlanTurn = -1;
     private final Set<String> attemptedDeploys = new HashSet<>();
     /**
+     * PR-C: the deck's own damage amplifiers, from its route-coverage
+     * artifact. Names come from prep, never from code.
+     */
+    public java.util.List<String> amplifierNames() {
+        return routePlan.payoffCards(forge.arena.prep.PayoffRules.DAMAGE_AMPLIFIER);
+    }
+
+    /**
      * Engine-layer observation sink (PR-58). The pilot owns the seat's event
      * stream, so an observation made down in the engine — where the game
      * objects live — still lands in the one ordered record of what this seat

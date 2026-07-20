@@ -65,6 +65,19 @@ public final class PayoffRules {
     public static final String X_SPELL_OUTLET = "x_spell_outlet";
 
     /**
+     * PR-C: a static that increases damage we deal (Torbran {@code +2},
+     * Solphim/Twinflame Tyrant {@code x2}).
+     *
+     * <p>The red deck's primer calls these central rather than incidental:
+     * "damage amplifiers turn modest token waves into table-wide kills…
+     * Torbran / Twinflame Tyrant / Ojer Axonil stack so each ETB deals
+     * lethal table damage." Our lethality projection counted NONE of them
+     * and so under-projected by up to 4x, declining attacks and drill
+     * activations that were genuinely lethal.
+     */
+    public static final String DAMAGE_AMPLIFIER = "damage_amplifier";
+
+    /**
      * PR-A: a permanent that lets unspent mana survive a phase change
      * (Omnath: {@code S:Mode$ UnspentMana}).
      *
@@ -162,6 +175,15 @@ public final class PayoffRules {
             // win-routes/5 — the playbook taxonomy's premium class: one
             // resolution, no combat, no prevention (life LOSS, not damage);
             // the second alternation catches Torment's repeat-X structure
+            // PR-C: damage amplifiers. Additive ("deals 2 more") and
+            // multiplicative ("deals double"/"twice that much") are one
+            // CLASS but must stay distinguishable downstream, so the
+            // multiplicative wording is matched separately below.
+            new Rule(DAMAGE_AMPLIFIER, "deals? (that much damage )?plus \\d+"
+                    + "|deals? \\d+ more damage"
+                    + "|it deals double that damage"
+                    + "|deals? double that damage"
+                    + "|deals? twice that much damage instead"),
             // PR-A: X spells that eat an arbitrary pool. Anchored on "x or
             // less" / "top x cards" rather than a bare "x", so a Polukranos
             // style creature-scoped X does not read as a mana outlet.
