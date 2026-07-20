@@ -290,6 +290,38 @@
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "4131-5149",
+      "archetype": "TapForManaUntapLoop",
+      "params": {
+        "engine": "Basalt Monolith",
+        "untapper": "Power Artifact",
+        "activation_cost": "{T}",
+        "untap_cost": "{1}",
+        "untap_ability_host": "engine",
+        "pool_color": "C",
+        "engine_mana_value": "3",
+        "untapper_mana_value": "2"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "2585-5149",
+      "archetype": "TapForManaUntapLoop",
+      "params": {
+        "engine": "Grim Monolith",
+        "untapper": "Power Artifact",
+        "activation_cost": "{T}",
+        "untap_cost": "{2}",
+        "untap_ability_host": "engine",
+        "pool_color": "C",
+        "engine_mana_value": "2",
+        "untapper_mana_value": "2"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
     }
   ],
   "unbound": [
@@ -297,8 +329,6 @@
     "1355-2645",
     "1355-2816",
     "2026-2404-2816",
-    "4131-5390",
-    "4131-5149",
-    "2585-5149"
+    "4131-5390"
   ]
 }

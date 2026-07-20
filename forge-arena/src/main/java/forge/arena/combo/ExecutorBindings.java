@@ -107,6 +107,9 @@ public final class ExecutorBindings {
             params.put("trigger_mana_value", String.valueOf(
                     pair.path("combined_mana_value").asInt(0)));
             params.put("protection_mana_value", "0");
+            // PR-49: the scope decides what this wipe actually destroys, and
+            // therefore what it is worth against a given board
+            params.put("wipe_scope", pair.path("wipe_scope").asText(""));
             merged.put(id, new Binding(id, PairedPlay.ARCHETYPE, params,
                     List.of(), "MAIN1", List.of()));
         }

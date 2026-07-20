@@ -108,6 +108,53 @@ public class ConversionPlannerTest {
     }
 
     @Test
+    public void aPairIsWorthWhatItActuallyDestroys() {
+        // PR-49, straight from a 300-game batch: pairs were offered
+        // cheapest-first, so the white deck fired its 3-mana creature wipe
+        // every single time and its land-destruction lines — the strongest
+        // play in the deck — never fired once in 300 games.
+        java.util.Map<String, String> landWipe = java.util.Map.of(
+                "trigger_card", "Armageddon", "protection_card", "Teferi's Protection",
+                "wipe_scope", "LANDS");
+        java.util.Map<String, String> creatureWipe = java.util.Map.of(
+                "trigger_card", "Doomskar", "protection_card", "Flawless Maneuver",
+                "wipe_scope", "CREATURES");
+        PairedPlay land = new PairedPlay(landWipe, "MAIN1");
+        PairedPlay creature = new PairedPlay(creatureWipe, "MAIN1");
+
+        // a mana-heavy table: 6 lands, 1 creature
+        SeatView manaHeavy = new SeatView(0, 8, java.util.Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of(), SeatView.Zone.HAND, Set.of(),
+                SeatView.Zone.COMMAND, Set.of(), SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 60, 0, 0,
+                List.of(new SeatView.OpponentView(1, 40, 0, Set.of(
+                        "Forest", "Island", "Plains", "Mountain", "Swamp", "Wastes",
+                        "Llanowar Elves"))));
+        assertTrue("a land wipe must outscore a creature wipe into 6 lands",
+                land.valueAgainst(manaHeavy) > creature.valueAgainst(manaHeavy));
+
+        // a creature-heavy table flips it
+        SeatView creatureHeavy = new SeatView(0, 8, java.util.Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of(), SeatView.Zone.HAND, Set.of(),
+                SeatView.Zone.COMMAND, Set.of(), SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 60, 0, 0,
+                List.of(new SeatView.OpponentView(1, 40, 0, Set.of(
+                        "Grizzly Bears", "Llanowar Elves", "Terra Stomper",
+                        "Craterhoof Behemoth", "Arbor Elf", "Norin the Wary", "Forest"))));
+        assertTrue("a creature wipe must outscore a land wipe into 6 creatures",
+                creature.valueAgainst(creatureHeavy) > land.valueAgainst(creatureHeavy));
+
+        // and neither fires into an empty board
+        SeatView bare = new SeatView(0, 3, java.util.Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of(), SeatView.Zone.HAND, Set.of(),
+                SeatView.Zone.COMMAND, Set.of(), SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 60, 0, 0,
+                List.of(new SeatView.OpponentView(1, 40, 0, Set.of("Forest"))));
+        assertEquals(0, land.valueAgainst(bare));
+        assertTrue(!land.worthFiring(bare));
+    }
+
+    @Test
     public void aDeckWithNoOutletArtifactsIsInert() {
         // inertness: no payoff classes -> no conversion decisions at all,
         // the deploy path keeps the turn exactly as before

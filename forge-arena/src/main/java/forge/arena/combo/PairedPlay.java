@@ -34,8 +34,11 @@ public final class PairedPlay implements LineExecutor {
     private final int triggerManaValue;
     private final int protectionManaValue;
     private final String entryPhase;
+    /** LANDS / CREATURES / NONLAND_PERMANENTS / ALL_PERMANENTS, or "" (v1 pairs). */
+    private final String wipeScope;
 
     public PairedPlay(Map<String, String> params, String entryPhase) {
+        this.wipeScope = params.getOrDefault("wipe_scope", "");
         this.triggerCard = require(params, "trigger_card");
         this.protectionCard = require(params, "protection_card");
         this.triggerManaValue = Integer.parseInt(params.getOrDefault("trigger_mana_value", "0"));
@@ -97,12 +100,65 @@ public final class PairedPlay implements LineExecutor {
      * both-cards+mana gates.
      */
     public boolean worthFiring(SeatView view) {
-        int theirs = 0;
-        for (SeatView.OpponentView opp : view.opponents()) {
-            theirs += opp.battlefield().size();
-        }
-        return theirs >= 8;
+        return valueAgainst(view) > 0;
     }
+
+    /**
+     * PR-49: how much this pair is worth RIGHT NOW, against what the
+     * opponents actually have. The pilot fires the highest-scoring
+     * affordable pair, not the cheapest one.
+     *
+     * <p>The first 300-game batch with generated pairs made the flaw
+     * obvious: every single pair the white deck used was its CHEAPEST
+     * wipe, because pairs were offered cheapest-first and a 3-mana
+     * sweeper always wins an affordability race. Its land-destruction
+     * lines — the strongest thing the deck does — never fired once.
+     *
+     * <p>Value is the count of opponent permanents this scope would
+     * actually destroy, so a land wipe scores high into a mana-heavy
+     * table and a creature wipe scores high into a creature-heavy one,
+     * and neither fires into a board it would barely dent. 0 = not worth
+     * casting yet.
+     */
+    public int valueAgainst(SeatView view) {
+        int hit = 0;
+        for (SeatView.OpponentView opp : view.opponents()) {
+            for (String card : opp.battlefield()) {
+                if (scopeHits(card)) {
+                    hit++;
+                }
+            }
+        }
+        // the same floor as before, now measured against what the wipe
+        // really touches rather than the whole table
+        return hit >= MIN_TARGETS ? hit : 0;
+    }
+
+    /** Board impact worth spending a two-card play on. */
+    static final int MIN_TARGETS = 5;
+
+    /**
+     * Does this wipe hit that permanent? The seat view is name-level, so
+     * lands are identified by the basic-land names plus the "s" of a
+     * nonbasic being unnameable here — an approximation, deliberately
+     * conservative: an unrecognised card counts as a nonland permanent.
+     */
+    private boolean scopeHits(String cardName) {
+        boolean land = BASIC_LANDS.contains(cardName);
+        return switch (wipeScope) {
+            case "LANDS" -> land;
+            case "CREATURES", "NONLAND_PERMANENTS" -> !land;
+            case "ALL_PERMANENTS" -> true;
+            // v1 hand-authored pairs carry no scope: keep the old
+            // whole-board reading so their behaviour is unchanged
+            default -> true;
+        };
+    }
+
+    private static final java.util.Set<String> BASIC_LANDS = java.util.Set.of(
+            "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
+            "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp",
+            "Snow-Covered Mountain", "Snow-Covered Forest");
 
     @Override
     public List<String> lineCards() {

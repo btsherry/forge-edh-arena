@@ -504,6 +504,14 @@ public final class ComboPilot {
         if (pendingProtection != null) {
             return Optional.empty();
         }
+        // PR-49: pick the pair with the highest BOARD VALUE, not the first
+        // affordable one. Pairs arrive cheapest-first, and the 300-game
+        // batch showed that meant the cheapest sweeper won every time — the
+        // white deck's land-destruction lines, its strongest play, never
+        // fired once in 300 games.
+        ExecutorBindings.Binding bestBinding = null;
+        PairedPlay bestPair = null;
+        int bestValue = 0;
         for (ExecutorBindings.Binding binding : bindings.all()) {
             if (!PairedPlay.ARCHETYPE.equals(binding.archetype())
                     || firedPairs.contains(binding.comboId())
@@ -512,23 +520,32 @@ public final class ComboPilot {
             }
             Optional<LineExecutor> executor = ExecutorBindings.executorFor(binding);
             if (executor.isEmpty() || !(executor.get() instanceof PairedPlay pair)
-                    || !pair.playable(view) || !pair.worthFiring(view)) {
+                    || !pair.playable(view)) {
                 continue;
             }
-            attemptedThisTurn.add(binding.comboId());
-            firedPairs.add(binding.comboId());
-            pendingProtection = pair.protectionCard();
-            events.accept(ArenaEvent.of("line_entered", view.turn(), seat)
-                    .with("combo", binding.comboId())
-                    .with("binding", binding.comboId())
-                    .with("attempted_via", "binding")
-                    .with("entry_phase", pair.entryPhase()));
-            events.accept(ArenaEvent.of("line_step", view.turn(), seat)
-                    .with("stage", "PAIRED_CAST")
-                    .with("iteration", 0));
-            return Optional.of(Action.play(LineExecutor.Step.cast(pair.triggerCard())));
+            int value = pair.valueAgainst(view);
+            if (value > bestValue) {
+                bestValue = value;
+                bestPair = pair;
+                bestBinding = binding;
+            }
         }
-        return Optional.empty();
+        if (bestPair == null) {
+            return Optional.empty();
+        }
+        attemptedThisTurn.add(bestBinding.comboId());
+        firedPairs.add(bestBinding.comboId());
+        pendingProtection = bestPair.protectionCard();
+        events.accept(ArenaEvent.of("line_entered", view.turn(), seat)
+                .with("combo", bestBinding.comboId())
+                .with("binding", bestBinding.comboId())
+                .with("attempted_via", "binding")
+                .with("entry_phase", bestPair.entryPhase()));
+        events.accept(ArenaEvent.of("line_step", view.turn(), seat)
+                .with("stage", "PAIRED_CAST")
+                .with("iteration", 0)
+                .with("board_value", bestValue));
+        return Optional.of(Action.play(LineExecutor.Step.cast(bestPair.triggerCard())));
     }
 
     /**
