@@ -36,31 +36,6 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         ComboPilot create(Player player);
     }
 
-    /**
-     * PR-58: run the alpha-strike prediction alongside the existing combat
-     * predicate and record both. Observation only — no decision reads it.
-     * On by default so batches produce the fidelity ledger; set
-     * {@code -Darena.predict.observe=false} to measure the wall-clock cost
-     * of having it off.
-     */
-    static final boolean PREDICT_OBSERVE =
-            !"false".equals(System.getProperty("arena.predict.observe"));
-
-    /**
-     * PR-61: let the prediction DECIDE the attack, not merely record it.
-     * Off by default — this is the A/B arm. Enable with
-     * {@code -Darena.predict.decide=true} in a batch config's
-     * worker_jvm_args.
-     *
-     * <p>The shadow ledger cannot justify this on its own: while the old
-     * path declines every attack the engine calls lethal, "did a win
-     * follow?" cannot separate a lying copy from a correct prediction
-     * nobody acted on. Both look identical. Only executing the attack
-     * distinguishes them, so the cutover and its measurement are the same
-     * experiment.
-     */
-    static final boolean PREDICT_DECIDE =
-            Boolean.getBoolean("arena.predict.decide");
 
     private final PilotFactory pilotFactory;
 
@@ -672,27 +647,6 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             // = stock combat untouched (inertness).
             if (attacker == player) {
                 int turn = getGame().getPhaseHandler().getTurn();
-                // PR-58 (Phase 7): predict, RECORD, decide nothing. We are
-                // already at declare-attackers here, which is the only moment
-                // the copy's combat can still be scripted — so this is the
-                // one seam where a real alpha-strike prediction is possible.
-                // Behaviour is unchanged until the fidelity ledger says the
-                // predictions are worth trusting.
-                KillPredictor.Prediction predicted = observeAlphaPrediction(turn);
-                // PR-61: the engine says this attack kills someone. That is a
-                // better-informed answer than PR-34's worst-case arithmetic
-                // below (which assumes every opponent blocks optimally with
-                // its biggest creatures), so it is consulted first — but only
-                // when it produced a real verdict. A timeout is UNKNOWN, and
-                // unknown falls through to the old path rather than being
-                // read as "no".
-                if (PREDICT_DECIDE && predicted != null && predicted.killsSomeone()
-                        && scriptAttack(predictedLethalOrder(), combat)) {
-                    pilot.observe(forge.arena.report.ArenaEvent.of("line_step", turn, seatIndex)
-                            .with("stage", "PREDICTED_LETHAL")
-                            .with("iteration", 0));
-                    return;
-                }
                 ComboPilot.CombatOrder order = pilot.combatOrder(
                         SeatViews.of(player, seatIndex, turn)).orElse(null);
                 if (order != null && scriptAttack(order, combat)) {
@@ -728,59 +682,6 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
          * it cannot matter: no creatures, or not enough power on the board to
          * kill the weakest opponent even unblocked.
          */
-        /**
-         * Every alive opponent, lowest life first — mirroring exactly how
-         * {@link KillPredictor#predictAlphaStrike} spread the attack it
-         * simulated. Predicting one assignment and then making a different
-         * one would make the verdict describe an attack we never launched.
-         */
-        private ComboPilot.CombatOrder predictedLethalOrder() {
-            List<Player> alive = new java.util.ArrayList<>();
-            for (Player p : getGame().getPlayers()) {
-                if (p != player && !p.hasLost()) {
-                    alive.add(p);
-                }
-            }
-            alive.sort(java.util.Comparator.comparingInt(Player::getLife));
-            List<Integer> order = new java.util.ArrayList<>();
-            for (Player p : alive) {
-                order.add(p.getId());
-            }
-            return new ComboPilot.CombatOrder("PREDICTED_LETHAL", order);
-        }
-
-        private KillPredictor.Prediction observeAlphaPrediction(int turn) {
-            if (!PREDICT_OBSERVE) {
-                return null;
-            }
-            int power = 0;
-            for (forge.game.card.Card c : player.getCreaturesInPlay()) {
-                if (forge.game.combat.CombatUtil.canAttack(c)) {
-                    power += Math.max(0, c.getNetPower());
-                }
-            }
-            int weakest = Integer.MAX_VALUE;
-            for (Player p : getGame().getPlayers()) {
-                if (p != player && !p.hasLost()) {
-                    weakest = Math.min(weakest, p.getLife());
-                }
-            }
-            if (power == 0 || weakest == Integer.MAX_VALUE || power < weakest) {
-                return null; // cannot kill anyone even unblocked — nothing to ask
-            }
-            KillPredictor.Prediction p = KillPredictor.predictAlphaStrike(
-                    getGame(), player, pl -> getGame().getPlayers().indexOf(pl),
-                    KillPredictor.DEFAULT_TIMEOUT_MS);
-            pilot.observe(forge.arena.report.ArenaEvent.of("alpha_prediction", turn, seatIndex)
-                    .with("attack_ready_power", power)
-                    .with("weakest_opponent_life", weakest)
-                    .with("predicted_kill", p.killsSomeone())
-                    .with("predicted_dead_seats", p.deadSeats())
-                    .with("timed_out", p.timedOut())
-                    .with("cause", p.cause())
-                    .with("elapsed_ms", p.elapsedMs()));
-            return p;
-        }
 
         /**
          * PR-34: a kill order when combat math GUARANTEES an elimination

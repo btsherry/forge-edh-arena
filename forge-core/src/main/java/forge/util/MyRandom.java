@@ -30,8 +30,28 @@ import java.util.Random;
  * @version $Id$
  */
 public class MyRandom {
-    /** Constant <code>random</code>. */
-    private static Random random = new SecureRandom();
+    /*
+     * ARENA-PATCH (forge-edh-arena, upstream patch 2 of 2).
+     *
+     * The provider was a single process-wide static. Any thread that drew a
+     * random number shifted the sequence every other thread saw, so a headless
+     * batch that ran ANY work on a second thread - a lookahead copy, a
+     * background evaluation - silently perturbed the live game. Measured
+     * effect: 15 of 30 games diverged on identical seeds (different winner,
+     * different length), which makes seeded reproduction impossible and every
+     * seed-paired comparison meaningless.
+     *
+     * The provider is now per-thread. setSeed() gives every thread its own
+     * generator from the same seed, so a game thread's sequence depends only
+     * on its own draws. Unseeded behaviour is unchanged: each thread lazily
+     * gets a SecureRandom exactly as before.
+     */
+    private static volatile Long deterministicSeed = null;
+
+    private static final ThreadLocal<Random> RANDOM = ThreadLocal.withInitial(() -> {
+        Long seed = deterministicSeed;
+        return seed == null ? new SecureRandom() : new Random(seed);
+    });
 
     /**
      * <p>
@@ -52,22 +72,32 @@ public class MyRandom {
      * @return the random
      */
     public static Random getRandom() {
-        return MyRandom.random;
+        return RANDOM.get();
     }
 
     /**
-     * Sets the random provider. Used for deterministic simulation.
+     * Sets this THREAD's random provider. Used for deterministic simulation.
      * @param random the random
      */
     public static void setRandom(Random random) {
-        MyRandom.random = random;
+        RANDOM.set(random);
+    }
+
+    /**
+     * ARENA-PATCH: seed every thread deterministically. Each thread gets its
+     * OWN generator from this seed, so concurrent work cannot consume another
+     * thread's sequence - which is what made seeded batches irreproducible.
+     */
+    public static void setSeed(final long seed) {
+        deterministicSeed = seed;
+        RANDOM.remove();
     }
 
     public static int[] splitIntoRandomGroups(final int value, final int numGroups) {
         int[] groups = new int[numGroups];
 
         for (int i = 0; i < value; i++) {
-            groups[random.nextInt(numGroups)]++;
+            groups[getRandom().nextInt(numGroups)]++;
         }
 
         return groups;

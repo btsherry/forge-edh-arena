@@ -72,7 +72,10 @@ public final class ArenaBootstrap {
      * determinism requires one game per JVM process (the worker-pool model).
      */
     public static void seedRng(long seed) {
-        MyRandom.setRandom(new Random(seed));
+        // ARENA-PATCH 2: setSeed, not setRandom. setRandom binds only the
+        // CALLING thread, and the game runs on its own thread — so the seed
+        // has to be set for every thread that will draw, not just this one.
+        MyRandom.setSeed(seed);
     }
 
     /** GuiDesktop with the assets dir pinned to an explicit path. */
