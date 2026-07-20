@@ -85,6 +85,10 @@ public class ComboTrackerTest {
         Set<String> allowed = Set.of("seatIndex", "turn", "cardsIn", "librarySize", "locate",
                 "manaPool", "ownBoardPower", "attackReadyPower", "opponents", "ownAttachments",
                 "untappedManaSources", "handSize", "handLands",
+                // PR-A: the current phase is public information at any table,
+                // and mana has a lifetime bounded by it — a pool banked in a
+                // main phase is gone by combat. No hidden zone is involved.
+                "phase",
                 "equals", "hashCode", "toString", "getClass", "notify", "notifyAll", "wait");
         for (var m : SeatView.class.getMethods()) {
             assertTrue("unexpected public API on SeatView (W8): " + m.getName(),

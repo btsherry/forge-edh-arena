@@ -53,6 +53,15 @@ public final class ConversionPlanner {
         /** Cast an X-draw spell: spend the pool on cards, re-enter bigger. */
         DIG,
         /**
+         * PR-A: cast an X spell that eats the whole pool and converts it to
+         * board or cards (Genesis Wave, Finale of Devastation). Ranked
+         * directly under the outlet kills because it is what a banked pool
+         * is FOR in a deck with no damage outlet — the green deck's entire
+         * plan, and previously unrepresented, so it banked a thousand mana
+         * and passed the turn in all 27 games.
+         */
+        X_SPELL,
+        /**
          * Activate a battlefield draw engine instead of casting one. The
          * first live conversion batch proved this is the common case: every
          * dig engine across all four decks is a PERMANENT (Sensei's Top,
@@ -131,6 +140,17 @@ public final class ConversionPlanner {
                     && !attempted.contains(battery)) {
                 return new Plan(Kind.DRILL, battery, 0, PayoffRules.LIFE_COST_OUTLET);
             }
+        }
+
+        // (1c) X SPELL — the pool's purpose in a deck whose payoff is not
+        // damage. Ranked under the outlet kills (those END the game) but
+        // above DIG, because converting the pool into board or library
+        // access is strictly better than drawing one card at a time.
+        String xSpell = firstReachable(view, routePlan.payoffCards(
+                PayoffRules.X_SPELL_OUTLET), attempted, false);
+        if (xSpell != null) {
+            return new Plan(Kind.X_SPELL, xSpell, ComboPilot.DEPLOY_X,
+                    PayoffRules.X_SPELL_OUTLET);
         }
 
         // (2) DRILL — a repeatable single-target sink already on the

@@ -53,11 +53,15 @@ public class PayoffRulesTest {
     public void hasteClassesDistinguishStaticOneshotTargeted() {
         hits("All creatures have haste.", PayoffRules.HASTE_STATIC);        // Concordant Crossroads
         hits("Creatures you control have haste.", PayoffRules.HASTE_STATIC); // Fervor
-        // Finale of Devastation: one-shot haste AND mass pump
+        // Finale of Devastation: one-shot haste AND mass pump AND (PR-A) an
+        // X-spell outlet. That third class is the point of PR-A — a deck can
+        // bank a thousand mana and, before this, had nothing it RECOGNISED to
+        // spend it on: the conversion planner knew only x_drain_each_opponent
+        // and self_draw_engine, and Finale is neither.
         hits("Search your library and/or graveyard for a creature card with mana value X or less "
                 + "and put it onto the battlefield. If you search your library this way, shuffle. "
                 + "If X is 10 or more, creatures you control get +X/+X and gain haste until end of turn.",
-                PayoffRules.HASTE_ONESHOT, PayoffRules.MASS_PUMP);
+                PayoffRules.HASTE_ONESHOT, PayoffRules.MASS_PUMP, PayoffRules.X_SPELL_OUTLET);
         // Lightning Greaves — win-routes/6 puts equipment in its OWN class:
         // it is usable from hand off a banked pool (cast, equip, swing),
         // unlike an ETB-trigger granter which only hastens later arrivals

@@ -74,7 +74,9 @@ public final class SeatViews {
         }
         return new SeatView(seatIndex, turn, zones, librarySize, manaPool, ownBoardPower,
                 opponents, attachments, untappedManaSources, handSize, handLands,
-                attackReadyPower);
+                attackReadyPower,
+                player.getGame().getPhaseHandler().getPhase() == null ? ""
+                        : player.getGame().getPhaseHandler().getPhase().name());
     }
 
     private static Set<String> names(Player player, ZoneType zone) {

@@ -60,6 +60,8 @@ public final class SeatView {
     private final int handSize;
     private final int handLands;
     private final int attackReadyPower;
+    /** Current phase name (PR-A): mana has a lifetime and it is this. */
+    private final String phase;
 
     public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize) {
         this(seatIndex, turn, ownCards, librarySize, 0, 0, java.util.List.of(), Map.of(), 0, 0, 0);
@@ -104,6 +106,15 @@ public final class SeatView {
             int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents,
             Map<String, String> ownAttachments, int untappedManaSources, int handSize,
             int handLands, int attackReadyPower) {
+        this(seatIndex, turn, ownCards, librarySize, manaPool, ownBoardPower, opponents,
+                ownAttachments, untappedManaSources, handSize, handLands, attackReadyPower, "");
+    }
+
+    public SeatView(int seatIndex, int turn, Map<Zone, Set<String>> ownCards, int librarySize,
+            int manaPool, int ownBoardPower, java.util.List<OpponentView> opponents,
+            Map<String, String> ownAttachments, int untappedManaSources, int handSize,
+            int handLands, int attackReadyPower, String phase) {
+        this.phase = phase == null ? "" : phase;
         this.attackReadyPower = attackReadyPower;
         this.seatIndex = seatIndex;
         this.turn = turn;
@@ -158,6 +169,17 @@ public final class SeatView {
      */
     public int attackReadyPower() {
         return attackReadyPower;
+    }
+
+    /**
+     * The phase this view was taken in (PR-A). Mana empties as each step and
+     * phase ends, so a pool banked in one phase is gone in the next unless
+     * an unspent-mana permanent says otherwise. Without this the pilot
+     * floats a pool in a main phase and tries to spend it in combat, and the
+     * engine simply refuses.
+     */
+    public String phase() {
+        return phase;
     }
 
     /**

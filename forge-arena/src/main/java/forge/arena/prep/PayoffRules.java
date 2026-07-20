@@ -49,6 +49,31 @@ public final class PayoffRules {
     public static final String X_DRAIN_EACH_OPPONENT = "x_drain_each_opponent";
     /** Blue Sun's / Stroke class — a CASTABLE X-draw spell (the dig, §1.11). */
     public static final String SELF_DRAW_ENGINE = "self_draw_engine";
+
+    /**
+     * PR-A: an X spell that converts an arbitrary pool into board or cards
+     * (Genesis Wave {X}{G}{G}{G}, Finale of Devastation {X}{G}{G}).
+     *
+     * <p>This class exists because a deck could bank a thousand mana and
+     * have nothing it recognised to spend it on. The green deck's primer
+     * states its infinite mana "dumps the library via Greater Good, Genesis
+     * Wave, or Finale of Devastation" — and NONE of those matched
+     * {@link #X_DRAIN_EACH_OPPONENT} or {@link #SELF_DRAW_ENGINE}, the only
+     * two outlet classes the conversion planner knew. The seat generated its
+     * engine, banked the pool, and passed the turn, every game.
+     */
+    public static final String X_SPELL_OUTLET = "x_spell_outlet";
+
+    /**
+     * PR-A: a permanent that lets unspent mana survive a phase change
+     * (Omnath: {@code S:Mode$ UnspentMana}).
+     *
+     * <p>Mana empties as each step and phase ends. A banked pool is therefore
+     * only spendable in the phase that made it — UNLESS one of these is on
+     * the battlefield. Without the distinction the pilot floats a pool in a
+     * main phase and tries to use it in combat, which the engine refuses.
+     */
+    public static final String UNSPENT_MANA_GRANT = "unspent_mana_grant";
     /**
      * The same dig, but hosted on a PERMANENT with an activated draw ability
      * (Sensei's Divining Top, Staff of Domination, The One Ring). Split from
@@ -137,6 +162,14 @@ public final class PayoffRules {
             // win-routes/5 — the playbook taxonomy's premium class: one
             // resolution, no combat, no prevention (life LOSS, not damage);
             // the second alternation catches Torment's repeat-X structure
+            // PR-A: X spells that eat an arbitrary pool. Anchored on "x or
+            // less" / "top x cards" rather than a bare "x", so a Polukranos
+            // style creature-scoped X does not read as a mana outlet.
+            new Rule(X_SPELL_OUTLET, "reveal the top x cards of your library"
+                    + "|with mana value x or less"
+                    + "|search your library[^.]*mana value x or less"),
+            new Rule(UNSPENT_MANA_GRANT, "you don'?t lose unspent"
+                    + "|doesn'?t empty (from )?your mana pool"),
             new Rule(X_DRAIN_EACH_OPPONENT, "each opponent loses x life"
                     + "|repeat the following process x times\\. each opponent loses \\d+ life"),
             // the DIG: X-draw pointable at self, or a repeatable activated

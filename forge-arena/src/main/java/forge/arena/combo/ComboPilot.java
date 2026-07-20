@@ -162,6 +162,8 @@ public final class ComboPilot {
 
     /** State fingerprint the live route was computed from (PR-56). */
     private String lastPlanState;
+    /** Phase the banked pool was created in (PR-A) — mana has a lifetime. */
+    private String bankedPhase;
 
     /**
      * The decision-relevant state behind a route verdict (PR-56). Two views
@@ -782,6 +784,7 @@ public final class ComboPilot {
             String comboId = activeComboId;
             firedShortcuts.add(comboId);
             firedTurns.put(comboId, view.turn());
+            bankedPhase = view.phase();
             firedBinding = activeBinding;
             currentRoute = "DIRECT_DAMAGE_LOOP";
             lastPlanTurn = view.turn();
@@ -802,6 +805,7 @@ public final class ComboPilot {
             LethalityPlanner.Verdict verdict = LethalityPlanner.choose(routePlan, view, events);
             firedShortcuts.add(comboId);
             firedTurns.put(comboId, view.turn());
+            bankedPhase = view.phase();
             firedBinding = activeBinding;
             currentRoute = verdict.route();
             lastPlanTurn = view.turn();
@@ -840,6 +844,7 @@ public final class ComboPilot {
             boundedProduct.put("mana_" + loop.poolColor(), SHORTCUT_POOL);
             firedShortcuts.add(comboId);
             firedTurns.put(comboId, view.turn());
+            bankedPhase = view.phase();
             // PR-25: conversion state — the binding's payoffs stay deploy
             // candidates after the line exits, and the verdict feeds combat
             firedBinding = activeBinding;
@@ -894,7 +899,41 @@ public final class ComboPilot {
      * WHY a conversion did or did not happen (the long-200 post-mortem had
      * to infer this from route names alone).
      */
+    /**
+     * PR-A: has the banked pool survived to now?
+     *
+     * <p>Mana empties as each step and phase ends (CR 500.4). A pool banked
+     * in a main phase is GONE by combat unless an unspent-mana permanent
+     * (Omnath's {@code S:Mode$ UnspentMana}) is on the battlefield. We were
+     * asserting the opposite: the shortcut injected a pool and the pilot
+     * went on trying to spend it in later phases, which the engine simply
+     * refuses. That is the green deck floating a thousand mana and passing
+     * the turn, in every game.
+     */
+    private boolean pooledManaStillLive(SeatView view) {
+        if (bankedPhase == null || bankedPhase.equals(view.phase())) {
+            return true;
+        }
+        for (String keeper : routePlan.payoffCards(
+                forge.arena.prep.PayoffRules.UNSPENT_MANA_GRANT)) {
+            if (view.locate(keeper) == SeatView.Presence.BATTLEFIELD) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private Optional<Action> convert(SeatView view) {
+        if (!pooledManaStillLive(view)) {
+            // the pool expired with the phase; spending it is not a legal
+            // plan, and pretending otherwise burns every priority window
+            events.accept(ArenaEvent.of("pool_expired", view.turn(), seat)
+                    .with("banked_phase", bankedPhase)
+                    .with("current_phase", view.phase()));
+            bankedPhase = null;
+            firedShortcuts.clear();
+            return Optional.empty();
+        }
         java.util.LinkedHashSet<String> bindingPayoffs = deployCandidates(firedBinding);
         // PR-55: the planner needs to know a kill is already routable, so it
         // can decline to dig instead of taking it. Outlet kills (TABLE_WIDE,
@@ -912,7 +951,7 @@ public final class ComboPilot {
                 .with("outlet_class", plan.outletClass())
                 .with("x", plan.x()));
         return switch (plan.kind()) {
-            case TABLE_WIDE, DIG -> Optional.of(Action.play(
+            case TABLE_WIDE, DIG, X_SPELL -> Optional.of(Action.play(
                     LineExecutor.Step.castX(plan.card(), plan.x())));
             case DRILL -> Optional.of(Action.drill(new DrillOrder(plan.card())));
             // a deployed draw engine is ACTIVATED, not cast: the controller
