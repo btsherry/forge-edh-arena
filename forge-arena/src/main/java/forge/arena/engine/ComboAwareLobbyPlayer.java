@@ -104,6 +104,37 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             drillNoProgress = 0;
         }
 
+        /**
+         * PR-50 (playbook §4): who to shoot first. We used to always pick
+         * the LOWEST-LIFE opponent, which is backwards in multiplayer — the
+         * dangerous player is the one with cards and open mana, not the one
+         * already nearly dead. A low life total still matters (it is the
+         * cheapest elimination), so it stays in the score rather than being
+         * the whole score.
+         *
+         * <p>Higher is more urgent: open mana they could interact with,
+         * cards in hand, and board presence push a player up; a low life
+         * total also pushes them up because finishing them is cheap and
+         * removes a whole set of blockers and answers from the table.
+         */
+        private int threatScore(Player opponent) {
+            int openMana = 0;
+            int board = 0;
+            for (forge.game.card.Card c : opponent.getCardsIn(
+                    forge.game.zone.ZoneType.Battlefield)) {
+                if (c.isLand() && !c.isTapped()) {
+                    openMana++;
+                }
+                if (c.isCreature()) {
+                    board++;
+                }
+            }
+            int handSize = opponent.getCardsIn(forge.game.zone.ZoneType.Hand).size();
+            // life is inverted: 40 life scores 0, 1 life scores ~39
+            int nearlyDead = Math.max(0, 40 - opponent.getLife());
+            return openMana * 3 + handSize * 2 + board + nearlyDead;
+        }
+
         /** The next drill activation, or null (disarms when done/failed). */
         private List<SpellAbility> drillStep(int turn) {
             if (activeDrill == null) {
@@ -140,7 +171,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             Player target = null;
             for (Player p : getGame().getPlayers()) {
                 if (p != player && !p.hasLost() && !drillImmune.contains(p.getId())
-                        && (target == null || p.getLife() < target.getLife())) {
+                        && (target == null || threatScore(p) > threatScore(target))) {
                     target = p;
                 }
             }

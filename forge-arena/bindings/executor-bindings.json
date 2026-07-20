@@ -322,6 +322,84 @@
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "1976-5078-5243",
+      "archetype": "SelfTopdeckRecastLoop",
+      "params": {
+        "engine": "Sensei's Divining Top",
+        "cost_reducer": "Etherium Sculptor",
+        "topdeck_enabler": "The Reality Chip",
+        "activation_cost": "{T}",
+        "bank_cycles": "12"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "777-5078-5243",
+      "archetype": "SelfTopdeckRecastLoop",
+      "params": {
+        "engine": "Sensei's Divining Top",
+        "cost_reducer": "Foundry Inspector",
+        "topdeck_enabler": "The Reality Chip",
+        "activation_cost": "{T}",
+        "bank_cycles": "12"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "2146-5078-5243",
+      "archetype": "SelfTopdeckRecastLoop",
+      "params": {
+        "engine": "Sensei's Divining Top",
+        "cost_reducer": "Cloud Key",
+        "topdeck_enabler": "The Reality Chip",
+        "activation_cost": "{T}",
+        "bank_cycles": "12"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "457-1976-5078-5390",
+      "archetype": "SelfTopdeckRecastLoop",
+      "params": {
+        "engine": "Sensei's Divining Top",
+        "cost_reducer": "Etherium Sculptor",
+        "topdeck_enabler": "Forensic Gadgeteer",
+        "activation_cost": "{T}",
+        "bank_cycles": "12"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "457-777-5078-5390",
+      "archetype": "SelfTopdeckRecastLoop",
+      "params": {
+        "engine": "Sensei's Divining Top",
+        "cost_reducer": "Foundry Inspector",
+        "topdeck_enabler": "Forensic Gadgeteer",
+        "activation_cost": "{T}",
+        "bank_cycles": "12"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
+    },
+    {
+      "combo_id": "457-2146-5078-5390",
+      "archetype": "SelfTopdeckRecastLoop",
+      "params": {
+        "engine": "Sensei's Divining Top",
+        "cost_reducer": "Cloud Key",
+        "topdeck_enabler": "Forensic Gadgeteer",
+        "activation_cost": "{T}",
+        "bank_cycles": "12"
+      },
+      "payoffs": [],
+      "entry_phase": "MAIN1"
     }
   ],
   "unbound": [
