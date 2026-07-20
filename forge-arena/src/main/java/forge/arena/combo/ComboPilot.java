@@ -857,8 +857,12 @@ public final class ComboPilot {
      */
     private Optional<Action> convert(SeatView view) {
         java.util.LinkedHashSet<String> bindingPayoffs = deployCandidates(firedBinding);
+        // PR-55: the planner needs to know a kill is already routable, so it
+        // can decline to dig instead of taking it. Outlet kills (TABLE_WIDE,
+        // DRILL) still outrank everything — they ARE the kill.
+        boolean killRouteLive = currentRoute != null && !"BANK_AND_HOLD".equals(currentRoute);
         ConversionPlanner.Plan plan = ConversionPlanner.choose(
-                view, routePlan, bindingPayoffs, attemptedDeploys);
+                view, routePlan, bindingPayoffs, attemptedDeploys, killRouteLive);
         if (plan.kind() == ConversionPlanner.Kind.NONE) {
             return Optional.empty();
         }

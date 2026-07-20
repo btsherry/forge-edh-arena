@@ -155,6 +155,33 @@ public class ConversionPlannerTest {
     }
 
     @Test
+    public void aLiveKillRouteOutranksDigging() {
+        // PR-55: the green deck's dig engine (Staff of Domination) is also
+        // one of its combo pieces, so after every fire it sat on the
+        // battlefield and the dig branch returned an activation in EVERY
+        // priority window — the pilot drew its library to the floor one card
+        // at a time with a lethal attack available the whole way.
+        SeatView digAvailable = view(Set.of("Blue Sun's Zenith"), Set.of(), Set.of(), 60);
+
+        // no kill routable: digging is right — never pass with a live engine
+        assertEquals(ConversionPlanner.Kind.DIG, ConversionPlanner.choose(
+                digAvailable, PLAN, Set.of(), Set.of(), false).kind());
+
+        // kill routable: digging must yield to it
+        assertEquals(ConversionPlanner.Kind.NONE, ConversionPlanner.choose(
+                digAvailable, PLAN, Set.of(), Set.of(), true).kind());
+
+        // ...but an OUTLET kill is itself the win and still outranks all:
+        // suppressing the dig must not suppress the thing that ends the game
+        SeatView withOutlet = view(Set.of("Exsanguinate"), Set.of(), Set.of(), 60);
+        assertEquals(ConversionPlanner.Kind.TABLE_WIDE, ConversionPlanner.choose(
+                withOutlet, PLAN, Set.of(), Set.of(), true).kind());
+        SeatView withSink = view(Set.of(), Set.of("Walking Ballista"), Set.of(), 60);
+        assertEquals(ConversionPlanner.Kind.DRILL, ConversionPlanner.choose(
+                withSink, PLAN, Set.of(), Set.of(), true).kind());
+    }
+
+    @Test
     public void aDeckWithNoOutletArtifactsIsInert() {
         // inertness: no payoff classes -> no conversion decisions at all,
         // the deploy path keeps the turn exactly as before

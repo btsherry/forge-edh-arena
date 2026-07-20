@@ -97,6 +97,17 @@ public final class ConversionPlanner {
      */
     public static Plan choose(SeatView view, RoutePlan routePlan,
             Set<String> bindingPayoffs, Set<String> attempted) {
+        return choose(view, routePlan, bindingPayoffs, attempted, false);
+    }
+
+    /**
+     * @param killRouteLive the lethality planner has a real win route for
+     *        this board right now (anything but BANK_AND_HOLD). Digging is a
+     *        means, never an end: when a kill is already routable, drawing
+     *        more cards must not outrank taking it.
+     */
+    public static Plan choose(SeatView view, RoutePlan routePlan,
+            Set<String> bindingPayoffs, Set<String> attempted, boolean killRouteLive) {
         // (1) TABLE_WIDE — the premium class. Deliberately ONLY
         // x_drain_each_opponent: it is the sole class that turns a pool into
         // a finished game in one resolution with no feeder and no combat.
@@ -136,6 +147,20 @@ public final class ConversionPlanner {
         // (3) DIG — no outlet reachable. Spend the pool on cards rather than
         // passing the turn with a live engine (the playbook's first law).
         // The deck-out guard is a hard floor, never a preference.
+        //
+        // PR-55: but ONLY when there is no kill to take. The first law says
+        // never end a turn with an unused engine and an unsearched library —
+        // it does not say search the library instead of winning. The green
+        // deck's dig engine (Staff of Domination) is also one of its combo
+        // pieces, so after every fire it was permanently on the battlefield
+        // and this branch returned an activation in EVERY priority window:
+        // the pilot drew its library down to the floor, one card at a time,
+        // with a lethal attack available the whole way. Digging outranking
+        // the win is the same mistake as hunting a haste card the deck did
+        // not need (PR-54) — a means promoted over its own end.
+        if (killRouteLive) {
+            return Plan.NOTHING;
+        }
         if (view.librarySize() > LIBRARY_FLOOR) {
             int x = Math.max(1, Math.min(view.librarySize() - LIBRARY_FLOOR, DIG_CAP));
             // a deployed draw engine is activated in place — no cast, no X
