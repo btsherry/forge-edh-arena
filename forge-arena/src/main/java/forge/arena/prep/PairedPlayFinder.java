@@ -91,7 +91,7 @@ public final class PairedPlayFinder {
         String text = normalize(oracleText);
         // a modal sweeper ("destroy all lands OR all creatures") can choose,
         // so treat it as the broader of its options
-        boolean lands = text.contains("destroy all lands");
+        boolean lands = text.contains("destroy all lands") || text.contains("exile all lands");
         // a modal sweeper reads "destroy all lands OR ALL CREATURES", so the
         // second option never contains the verb — match the bare option too
         boolean creatures = text.contains("destroy all creatures")
@@ -109,7 +109,13 @@ public final class PairedPlayFinder {
         if (creatures) {
             return Scope.CREATURES;
         }
-        return WIPE.matcher(text).find() ? Scope.NONLAND_PERMANENTS : null;
+        // Review find: the old fallback returned NONLAND_PERMANENTS for ANY
+        // unrecognised sweeper, so "exile all lands" — which the checks above
+        // miss because they look for "destroy" — was classified as a nonland
+        // wipe and would happily pair with a creature shield, destroying our
+        // own mana base. An unrecognised sweeper is now no pair at all: a
+        // missed pairing costs one line, a mis-scoped one costs the game.
+        return null;
     }
 
     /** The scope a shield covers, or null when the card is not a shield. */

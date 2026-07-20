@@ -123,6 +123,20 @@ public class PairedPlayFinderTest {
     }
 
     @Test
+    public void anExileAllLandsSweeperIsALandWipeNotANonlandOne() {
+        // Review find: the checks looked for "destroy all lands", so an
+        // EXILE-worded land sweeper fell through to a generic fallback that
+        // called it a nonland wipe — which would then pair with a creature
+        // shield and destroy our own mana base. Same class of mistake the
+        // scope rule exists to prevent, arriving through a different word.
+        assertEquals(PairedPlayFinder.Scope.LANDS,
+                PairedPlayFinder.wipeScope("Exile all lands."));
+        // and an unrecognised sweeper is now NO pair rather than a guess:
+        // a missed pairing costs one line, a mis-scoped one costs the game
+        assertNull(PairedPlayFinder.wipeScope("Destroy all Auras."));
+    }
+
+    @Test
     public void manaValueComesFromThePrintedCost() {
         // the dossier stores "{3}{W}", not a number
         assertEquals(4, PairedPlayFinder.manaValue("{3}{W}"));

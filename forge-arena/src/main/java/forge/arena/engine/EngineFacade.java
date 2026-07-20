@@ -170,10 +170,15 @@ public final class EngineFacade {
      * one worker took a JVM-level SIGSEGV, costing about a sixth of every
      * batch's sample.
      *
-     * <p>Deliberately NOT patched in Forge. The recursion is legitimate
-     * work on a big board, not an upstream bug, and this project has to
-     * stay mergeable with upstream — so the fix is arena-side: give the
-     * game loop a thread with room to do it.
+     * <p>The size is EMPIRICAL, not decorative. A code review argued it
+     * should shrink now that the infinite-recursion cycle is patched
+     * (PR-49), since an abandoned timed-out thread retains its stack. That
+     * was tried at 8MB and the test JVM died with SIGSEGV — a stack
+     * overflow deep enough in native frames that the VM cannot unwind it.
+     * Forge's target-legality walk really does need this much room on a
+     * large board, so the reservation stays and the leak is mitigated
+     * instead (daemon thread, interrupt grace, and a warning when a game
+     * loop refuses to stop).
      */
     private static final int GAME_THREAD_STACK_BYTES = 64 * 1024 * 1024;
 
@@ -183,6 +188,9 @@ public final class EngineFacade {
      * the cause otherwise), because a single-thread executor gives no way
      * to size the stack.
      */
+    /** How long to let an interrupted game loop actually stop. */
+    private static final long INTERRUPT_GRACE_MS = 5_000;
+
     private static void runGameOnDeepStack(Runnable body, long timeoutSec) throws Exception {
         java.util.concurrent.atomic.AtomicReference<Throwable> failure =
                 new java.util.concurrent.atomic.AtomicReference<>();
@@ -197,7 +205,18 @@ public final class EngineFacade {
         gameThread.start();
         gameThread.join(TimeUnit.SECONDS.toMillis(timeoutSec));
         if (gameThread.isAlive()) {
+            // Review find: a game loop deep in engine work may not observe an
+            // interrupt, and an abandoned thread keeps its whole Game object
+            // graph reachable. Roughly a quarter of games end on the wall
+            // clock, so across a 300-game batch that retention is the
+            // difference between a healthy worker and an OOM. Give the
+            // interrupt a moment to land and report honestly if it does not.
             gameThread.interrupt();
+            gameThread.join(INTERRUPT_GRACE_MS);
+            if (gameThread.isAlive()) {
+                System.err.println("warning: game thread did not stop after interrupt"
+                        + " — its heap stays reachable until the worker exits");
+            }
             throw new TimeoutException("wall clock " + timeoutSec + "s");
         }
         Throwable t = failure.get();

@@ -138,7 +138,21 @@ public final class ExecutorBindings {
      * unknown — the combo stays detection-only (plan §6 generic fallback),
      * never a crash: an unknown name in data must not break a batch.
      */
+    /**
+     * Executors are immutable value objects built from a binding's params,
+     * so building one per call was pure churn: the pilot asks for every
+     * binding's executor at EVERY priority window, and a deck with 36
+     * generated paired plays turned that into tens of thousands of
+     * short-lived objects per game. Cached by identity of the binding.
+     */
+    private static final Map<Binding, Optional<LineExecutor>> EXECUTOR_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     public static Optional<LineExecutor> executorFor(Binding binding) {
+        return EXECUTOR_CACHE.computeIfAbsent(binding, ExecutorBindings::buildExecutor);
+    }
+
+    private static Optional<LineExecutor> buildExecutor(Binding binding) {
         if (TapForManaUntapLoop.ARCHETYPE.equals(binding.archetype())) {
             return Optional.of(new TapForManaUntapLoop(binding.params(), binding.entryPhase()));
         }
