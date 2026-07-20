@@ -381,16 +381,28 @@ turn-12 "attacked for zero" result, stated as a rule.
   natural Phase 8 if Phase 7 lands.
 - No deck-specific logic. Every call site reads the deck's own artifacts.
 
-## Sequence
+## Sequence and status
 
-1. **Concurrency + hang spike.** 6 threads copying and advancing fat
-   Selvala/Urza boards, including a board with a live infinite combo. Prove no
-   corruption, no hang. Ship the timeout wrapper. **No behaviour change.**
-2. **Call site 1: combat prediction**, state-gated, feature-flagged, Selvala
-   first. A/B by seed + fidelity ledger.
-3. **Call site 2: loop-product prediction** for Urza (the mechanism from the
-   section above, not a rerun of call site 1).
-4. **Delete the dead predicates** the two cutovers have replaced.
+1. **Concurrency + hang spike** — DONE (PR-57). 6 workers x 5 predictions:
+   30/30 completed, 0 abandoned, nothing thrown. The reviewer's bet-money
+   risk did not materialize. Timeout wrapper shipped; no behaviour change.
+2. **Budget from production, not a fixture** — DONE (PR-59/60). 250 ms was
+   set from a 2-player single-threaded spike and timed out 75% of the time.
+   Re-measured unclipped: p50 283 ms, p99 1331 ms, 2.0 predictions per game,
+   0.5% of game wall clock. Budget is 2000 ms and configurable per run.
+3. **Call site 1: combat prediction** — observation DONE (PR-58), decision
+   arm wired behind `arena.predict.decide` (PR-61). **A/B running**: 30 games
+   per arm, identical seeds. This is the go/no-go.
+4. **Coverage, which turned out to matter more than conversion for Urza** —
+   DONE (PR-61b). 11 of its 23 combos were unbound (438 no_viable_route
+   events against 23 fires); five shared one shape an existing archetype
+   already covers, so they cost five lines of data and no code.
+5. **Call site 2: loop-product prediction** for Urza — NEXT, and only after
+   the A/B verdict. Verify PR-51's existing cast-trigger guard before
+   building anything new; it currently fires only when the outlet is already
+   on the battlefield, which for Urza it usually is not.
+6. **Delete the dead predicates** the cutovers replace — LAST, and only
+   against measured games.
 
 ## Exit bar
 
