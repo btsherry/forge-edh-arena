@@ -326,6 +326,67 @@ public class ComboPilotTest {
     }
 
     @Test
+    public void theRouteIsReplannedWhenTheBoardMovesNotOncePerTurn() throws Exception {
+        // PR-56: the verdict used to be computed at the turn's FIRST priority
+        // window and reused for the whole turn — including declareAttackers,
+        // which reads it to decide whether to swing. But the turn is exactly
+        // when the board changes. A seat that opened with nothing and
+        // assembled a lethal board by the combat step still read the stale
+        // verdict and declined to attack.
+        Path dir = Files.createTempDirectory("pilot-replan");
+        Files.writeString(dir.resolve("executor-bindings.json"), """
+                {"schema": "arena.executor-bindings/1",
+                 "bindings": [{"combo_id": "527-2816", "archetype": "TapForManaUntapLoop",
+                   "params": {"engine": "Selvala, Heart of the Wilds", "untapper": "Umbral Mantle",
+                              "activation_cost": "{G}", "untap_cost": "{3}",
+                              "untap_ability_host": "engine", "pool_color": "G"}}],
+                 "unbound": []}""");
+        RoutePlan plan = new RoutePlan(
+                List.of(new RoutePlan.PlannedRoute("SPREAD_COMBAT", "conversion", "supported",
+                        List.of("Craterhoof Behemoth"))),
+                Map.of("mass_pump", List.of("Craterhoof Behemoth")));
+        List<ArenaEvent> events = new ArrayList<>();
+        ComboPilot pilot = new ComboPilot(new ComboTracker(List.of(MANTLE_DEF)),
+                ExecutorBindings.load(dir.resolve("executor-bindings.json")), plan,
+                0.0, 0, events::add);
+
+        // fire, then exit the line — conversion is now pending
+        pilot.nextAction(ready(3), true, PROFITABLE);
+        pilot.nextAction(ready(3), true, PROFITABLE);
+
+        // an empty board on turn 4: nothing can attack, no pump in hand
+        pilot.nextAction(board(4, 0, Set.of()), true, PROFITABLE);
+        long afterFirst = events.stream().filter(e -> e.t().equals("route_selected")).count();
+
+        // SAME turn, board assembled mid-turn: the pump landed and 40 power
+        // is now attack-ready. The route must be reconsidered, not cached.
+        pilot.nextAction(board(4, 40, Set.of("Craterhoof Behemoth")), true, PROFITABLE);
+        long afterBoard = events.stream().filter(e -> e.t().equals("route_selected")).count();
+        assertTrue("a mid-turn board change must trigger a replan",
+                afterBoard > afterFirst);
+
+        // ...but an unchanged board must NOT: replanning is driven by the
+        // board, not the clock, so it stays bounded and emits no event spam
+        pilot.nextAction(board(4, 40, Set.of("Craterhoof Behemoth")), true, PROFITABLE);
+        assertEquals("no state change -> no recompute, no event", afterBoard,
+                events.stream().filter(e -> e.t().equals("route_selected")).count());
+        assertAllValid(events);
+    }
+
+    /** A post-fire board with a given attack-ready power and hand. */
+    private static SeatView board(int turn, int power, Set<String> hand) {
+        return new SeatView(0, turn, Map.of(
+                SeatView.Zone.BATTLEFIELD, Set.of("Selvala, Heart of the Wilds", "Umbral Mantle"),
+                SeatView.Zone.HAND, hand,
+                SeatView.Zone.COMMAND, Set.of(),
+                SeatView.Zone.GRAVEYARD, Set.of(),
+                SeatView.Zone.EXILE, Set.of()), 80, 0, power,
+                List.of(new SeatView.OpponentView(1, 40, 0, Set.of()),
+                        new SeatView.OpponentView(2, 40, 0, Set.of()),
+                        new SeatView.OpponentView(3, 40, 0, Set.of())));
+    }
+
+    @Test
     public void failedConversionRefiresPastTheWindowNotForever() throws Exception {
         // PR-35 (stall-autopsy find): a t21 reservation was still suppressing
         // the proven engine at t33 while the seat ground out unpumped

@@ -150,6 +150,20 @@ public final class ComboPilot {
     private String currentRoute;
     private int lastPlanTurn = -1;
     private final Set<String> attemptedDeploys = new HashSet<>();
+    /** State fingerprint the live route was computed from (PR-56). */
+    private String lastPlanState;
+
+    /**
+     * The decision-relevant state behind a route verdict (PR-56). Two views
+     * with the same fingerprint cannot produce different verdicts, so the
+     * plan only needs recomputing when this changes — which makes replanning
+     * driven by the board rather than by the clock.
+     */
+    private static String planState(SeatView view) {
+        return view.attackReadyPower() + "/" + view.ownBoardPower() + "/" + view.handSize()
+                + "/" + view.manaPool() + "/" + view.cardsIn(SeatView.Zone.BATTLEFIELD).size()
+                + "/" + view.opponents().stream().mapToInt(SeatView.OpponentView::life).sum();
+    }
 
     public ComboPilot(ComboTracker tracker, ExecutorBindings bindings, double patience,
             int seat, Consumer<ArenaEvent> events) {
@@ -386,8 +400,20 @@ public final class ComboPilot {
         // tutored after the fire flips BANK_AND_HOLD into a real route
         // instead of a stall — and keep deploying payoffs as they arrive
         if (!firedShortcuts.isEmpty() && !lineActive()) {
-            if (view.turn() != lastPlanTurn) {
+            // PR-56 (research: receding-horizon replanning) — the verdict used
+            // to be computed once, at the turn's FIRST priority window, and
+            // then reused for the whole turn including declareAttackers. But
+            // the turn is exactly when the board changes: cast the pump, draw
+            // the payoff, untap the team. A seat that opened the turn with
+            // nothing and assembled a lethal board by the combat step still
+            // read BANK_AND_HOLD from before it did any of that, and declined
+            // to attack. Replan whenever the state a verdict depends on has
+            // actually moved — board-driven, not clock-driven, so it stays
+            // bounded (no change, no recompute, no event).
+            String state = planState(view);
+            if (view.turn() != lastPlanTurn || !state.equals(lastPlanState)) {
                 lastPlanTurn = view.turn();
+                lastPlanState = state;
                 currentRoute = LethalityPlanner.choose(routePlan, view, events).route();
             }
             // PR-38 (Phase 6 A2): the conversion state machine runs BEFORE
@@ -749,6 +775,7 @@ public final class ComboPilot {
             firedBinding = activeBinding;
             currentRoute = "DIRECT_DAMAGE_LOOP";
             lastPlanTurn = view.turn();
+            lastPlanState = planState(view);
             Map<String, Object> product = new HashMap<>();
             product.put("drill_outlet", pingLoop.pinger());
             events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
@@ -768,6 +795,7 @@ public final class ComboPilot {
             firedBinding = activeBinding;
             currentRoute = verdict.route();
             lastPlanTurn = view.turn();
+            lastPlanState = planState(view);
             Map<String, Object> boundedProduct = new HashMap<>();
             boundedProduct.put("token_entries", copyLoop.floodCount());
             events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
@@ -807,6 +835,7 @@ public final class ComboPilot {
             firedBinding = activeBinding;
             currentRoute = verdict.route();
             lastPlanTurn = view.turn();
+            lastPlanState = planState(view);
             events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
                     .with("combo", comboId)
                     .with("iterations_proven", proof.cycles())
