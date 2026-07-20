@@ -191,7 +191,14 @@ public final class KillPredictor {
             return Prediction.abandoned("timeout", elapsed);
         }
         if (failure.get() != null) {
-            return Prediction.abandoned("threw", elapsed);
+            // PR-64: name WHAT threw. A first 30-game arm reported 22 of 83
+            // predictions throwing (26%) while the isolated 2-player test
+            // ran 30/30 clean — a failure rate invisible until the causes
+            // were split apart, and undiagnosable while the throwable was
+            // swallowed. "threw" is not a diagnosis; the exception is.
+            Throwable t = failure.get();
+            return Prediction.abandoned("threw:" + t.getClass().getSimpleName()
+                    + (t.getMessage() != null ? ":" + t.getMessage() : ""), elapsed);
         }
         if (dead.get() == null) {
             // no Combat object: called outside declare-attackers, so there

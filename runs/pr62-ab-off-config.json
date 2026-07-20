@@ -1,0 +1,38 @@
+{
+  "run_id": "pr62-ab-off",
+  "seed_base": 6200,
+  "games": 30,
+  "workers": 6,
+  "out_dir": "runs/pr62-ab-off",
+  "assets_dir": "forge-gui",
+  "limits": {
+    "turns": 35,
+    "wall_clock_sec": 600,
+    "priority_passes_per_turn": 2000
+  },
+  "seats": [
+    {
+      "deck": "forge-arena/decks/selvala-heart-of-the-wilds.dck",
+      "combo_aware": true,
+      "dossier": "forge-arena/decks/selvala-heart-of-the-wilds/dossier"
+    },
+    {
+      "deck": "forge-arena/decks/purphoros-god-of-the-forge.dck",
+      "combo_aware": true,
+      "dossier": "forge-arena/decks/purphoros-god-of-the-forge/dossier"
+    },
+    {
+      "deck": "forge-arena/decks/urza-lord-high-artificer.dck",
+      "combo_aware": true,
+      "dossier": "forge-arena/decks/urza-lord-high-artificer/dossier"
+    },
+    {
+      "deck": "forge-arena/decks/giada-font-of-hope.dck",
+      "combo_aware": true,
+      "dossier": "forge-arena/decks/giada-font-of-hope/dossier"
+    }
+  ],
+  "worker_jvm_args": [
+    "-Darena.predict.decide=false"
+  ]
+}

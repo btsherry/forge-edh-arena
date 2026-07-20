@@ -232,7 +232,8 @@
         "rock_mana": "2",
         "rock_tap_cost": "{T}",
         "pool_color": "C",
-        "shortcut": "true"
+        "shortcut": "true",
+        "bouncer_mana_value": "8"
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
@@ -247,7 +248,8 @@
         "rock_mana": "3",
         "rock_tap_cost": "{T}",
         "pool_color": "C",
-        "shortcut": "true"
+        "shortcut": "true",
+        "bouncer_mana_value": "8"
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
@@ -262,7 +264,8 @@
         "rock_mana": "3",
         "rock_tap_cost": "{T}",
         "pool_color": "C",
-        "shortcut": "true"
+        "shortcut": "true",
+        "bouncer_mana_value": "8"
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
@@ -411,7 +414,8 @@
         "rock_mana": "2",
         "rock_tap_cost": "{T}",
         "pool_color": "C",
-        "shortcut": "true"
+        "shortcut": "true",
+        "bouncer_mana_value": "7"
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
@@ -426,7 +430,8 @@
         "rock_mana": "3",
         "rock_tap_cost": "{T}",
         "pool_color": "C",
-        "shortcut": "true"
+        "shortcut": "true",
+        "bouncer_mana_value": "7"
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
@@ -441,7 +446,8 @@
         "rock_mana": "1",
         "rock_tap_cost": "{T}",
         "pool_color": "U",
-        "shortcut": "true"
+        "shortcut": "true",
+        "bouncer_mana_value": "7"
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
@@ -456,7 +462,8 @@
         "rock_mana": "1",
         "rock_tap_cost": "{T}",
         "pool_color": "U",
-        "shortcut": "true"
+        "shortcut": "true",
+        "bouncer_mana_value": "8"
       },
       "payoffs": [],
       "entry_phase": "MAIN1"
@@ -471,7 +478,8 @@
         "rock_mana": "1",
         "rock_tap_cost": "{T}",
         "pool_color": "U",
-        "shortcut": "true"
+        "shortcut": "true",
+        "bouncer_mana_value": "8"
       },
       "payoffs": [],
       "entry_phase": "MAIN1"

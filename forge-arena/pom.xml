@@ -13,6 +13,15 @@
     <name>Forge Arena</name>
     <description>Headless 4-player Commander batch harness with combo-aware AI (see forge-arena/docs/IMPLEMENTATION-PLAN.md)</description>
 
+    <properties>
+        <!--
+          Arena tests run by default and are NOT disabled by the reactor's
+          -DskipTests (see the surefire block below). Opting out is
+          deliberate and explicit: -Darena.skip.tests=true.
+        -->
+        <arena.skip.tests>false</arena.skip.tests>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>forge</groupId>
@@ -72,8 +81,18 @@
                 <configuration>
                     <!-- bootstrap tests resolve ../forge-gui relative to the module basedir -->
                     <workingDirectory>${project.basedir}</workingDirectory>
-                    <!-- always run arena tests, even when the reactor build passes -DskipTests for the forge deps -->
-                    <skipTests>false</skipTests>
+                    <!--
+                      Always run arena tests even when the reactor build
+                      passes -DskipTests for the forge deps: a green build
+                      must never mean "the arena suite was skipped".
+
+                      But that also made it IMPOSSIBLE to skip them, so
+                      batch.sh — which only wants a compiled classpath — paid
+                      the full ~4 minute suite on every launch. The dedicated
+                      property keeps forge's -DskipTests from disabling us
+                      while still giving a caller a deliberate way to opt out.
+                    -->
+                    <skipTests>${arena.skip.tests}</skipTests>
                     <!--
                       The suite plays real games, and a combo harness builds
                       very large boards on purpose, so the fork had grown to a

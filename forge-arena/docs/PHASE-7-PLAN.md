@@ -328,6 +328,59 @@ against actual-outcome on attacks that really happen.
 That makes the A/B the next step rather than a later one, and it must carry
 the ledger with it.
 
+## THE A/B VERDICT: do not cut over
+
+30 games per arm, identical seeds, one flag apart.
+
+| | predictions | said lethal | attacks steered | wins |
+|---|---|---|---|---|
+| predictor observes | 83 | 35 | **0** | **20** |
+| predictor decides  | 91 | 33 | **33** | **19** |
+
+Seed-paired flips: purphoros 2 each way, giada 1 against, selvala 0 each
+way. The decision arm also took one crash the baseline did not.
+
+**33 prediction-driven alpha strikes, every one executed, and the win count
+did not move.** The mechanism works end-to-end — 33 of 33 predicted kills
+became real attacks, against 0 in the baseline — and it bought nothing.
+
+### Why, and the second reason is mine
+
+**1. The primitive is unhealthy.** ~24% of predictions throw in both arms
+(22/83 and 20/91) while the isolated 2-player test ran 30/30 clean. A
+predicate that fails a quarter of the time in production is not a foundation.
+The exception was swallowed, so the cause telemetry now carries it (PR-64).
+
+**2. "Kills someone" is not a win condition, and I measured it as if it
+were.** In a four-player pod you need three eliminations. An all-in alpha
+that kills one opponent leaves the attacker tapped out with an empty board
+against two survivors — plausibly WORSE than not attacking, which fits the
+arm being one win behind. I built a predicate answering *does anyone die*
+and then graded it on *did you win*. Those were never the same question, and
+no amount of copy fidelity would have closed that gap.
+
+This is the same error the phase exists to remove, one level up: not a proxy
+inside the code, but a proxy in the **success criterion**. The engine
+answered exactly what I asked. I asked the wrong thing.
+
+### What survives
+
+The machinery is sound and stays, unused by any decision: the copy-at-
+declare-attackers technique, the timeout guard, the gate (2.0 predictions per
+game, 0.5% of wall clock), the cause telemetry. What does not survive is the
+claim that combat-kill prediction improves play.
+
+**The exit bar — Selvala and Urza above 40% same-turn conversion — is not
+met and was not approached.** Urza is 0 for 30 in both arms.
+
+### What to ask instead
+
+If prediction is worth anything here, the question must be terminal:
+*does this line WIN the game* — all opponents dead, or a state from which
+they cannot recover — not *does it kill a player*. That is a much rarer
+event, which suits the primitive: rarer means the ~40 ms budget buys more,
+and a false positive costs less because it fires less.
+
 ## Urza: the setup/payload split (second Gemini consultation)
 
 Gemini's verdict on "predict the loop's product": it collapses back into

@@ -14,7 +14,7 @@ export JAVA_HOME="${JAVA_HOME:-/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Con
 CP_FILE="$REPO_ROOT/forge-arena/target/classpath.txt"
 if [ ! -f "$CP_FILE" ] || [ "$REPO_ROOT/forge-arena/pom.xml" -nt "$CP_FILE" ]; then
   echo "building forge-arena (generates classpath.txt)..."
-  (cd "$REPO_ROOT" && mvn -pl forge-arena -am install -DskipTests -Dcheckstyle.skip=true -q)
+  (cd "$REPO_ROOT" && mvn -pl forge-arena -am install -DskipTests -Darena.skip.tests=true -Dcheckstyle.skip=true -q)
 fi
 CP="$REPO_ROOT/forge-arena/target/classes:$(cat "$CP_FILE")"
 

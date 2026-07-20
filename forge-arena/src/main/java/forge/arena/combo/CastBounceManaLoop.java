@@ -47,6 +47,7 @@ public final class CastBounceManaLoop implements LineExecutor, ShortcutSource {
     private final String poolColor;
     private final boolean shortcutEligible;
     private final int bankCycles;
+    private final int bouncerManaValue;
     private final String entryPhase;
 
     public CastBounceManaLoop(Map<String, String> params, String entryPhase) {
@@ -58,6 +59,7 @@ public final class CastBounceManaLoop implements LineExecutor, ShortcutSource {
         this.poolColor = params.getOrDefault("pool_color", "C");
         this.shortcutEligible = Boolean.parseBoolean(params.getOrDefault("shortcut", "true"));
         this.bankCycles = Integer.parseInt(params.getOrDefault("bank_cycles", "6"));
+        this.bouncerManaValue = Integer.parseInt(params.getOrDefault("bouncer_mana_value", "0"));
         this.entryPhase = entryPhase != null ? entryPhase : "MAIN1";
     }
 
@@ -109,9 +111,28 @@ public final class CastBounceManaLoop implements LineExecutor, ShortcutSource {
         };
     }
 
+    /**
+     * PR-63: the BOUNCER's cast cost matters as much as the rock's, and
+     * leaving it 0 ("unknown, never gates") was measured to churn.
+     *
+     * <p>Across a 30-game arm the two Mox-Amber bindings were the most
+     * ENTERED lines in the batch — 21 entries, 20 of them aborting
+     * immediately on validation:cast_unaffordable. Mox Amber costs nothing,
+     * so the unaffordable piece was always the bouncer: Hullbreaker Horror
+     * at seven mana, Tidespout Tyrant at eight. The affordability gate saw
+     * an estimate of 0, concluded the assembly was free, entered the line
+     * every turn, and failed at the cast every turn.
+     *
+     * <p>An estimate of 0 means "unknown" and is the right default for a
+     * piece a binding says nothing about; it is the wrong answer for a
+     * seven-mana creature the binding knows all about.
+     */
     @Override
     public int castCostEstimate(String card) {
-        return card.equals(rock) ? rockCost : 0;
+        if (card.equals(rock)) {
+            return rockCost;
+        }
+        return card.equals(bouncer) ? bouncerManaValue : 0;
     }
 
     /** Per cycle: mana produced minus the cost to recast the rock. */
