@@ -195,9 +195,21 @@ public final class BatchMain {
         long started = System.currentTimeMillis();
         List<Process> pool = new ArrayList<>();
         String javaBin = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+        // PR-59: extra JVM args per batch (config "worker_jvm_args": ["-Dx=y"]).
+        // A/B-ing a behaviour flag, or widening a measurement budget, must be
+        // a property of the RUN — recorded in its config next to the results
+        // — rather than an edited constant that leaves no trace of which
+        // build produced which numbers.
+        List<String> extraArgs = new ArrayList<>();
+        for (JsonNode arg : cfg.path("worker_jvm_args")) {
+            extraArgs.add(arg.asText());
+        }
         for (int w = 0; w < workers; w++) {
-            List<String> cmd = List.of(javaBin, workerHeap, "-cp", System.getProperty("java.class.path"),
-                    WorkerMain.class.getName(), outDir.toString(), String.valueOf(w), String.valueOf(workers));
+            List<String> cmd = new ArrayList<>(List.of(javaBin, workerHeap));
+            cmd.addAll(extraArgs);
+            cmd.addAll(List.of("-cp", System.getProperty("java.class.path"),
+                    WorkerMain.class.getName(), outDir.toString(), String.valueOf(w),
+                    String.valueOf(workers)));
             ProcessBuilder pb = new ProcessBuilder(cmd)
                     .redirectErrorStream(true)
                     .redirectOutput(outDir.resolve("worker-" + w + ".out").toFile());

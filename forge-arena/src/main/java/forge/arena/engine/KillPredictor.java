@@ -49,8 +49,16 @@ public final class KillPredictor {
      * rather than board-size scaling. 250 ms is ~6x the measured worst
      * case: comfortably out of the way of honest work, and short enough
      * that a hung simulation costs a quarter second rather than a batch.
+     *
+     * <p><b>That budget was measured in the wrong environment.</b> 35 ms came
+     * from a 2-player fixture on one thread. In a real 4-player batch under 6
+     * workers the same prediction ran 176-260 ms and timed out 75% of the
+     * time — a bigger game state to copy, and six workers contending for
+     * cores. Overridable via {@code -Darena.predict.timeout.ms} so the true
+     * distribution can be measured rather than truncated by the cap.
      */
-    public static final long DEFAULT_TIMEOUT_MS = 250;
+    public static final long DEFAULT_TIMEOUT_MS =
+            Long.getLong("arena.predict.timeout.ms", 250);
 
     /**
      * The engine's answer.

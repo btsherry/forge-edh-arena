@@ -269,6 +269,37 @@ executors' `SimResult.profitable(n)` validation, which is precisely a product
 measurement on a copy. We are generalizing the working pattern, not importing
 a new one.
 
+## MEASURED: the 35 ms budget was measured in the wrong environment
+
+The cost spike ran a 2-player fixture on one thread and produced 37-44 ms.
+The first real batch — 4 players, 6 workers — produced a very different
+number:
+
+| | isolated spike | real batch |
+|---|---|---|
+| players | 2 | 4 |
+| workers | 1 | 6 |
+| elapsed | 35 ms | **176-260 ms (p50 257)** |
+| timed out at 250 ms | 0% | **75%** |
+
+A bigger game state to copy, and six workers contending for cores. The
+budget was set from a measurement that did not resemble production, which is
+the same mistake as tuning a predicate against a hand-picked board.
+
+**But the conclusion is not "prediction is too expensive."** The read-model
+gate works exactly as intended: predictions fired **1.0 times per game**, so
+even at 250 ms the total is 0.25 s of a 110 s game — **0.2% overhead**. We
+are not paying too much; we are paying and then throwing the answer away.
+
+The defect is a budget set too tight to ever produce a verdict, not a design
+that costs too much. `arena.predict.timeout.ms` is now configurable, and
+`worker_jvm_args` in a batch config lets a run record its own budget next to
+its results instead of depending on an edited constant.
+
+Generalized: **any budget must be measured in the environment that will pay
+it.** A number from a clean single-threaded fixture is not a number about a
+6-worker batch.
+
 ## Urza: the setup/payload split (second Gemini consultation)
 
 Gemini's verdict on "predict the loop's product": it collapses back into

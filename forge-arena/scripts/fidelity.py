@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """Phase 7 fidelity ledger (PR-58).
 
-Answers the question that decides whether the prediction cutover is
-justified: when the engine says "attacking now kills someone", is it right,
-and does the existing predicate agree?
+Answers the one question the prediction cutover rests on: when the engine
+says "attacking right now kills someone", is it right, and did the OLD path
+attack anyway?
 
-Reads a batch run directory and reports, per deck:
-  - how often a prediction ran at all (the read-model gate is meant to make
-    this rare)
+Reads a batch run directory (the one holding game-records.jsonl) and reports
+per deck:
+  - how often a prediction ran at all (the read-model gate should make this
+    rare — a high count means the gate is too loose)
   - how often it predicted a kill
-  - whether the seat actually won that turn or the next (did the predicted
-    kill happen?)
-  - how often the OLD path declined to attack on a turn the engine says was
-    lethal — the whole case for switching, in one number
-  - what the predictions cost in wall clock
+  - whether a win actually followed within a turn (did the predicted kill
+    happen, or is the copy lying?)
+  - how often the engine called it lethal on a turn the old path did NOT
+    steer an attack — the entire case for cutting over, in one number
+  - what predictions cost in wall clock
+
+Seating ROTATES per game, so every seat index is resolved through that
+record's own `seats` array. Events are flat objects in a per-game file named
+by the record's `event_log`.
 
 Usage: fidelity.py <run-dir>
 """
@@ -23,92 +28,94 @@ from collections import defaultdict
 from pathlib import Path
 
 
-def load_records(run_dir: Path):
-    """Yield (record, events) per game across every worker shard."""
-    for path in sorted(run_dir.rglob("*.jsonl")):
-        if path.name == "batches.jsonl":
+def games(run_dir: Path):
+    """Yield (record, [events]) for every game in the run."""
+    records = run_dir / "game-records.jsonl"
+    if not records.exists():
+        sys.exit(f"no game-records.jsonl in {run_dir}")
+    for line in records.read_text(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
             continue
-        for line in path.read_text(errors="replace").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(rec, dict) and "events" in rec:
-                yield rec, rec.get("events", [])
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        events = []
+        log = rec.get("event_log")
+        if log and (run_dir / log).exists():
+            for raw in (run_dir / log).read_text(errors="replace").splitlines():
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    events.append(json.loads(raw))
+                except json.JSONDecodeError:
+                    continue
+        yield rec, events
 
 
 def main(run_dir: Path):
-    per_deck = defaultdict(lambda: {
-        "predictions": 0, "predicted_kill": 0, "timed_out": 0,
-        "elapsed_ms": 0, "kill_and_won_soon": 0, "kill_but_no_win": 0,
-        "forced_attack_same_turn": 0, "lethal_missed_by_old_path": 0,
-    })
-    games = 0
+    per_deck = defaultdict(lambda: defaultdict(int))
+    total = 0
 
-    for rec, events in load_records(run_dir):
-        games += 1
-        # seating ROTATES per game — always use this record's own seats
+    for rec, events in games(run_dir):
+        total += 1
         seats = rec.get("seats") or []
-        winner_seat = rec.get("winner_seat", -1)
+        winner = rec.get("winner_seat", -1)
         win_turn = rec.get("turns")
 
-        # what the OLD path did, per (seat, turn)
-        forced = set()
-        for e in events:
-            if e.get("t") == "line_step" and e.get("fields", {}).get("stage") in (
-                    "FORCED_ATTACK", "LETHAL_ALPHA"):
-                forced.add((e.get("seat"), e.get("turn")))
+        # what the OLD path actually did, per (seat, turn)
+        attacked = {
+            (e.get("seat"), e.get("turn"))
+            for e in events
+            if e.get("t") == "line_step"
+            and e.get("stage") in ("FORCED_ATTACK", "LETHAL_ALPHA")
+        }
 
         for e in events:
             if e.get("t") != "alpha_prediction":
                 continue
-            f = e.get("fields", {})
-            seat = e.get("seat")
-            turn = e.get("turn")
+            seat, turn = e.get("seat"), e.get("turn")
             deck = seats[seat] if isinstance(seat, int) and seat < len(seats) else f"seat{seat}"
             d = per_deck[deck]
-            d["predictions"] += 1
-            d["elapsed_ms"] += f.get("elapsed_ms", 0) or 0
-            if f.get("timed_out"):
+            d["runs"] += 1
+            d["ms"] += e.get("elapsed_ms") or 0
+            if e.get("timed_out"):
                 d["timed_out"] += 1
                 continue
-            if not f.get("predicted_kill"):
+            if not e.get("predicted_kill"):
+                d["predicted_no_kill"] += 1
                 continue
             d["predicted_kill"] += 1
+            won_soon = (
+                seat == winner
+                and isinstance(win_turn, int)
+                and isinstance(turn, int)
+                and 0 <= win_turn - turn <= 1
+            )
+            d["kill_then_won" if won_soon else "kill_no_win"] += 1
+            d["old_path_agreed" if (seat, turn) in attacked else "OLD_PATH_MISSED"] += 1
 
-            # Did the predicted kill actually land? The seat winning on this
-            # turn or the next is the observable proxy for "yes".
-            won_soon = (seat == winner_seat and isinstance(win_turn, int)
-                        and isinstance(turn, int) and 0 <= win_turn - turn <= 1)
-            if won_soon:
-                d["kill_and_won_soon"] += 1
-            else:
-                d["kill_but_no_win"] += 1
-
-            if (seat, turn) in forced:
-                d["forced_attack_same_turn"] += 1
-            else:
-                # engine says lethal, old path did not steer an attack: this
-                # is the population the cutover would newly convert
-                d["lethal_missed_by_old_path"] += 1
-
-    print(f"=== PR-58 fidelity ledger: {games} games from {run_dir} ===\n")
+    print(f"=== PR-58 fidelity ledger — {total} games from {run_dir.name} ===\n")
     if not per_deck:
-        print("no alpha_prediction events found — the read-model gate never opened")
+        print("no alpha_prediction events: the read-model gate never opened.")
+        print("(power >= weakest opponent life never held on an own combat)")
         return
+
     for deck, d in sorted(per_deck.items()):
-        n = d["predictions"]
-        avg = (d["elapsed_ms"] / n) if n else 0
+        n = d["runs"]
         print(f"{deck}")
-        print(f"  predictions run        {n}  (avg {avg:.0f} ms, {d['timed_out']} timed out)")
-        print(f"  predicted a kill       {d['predicted_kill']}")
-        print(f"    -> seat won by t+1   {d['kill_and_won_soon']}")
-        print(f"    -> no win followed   {d['kill_but_no_win']}   <- copy lying, or the pilot did not take it")
-        print(f"  old path also attacked {d['forced_attack_same_turn']}")
-        print(f"  OLD PATH MISSED IT     {d['lethal_missed_by_old_path']}   <- the case for cutting over")
+        print(f"  predictions run         {n}   avg {d['ms'] / n:.0f} ms"
+              f"   ({d['timed_out']} timed out)")
+        print(f"  predicted a kill        {d['predicted_kill']}"
+              f"   (no kill: {d['predicted_no_kill']})")
+        print(f"    won within a turn     {d['kill_then_won']}")
+        print(f"    no win followed       {d['kill_no_win']}"
+              f"   <- copy lying, or pilot never took the attack")
+        print(f"  old path also attacked  {d['old_path_agreed']}")
+        print(f"  OLD PATH MISSED IT      {d['OLD_PATH_MISSED']}"
+              f"   <- the case for cutting over")
         print()
 
 
