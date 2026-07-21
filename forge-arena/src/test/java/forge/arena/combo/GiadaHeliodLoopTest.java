@@ -139,6 +139,10 @@ public class GiadaHeliodLoopTest {
         } else {
             System.out.println("LOOP DOES NOT SUSTAIN YET: " + drillSteps
                     + " drill step(s), prereq=" + prereq);
+            events.stream().filter(e -> e.t().equals("outlet_drill")
+                            || e.t().equals("loop_prereq"))
+                    .forEach(e -> System.out.println("   EVIDENCE " + e.t()
+                            + " " + e.fields()));
         }
     }
 }

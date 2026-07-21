@@ -1162,13 +1162,19 @@ public final class ComboPilot {
      */
     public void reportDrillStep(int turn, String outlet, int targetSeat,
             int iteration, int outletCounters, int ownLife) {
+        reportDrillStep(turn, outlet, targetSeat, iteration, outletCounters, ownLife, false);
+    }
+
+    public void reportDrillStep(int turn, String outlet, int targetSeat,
+            int iteration, int outletCounters, int ownLife, boolean lifelink) {
         ArenaEvent e = ArenaEvent.of("outlet_drill", turn, seat)
                 .with("outlet", outlet)
                 .with("target_seat", targetSeat);
         if (iteration >= 0) {
             e = e.with("iteration", iteration)
                     .with("outlet_counters", outletCounters)
-                    .with("own_life", ownLife);
+                    .with("own_life", ownLife)
+                    .with("outlet_lifelink", lifelink);
         }
         events.accept(e);
     }

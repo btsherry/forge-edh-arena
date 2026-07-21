@@ -75,7 +75,11 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
          * the activation stops resolving. Armed by the ConversionPlanner
          * (PR-38); package-armed directly in tests.
          */
-        public record DrillOrder(String outletCard, String costHint) {
+        public record DrillOrder(String outletCard, String costHint,
+                String prereqCard, String prereqCost) {
+            public DrillOrder(String outletCard, String costHint) {
+                this(outletCard, costHint, null, null);
+            }
         }
 
         private DrillOrder activeDrill;
@@ -141,6 +145,23 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
          * The single number that distinguishes a sustaining loop (stable or
          * rising) from a pinger consuming itself (falling to zero).
          */
+        /**
+         * PR-75: does the outlet ACTUALLY have lifelink right now? The whole
+         * loop hinges on it — without lifelink the ping gains no life, the
+         * engine never triggers, and the counter never returns. Everything so
+         * far has inferred this from "we activated the grant"; this observes
+         * the permanent itself.
+         */
+        private boolean outletHasLifelink(String outlet) {
+            for (forge.game.card.Card c : player.getCardsIn(
+                    forge.game.zone.ZoneType.Battlefield)) {
+                if (c.getName().equals(outlet)) {
+                    return c.hasKeyword(forge.game.keyword.Keyword.LIFELINK);
+                }
+            }
+            return false;
+        }
+
         private int outletCounters(String outlet) {
             for (forge.game.card.Card c : player.getCardsIn(
                     forge.game.zone.ZoneType.Battlefield)) {
@@ -149,6 +170,37 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 }
             }
             return -1;
+        }
+
+        /**
+         * PR-76: counters this ability's cost REMOVES, read from the
+         * structured cost parts.
+         *
+         * <p>PR-70 and PR-73 both regex-matched {@code SubCounter<N/P1P1>}
+         * against {@code Cost.toString()} — which renders human-readable
+         * text ("Remove a +1/+1 counter from CARDNAME"), not script syntax.
+         * Neither ever matched. assemblyX silently fell back to X=1 instead
+         * of 2, and the drill's survival check silently returned "safe" and
+         * let Ballista spend its last counter and die.
+         *
+         * <p>I parsed rendered text instead of structured data — the exact
+         * mistake this project has spent a week diagnosing everywhere else
+         * (oracle prose versus card scripts). Forge models this as a
+         * {@link forge.game.cost.CostRemoveCounter} part; ask the object.
+         */
+        private static int countersRemovedByCost(SpellAbility ab) {
+            if (ab == null || ab.getPayCosts() == null) {
+                return 0;
+            }
+            int most = 0;
+            for (forge.game.cost.CostPart part : ab.getPayCosts().getCostParts()) {
+                if (part instanceof forge.game.cost.CostRemoveCounter rc
+                        && rc.counter != null && rc.counter.is(forge.game.card.CounterEnumType.P1P1)) {
+                    Integer n = rc.convertAmount();
+                    most = Math.max(most, n == null ? 1 : n);
+                }
+            }
+            return most;
         }
 
         /**
@@ -211,15 +263,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 }
                 int spend = 0;
                 for (SpellAbility ab : c.getSpellAbilities()) {
-                    if (ab.getPayCosts() == null) {
-                        continue;
-                    }
-                    java.util.regex.Matcher m = java.util.regex.Pattern
-                            .compile("SubCounter<(\\d+)/P1P1>")
-                            .matcher(ab.getPayCosts().toString());
-                    if (m.find()) {
-                        spend = Math.max(spend, Integer.parseInt(m.group(1)));
-                    }
+                    spend = Math.max(spend, countersRemovedByCost(ab));
                 }
                 // no counter-spending ability -> the cost cannot kill it
                 return spend == 0 || c.getNetToughness() - spend > 0;
@@ -231,6 +275,30 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private List<SpellAbility> drillStep(int turn) {
             if (activeDrill == null) {
                 return null;
+            }
+            // PR-77: lifelink is granted "until end of turn". The drill runs
+            // across turns, so on every turn after the first it was pinging
+            // with no lifelink — gaining no life, triggering nothing, and the
+            // counter never returning. Observed directly: the second logged
+            // drill step read outlet_lifelink=false. A drill must MAINTAIN
+            // its own precondition, not assume a one-time setup persists.
+            if (activeDrill.prereqCard() != null
+                    && !outletHasLifelink(activeDrill.outletCard())) {
+                SpellAbility regrant = AbilityResolver.resolve(player,
+                        activeDrill.prereqCard(), activeDrill.prereqCost(),
+                        List.of(activeDrill.outletCard()));
+                if (regrant != null
+                        && ComputerUtil.handlePlayingSpellAbility(player, regrant, () -> { })) {
+                    pilot.observe(forge.arena.report.ArenaEvent.of(
+                            "loop_prereq", turn, seatIndex)
+                            .with("card", activeDrill.prereqCard())
+                            .with("cost", activeDrill.prereqCost())
+                            .with("target", activeDrill.outletCard())
+                            .with("regrant", true));
+                    // yield so it RESOLVES before the next ping (the LIFO
+                    // stack lesson from PR-74)
+                    return null;
+                }
             }
             if (!outletSurvivesItsOwnCost(activeDrill.outletCard())) {
                 // hold this window rather than destroy the engine: the
@@ -291,7 +359,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             drillIterations++;
             pilot.reportDrillStep(turn, activeDrill.outletCard(), target.getId(),
                     drillIterations, outletCounters(activeDrill.outletCard()),
-                    player.getLife());
+                    player.getLife(), outletHasLifelink(activeDrill.outletCard()));
             return Collections.singletonList(sa);
         }
 
@@ -424,20 +492,41 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     // needs the grant, or the drill's first ping gains no
                     // life, the engine never triggers, and the counter never
                     // returns — a loop that was proven and then not run.
+                    boolean grantedThisWindow = false;
                     if (action.drill().prereqCard() != null) {
                         SpellAbility grant = AbilityResolver.resolve(player,
                                 action.drill().prereqCard(),
                                 action.drill().prereqCost(), List.of(outlet));
                         if (grant != null) {
-                            ComputerUtil.handlePlayingSpellAbility(player, grant, () -> { });
+                            grantedThisWindow = ComputerUtil.handlePlayingSpellAbility(
+                                    player, grant, () -> { });
                             pilot.observe(forge.arena.report.ArenaEvent.of(
                                     "loop_prereq", turn, seatIndex)
                                     .with("card", action.drill().prereqCard())
                                     .with("cost", action.drill().prereqCost())
-                                    .with("target", outlet));
+                                    .with("target", outlet)
+                                    .with("played", grantedThisWindow));
                         }
                     }
-                    armDrill(new DrillOrder(outlet, null));
+                    armDrill(new DrillOrder(outlet, null,
+                            action.drill().prereqCard(), action.drill().prereqCost()));
+                    // PR-74: do NOT ping in the same priority window as the
+                    // grant. handlePlayingSpellAbility puts the lifelink
+                    // ability on the STACK; it does not resolve it (which is
+                    // why GameSimHandle calls resolveStack explicitly after
+                    // its own activations). Firing the drill here stacks the
+                    // ping ON TOP of the grant, and the stack resolves LIFO —
+                    // so the ping resolved FIRST, with no lifelink, gaining
+                    // no life, triggering nothing, and taking Ballista's last
+                    // counter with it.
+                    //
+                    // Ben's read was right: lifelink was never actually on
+                    // the Walker when it fired. Yield this window so the
+                    // grant resolves; the drill starts next priority with
+                    // lifelink genuinely active.
+                    if (grantedThisWindow) {
+                        return null;
+                    }
                     List<SpellAbility> first = drillStep(turn);
                     if (first != null) {
                         return first;
@@ -625,16 +714,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             }
             int mostCountersSpent = 0;
             for (SpellAbility ab : host.getSpellAbilities()) {
-                if (ab.getPayCosts() == null) {
-                    continue;
-                }
-                java.util.regex.Matcher m = java.util.regex.Pattern
-                        .compile("SubCounter<(\\d+)/P1P1>")
-                        .matcher(ab.getPayCosts().toString());
-                if (m.find()) {
-                    mostCountersSpent = Math.max(mostCountersSpent,
-                            Integer.parseInt(m.group(1)));
-                }
+                mostCountersSpent = Math.max(mostCountersSpent, countersRemovedByCost(ab));
             }
             // survive spending them once: N counters spent needs N+1 present
             return Math.max(ASSEMBLY_MIN_X, mostCountersSpent + 1);
