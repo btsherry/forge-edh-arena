@@ -43,6 +43,8 @@ public final class LifegainPingLoop implements LineExecutor {
 
     private final String pinger;
     private final String lifegainEngine;
+    private final String lifelinkSource;
+    private final String lifelinkCost;
     private final int pingerManaValue;
     private final int engineManaValue;
     private final String entryPhase;
@@ -50,6 +52,14 @@ public final class LifegainPingLoop implements LineExecutor {
     public LifegainPingLoop(Map<String, String> params, String entryPhase) {
         this.pinger = require(params, "pinger");
         this.lifegainEngine = require(params, "lifegain_engine");
+        // PR-70: the loop is not a loop without LIFELINK on the pinger.
+        // Ballista's ping deals damage; only lifelink turns that damage into
+        // life; only the life gain triggers the engine to hand the counter
+        // back. Optional param because a pinger that already HAS lifelink
+        // needs no grant — but when it is needed and absent, the "loop"
+        // silently degrades into a pinger burning through its own counters.
+        this.lifelinkSource = params.get("lifelink_source");
+        this.lifelinkCost = params.getOrDefault("lifelink_cost", "{1}{W}");
         this.pingerManaValue = Integer.parseInt(params.getOrDefault("pinger_mana_value", "2"));
         this.engineManaValue = Integer.parseInt(params.getOrDefault("engine_mana_value", "3"));
         this.entryPhase = entryPhase != null ? entryPhase : "MAIN1";
@@ -95,7 +105,10 @@ public final class LifegainPingLoop implements LineExecutor {
      */
     @Override
     public List<Step> assemblySteps(SeatView view) {
-        for (String piece : List.of(lifegainEngine, pinger)) {
+        List<String> required = lifelinkSource == null
+                ? List.of(lifegainEngine, pinger)
+                : List.of(lifegainEngine, pinger, lifelinkSource);
+        for (String piece : required) {
             SeatView.Presence where = view.locate(piece);
             if (where == SeatView.Presence.BATTLEFIELD) {
                 continue;
@@ -123,14 +136,35 @@ public final class LifegainPingLoop implements LineExecutor {
      */
     @Override
     public SimResult validate(SimHandle sim) {
+        // PR-70: grant lifelink BEFORE proving the ping. Without it the ping
+        // gains no life, the engine never triggers, and the counter never
+        // comes back — the loop is a one-shot that eats itself. Spellbook's
+        // own prerequisite for both of this deck's combos is explicit:
+        // "You have a way to give Walking Ballista lifelink."
+        if (lifelinkSource != null
+                && !sim.activate(lifelinkSource, lifelinkCost, List.of(pinger))) {
+            return SimResult.blocked("lifelink_grant");
+        }
         return sim.activateAtOpponent(pinger, null)
                 ? SimResult.profitable(1)
                 : SimResult.blocked("pinger");
     }
 
-    /** The drill does the work; the line itself has no further steps. */
+    /** The lifelink grant the drill needs standing before it starts. */
+    public String lifelinkSource() {
+        return lifelinkSource;
+    }
+
+    /**
+     * PR-70: grant lifelink, THEN hand off to the drill. Lifelink lasts until
+     * end of turn, so one grant covers every drill iteration this turn — but
+     * without it the drill's first ping breaks the loop it was armed to run.
+     */
     @Override
     public Step next(LineState state, SeatView view) {
+        if (lifelinkSource != null && state.iteration() == 0) {
+            return Step.activateTargeting(lifelinkSource, lifelinkCost, pinger);
+        }
         return Step.done();
     }
 }

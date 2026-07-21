@@ -136,6 +136,21 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             return openMana * 3 + handSize * 2 + board + nearlyDead;
         }
 
+        /**
+         * PR-70: +1/+1 counters on the drill's outlet, or -1 if it is gone.
+         * The single number that distinguishes a sustaining loop (stable or
+         * rising) from a pinger consuming itself (falling to zero).
+         */
+        private int outletCounters(String outlet) {
+            for (forge.game.card.Card c : player.getCardsIn(
+                    forge.game.zone.ZoneType.Battlefield)) {
+                if (c.getName().equals(outlet)) {
+                    return c.getCounters(forge.game.card.CounterEnumType.P1P1);
+                }
+            }
+            return -1;
+        }
+
         /** The next drill activation, or null (disarms when done/failed). */
         private List<SpellAbility> drillStep(int turn) {
             if (activeDrill == null) {
@@ -192,7 +207,9 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 return null;
             }
             drillIterations++;
-            pilot.reportDrillStep(turn, activeDrill.outletCard(), target.getId());
+            pilot.reportDrillStep(turn, activeDrill.outletCard(), target.getId(),
+                    drillIterations, outletCounters(activeDrill.outletCard()),
+                    player.getLife());
             return Collections.singletonList(sa);
         }
 
@@ -468,7 +485,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 // more would buy a bigger Ballista and no combo. Deck-
                 // agnostic: any X-cost assembly piece gets minimum viability
                 // rather than zero.
-                sa.setXManaCostPaid(ASSEMBLY_MIN_X);
+                sa.setXManaCostPaid(assemblyX(sa.getHostCard()));
             }
             // PR-27a: arm the resolution-choice hint (Sabertooth's bounce,
             // Scepter's imprint) — persists within the turn until consumed
@@ -485,6 +502,43 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
          * assembly must leave mana for the payoff.
          */
         static final int ASSEMBLY_MIN_X = 1;
+
+        /**
+         * PR-70: the X an assembly cast needs to be USABLE, not merely alive.
+         *
+         * <p>PR-69 fixed X=0 (a 0/0 that dies on resolution) by paying 1. That
+         * was still not enough for a piece that SPENDS its own counters:
+         * Walking Ballista at one counter pings once, becomes a 0/0, and dies
+         * before the combo can hand the counter back. Commander Spellbook says
+         * so outright — both of this deck's combos list the prerequisite
+         * "Walking Ballista has at least two +1/+1 counters on it."
+         *
+         * <p>Derived from the card, not hardcoded: a permanent that enters
+         * with X counters, has no base toughness of its own, and carries an
+         * ability costing {@code SubCounter<N/P1P1>} needs X > N or using that
+         * ability kills it. Any deck's equivalent piece gets the same
+         * treatment; nothing here names a card.
+         */
+        private int assemblyX(forge.game.card.Card host) {
+            if (host == null || host.getCurrentToughness() > 0) {
+                return ASSEMBLY_MIN_X;
+            }
+            int mostCountersSpent = 0;
+            for (SpellAbility ab : host.getSpellAbilities()) {
+                if (ab.getPayCosts() == null) {
+                    continue;
+                }
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile("SubCounter<(\\d+)/P1P1>")
+                        .matcher(ab.getPayCosts().toString());
+                if (m.find()) {
+                    mostCountersSpent = Math.max(mostCountersSpent,
+                            Integer.parseInt(m.group(1)));
+                }
+            }
+            // survive spending them once: N counters spent needs N+1 present
+            return Math.max(ASSEMBLY_MIN_X, mostCountersSpent + 1);
+        }
 
         private int rampTriedTurn = -1;
         private final java.util.Set<String> rampTried = new java.util.HashSet<>();

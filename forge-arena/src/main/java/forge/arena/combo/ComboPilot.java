@@ -1134,9 +1134,32 @@ public final class ComboPilot {
      * the outlet fired at a specific opponent. Telemetry only.
      */
     public void reportDrillStep(int turn, String outlet, int targetSeat) {
-        events.accept(ArenaEvent.of("outlet_drill", turn, seat)
+        reportDrillStep(turn, outlet, targetSeat, -1, -1, -1);
+    }
+
+    /**
+     * PR-70 loop-health telemetry. A ping-loop only SUSTAINS when the
+     * resource it spends comes back: Ballista removes a +1/+1 counter to
+     * deal damage, lifelink turns that damage into life, and the engine's
+     * life-gain trigger returns the counter. If counters fall monotonically
+     * the "loop" is a pinger eating itself — which is exactly what was
+     * happening, invisibly, because we only logged that a drill step fired.
+     *
+     * <p>Deck-agnostic in shape (a counter count and a life total), and
+     * temporary in intent: this is the instrumentation that tells us the
+     * loop is real, and can be dropped once it demonstrably is.
+     */
+    public void reportDrillStep(int turn, String outlet, int targetSeat,
+            int iteration, int outletCounters, int ownLife) {
+        ArenaEvent e = ArenaEvent.of("outlet_drill", turn, seat)
                 .with("outlet", outlet)
-                .with("target_seat", targetSeat));
+                .with("target_seat", targetSeat);
+        if (iteration >= 0) {
+            e = e.with("iteration", iteration)
+                    .with("outlet_counters", outletCounters)
+                    .with("own_life", ownLife);
+        }
+        events.accept(e);
     }
 
     /** Gate 3.6 logging half: the controller's stall watchdog reports through the pilot. */

@@ -110,7 +110,12 @@ public final class RunLogRenderer {
                         + (f.get("x") != null ? ", X=" + f.get("x") : "") + ")";
             case "outlet_drill":
                 return "drill  " + f.get("outlet") + " -> "
-                        + seatLabel(f.get("target_seat"), seatNames);
+                        + seatLabel(f.get("target_seat"), seatNames)
+                        + (f.get("outlet_counters") != null
+                                ? "  [i" + f.get("iteration")
+                                        + " counters=" + f.get("outlet_counters")
+                                        + " life=" + f.get("own_life") + "]"
+                                : "");
             case "lethal_alpha":
                 return "ALPHA  " + f.get("guaranteed_damage") + " guaranteed -> "
                         + seatLabel(f.get("target_seat"), seatNames)
