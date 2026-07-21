@@ -781,7 +781,11 @@ public final class ComboPilot {
             // be triaged (which piece blocked, or "the loop simply does not
             // net positive from here") instead of 48 anonymous aborts
             abortLine(view.turn(), "validation", null,
-                    proof.blockedBy() != null ? "blocked:" + proof.blockedBy() : "unprofitable");
+                    proof.blockedBy() != null
+                            ? "blocked:" + proof.blockedBy()
+                                    + (proof.diagnostic() != null
+                                            ? " (" + proof.diagnostic() + ")" : "")
+                            : "unprofitable");
             return Optional.empty();
         }
         if (activeExecutor instanceof LifegainPingLoop pingLoop) {

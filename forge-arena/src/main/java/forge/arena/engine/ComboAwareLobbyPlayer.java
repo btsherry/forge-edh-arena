@@ -239,7 +239,15 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             boolean entryWindowOpen = game.getPhaseHandler().is(PhaseType.MAIN1, player)
                     && game.getStack().isEmpty();
             java.util.function.Function<forge.arena.combo.LineExecutor, forge.arena.combo.SimResult>
-                    validator = executor -> executor.validate(GameSimHandle.copyOf(game, player));
+                    validator = executor -> {
+                        // PR-68: one seam, so every executor gains the
+                        // diagnostic without any of them changing. A blocked
+                        // result carries WHY out of the sandbox.
+                        GameSimHandle handle = GameSimHandle.copyOf(game, player);
+                        forge.arena.combo.SimResult proof = executor.validate(handle);
+                        return proof.isBlocked()
+                                ? proof.withDiagnostic(handle.lastFailure()) : proof;
+                    };
             ComboPilot.Action action = pilot.nextAction(view, entryWindowOpen, validator)
                     .orElse(null);
             if (action == null) {
@@ -438,6 +446,29 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             if (step.x() != null && sa.getPayCosts() != null
                     && sa.getPayCosts().hasXInAnyCostPart() && manaOnlyX(sa.getPayCosts())) {
                 sa.setXManaCostPaid(step.x());
+            } else if (step.isCast() && sa.getPayCosts() != null
+                    && sa.getPayCosts().hasXInAnyCostPart() && manaOnlyX(sa.getPayCosts())) {
+                // PR-69: an ASSEMBLY cast with no scripted X defaults to X=0,
+                // and X=0 is frequently fatal. Traced in a real game:
+                //
+                //   zone_change  Walking Ballista  Stack -> Battlefield
+                //   combo_ready  1274-3693 (Heliod + Ballista)
+                //   zone_change  Walking Ballista  Battlefield -> Graveyard
+                //   line_aborted not_assemblable
+                //
+                // Ballista is ManaCost:X X, PT:0/0, K:etbCounter:P1P1:X — at
+                // X=0 it enters as a 0/0 with no counters and state-based
+                // actions bury it on resolution, destroying the combo it had
+                // just completed. Giada's combo reached READY 11 times in 30
+                // games and fired ZERO.
+                //
+                // Assembly wants the piece FUNCTIONAL, not large: X=1 gives
+                // Ballista a body and one counter of ammunition, and leaves
+                // mana for the payoff half (Heliod's {1}{W} lifelink). Paying
+                // more would buy a bigger Ballista and no combo. Deck-
+                // agnostic: any X-cost assembly piece gets minimum viability
+                // rather than zero.
+                sa.setXManaCostPaid(ASSEMBLY_MIN_X);
             }
             // PR-27a: arm the resolution-choice hint (Sabertooth's bounce,
             // Scepter's imprint) — persists within the turn until consumed
@@ -447,6 +478,13 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             }
             return Collections.singletonList(sa);
         }
+
+        /**
+         * PR-69: X for an assembly cast that scripts none. One, not zero —
+         * zero is a 0/0 that dies on resolution. Minimum viability, because
+         * assembly must leave mana for the payoff.
+         */
+        static final int ASSEMBLY_MIN_X = 1;
 
         private int rampTriedTurn = -1;
         private final java.util.Set<String> rampTried = new java.util.HashSet<>();

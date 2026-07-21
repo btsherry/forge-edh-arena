@@ -39,6 +39,19 @@ public interface SimHandle {
         return false;
     }
 
+    /**
+     * PR-68: why the most recent {@link #activate} returned false, or null.
+     *
+     * <p>{@code activate} collapses four structurally different failures into
+     * one boolean — card absent, no ability matching the cost hint, targeting
+     * mismatch, and cost unpayable — and the abort that results names only a
+     * role. This carries the distinction out so a blocked line can be fixed
+     * rather than merely counted.
+     */
+    default String lastFailure() {
+        return null;
+    }
+
     /** Total floating mana in the perspective player's pool. */
     int manaPoolTotal();
 

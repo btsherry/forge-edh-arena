@@ -19,10 +19,46 @@ final class AbilityResolver {
     }
 
     /**
+     * PR-68: why {@link #resolve} returned null, in a form that names the fix.
+     *
+     * <p>Computed ONLY on the failure path, so the hot path is untouched. The
+     * load-bearing part is listing what the card ACTUALLY offers: a binding
+     * asking for {@code {1}} on a card whose untap ability costs {@code {3}}
+     * is invisible as "blocked:engine" and obvious as
+     * {@code no_ability_matching '{1}' on Basalt Monolith; card offers
+     * [{T}, {3}]} — which is exactly the class of bug that cost this project
+     * the Power Artifact loop.
+     */
+    static String describe(Player player, String cardName, String costHint,
+            List<String> targetNames) {
+        Card card = findBattlefield(player, cardName);
+        if (card == null) {
+            return "card_not_on_battlefield: '" + cardName + "'";
+        }
+        java.util.List<String> offered = new java.util.ArrayList<>();
+        for (SpellAbility sa : card.getAllPossibleAbilities(player, false)) {
+            if (!sa.isActivatedAbility()) {
+                continue;
+            }
+            offered.add((sa.getPayCosts() == null ? "(free)" : sa.getPayCosts().toString())
+                    + (sa.isManaAbility() ? "|mana" : "")
+                    + (sa.usesTargeting() ? "|targets" : ""));
+        }
+        if (offered.isEmpty()) {
+            return "no_activated_abilities on '" + cardName + "'";
+        }
+        boolean wantsTargets = targetNames != null && !targetNames.isEmpty();
+        return "no_ability_matching '" + costHint + "'"
+                + (wantsTargets ? " with targets " + targetNames : " (untargeted)")
+                + " on '" + cardName + "'; card offers " + offered;
+    }
+
+    /**
      * Find and configure the ability, or null: card not on the player's
      * battlefield, no cost-hint match, unscripted targeting, or a named
      * target missing/illegal. Targets are resolved on the player's own
      * battlefield (combo pieces target the combo's own permanents).
+     * {@link #describe} explains a null on the failure path.
      */
     static SpellAbility resolve(Player player, String cardName, String costHint,
             List<String> targetNames) {

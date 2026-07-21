@@ -26,6 +26,13 @@ public final class GameSimHandle implements SimHandle {
 
     private final Game sim;
     private final Player player;
+    /** PR-68: why the last activate() refused, or null. */
+    private String lastFailure;
+
+    @Override
+    public String lastFailure() {
+        return lastFailure;
+    }
 
     private GameSimHandle(Game sim, Player player) {
         this.sim = sim;
@@ -62,19 +69,44 @@ public final class GameSimHandle implements SimHandle {
         return new GameSimHandle(sim, simPlayer);
     }
 
+    private boolean isTapped(String cardName) {
+        for (Card c : player.getCardsIn(forge.game.zone.ZoneType.Battlefield)) {
+            if (c.getName().equals(cardName)) {
+                return c.isTapped();
+            }
+        }
+        return false;
+    }
+
     @Override
     public boolean activate(String cardName, String costHint, List<String> targetNames) {
         SpellAbility sa = AbilityResolver.resolve(player, cardName, costHint, targetNames);
         if (sa == null) {
+            lastFailure = AbilityResolver.describe(player, cardName, costHint, targetNames);
             return false;
         }
         if (sa.isManaAbility()) {
             // mana abilities never use the stack; playNoStack pays costs
             // (tap/untap symbols included) through the AI cost machinery
-            return ComputerUtil.playNoStack(player, sa, sim, false);
+            boolean paid = ComputerUtil.playNoStack(player, sa, sim, false);
+            if (!paid) {
+                // the ability EXISTS and matched — the engine refused to pay
+                // for it. A different bug entirely from "no such ability",
+                // and previously indistinguishable.
+                lastFailure = "cost_unpayable: '" + cardName + "' " + costHint
+                        + " (mana ability found, payment refused; pool="
+                        + player.getManaPool().totalMana()
+                        + (isTapped(cardName) ? ", card TAPPED" : "") + ")";
+            }
+            return paid;
         }
         boolean played = ComputerUtil.handlePlayingSpellAbility(player, sa, () -> {
         });
+        if (!played) {
+            lastFailure = "play_refused: '" + cardName + "' " + costHint
+                    + " (ability found, engine declined to play it"
+                    + (isTapped(cardName) ? "; card TAPPED" : "") + ")";
+        }
         if (played) {
             // PR-33 (urza find): the scripted activation's resolution may
             // carry optional parts ("you MAY copy the exiled card / you MAY
@@ -123,6 +155,11 @@ public final class GameSimHandle implements SimHandle {
         }
         boolean played = ComputerUtil.handlePlayingSpellAbility(player, sa, () -> {
         });
+        if (!played) {
+            lastFailure = "play_refused: '" + cardName + "' " + costHint
+                    + " (ability found, engine declined to play it"
+                    + (isTapped(cardName) ? "; card TAPPED" : "") + ")";
+        }
         if (played) {
             GameSimulator.resolveStack(sim, player.getWeakestOpponent());
         }
