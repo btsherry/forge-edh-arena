@@ -155,6 +155,11 @@ public final class LifegainPingLoop implements LineExecutor {
         return lifelinkSource;
     }
 
+    /** Cost hint for that grant (Heliod's {1}{W}). */
+    public String lifelinkCost() {
+        return lifelinkCost;
+    }
+
     /**
      * PR-70: grant lifelink, THEN hand off to the drill. Lifelink lasts until
      * end of turn, so one grant covers every drill iteration this turn — but

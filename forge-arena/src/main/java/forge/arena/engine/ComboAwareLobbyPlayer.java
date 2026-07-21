@@ -337,6 +337,24 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 // then arm and fire the first activation in this same window.
                 String outlet = action.drill().outletCard();
                 if (GameSimHandle.copyOf(game, player).activateAtOpponent(outlet, null)) {
+                    // PR-71: perform Spellbook's step 1 in the REAL game.
+                    // Validation proved it on a copy; the live board still
+                    // needs the grant, or the drill's first ping gains no
+                    // life, the engine never triggers, and the counter never
+                    // returns — a loop that was proven and then not run.
+                    if (action.drill().prereqCard() != null) {
+                        SpellAbility grant = AbilityResolver.resolve(player,
+                                action.drill().prereqCard(),
+                                action.drill().prereqCost(), List.of(outlet));
+                        if (grant != null) {
+                            ComputerUtil.handlePlayingSpellAbility(player, grant, () -> { });
+                            pilot.observe(forge.arena.report.ArenaEvent.of(
+                                    "loop_prereq", turn, seatIndex)
+                                    .with("card", action.drill().prereqCard())
+                                    .with("cost", action.drill().prereqCost())
+                                    .with("target", outlet));
+                        }
+                    }
                     armDrill(new DrillOrder(outlet, null));
                     List<SpellAbility> first = drillStep(turn);
                     if (first != null) {

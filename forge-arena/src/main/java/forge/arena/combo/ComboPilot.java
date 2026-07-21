@@ -73,7 +73,10 @@ public final class ComboPilot {
      * and discovers the ability structurally (no cost hint travels here —
      * the pilot names the OUTLET, the engine layer knows the mechanics).
      */
-    public record DrillOrder(String outletCard) {
+    public record DrillOrder(String outletCard, String prereqCard, String prereqCost) {
+        public DrillOrder(String outletCard) {
+            this(outletCard, null, null);
+        }
     }
 
     /**
@@ -808,7 +811,15 @@ public final class ComboPilot {
                     .with("iterations_proven", proof.cycles())
                     .with("bounded_product", product));
             exitLine();
-            return Optional.of(Action.drill(new DrillOrder(pingLoop.pinger())));
+            // PR-71: Spellbook's step 1 — "Activate Heliod by paying {1}{W},
+            // giving Walking Ballista lifelink" — happens ONCE and then the
+            // loop repeats FROM STEP 2. PR-70 granted it in validate(), which
+            // runs on a COPY, and in next(), which this path never calls
+            // because the line exits straight into the drill. So the grant
+            // was proven and never performed. It travels with the drill order
+            // now, and the controller performs it before the first ping.
+            return Optional.of(Action.drill(new DrillOrder(pingLoop.pinger(),
+                    pingLoop.lifelinkSource(), pingLoop.lifelinkCost())));
         }
         if (activeExecutor instanceof SpellCopyLoop copyLoop) {
             // PR-27b: token product — compress to a flood order; the route
