@@ -151,9 +151,91 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             return -1;
         }
 
+        /**
+         * PR-72: while a drill is armed, a +1/+1 counter trigger must feed the
+         * OUTLET, not the biggest creature on the board.
+         *
+         * <p>Heliod's trigger TARGETS — "put a +1/+1 counter on target
+         * creature or enchantment you control" — and stock AI resolves it
+         * with {@code ComputerUtilCard.getBestAI(aiCreat)}, which in an Angel
+         * deck picks a fat Angel over a 1/1 Walking Ballista. The counter the
+         * loop just spent never comes back, and the loop dies after exactly
+         * one ping. Both observed drill sequences were length 1 for this
+         * reason, with the lifelink grant and the ping both working.
+         *
+         * <p>Note Archangel of Thune has the same trigger as {@code
+         * PutCounterAll} over every creature, so it cannot be misdirected —
+         * which is why only the Heliod line needed this.
+         *
+         * <p>Deck-agnostic: no card is named. The rule is that a counter
+         * trigger, while a drill is armed, feeds the drill's own outlet
+         * whenever that is a legal target.
+         */
+        @Override
+        public boolean chooseTargetsFor(SpellAbility currentAbility) {
+            if (activeDrill != null && currentAbility != null
+                    && currentAbility.usesTargeting()
+                    && currentAbility.getApi() == forge.game.ability.ApiType.PutCounter) {
+                forge.game.card.Card outlet =
+                        AbilityResolver.findBattlefield(player, activeDrill.outletCard());
+                if (outlet != null && currentAbility.canTarget(outlet)) {
+                    currentAbility.resetTargets();
+                    currentAbility.getTargets().add(outlet);
+                    return true;
+                }
+            }
+            return super.chooseTargetsFor(currentAbility);
+        }
+
+        /**
+         * PR-73: would paying the outlet's own activation cost kill it?
+         *
+         * <p>Walking Ballista removes a +1/+1 counter to deal damage, and its
+         * toughness IS those counters. Spend the last one and it becomes 0/0
+         * — state-based actions bury it as the cost is paid, before the
+         * lifelink damage resolves, so the life gain and the engine's trigger
+         * arrive with nothing to put the counter back on. The loop kills
+         * itself on its final iteration and looks like "the drill only ran
+         * once".
+         *
+         * <p>This is precisely what Commander Spellbook's prerequisite
+         * protects — "Walking Ballista has at least two +1/+1 counters on
+         * it" — and the drill had no notion of it. Deck-agnostic: never pay a
+         * cost that destroys the source of the ability being paid for.
+         */
+        private boolean outletSurvivesItsOwnCost(String outlet) {
+            for (forge.game.card.Card c : player.getCardsIn(
+                    forge.game.zone.ZoneType.Battlefield)) {
+                if (!c.getName().equals(outlet)) {
+                    continue;
+                }
+                int spend = 0;
+                for (SpellAbility ab : c.getSpellAbilities()) {
+                    if (ab.getPayCosts() == null) {
+                        continue;
+                    }
+                    java.util.regex.Matcher m = java.util.regex.Pattern
+                            .compile("SubCounter<(\\d+)/P1P1>")
+                            .matcher(ab.getPayCosts().toString());
+                    if (m.find()) {
+                        spend = Math.max(spend, Integer.parseInt(m.group(1)));
+                    }
+                }
+                // no counter-spending ability -> the cost cannot kill it
+                return spend == 0 || c.getNetToughness() - spend > 0;
+            }
+            return true;
+        }
+
         /** The next drill activation, or null (disarms when done/failed). */
         private List<SpellAbility> drillStep(int turn) {
             if (activeDrill == null) {
+                return null;
+            }
+            if (!outletSurvivesItsOwnCost(activeDrill.outletCard())) {
+                // hold this window rather than destroy the engine: the
+                // deck's own life gain refills the counter and the loop
+                // resumes next priority
                 return null;
             }
             if (drillIterations >= DRILL_BOUND || getGame().isGameOver()) {
