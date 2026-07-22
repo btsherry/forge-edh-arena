@@ -39,12 +39,20 @@ public final class SeatView {
 
     /**
      * PUBLIC information about one opponent (PR-16, for the LethalityPlanner):
-     * life total, poison, and battlefield card names — all open information at
-     * a real table. Structurally NO hands, NO libraries (W8 unchanged).
+     * life total, poison, battlefield card names, and total creature power
+     * (PR-eta: the pairing fire policy's "significant threats" measure) — all
+     * open information at a real table. Structurally NO hands, NO libraries
+     * (W8 unchanged).
      */
-    public record OpponentView(int seatIndex, int life, int poison, Set<String> battlefield) {
+    public record OpponentView(int seatIndex, int life, int poison, Set<String> battlefield,
+            int creaturePower) {
         public OpponentView {
             battlefield = Set.copyOf(battlefield);
+        }
+
+        /** Pre-PR-eta shape; power 0. Existing planner tests build with this. */
+        public OpponentView(int seatIndex, int life, int poison, Set<String> battlefield) {
+            this(seatIndex, life, poison, battlefield, 0);
         }
     }
 

@@ -30,7 +30,8 @@ public final class RunLogRenderer {
             // conversion decisions belong there, not behind VERBOSE
             "turn_state", "conversion_step", "outlet_drill", "lethal_alpha",
             "distance_to_fire", "program_complete", "program_abort", "loop_prereq",
-            "governor_plan", "drill_suppressed");
+            "governor_plan", "drill_suppressed", "pairing_entered", "pairing_complete",
+            "pairing_abort");
 
     private RunLogRenderer() {
     }

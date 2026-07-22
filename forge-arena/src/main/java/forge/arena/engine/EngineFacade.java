@@ -285,12 +285,27 @@ public final class EngineFacade {
                     });
         } catch (java.io.IOException ignored) {
         }
+        // PR-eta: compiled pairing programs (wipe + shield), same discovery
+        // pattern — a pair with a program runs ONLY through it.
+        java.util.Map<String, String> pairingPaths = new java.util.LinkedHashMap<>();
+        try (java.util.stream.Stream<java.nio.file.Path> files =
+                java.nio.file.Files.list(seat.dossierDir())) {
+            files.filter(f -> f.getFileName().toString().startsWith("pairing-program-")
+                            && f.getFileName().toString().endsWith(".json"))
+                    .forEach(f -> {
+                        String n = f.getFileName().toString();
+                        pairingPaths.put(n.substring(16, n.length() - 5),
+                                f.toAbsolutePath().toString());
+                    });
+        } catch (java.io.IOException ignored) {
+        }
         return new ComboAwareLobbyPlayer(name, player -> {
             forge.arena.combo.ComboTracker tracker = new forge.arena.combo.ComboTracker(defs);
             forge.arena.combo.ComboPilot p = new forge.arena.combo.ComboPilot(tracker, bindings,
                     routePlan, new forge.arena.combo.TutorRanker(tutorWeights, tracker, payoffCards),
                     0.0, seatIndex, sink);
             p.setProgramPaths(programPaths);
+            p.setPairingPrograms(pairingPaths);
             return p;
         });
     }

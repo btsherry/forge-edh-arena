@@ -48,8 +48,12 @@ public final class SeatViews {
             if (other == player || other.hasLost()) {
                 continue;
             }
+            int oppPower = 0;
+            for (Card c : other.getCreaturesInPlay()) {
+                oppPower += Math.max(0, c.getNetPower());
+            }
             opponents.add(new SeatView.OpponentView(other.getId(), other.getLife(),
-                    other.getPoisonCounters(), names(other, ZoneType.Battlefield)));
+                    other.getPoisonCounters(), names(other, ZoneType.Battlefield), oppPower));
         }
         Map<String, String> attachments = new java.util.HashMap<>();
         int untappedManaSources = 0;

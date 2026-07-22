@@ -638,3 +638,83 @@ The Win Routes spec (route definitions + classification rules) is a documentatio
 - No network in the game loop; Spellbook client only in prep/, Anthropic API clients only in prep-time components (prep/ClaudeClient for the Gate-3 autopsy — as-built PR-13; bindgen/ for Gate 3.5), all prep-time only, proper user agent, cache-first, keys via environment variables.
 - Bindgen outputs are untrusted until verified: schema → lint → sandbox-sim, in that order; only sim-passed bindings get executable. Store request hash, model id, and verbatim response with every library entry; run manifests pin the library version.
 - When in doubt between fidelity to this document and what the actual Forge source supports: **the source wins** — update this document in the same PR.
+
+## Project file inventory (2026-07-22)
+
+### Research
+
+- `forge-arena/docs/research/architecture-survey-2.md` — Web + Gemini investigation of whether "scripted pilot over stock AI" is the right frame, reframing via steps-to-win analysis.
+- `forge-arena/docs/research/combo-conversion-playbook.md` — Format-general design reference for structural mechanisms of combo fire→win conversion (engine + outlet pattern).
+- `forge-arena/docs/research/divergence-investigation.md` — Hunt for residual 10% non-determinism after per-thread RNG seeding, narrowed but not closed.
+- `forge-arena/docs/research/game-ai-architectures.md` — Survey of game-AI decision architectures with ranked recommendations for combo-pilot fire-turn and conversion metrics.
+- `forge-arena/docs/research/ingestion-findings.md` — Measurement showing prep is blind to 60–83% of each deck's nonland cards (core finding that drove Phase 9).
+- `forge-arena/docs/research/ingestion-trial-purphoros2.md` — First end-to-end run of new ingestion workflow, Gemini independently reconstructed Grinning Ignus + Runaway Steam-Kin + Purphoros line.
+- `forge-arena/docs/research/mtg-ai-survey.md` — Academic/commercial/hobby AI survey for MTG, focused on combo firing sequencing and resource-to-win conversion.
+- `forge-arena/docs/research/mtg-rules-digest-conversion.md` — Comprehensive Rules (June 2026) digest constraining the combo-conversion module (loops, X spells, mana pool, win/loss SBAs).
+- `forge-arena/docs/research/mtg-rules-summary.md` — General Comprehensive Rules companion covering turn structure, priority, stack, combat, replacements, and Commander format.
+
+### Primers
+
+- `forge-arena/docs/primers/giada-font-of-hope-deckcheck.md` — DeckCheck.co analysis of Giada deck (external reference for pilot grading and calibration).
+- `forge-arena/docs/primers/purphoros-god-of-the-forge-deckcheck.md` — DeckCheck.co analysis of Purphoros deck (reference for decision audits and Gate 1.5 tuning).
+- `forge-arena/docs/primers/selvala-heart-of-the-wilds-deckcheck.md` — DeckCheck.co analysis of Selvala deck (external reference, sits beside dossier as content-hash baseline).
+- `forge-arena/docs/primers/urza-lord-high-artificer-deckcheck.md` — DeckCheck.co analysis of Urza deck (artifact storm strategy reference for pilot grading).
+
+### Plans and results
+
+- `forge-arena/docs/IMPLEMENTATION-PLAN.md` — Master specification (v3.3), canonical design document covering mission, acceptance bars, architecture, schemas, execution flow, and roadmap.
+- `forge-arena/docs/PR-LOG.md` — Running PR log mapping each PR to artifacts introduced (Foundation PRs 1–14 and beyond).
+- `forge-arena/docs/PHASE-6-PLAN.md` — Plan for conversion, coverage, and speed: any deck plays Magic well with early combo assembly, firing, and win conversion.
+- `forge-arena/docs/PHASE-7-PLAN.md` — Plan to replace hand-written predicates with exact rules-engine queries (real prediction lines).
+- `forge-arena/docs/PHASE-8-PLAN.md` — Planning record: prove execution (deterministic per combo), measuring steps between fire and win.
+- `forge-arena/docs/PHASE-9-PLAN.md` — Planning record: teach prep to read decks (respond to 60–83% blindness discovered in ingestion-findings.md).
+- `forge-arena/docs/PHASE-9-FINDINGS.md` — 341 cards, 7 subagents, four decks; 0 out-of-vocabulary capabilities, 0 hallucinations, 49 cross-agent proposals promoted.
+- `forge-arena/docs/PHASE-10-PLAN.md` — Grounded plan to fix deck behaviour using card scripts, strategy primers, and 341-card ingestion pass.
+- `forge-arena/docs/PHASE-10-RESULTS.md` — Deterministic 30-game results (Selvala 0→1 win, Giada 9→12), three decks moved right, one mechanism confirmed.
+- `forge-arena/docs/PHASE-11-PLAN.md` — Ben-approved plan: one execution path per combo, no fallback tier, full oracle text as compiler input alongside scripts.
+- `forge-arena/docs/COMBO-ACCOUNTING.md` — Two-level audit of 42 detected combos (42 across all four decks, binding status + validation in batch).
+- `forge-arena/docs/COMBO-AUDIT-RESULTS.md` — 30-game combo-audit batch results (flat, all within noise of prior Phase 10 runs).
+- `forge-arena/docs/INGESTION-SPEC.md` — Executable contract for ingestion: what runs, what's handed to whom, what comes back, where it breaks.
+- `forge-arena/docs/INGESTION-WORKFLOW.md` — Design for replacing prep (not yet built), ordered: correctness first, then efficiency, then elegance.
+- `forge-arena/docs/GIADA-COMBO-RESULT.md` — First end-to-end combo execution result (Giada 30-game: 2 combos fired, 1 fired and won that game).
+- `forge-arena/docs/WIN-ROUTES.md` — Win Routes spec (v1): closed set of conversion routes, per-deck feature classification rules (cache-first, library-driven).
+- `forge-arena/docs/PROJECT-BRIEF.md` — Canonical project brief (one sentence): drop in ANY deck, prep detects combos, pilot assembles and converts to wins with no hardcoded logic.
+- `forge-arena/docs/T0-VERIFICATION.md` — Forge internals verification (complete) against Plan v3.1 §1: all assumptions confirmed except 4 corrections.
+- `forge-arena/docs/PR-66-SYNERGY-CLASSES.md` — PR-66 queued design (not built): 31 card pairings named by two independent subagents, absent from Spellbook.
+
+### Deck dossier artifacts
+
+**Dossiers present:** `giada-font-of-hope`, `purphoros-god-of-the-forge`, `purphoros-god-of-the-forge2`, `selvala-heart-of-the-wilds`, `urza-lord-high-artificer`
+
+**Dossier file types** (each deck's `dossier/` subdirectory contains):
+- `dossier.json` — arena.dossier/1: deck metadata, schema versions, artifact checksums, versioned library references.
+- `deck-cards.json` — arena.deck-cards/1: normalized deck card list.
+- `deck-meta.yaml` — Deck name, source, URL, archetype tags.
+- `combos.json` — arena.combos/1: combos detected by Spellbook (id, url, pieces, mana, prerequisites, step text).
+- `advisory-combos.json` — Almost-included combos (at least one piece missing), deckbuilding advice only.
+- `spellbook-raw.json` — Raw Commander Spellbook API response for deck (unmodified snapshot).
+- `spellbook-raw.meta.json` — Metadata file for Spellbook API snapshot.
+- `capability-inventory.json` — arena.capability-inventory/2: per-card T0 scripts and T3 capabilities (roles, activations, evidenced).
+- `route-coverage.json` — arena.route-coverage/2: win routes detected in deck combos (routable vs. unroutable features).
+- `tutor-priorities.json` — arena.tutor-priorities/1: card weights for tutor targeting (derived from win plan + route requirements).
+- `discovered-synergies.json` — arena.discovered-synergies/1: card pairs independently named by two subagents, absent from Spellbook.
+- `paired-plays.json` — arena.paired-plays/1: prep-enumerated wipe+protection candidate pairs (trigger, protection, wipe scope, combined mana value).
+- `implementability-report.json` — arena.implementability-report/1: pass/fail, unimplemented cards, goldfish games.
+- `lint-report.json` — arena.lint-report/1: banlist legality check results.
+- `unimplemented-cards.txt` — Plain text list of cards without Forge scripts.
+- `program-backlog.json` — arena.program-backlog/1: Gate 4 verdicts per combo (executable / flagged with abort reason / no_program); the no_program list IS the compile backlog.
+- `combo-program-*.json` — arena.combo-program/1: compiled per-combo program (pieces, setup with frequencies, loop body, trigger obligations, exit states) interpreted by ProgramRunner.
+- `pairing-program-*.json` — arena.pairing-program/1: compiled wipe+protection pair (mechanism validity, respond-on-stack sequencing, fire policy, measured verify) run by PairingRunner.
+- `fixtures/fixture-*.json` — arena.program-fixture/1: goldfish boards DERIVED from compiled programs by Gate 4 (hand/battlefield/lands).
+- `*.dck` — The deck file itself (included in dossier for content-hash verification).
+
+### Scripts and run configs
+
+- `forge-arena/scripts/batch.sh` — Launch arena batch from batch-config.json (orchestrator + worker pool, deterministic seeding per worker).
+- `forge-arena/scripts/prep.sh` — Arena prep v1: compile deck dossier through Gates 0–3 (ingest, lint, implementability, combo detection).
+- `forge-arena/scripts/canary.sh` — Gate 4 canary batch (20 games, full-fidelity verification before large runs).
+- `forge-arena/scripts/smoke.sh` — CI smoke gate: build + unit tests + small canary batch.
+- `forge-arena/scripts/fidelity.py` — Phase 7 fidelity ledger scorer (prediction layer vs. old path, when engine says attack is lethal).
+- `forge-arena/scripts/program-fidelity.py` — Phase 11 execution-fidelity scorer (program entry, sustain, convert rates; why programs stopped).
+- `forge-arena/scripts/build-ingestion-packages.py` — Assemble ingestion packages (per-card oracle+script, whole-deck package for Gemini).
+- `forge-arena/scripts/capability-prototype.py` — PROTOTYPE: extract capabilities from Forge card scripts, measure blind-spot closure vs. oracle-text alone.

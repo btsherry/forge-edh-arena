@@ -85,6 +85,9 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private DrillOrder activeDrill;
         /** Phase 11: the running compiled-program interpreter, if any. */
         private ProgramRunner activeProgram;
+        /** PR-eta: the live pairing runner — polled even with a non-empty
+         *  stack, because respond-on-stack IS its job. */
+        private PairingRunner activePairing;
         private int drillIterations;
         /** Bounded per game — a runaway drill is a stall, not a win. */
         static final int DRILL_BOUND = 200;
@@ -435,9 +438,28 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 pendingChoice = null;
             }
             watchForStall(game, turn);
+            // PR-eta: an active pairing owns every window — including the
+            // ones with its own wipe on the stack (respond-on-stack is the
+            // designed exception to the yield-while-stack-full invariant)
+            if (activePairing != null) {
+                List<SpellAbility> step = activePairing.next(turn);
+                if (activePairing.finished()) {
+                    activePairing = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activePairing != null) {
+                    return null;
+                }
+            }
             // PR-31: an armed paired-play protection fires at the first
-            // priority with our trigger on the stack — cast it in response
-            if (pilot.pendingProtection() != null && !game.getStack().isEmpty()) {
+            // priority with our trigger on the stack — cast it in response.
+            // PR-eta: only the turn it was armed — a stale shield (its wipe's
+            // cast silently failed) must not fire into unrelated stacks,
+            // including a compiled pairing's own wipe
+            pilot.expireStaleProtection(turn);
+            if (pilot.pendingProtectionFresh(turn) && !game.getStack().isEmpty()) {
                 SpellAbility protection = AbilityResolver.resolveCast(
                         player, pilot.pendingProtection());
                 pilot.protectionResolved(turn, protection != null);
@@ -541,6 +563,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 activeProgram = new ProgramRunner(getGame(), player, pilot,
                         seatIndex, action.program().programPath());
                 return activeProgram.next(turn);
+            }
+            if (!action.isStep() && action.pairing() != null) {
+                // PR-eta: wipe + shield, respond-on-stack, measured verify.
+                activePairing = new PairingRunner(getGame(), player, pilot,
+                        seatIndex, action.pairing().programPath());
+                List<SpellAbility> first = activePairing.next(turn);
+                if (activePairing.finished()) {
+                    activePairing = null;
+                }
+                return first;
             }
             if (!action.isStep() && action.drill() != null) {
                 // PR-38: the planner picked a single-target sink. PROVE it on

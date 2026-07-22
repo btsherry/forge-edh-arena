@@ -37,13 +37,13 @@ public final class ComboPilot {
 
     /** One pilot output: a scripted step, a mana shortcut, or a token flood. */
     public record Action(LineExecutor.Step step, ShortcutOrder shortcut, TokenFlood flood,
-            DrillOrder drill, ProgramOrder program) {
+            DrillOrder drill, ProgramOrder program, PairingOrder pairing) {
         public Action(LineExecutor.Step step, ShortcutOrder shortcut, TokenFlood flood) {
-            this(step, shortcut, flood, null, null);
+            this(step, shortcut, flood, null, null, null);
         }
 
         public Action(LineExecutor.Step step, ShortcutOrder shortcut) {
-            this(step, shortcut, null, null, null);
+            this(step, shortcut, null, null, null, null);
         }
 
         public boolean isStep() {
@@ -51,24 +51,32 @@ public final class ComboPilot {
         }
 
         static Action play(LineExecutor.Step step) {
-            return new Action(step, null, null, null, null);
+            return new Action(step, null, null, null, null, null);
         }
 
         static Action shortcut(ShortcutOrder order) {
-            return new Action(null, order, null, null, null);
+            return new Action(null, order, null, null, null, null);
         }
 
         static Action flood(TokenFlood order) {
-            return new Action(null, null, order, null, null);
+            return new Action(null, null, order, null, null, null);
         }
 
         static Action drill(DrillOrder order) {
-            return new Action(null, null, null, order, null);
+            return new Action(null, null, null, order, null, null);
         }
 
         static Action program(ProgramOrder order) {
-            return new Action(null, null, null, null, order);
+            return new Action(null, null, null, null, order, null);
         }
+
+        static Action pairing(PairingOrder order) {
+            return new Action(null, null, null, null, null, order);
+        }
+    }
+
+    /** PR-eta: dispatch a compiled pairing program (wipe + shield, respond-on-stack). */
+    public record PairingOrder(String pairingId, String programPath) {
     }
 
     /**
@@ -191,6 +199,108 @@ public final class ComboPilot {
             }
         }
         this.programPieces = pieces;
+    }
+
+    /**
+     * PR-eta: compiled pairing programs (wipe + shield). What the pilot
+     * needs for the ENTRY decision only — the runner re-verifies everything
+     * against the live game. Names come from the programs, never from code.
+     */
+    public record PairingSpec(String id, String path, String wipe, String protection,
+            String policyType, int minPower, int manaEstimate) {
+    }
+
+    private java.util.List<PairingSpec> pairingSpecs = java.util.List.of();
+    private final Set<String> firedPairings = new HashSet<>();
+
+    /**
+     * PR-eta panel finding: a PREFLIGHT abort spends NOTHING — burning the
+     * once-per-game pair on it contradicted fresh evaluation. The runner
+     * calls this to hand the pair back; attemptedThisTurn still prevents a
+     * same-turn spin.
+     */
+    public void pairingPreflightFailed(String pairingId) {
+        firedPairings.remove(pairingId);
+    }
+
+    public void setPairingPrograms(Map<String, String> paths) {
+        java.util.List<PairingSpec> specs = new java.util.ArrayList<>();
+        for (Map.Entry<String, String> e : (paths == null ? Map.<String, String>of() : paths)
+                .entrySet()) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode program =
+                        new com.fasterxml.jackson.databind.ObjectMapper()
+                                .readTree(new java.io.File(e.getValue()));
+                String wipe = program.path("wipe").path("card").asText(null);
+                String protection = program.path("protection").path("card").asText(null);
+                if (wipe == null || protection == null) {
+                    continue;
+                }
+                boolean free = program.path("protection").hasNonNull("free_condition");
+                int estimate = symbolCount(program.path("wipe").path("cost").asText(""))
+                        + (free ? 0
+                                : symbolCount(program.path("protection").path("cost").asText("")));
+                specs.add(new PairingSpec(e.getKey(), e.getValue(), wipe, protection,
+                        program.path("fire_policy").path("type").asText("threat_gated"),
+                        program.path("fire_policy")
+                                .path("min_combined_opponent_creature_power").asInt(6),
+                        estimate));
+            } catch (Exception unreadable) {
+                // the runner aborts loudly on use; nothing to do here
+            }
+        }
+        this.pairingSpecs = specs;
+    }
+
+    /** Mana-value estimate of a canonical brace cost string ("{3}{W}{W}" -> 5). */
+    private static int symbolCount(String cost) {
+        int total = 0;
+        for (String sym : cost.replace("{", " ").replace("}", " ").trim().split("\\s+")) {
+            if (sym.isEmpty()) {
+                continue;
+            }
+            total += sym.chars().allMatch(Character::isDigit) ? Integer.parseInt(sym) : 1;
+        }
+        return total;
+    }
+
+    /**
+     * PR-eta entry decision: a compiled pairing fires at the first legal
+     * window once both cards are in hand, the mana estimate is coverable,
+     * and its fire policy holds — threat_gated needs opponents' combined
+     * creature power at the program's floor (Ben: "as soon as mana is
+     * available and our opponents have significant threats");
+     * assembly_gated (mass land destruction) needs nothing beyond assembly
+     * ("as soon as its assembled and we can afford it"). Marked fired at
+     * dispatch: once per pair per game, exactly like the legacy path.
+     */
+    private Optional<Action> compiledPairings(SeatView view) {
+        Set<String> hand = view.cardsIn(SeatView.Zone.HAND);
+        for (PairingSpec spec : pairingSpecs) {
+            if (firedPairings.contains(spec.id()) || attemptedThisTurn.contains(spec.id())
+                    || !hand.contains(spec.wipe()) || !hand.contains(spec.protection())) {
+                continue;
+            }
+            if (view.manaPool() + view.untappedManaSources() < spec.manaEstimate()) {
+                continue;
+            }
+            if ("threat_gated".equals(spec.policyType())) {
+                int threat = view.opponents().stream()
+                        .mapToInt(SeatView.OpponentView::creaturePower).sum();
+                if (threat < spec.minPower()) {
+                    continue;
+                }
+            }
+            attemptedThisTurn.add(spec.id());
+            firedPairings.add(spec.id());
+            events.accept(ArenaEvent.of("pairing_entered", view.turn(), seat)
+                    .with("pairing", spec.id())
+                    .with("wipe", spec.wipe())
+                    .with("protection", spec.protection())
+                    .with("policy", spec.policyType()));
+            return Optional.of(Action.pairing(new PairingOrder(spec.id(), spec.path())));
+        }
+        return Optional.empty();
     }
     /**
      * PR-C: the deck's own damage amplifiers, from its route-coverage
@@ -584,16 +694,38 @@ public final class ComboPilot {
                     .with("entry_phase", executor.get().entryPhase()));
             return assemblyAction(view, validator);
         }
-        return pairedPlays(view).or(() -> preAssembly(view));
+        return compiledPairings(view).or(() -> pairedPlays(view))
+                .or(() -> preAssembly(view));
     }
 
     // PR-31: paired plays (wipe + instant shield) — binding-driven, no loop
     private String pendingProtection;
+    private int pendingProtectionTurn = -1;
     private final Set<String> firedPairs = new HashSet<>();
 
     /** The shield the controller must cast while our trigger is on the stack. */
     public String pendingProtection() {
         return pendingProtection;
+    }
+
+    /**
+     * PR-eta panel finding: a legacy shield armed for a wipe whose cast
+     * silently failed dangles FOREVER (the epsilon Final Showdown dangle)
+     * and then fires into the first non-empty stack it sees — including a
+     * compiled pairing's own wipe. Armed protection is only live the turn
+     * it was armed; the controller expires it after that.
+     */
+    public boolean pendingProtectionFresh(int turn) {
+        return pendingProtection != null && pendingProtectionTurn == turn;
+    }
+
+    public void expireStaleProtection(int turn) {
+        if (pendingProtection != null && pendingProtectionTurn != turn) {
+            events.accept(ArenaEvent.of("line_aborted", turn, seat)
+                    .with("cause", "stale_protection")
+                    .with("piece_lost", pendingProtection));
+            pendingProtection = null;
+        }
     }
 
     /** The controller reports the response cast (or its failure); the pair ends. */
@@ -633,7 +765,11 @@ public final class ComboPilot {
         for (ExecutorBindings.Binding binding : bindings.all()) {
             if (!PairedPlay.ARCHETYPE.equals(binding.archetype())
                     || firedPairs.contains(binding.comboId())
-                    || attemptedThisTurn.contains(binding.comboId())) {
+                    || attemptedThisTurn.contains(binding.comboId())
+                    // PR-eta: a pair with a compiled program runs ONLY
+                    // through it (one execution path, same rule as combos)
+                    || pairingSpecs.stream().anyMatch(
+                            sp -> sp.id().equals(binding.comboId()))) {
                 continue;
             }
             Optional<LineExecutor> executor = ExecutorBindings.executorFor(binding);
@@ -654,6 +790,7 @@ public final class ComboPilot {
         attemptedThisTurn.add(bestBinding.comboId());
         firedPairs.add(bestBinding.comboId());
         pendingProtection = bestPair.protectionCard();
+        pendingProtectionTurn = view.turn();
         events.accept(ArenaEvent.of("line_entered", view.turn(), seat)
                 .with("combo", bestBinding.comboId())
                 .with("binding", bestBinding.comboId())
@@ -732,6 +869,13 @@ public final class ComboPilot {
                 cards.add(pair.triggerCard());
                 cards.add(pair.protectionCard());
             }
+        }
+        // PR-eta panel finding: compiled pairs must reserve their own cards —
+        // reservation through the legacy artifact alone breaks the day prep
+        // stops emitting a compiled pair there
+        for (PairingSpec spec : pairingSpecs) {
+            cards.add(spec.wipe());
+            cards.add(spec.protection());
         }
         return cards;
     }
