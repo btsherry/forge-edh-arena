@@ -52,6 +52,7 @@ public final class PrepMain {
         ARTIFACT_FILES.put("tutor_priorities", "tutor-priorities.json");
         ARTIFACT_FILES.put("autopsy_proposals", "autopsy-proposals.json");
         ARTIFACT_FILES.put("autopsy_raw", "autopsy-raw.json");
+        ARTIFACT_FILES.put("program_backlog", "program-backlog.json");
     }
 
     /**
@@ -165,6 +166,23 @@ public final class PrepMain {
             } catch (IOException e) {
                 gates.add(new GateOutcome("bindgen", false, e.getMessage()));
             }
+        }
+
+        // Gate 4 (PR-delta): program executability — a goldfish fixture is
+        // DERIVED from each compiled program and played for real; whatever
+        // cannot execute ships FLAGGED (the flag list is the build backlog).
+        // This gate records, it never fails prep.
+        if (options.goldfishGames() > 0) {
+            try {
+                ProgramGate.Report programs = ProgramGate.run(dossier);
+                gates.add(new GateOutcome("4 programs", true,
+                        programs.executable() + " executable, " + programs.flagged()
+                                + " flagged, " + programs.noProgram() + " no_program"));
+            } catch (IOException e) {
+                gates.add(new GateOutcome("4 programs", true, "skipped: " + e.getMessage()));
+            }
+        } else {
+            gates.add(new GateOutcome("4 programs", true, "skipped (goldfish games 0)"));
         }
 
         finalizeIndex(dossier, gates);
