@@ -16,6 +16,7 @@ import org.testng.annotations.Test;
 import com.google.common.eventbus.Subscribe;
 
 import forge.arena.bootstrap.ArenaBootstrap;
+import forge.arena.engine.ArenaGameResult;
 import forge.arena.engine.ArenaLimits;
 import forge.arena.engine.EngineFacade;
 import forge.arena.engine.GameAware;
@@ -98,10 +99,28 @@ public class GiadaHeliodLoopTest {
         Path dossier = Path.of("decks", "giada-font-of-hope", "dossier");
         List<ArenaEvent> events = new CopyOnWriteArrayList<>();
         Consumer<ArenaEvent> sink = events::add;
-        EngineFacade.playCommanderGame(
+        ArenaGameResult result = EngineFacade.playCommanderGame(
                 List.of(SeatSpec.comboAware(new File("decks/giada-font-of-hope.dck"), dossier),
                         SeatSpec.goldfish(new File("decks/urza-lord-high-artificer.dck"))),
                 42L, new ArenaLimits(12, 400, 2000), sink, new BoardProbe());
+
+        // Pre-gamma spike telemetry: how the engine actually grants windows —
+        // iterations per turn, the terminal program event, and the game
+        // outcome. Monitoring, not assertion; PR-gamma's numbers come from
+        // here.
+        java.util.Map<Integer, Long> perTurn = new java.util.TreeMap<>();
+        events.stream().filter(e -> e.t().equals("outlet_drill"))
+                .forEach(e -> perTurn.merge(e.turn(), 1L, Long::sum));
+        System.out.println("SPIKE iterations-per-turn=" + perTurn
+                + " terminal=" + events.stream()
+                        .filter(e -> e.t().equals("program_complete")
+                                || e.t().equals("program_abort"))
+                        .map(e -> e.t() + e.fields()).toList()
+                + " governor=" + events.stream()
+                        .filter(e -> e.t().equals("governor_plan"))
+                        .map(e -> String.valueOf(e.fields())).toList()
+                + " result=" + result.type() + "/" + result.winnerName()
+                + "/" + result.winCondition() + "/t" + result.turns());
 
         long drillSteps = events.stream()
                 .filter(e -> e.t().equals("outlet_drill")).count();
@@ -126,5 +145,37 @@ public class GiadaHeliodLoopTest {
                         .filter(e -> e.t().equals("program_abort"))
                         .map(e -> String.valueOf(e.fields())).toList(),
                 drillSteps >= 5);
+
+        // PR-gamma: the governor plans BEFORE firing — need measured from the
+        // live table, cap from declared self-consumption ("none" here), N =
+        // min of the two, per tranche.
+        List<ArenaEvent> plans = events.stream()
+                .filter(e -> e.t().equals("governor_plan")).toList();
+        assertTrue("the governor must emit a plan before iterating, plans="
+                + plans.size(), !plans.isEmpty());
+        assertTrue("planned N must cover the sustain bar, plan="
+                + plans.get(0).fields(),
+                ((Number) plans.get(0).fields().get("planned")).intValue() >= 5);
+
+        // PR-gamma: the spike measured the full conversion — 39 verified
+        // iterations in ONE turn, opponent's life to zero, engine-declared
+        // win. That is the project's charge (gamestate into wins), so it is
+        // asserted, not just observed. The engine's WIN is the ground truth;
+        // a lethal final iteration ends the game before program_complete can
+        // be emitted, which is why the assertion is on the RESULT.
+        assertTrue("the program must CONVERT: engine win for seat0, got "
+                + result.type() + "/" + result.winnerName()
+                + "/" + result.winCondition(),
+                result.type() == ArenaGameResult.ResultType.WIN
+                        && result.winnerSeat() == 0);
+
+        // PR-gamma: a program piece is never drilled by the legacy path
+        long legacyDrillOnPiece = events.stream()
+                .filter(e -> e.t().equals("conversion_step"))
+                .filter(e -> "DRILL".equals(String.valueOf(e.fields().get("kind")))
+                        && "Walking Ballista".equals(String.valueOf(e.fields().get("card"))))
+                .count();
+        assertTrue("legacy drill must never arm on a program piece (saw "
+                + legacyDrillOnPiece + ")", legacyDrillOnPiece == 0);
     }
 }

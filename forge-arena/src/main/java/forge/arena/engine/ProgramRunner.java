@@ -57,6 +57,17 @@ public final class ProgramRunner {
 
     private boolean finished;
     private int iterations;
+    /**
+     * PR-gamma governor v0: iterations are planned in TRANCHES. At each
+     * boundary the governor recomputes N = min(exit-state need, self-
+     * consumption cap) from the LIVE world and emits a governor_plan; a
+     * tranche that exhausts with opponents still alive replans rather than
+     * firing blindly (life totals move at instant speed). Ben's bound: going
+     * 100 times generating mana is great, drawing 100 cards from your own
+     * deck will lose you the game.
+     */
+    private int plannedThrough;
+    private int tranche;
     private int grantTurn = -1;
     private boolean pendingGrant;
     private boolean pendingIteration;
@@ -256,6 +267,39 @@ public final class ProgramRunner {
         if (iterations >= ITERATION_CAP) {
             return abort(turn, "iteration_cap: " + ITERATION_CAP);
         }
+        // governor v0 (PR-gamma): plan a tranche when the previous one is
+        // spent. Need is measured from the live table, the cap from the
+        // program's declared self-consumption vs live resources.
+        if (iterations >= plannedThrough) {
+            int need = 0;
+            for (Player p : game.getPlayers()) {
+                if (p != player && !p.hasLost()) {
+                    need += Math.max(0, p.getLife());
+                }
+            }
+            int cap = selfConsumptionCap();
+            int planned = Math.min(need, cap);
+            if (planned <= 0) {
+                return abort(turn, "self_floor: exit state needs " + need
+                        + " more iterations but the resource cap allows " + cap);
+            }
+            plannedThrough = iterations + planned;
+            tranche++;
+            pilot.observe(ArenaEvent.of("governor_plan", turn, seat)
+                    .with("combo", comboId)
+                    .with("exit_state", program.path("exit_states").path(0)
+                            .path("engine_state").asText("opponent_life_zero_each"))
+                    .with("need", need)
+                    .with("cap", cap == Integer.MAX_VALUE ? "none" : cap)
+                    .with("planned", planned)
+                    .with("tranche", tranche)
+                    .with("iterations_done", iterations));
+        } else if (selfConsumptionCap() <= 0) {
+            // mid-tranche floor breach (an opponent milling us, a life drain):
+            // the declared resource hit its floor before the tranche did
+            return abort(turn, "self_floor: resource at floor mid-tranche after "
+                    + iterations + " iterations");
+        }
         // fire one real iteration
         SpellAbility ping = AbilityResolver.resolveAtPlayer(player, outlet, null, target);
         if (ping == null) {
@@ -266,6 +310,25 @@ public final class ProgramRunner {
         lastTargetId = target.getId();
         pendingIteration = true;
         return List.of(ping);
+    }
+
+    /**
+     * How many more iterations the program's declared self-consumption
+     * permits, from LIVE resources ({@code self_consumption}: what the loop
+     * spends of its OWN that it cannot get back). {@code none} is unbounded;
+     * {@code library} keeps a floor above drawing out (CR 704.5c); {@code
+     * life} keeps a floor above our own payments. Default floors are the
+     * plan's (library 5, life 10) — a program may declare tighter ones.
+     */
+    private int selfConsumptionCap() {
+        JsonNode sc = program.path("self_consumption");
+        String resource = sc.path("resource").asText("none");
+        return switch (resource) {
+            case "library" -> player.getCardsIn(forge.game.zone.ZoneType.Library).size()
+                    - sc.path("floor").asInt(5);
+            case "life" -> player.getLife() - sc.path("floor").asInt(10);
+            default -> Integer.MAX_VALUE;
+        };
     }
 
     private JsonNode perTurnStep() {

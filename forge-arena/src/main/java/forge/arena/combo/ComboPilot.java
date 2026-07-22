@@ -163,9 +163,34 @@ public final class ComboPilot {
     private final Set<String> attemptedDeploys = new HashSet<>();
     /** Phase 11: combo id -> compiled program path (strings only — W8 pure). */
     private Map<String, String> programPaths = Map.of();
+    /**
+     * PR-gamma: every card that is a PIECE of some compiled program. A
+     * program is the ONLY execution path for its pieces (no dual paths —
+     * the post-abort phantom drill on the Ballista was the legacy
+     * conversion machinery arming on a program's outlet). Names come from
+     * the programs themselves, never from code.
+     */
+    private Set<String> programPieces = Set.of();
 
     public void setProgramPaths(Map<String, String> paths) {
         this.programPaths = paths == null ? Map.of() : paths;
+        Set<String> pieces = new HashSet<>();
+        for (String path : this.programPaths.values()) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode program =
+                        new com.fasterxml.jackson.databind.ObjectMapper()
+                                .readTree(new java.io.File(path));
+                for (com.fasterxml.jackson.databind.JsonNode piece : program.path("pieces")) {
+                    String card = piece.path("card").asText();
+                    if (!card.isEmpty()) {
+                        pieces.add(card);
+                    }
+                }
+            } catch (Exception unreadable) {
+                // the runner aborts loudly on use; nothing to do here
+            }
+        }
+        this.programPieces = pieces;
     }
     /**
      * PR-C: the deck's own damage amplifiers, from its route-coverage
@@ -982,7 +1007,18 @@ public final class ComboPilot {
         return switch (plan.kind()) {
             case TABLE_WIDE, DIG, X_SPELL -> Optional.of(Action.play(
                     LineExecutor.Step.castX(plan.card(), plan.x())));
-            case DRILL -> Optional.of(Action.drill(new DrillOrder(plan.card())));
+            // PR-gamma: a program piece is never drilled by the legacy path —
+            // the program is its one execution path (fresh evaluation after
+            // an interruption re-enters the PROGRAM, not a fallback)
+            case DRILL -> {
+                if (programPieces.contains(plan.card())) {
+                    events.accept(ArenaEvent.of("drill_suppressed", view.turn(), seat)
+                            .with("card", plan.card())
+                            .with("reason", "program_owns_piece"));
+                    yield Optional.empty();
+                }
+                yield Optional.of(Action.drill(new DrillOrder(plan.card())));
+            }
             // a deployed draw engine is ACTIVATED, not cast: the controller
             // finds its draw ability structurally (ApiType.Draw), and tries a
             // real tutor first — fetching the payoff beats drawing one card
