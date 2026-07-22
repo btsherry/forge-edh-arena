@@ -1,0 +1,131 @@
+# Running PR log
+
+One paragraph per PR: what was added and why, plus new files/artifacts it
+introduced. MAINTENANCE RULE: append an entry with every PR commit. Detail
+lives in the commit messages; this is the map.
+
+## Foundation (PRs 1–14) — harness, prep gates, first executor
+- **PR-1..5** Module skeleton, versioned JSON schemas, headless bootstrap and
+  RNG seeding; EngineFacade with arena limits and ArchUnit layer isolation;
+  dual-sink event recording (per-game JSONL + tailable run.log); seeded
+  Latin-square seat rotation; worker-pool batch driver with smoke/batch
+  scripts. *Artifacts introduced: run dirs with game-records.jsonl,
+  events/NNNN.jsonl, run.log, batches.jsonl ledger.*
+- **PR-6..10** The prep gate chain: Gate 0 ingest (deck-cards.json + dossier
+  skeleton), Gate 1 legality lint vs pinned banlist (lint-report.json), Gate 2
+  implementability/goldfish compile (implementability-report.json), canary
+  divergence proof, Gate 3 Commander Spellbook client (combos.json,
+  advisory-combos.json, route-coverage.json).
+- **PR-11..13** SeatView hidden-info read-model (the ONLY game surface the
+  combo layer may touch) + detection-only ComboTracker; `arena prep` dossier
+  compiler; LLM classification fallback + route library (prep autopsy).
+- **PR-14** TapForManaUntapLoop, the first executor archetype, and the
+  sim-validation seam: prove a loop on a GameCopier copy before firing.
+  *Global artifact: bindings/executor-bindings.json.*
+
+## Pilot and conversion (PRs 15–39) — the combo pilot learns to fire
+- **PR-15..19** ComboAwareController with line mode and decision telemetry;
+  LethalityPlanner + RoutePlan; loop shortcut + stall watchdog; TutorRanker
+  (tutor-priorities.json); ASSEMBLY/DEPLOY stages — first assembled,
+  proven, fired, WON game; affordability gate.
+- **PR-20..23** Gate 3.5 bindgen (LLM binding generation, sim-verified) and
+  Gate 3.6 stall autopsy; turn_state/turn_summary play telemetry; BatchStats
+  reducers with funnels, fingerprints, and seed-paired A/B compare.
+- **PR-24..30** Payoff-visible tutor urgency + distance-aware mulligan;
+  scripted DEPLOY_WIN conversion; pre-assembly speed work; BounceRecastLoop
+  and SpellCopyLoop archetypes (+ token-flood shortcut — Purphoros pilots);
+  X-rider guards; goldfish gauntlet; ramp sequencing.
+- **PR-31..35** PairedPlay + ImprintCopyLoop archetypes; copy-fidelity shim
+  (imprint/exile links GameCopier drops); continuous lethal-check alpha;
+  window-bounded re-fire. Research: combo-conversion-playbook.md,
+  game-ai-architectures.md, mtg-rules-digest-conversion.md.
+- **PR-36..39** win-routes/5 outlet vocabulary; loop-to-lethal drill;
+  ConversionPlanner state machine (spend the banked engine: table-wide →
+  drill → dig); CastBounceManaLoop archetype; run-log observability.
+
+## Measurement and correction (PRs 40–53)
+- **PR-40..45** Honest-measurement pass: sameTurnWin metric, abort taxonomy,
+  deck-swap safety across all 12 pod permutations, Moxfield ingestion
+  (later found nonviable vs Cloudflare — export files are the interface).
+- **PR-41 family** The haste-split saga: win-routes/6 split, step-resolution
+  failure naming, dig-vs-tutor priority, the pool-blind tutor, and the tutor
+  seam (chooseSingleCardForZoneChange) — 255 tutor decisions after 366 games
+  of zero.
+- **PR-46..52** 64MB deep-stack game thread; LifegainPingLoop (Giada's
+  combo archetype); PairedPlayFinder reads card text for wipe+protect pairs
+  Spellbook cannot see (paired-plays.json); reentrancy guard for the
+  infinite-recursion crash (UPSTREAM-PATCHES.md #1); SelfTopdeckRecastLoop;
+  threat-score targeting; hygiene pass.
+- **PR-53** Turn cap 35 by measurement; bounded surefire heap (the fork
+  SIGSEGV was G1 GC, not stack — corrected the PR-52 record).
+
+## Phase 7 — the prediction bet (PRs 54–66): built, measured, rejected
+- **PR-54/55/56** Three proxy bugs, one shape: haste-ownership vs can-attack;
+  digging outranking a live kill; clock-driven vs board-driven replanning.
+- **PR-57..61** KillPredictor primitive (hang-guarded, concurrency-proven),
+  alpha-strike observation, budget re-measured in production, honest
+  no-answer causes, highest-yield mana ability resolution, the decision arm.
+  Plans: PHASE-7-PLAN.md.
+- **PR-62..66** A/B verdict: 33 steered attacks, zero benefit — do not cut
+  over. Bouncer affordability; five Urza bindings via existing archetype;
+  SelfBounceRecastLoop (found by ingestion, not a human); synergy classes
+  queued (PR-66). Research: architecture-survey-2.md, PROJECT-BRIEF.md.
+- **PR-67** THE PIVOT: seeded batches never reproduced (15/30 diverged).
+  Per-thread RNG upstream (UPSTREAM-PATCHES.md #2); prediction stack deleted.
+  Every prior A/B retroactively unreliable; first trustworthy baselines follow.
+
+## Phase 9–10 — ingestion rebuild and deck fixes (PRs A–D2, 68–77)
+- **Ingestion** (docs: PHASE-9-PLAN.md, INGESTION-WORKFLOW.md,
+  INGESTION-SPEC.md, ingestion-findings.md, ingestion-trial-purphoros2.md;
+  skill: .claude/skills/ingest-deck). Prep was blind to 60–83% of nonland
+  cards while reporting pass. Rebuilt on Forge card SCRIPTS as T0 ground
+  truth + 341-card LLM pass (7 subagents), script-evidence enforced.
+  *New per-deck artifacts: capability-inventory.json,
+  discovered-synergies.json, proposed-vocabulary.json, win-plan.json,
+  ingestion-report.json. Global: capability-registry.json.*
+- **PR-A/B/C** Selvala's x_spell_outlet + mana-lifetime (phase) rule; Urza's
+  restricted-mana accounting + ability-cost-reducer split; amplifier-aware
+  lethality with multipliers-first pessimism. First trustworthy movement:
+  Selvala off zero, mechanism-confirmed.
+- **PR-D1/D2** Power Artifact binding modelled the wrong mechanic (cost
+  reducer, not untapper) — fixed via goldfish test; full 42-combo audit,
+  30 bound, 12 flagged honestly (COMBO-ACCOUNTING.md).
+- **PR-68..77** The Heliod six-defect chain, each invisible until the prior
+  fix: validation gate now explains refusals (68); X=0 assembly death → X≥2
+  derived from cost parts (69/70/76 — the rendered-text-vs-structured-data
+  bug, twice); grant proven on copy but never performed live (71); counter
+  trigger mistargeting via chooseTargetsFor seam (72); last-counter suicide
+  guard (73); LIFO stack ordering — yield so grants resolve first (74/77).
+  Loop now sustains mechanically; remaining gap was the drill throttle.
+  Result docs: PHASE-10-PLAN/RESULTS, GIADA-COMBO-RESULT.md, 120-game
+  baseline (purph 25.8% / giada 20.8% / selvala 4.2% / urza 0, CI-backed).
+
+## Phase 11 — compile, don't classify (current)
+- **PR-alpha** ComboProgram schema + Heliod reference program
+  (combo-program-1274-3693.json): Spellbook's verbatim steps compiled
+  against script facts, all six failure modes encoded as structure. Plan:
+  PHASE-11-PLAN.md — one path per combo, real iterations to a
+  governor-computed target (no declared shortcuts), oracle text as compiler
+  input, ship-flagged prep, fresh-evaluation interruption policy.
+  Research: mtg-rules-summary.md (agent-built from official CR June 2026,
+  26-keyword glossary).
+- *Next: PR-beta StepInterpreter (five invariants, LifegainPingLoop deleted
+  when green); spike on repeated same-ability activation; PR-gamma
+  target-computed loop runner + exit-state governor; PR-delta prep goldfish
+  gate emitting fixtures from programs; PR-epsilon execution-fidelity batch.*
+
+## Artifact inventory (current)
+**Per-deck dossier:** deck-cards, combos, advisory-combos, route-coverage,
+tutor-priorities, paired-plays, lint-report, implementability-report,
+spellbook-raw(+meta), dossier.json (sha256 integrity), capability-inventory,
+discovered-synergies, proposed-vocabulary, win-plan, ingestion-report,
+combo-program-&lt;id&gt;.json (Phase 11+).
+**Global:** bindings/executor-bindings.json, bindings/capability-registry.json,
+UPSTREAM-PATCHES.md (2 entries).
+**Batch outputs:** runs/&lt;id&gt;/&lt;stamp&gt;/{game-records.jsonl, events/,
+run.log, worker-*.out, run-manifest.json}, runs/&lt;id&gt;/batches.jsonl.
+**Plans:** PHASE-6..11-PLAN.md, PROJECT-BRIEF.md, COMBO-ACCOUNTING.md, PR-LOG.md (this).
+**Research:** combo-conversion-playbook, game-ai-architectures,
+mtg-rules-digest-conversion, mtg-ai-survey, architecture-survey-2,
+ingestion-findings, ingestion-trial-purphoros2, divergence-investigation,
+mtg-rules-summary.
