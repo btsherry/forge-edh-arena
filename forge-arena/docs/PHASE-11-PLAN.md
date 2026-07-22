@@ -57,3 +57,29 @@ path until compiled (sequential migration, never dual-path for one combo).
 3. Post-step measured delta must match expectation       (loop-health telemetry)
 4. Sustain guard from structured cost parts              (PR-73/76)
 5. Sandbox proves; the LIVE game performs                (PR-71)
+
+## Amendments (Ben review of PR-alpha)
+- SETUP FREQUENCY: setup is one list, each step tagged once | per_turn |
+  per_iteration. Some combos re-perform setup every cycle; room made now.
+- TARGETING IS EXPLICIT-ONLY: targets/must_target fields exist only when the
+  card's script targets. Untargeted combos (the majority) omit them.
+- GOVERNOR SAFETY BOUNDS: N = min(iterations the chosen exit state needs,
+  every self-consumption cap). Each loop declares what it drains from US —
+  library (floor 5: drawing out = losing, CR 704.5c), life (floor), or none.
+  100 mana iterations fine; 100 self-draws is suicide. Execute in TRANCHES:
+  run T iterations, re-verify deltas + safety + board, continue — which is
+  also how the fresh-evaluation interruption policy gets its re-entry points.
+
+## PR-beta implementation brief (StepInterpreter)
+Single runtime class forge.arena.combo.StepInterpreter consuming
+combo-program JSON. Per step: (1) precondition check vs LIVE SeatView —
+presence AND usability (untapped where cost taps, counters, keyword); (2)
+resolve action via AbilityResolver using script cost hints; (3) put at most
+ONE object on the stack, then yield until it resolves; (4) after resolution,
+measure actual deltas vs expected_deltas_per_iteration — mismatch => abort
+with PR-68-style diagnostic naming step + expected + observed; (5) sustain
+guards from STRUCTURED cost parts; (6) setup frequency honored (once /
+per_turn re-verified via `verify` field / per_iteration). trigger_obligations
+route through the chooseTargetsFor seam scoped to the running program.
+Heliod routes ONLY through the interpreter; LifegainPingLoop deleted when
+green. Exit: goldfish test — N sustained verified iterations, engine-real.
