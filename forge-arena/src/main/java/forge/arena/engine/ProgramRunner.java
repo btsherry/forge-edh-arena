@@ -124,6 +124,27 @@ public final class ProgramRunner {
         return false;
     }
 
+    /**
+     * The target the program OBLIGES for a trigger from the named source
+     * card, or null when it declares none ({@code loop.trigger_obligations},
+     * matched by {@code source}). This is how "Heliod's counter must return
+     * to the Ballista" reaches the engine without a card name in code: the
+     * compiled program declares it, the controller's
+     * orderAndPlaySimultaneousSa override enforces it.
+     */
+    public String obligedTargetFor(String sourceCard) {
+        if (program == null) {
+            return null;
+        }
+        for (JsonNode ob : program.path("loop").path("trigger_obligations")) {
+            if (ob.path("source").asText().equals(sourceCard)) {
+                String t = ob.path("must_target").asText();
+                return t.isEmpty() ? null : t;
+            }
+        }
+        return null;
+    }
+
     /** One decision per priority window; null = nothing to do this window. */
     public List<SpellAbility> next(int turn) {
         if (finished) {

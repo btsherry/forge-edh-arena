@@ -206,42 +206,25 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         }
 
         /**
-         * PR-72: while a drill is armed, a +1/+1 counter trigger must feed the
-         * OUTLET, not the biggest creature on the board.
-         *
-         * <p>Heliod's trigger TARGETS — "put a +1/+1 counter on target
-         * creature or enchantment you control" — and stock AI resolves it
-         * with {@code ComputerUtilCard.getBestAI(aiCreat)}, which in an Angel
-         * deck picks a fat Angel over a 1/1 Walking Ballista. The counter the
-         * loop just spent never comes back, and the loop dies after exactly
-         * one ping. Both observed drill sequences were length 1 for this
-         * reason, with the lifelink grant and the ping both working.
-         *
-         * <p>Note Archangel of Thune has the same trigger as {@code
-         * PutCounterAll} over every creature, so it cannot be misdirected —
-         * which is why only the Heliod line needed this.
-         *
-         * <p>Deck-agnostic: no card is named. The rule is that a counter
-         * trigger, while a drill is armed, feeds the drill's own outlet
-         * whenever that is a legal target.
+         * PR-72, corrected: this seam is NOT how Forge targets a wrapped
+         * trigger. {@code chooseTargetsFor} is only invoked for scripted
+         * {@code TargetingPlayer} flows ({@code prepareSingleSa}); a normal
+         * queued trigger goes {@code MagicStack.chooseOrderOfSimultaneous-
+         * StackEntry -> orderAndPlaySimultaneousSa -> brains.doTrigger()},
+         * where CountersPutAi feeds {@code getBestAI()} — a fat Angel over a
+         * 1/1 Ballista. PR-72's gate here never fired (measured: Lyra=1,
+         * Ballista=1); the real obligation lives in the
+         * {@link #orderAndPlaySimultaneousSa} override below. This narrow
+         * form is kept for the rare TargetingPlayer case while a drill or
+         * program is live.
          */
         @Override
         public boolean chooseTargetsFor(SpellAbility currentAbility) {
             String obligedOutlet = activeDrill != null ? activeDrill.outletCard()
                     : activeProgram != null ? activeProgram.outletCard() : null;
-            // The PutCounter API gate never matched the WRAPPED trigger
-            // ability (its getApi() is not the sub-ability's), so the
-            // obligation silently never applied and the counter went to
-            // getBestAI() — measured: Lyra=1, Ballista=1. Program scope: any
-            // TARGETED trigger hosted by one of the program's own pieces
-            // feeds the program's outlet when that is legal.
-            boolean programTrigger = activeProgram != null && currentAbility != null
-                    && currentAbility.getHostCard() != null
-                    && activeProgram.isPiece(currentAbility.getHostCard().getName());
             if (obligedOutlet != null && currentAbility != null
                     && currentAbility.usesTargeting()
-                    && (programTrigger
-                        || currentAbility.getApi() == forge.game.ability.ApiType.PutCounter)) {
+                    && currentAbility.getApi() == forge.game.ability.ApiType.PutCounter) {
                 forge.game.card.Card outlet =
                         AbilityResolver.findBattlefield(player, obligedOutlet);
                 if (outlet != null && currentAbility.canTarget(outlet)) {
@@ -251,6 +234,52 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 }
             }
             return super.chooseTargetsFor(currentAbility);
+        }
+
+        /**
+         * THE trigger-targeting seam. Forge routes every queued (wrapped)
+         * triggered ability through this controller method on its way to the
+         * stack; stock AI then picks targets in {@code brains.doTrigger()}
+         * with {@code getBestAI()}. While a program is live, a trigger whose
+         * source card carries a declared obligation
+         * ({@code loop.trigger_obligations}) has its targets set to the
+         * obliged card and goes to the stack directly — exactly what super
+         * does after {@code doTrigger}, minus the AI's target choice. All
+         * other entries keep stock behavior, including order.
+         *
+         * <p>Deck-agnostic: the obligation names cards in the COMPILED
+         * PROGRAM, never in code. An override, not a parent patch.
+         */
+        @Override
+        public void orderAndPlaySimultaneousSa(List<SpellAbility> activePlayerSAs) {
+            if (activeProgram == null) {
+                super.orderAndPlaySimultaneousSa(activePlayerSAs);
+                return;
+            }
+            List<SpellAbility> rest = new java.util.ArrayList<>();
+            for (SpellAbility sa : activePlayerSAs) {
+                String obliged = sa.isTrigger() && !sa.isCopied() && sa.getHostCard() != null
+                        ? activeProgram.obligedTargetFor(sa.getHostCard().getName())
+                        : null;
+                forge.game.card.Card target = obliged == null ? null
+                        : AbilityResolver.findBattlefield(player, obliged);
+                // the wrapper itself may not target — walk to the
+                // (sub)ability that does
+                SpellAbility targeting = sa;
+                while (targeting != null && !targeting.usesTargeting()) {
+                    targeting = targeting.getSubAbility();
+                }
+                if (target != null && targeting != null && targeting.canTarget(target)) {
+                    targeting.resetTargets();
+                    targeting.getTargets().add(target);
+                    ComputerUtil.playStack(sa, player, getGame());
+                } else {
+                    rest.add(sa);
+                }
+            }
+            if (!rest.isEmpty()) {
+                super.orderAndPlaySimultaneousSa(rest);
+            }
         }
 
         /**

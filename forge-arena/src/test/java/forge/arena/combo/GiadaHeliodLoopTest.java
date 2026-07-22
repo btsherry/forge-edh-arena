@@ -114,26 +114,17 @@ public class GiadaHeliodLoopTest {
                 prereq >= 1);
 
         // Phase 11 PR-beta: the REAL bar. The interpreter must run sustained,
-        // verified, engine-real iterations — the assertion six defects and a
-        // rewrite were spent earning.
-        assertTrue("lifelink must be granted for real (loop_prereq=" + prereq + ")",
-                prereq >= 1);
-        // KNOWN GAP (PR-beta close-out): the interpreter enters, grants and
-        // VERIFIES lifelink on the live board, fires real pings, and measures
-        // deltas — but Heliod's counter trigger still reaches getBestAI()
-        // (measured: Lyra=1, Ballista=1). chooseTargetsFor is NOT the seam
-        // Forge uses for mandatory-trigger targeting: PR-72's override never
-        // fired for it, under the drill OR the program — it was
-        // plausible-but-unproven. NEXT SESSION: trace TriggerHandler /
-        // WrappedAbility to the real targeting entry point, then raise this
-        // to drillSteps >= 5 — the single assertion that proves the loop.
-        if (drillSteps >= 5) {
-            System.out.println("LOOP SUSTAINS: " + drillSteps);
-        } else {
-            System.out.println("LOOP GAP (trigger targeting seam): steps=" + drillSteps
-                    + " aborts=" + events.stream()
-                            .filter(e -> e.t().equals("program_abort"))
-                            .map(e -> String.valueOf(e.fields())).toList());
-        }
+        // verified, engine-real iterations — the assertion six defects, a
+        // rewrite, and one traced seam were spent earning. The seam: Forge
+        // routes a wrapped trigger through orderAndPlaySimultaneousSa ->
+        // brains.doTrigger() (chooseTargetsFor is only for TargetingPlayer
+        // scripts), so the obligation is enforced in the controller's
+        // orderAndPlaySimultaneousSa override, where the counter actually
+        // gets its target.
+        assertTrue("the loop must SUSTAIN through the interpreter (drill steps="
+                + drillSteps + ") aborts=" + events.stream()
+                        .filter(e -> e.t().equals("program_abort"))
+                        .map(e -> String.valueOf(e.fields())).toList(),
+                drillSteps >= 5);
     }
 }

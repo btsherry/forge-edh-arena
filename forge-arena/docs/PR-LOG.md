@@ -129,3 +129,6 @@ run.log, worker-*.out, run-manifest.json}, runs/&lt;id&gt;/batches.jsonl.
 mtg-rules-digest-conversion, mtg-ai-survey, architecture-survey-2,
 ingestion-findings, ingestion-trial-purphoros2, divergence-investigation,
 mtg-rules-summary.
+
+## PR-beta.1 — the trigger-targeting seam, traced and taken
+Traced why Heliod's counter went to Lyra: Forge routes a queued (wrapped) trigger through `MagicStack.chooseOrderOfSimultaneousStackEntry` → the controller's `orderAndPlaySimultaneousSa` → `prepareSingleSa` → `brains.doTrigger()`, where `CountersPutAi` feeds `getBestAI()`; `chooseTargetsFor` is only invoked for scripted `TargetingPlayer` flows, so PR-72's override was never in the path at all. Fix: override `orderAndPlaySimultaneousSa` in ComboAwareController — while a program is live, a trigger whose source carries a declared obligation (`loop.trigger_obligations`, new `ProgramRunner.obligedTargetFor`) has its targets set to the obliged card and goes to the stack directly; everything else keeps stock behavior. No parent patch, no card names in code. GiadaHeliodLoopTest raised back to its hard bar (`drillSteps >= 5`) and passes: the loop sustains verified iterations on the live game. 236/236.
