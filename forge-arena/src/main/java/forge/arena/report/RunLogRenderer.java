@@ -29,7 +29,7 @@ public final class RunLogRenderer {
             // snapshot (life/hand/creatures/power for every seat) and the
             // conversion decisions belong there, not behind VERBOSE
             "turn_state", "conversion_step", "outlet_drill", "lethal_alpha",
-            "distance_to_fire");
+            "distance_to_fire", "program_complete", "program_abort", "loop_prereq");
 
     private RunLogRenderer() {
     }

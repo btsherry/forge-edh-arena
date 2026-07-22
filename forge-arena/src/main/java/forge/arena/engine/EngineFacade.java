@@ -271,11 +271,27 @@ public final class EngineFacade {
         for (forge.arena.combo.ComboDef def : defs) {
             bindings.forCombo(def.id()).ifPresent(b -> payoffCards.addAll(b.payoffs()));
         }
+        // Phase 11: compiled combo programs, discovered from the dossier.
+        // A combo with a program runs ONLY through it.
+        java.util.Map<String, String> programPaths = new java.util.LinkedHashMap<>();
+        try (java.util.stream.Stream<java.nio.file.Path> files =
+                java.nio.file.Files.list(seat.dossierDir())) {
+            files.filter(f -> f.getFileName().toString().startsWith("combo-program-")
+                            && f.getFileName().toString().endsWith(".json"))
+                    .forEach(f -> {
+                        String n = f.getFileName().toString();
+                        programPaths.put(n.substring(14, n.length() - 5),
+                                f.toAbsolutePath().toString());
+                    });
+        } catch (java.io.IOException ignored) {
+        }
         return new ComboAwareLobbyPlayer(name, player -> {
             forge.arena.combo.ComboTracker tracker = new forge.arena.combo.ComboTracker(defs);
-            return new forge.arena.combo.ComboPilot(tracker, bindings, routePlan,
-                    new forge.arena.combo.TutorRanker(tutorWeights, tracker, payoffCards),
+            forge.arena.combo.ComboPilot p = new forge.arena.combo.ComboPilot(tracker, bindings,
+                    routePlan, new forge.arena.combo.TutorRanker(tutorWeights, tracker, payoffCards),
                     0.0, seatIndex, sink);
+            p.setProgramPaths(programPaths);
+            return p;
         });
     }
 

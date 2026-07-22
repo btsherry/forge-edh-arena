@@ -168,9 +168,6 @@ public final class ExecutorBindings {
         if (ImprintCopyLoop.ARCHETYPE.equals(binding.archetype())) {
             return Optional.of(new ImprintCopyLoop(binding.params(), binding.entryPhase()));
         }
-        if (LifegainPingLoop.ARCHETYPE.equals(binding.archetype())) {
-            return Optional.of(new LifegainPingLoop(binding.params(), binding.entryPhase()));
-        }
         if (SelfBounceRecastLoop.ARCHETYPE.equals(binding.archetype())) {
             return Optional.of(new SelfBounceRecastLoop(binding.params(), binding.entryPhase()));
         }

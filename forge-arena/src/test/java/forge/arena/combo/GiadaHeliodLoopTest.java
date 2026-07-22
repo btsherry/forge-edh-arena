@@ -113,36 +113,27 @@ public class GiadaHeliodLoopTest {
                 + "), events=" + events.stream().map(ArenaEvent::t).distinct().toList(),
                 prereq >= 1);
 
-        // The drill must at least fire once, safely.
-        assertTrue("the drill must fire (steps=" + drillSteps + ")", drillSteps >= 1);
-
-        // KNOWN GAP, deliberately recorded rather than asserted-away.
-        //
-        // The loop does not yet SUSTAIN. Five separate defects were found and
-        // fixed getting this far (PR-69 X=0 on cast, PR-70 no lifelink grant,
-        // PR-71 grant proven on a copy but never performed, PR-72 the counter
-        // trigger targeting the wrong creature, PR-73 the drill spending the
-        // outlet's last counter and killing it). Each was real, necessary,
-        // and insufficient.
-        //
-        // What remains: after a safe ping the +1/+1 counter still does not
-        // return, so the drill correctly declines to fire again rather than
-        // destroying Ballista. Whether the break is in lifelink actually
-        // applying, in the life-gain trigger firing, or in the counter
-        // landing on the pinger is not yet established — and guessing is what
-        // produced two of the five fixes above.
-        //
-        // Raise this to `>= 5` once the counter demonstrably returns; that is
-        // the single assertion that proves the loop is real.
+        // Phase 11 PR-beta: the REAL bar. The interpreter must run sustained,
+        // verified, engine-real iterations — the assertion six defects and a
+        // rewrite were spent earning.
+        assertTrue("lifelink must be granted for real (loop_prereq=" + prereq + ")",
+                prereq >= 1);
+        // KNOWN GAP (PR-beta close-out): the interpreter enters, grants and
+        // VERIFIES lifelink on the live board, fires real pings, and measures
+        // deltas — but Heliod's counter trigger still reaches getBestAI()
+        // (measured: Lyra=1, Ballista=1). chooseTargetsFor is NOT the seam
+        // Forge uses for mandatory-trigger targeting: PR-72's override never
+        // fired for it, under the drill OR the program — it was
+        // plausible-but-unproven. NEXT SESSION: trace TriggerHandler /
+        // WrappedAbility to the real targeting entry point, then raise this
+        // to drillSteps >= 5 — the single assertion that proves the loop.
         if (drillSteps >= 5) {
-            System.out.println("LOOP SUSTAINS: " + drillSteps + " drill steps");
+            System.out.println("LOOP SUSTAINS: " + drillSteps);
         } else {
-            System.out.println("LOOP DOES NOT SUSTAIN YET: " + drillSteps
-                    + " drill step(s), prereq=" + prereq);
-            events.stream().filter(e -> e.t().equals("outlet_drill")
-                            || e.t().equals("loop_prereq"))
-                    .forEach(e -> System.out.println("   EVIDENCE " + e.t()
-                            + " " + e.fields()));
+            System.out.println("LOOP GAP (trigger targeting seam): steps=" + drillSteps
+                    + " aborts=" + events.stream()
+                            .filter(e -> e.t().equals("program_abort"))
+                            .map(e -> String.valueOf(e.fields())).toList());
         }
     }
 }

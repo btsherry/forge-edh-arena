@@ -83,6 +83,8 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         }
 
         private DrillOrder activeDrill;
+        /** Phase 11: the running compiled-program interpreter, if any. */
+        private ProgramRunner activeProgram;
         private int drillIterations;
         /** Bounded per game — a runaway drill is a stall, not a win. */
         static final int DRILL_BOUND = 200;
@@ -225,11 +227,23 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
          */
         @Override
         public boolean chooseTargetsFor(SpellAbility currentAbility) {
-            if (activeDrill != null && currentAbility != null
+            String obligedOutlet = activeDrill != null ? activeDrill.outletCard()
+                    : activeProgram != null ? activeProgram.outletCard() : null;
+            // The PutCounter API gate never matched the WRAPPED trigger
+            // ability (its getApi() is not the sub-ability's), so the
+            // obligation silently never applied and the counter went to
+            // getBestAI() — measured: Lyra=1, Ballista=1. Program scope: any
+            // TARGETED trigger hosted by one of the program's own pieces
+            // feeds the program's outlet when that is legal.
+            boolean programTrigger = activeProgram != null && currentAbility != null
+                    && currentAbility.getHostCard() != null
+                    && activeProgram.isPiece(currentAbility.getHostCard().getName());
+            if (obligedOutlet != null && currentAbility != null
                     && currentAbility.usesTargeting()
-                    && currentAbility.getApi() == forge.game.ability.ApiType.PutCounter) {
+                    && (programTrigger
+                        || currentAbility.getApi() == forge.game.ability.ApiType.PutCounter)) {
                 forge.game.card.Card outlet =
-                        AbilityResolver.findBattlefield(player, activeDrill.outletCard());
+                        AbilityResolver.findBattlefield(player, obligedOutlet);
                 if (outlet != null && currentAbility.canTarget(outlet)) {
                     currentAbility.resetTargets();
                     currentAbility.getTargets().add(outlet);
@@ -415,6 +429,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         return proof.isBlocked()
                                 ? proof.withDiagnostic(handle.lastFailure()) : proof;
                     };
+            if (activeProgram != null) {
+                List<SpellAbility> step = activeProgram.next(turn);
+                if (activeProgram != null && activeProgram.finished()) {
+                    activeProgram = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activeProgram != null) {
+                    return null;
+                }
+            }
             ComboPilot.Action action = pilot.nextAction(view, entryWindowOpen, validator)
                     .orElse(null);
             if (action == null) {
@@ -479,6 +505,13 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     }
                 }
                 return stock;
+            }
+            if (!action.isStep() && action.program() != null) {
+                // Phase 11: hand the window to the interpreter. No drill, no
+                // archetype — the program is the only path for this combo.
+                activeProgram = new ProgramRunner(getGame(), player, pilot,
+                        seatIndex, action.program().programPath());
+                return activeProgram.next(turn);
             }
             if (!action.isStep() && action.drill() != null) {
                 // PR-38: the planner picked a single-target sink. PROVE it on

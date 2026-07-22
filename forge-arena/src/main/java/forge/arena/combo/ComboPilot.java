@@ -37,13 +37,13 @@ public final class ComboPilot {
 
     /** One pilot output: a scripted step, a mana shortcut, or a token flood. */
     public record Action(LineExecutor.Step step, ShortcutOrder shortcut, TokenFlood flood,
-            DrillOrder drill) {
+            DrillOrder drill, ProgramOrder program) {
         public Action(LineExecutor.Step step, ShortcutOrder shortcut, TokenFlood flood) {
-            this(step, shortcut, flood, null);
+            this(step, shortcut, flood, null, null);
         }
 
         public Action(LineExecutor.Step step, ShortcutOrder shortcut) {
-            this(step, shortcut, null, null);
+            this(step, shortcut, null, null, null);
         }
 
         public boolean isStep() {
@@ -51,19 +51,23 @@ public final class ComboPilot {
         }
 
         static Action play(LineExecutor.Step step) {
-            return new Action(step, null, null, null);
+            return new Action(step, null, null, null, null);
         }
 
         static Action shortcut(ShortcutOrder order) {
-            return new Action(null, order, null, null);
+            return new Action(null, order, null, null, null);
         }
 
         static Action flood(TokenFlood order) {
-            return new Action(null, null, order, null);
+            return new Action(null, null, order, null, null);
         }
 
         static Action drill(DrillOrder order) {
-            return new Action(null, null, null, order);
+            return new Action(null, null, null, order, null);
+        }
+
+        static Action program(ProgramOrder order) {
+            return new Action(null, null, null, null, order);
         }
     }
 
@@ -77,6 +81,10 @@ public final class ComboPilot {
         public DrillOrder(String outletCard) {
             this(outletCard, null, null);
         }
+    }
+
+    /** Phase 11: run the combo's COMPILED PROGRAM (engine-side runner). */
+    public record ProgramOrder(String comboId, String programPath) {
     }
 
     /**
@@ -153,6 +161,12 @@ public final class ComboPilot {
     private String currentRoute;
     private int lastPlanTurn = -1;
     private final Set<String> attemptedDeploys = new HashSet<>();
+    /** Phase 11: combo id -> compiled program path (strings only — W8 pure). */
+    private Map<String, String> programPaths = Map.of();
+
+    public void setProgramPaths(Map<String, String> paths) {
+        this.programPaths = paths == null ? Map.of() : paths;
+    }
     /**
      * PR-C: the deck's own damage amplifiers, from its route-coverage
      * artifact. Names come from prep, never from code.
@@ -477,6 +491,28 @@ public final class ComboPilot {
                     continue;
                 }
             }
+            // Phase 11: a combo with a compiled program runs ONLY through it
+            // — never the archetype path (one execution route per combo).
+            if (programPaths.containsKey(status.id())) {
+                String comboId = status.id();
+                attemptedThisTurn.add(comboId);
+                firedShortcuts.add(comboId);
+                firedTurns.put(comboId, view.turn());
+                bankedPhase = view.phase();
+                currentRoute = "DIRECT_DAMAGE_LOOP";
+                lastPlanTurn = view.turn();
+                lastPlanState = planState(view);
+                events.accept(ArenaEvent.of("line_entered", view.turn(), seat)
+                        .with("combo", comboId).with("attempted_via", "program")
+                        .with("entry_phase", "MAIN1"));
+                Map<String, Object> product = new HashMap<>();
+                product.put("program", programPaths.get(comboId));
+                events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
+                        .with("combo", comboId).with("iterations_proven", 0)
+                        .with("bounded_product", product));
+                return Optional.of(Action.program(
+                        new ProgramOrder(comboId, programPaths.get(comboId))));
+            }
             Optional<ExecutorBindings.Binding> binding = bindings.forCombo(status.id());
             Optional<LineExecutor> executor = binding.flatMap(ExecutorBindings::executorFor);
             if (executor.isEmpty()) {
@@ -790,36 +826,6 @@ public final class ComboPilot {
                                             ? " (" + proof.diagnostic() + ")" : "")
                             : "unprofitable");
             return Optional.empty();
-        }
-        if (activeExecutor instanceof LifegainPingLoop pingLoop) {
-            // PR-47: this loop's product is not a resource to bank — it is
-            // PERMISSION TO KEEP ACTIVATING. Hand the proven pinger to the
-            // PR-37 drill, which already knows how to kill a table one
-            // activation per priority window.
-            String comboId = activeComboId;
-            firedShortcuts.add(comboId);
-            firedTurns.put(comboId, view.turn());
-            bankedPhase = view.phase();
-            firedBinding = activeBinding;
-            currentRoute = "DIRECT_DAMAGE_LOOP";
-            lastPlanTurn = view.turn();
-            lastPlanState = planState(view);
-            Map<String, Object> product = new HashMap<>();
-            product.put("drill_outlet", pingLoop.pinger());
-            events.accept(ArenaEvent.of("combo_shortcut", view.turn(), seat)
-                    .with("combo", comboId)
-                    .with("iterations_proven", proof.cycles())
-                    .with("bounded_product", product));
-            exitLine();
-            // PR-71: Spellbook's step 1 — "Activate Heliod by paying {1}{W},
-            // giving Walking Ballista lifelink" — happens ONCE and then the
-            // loop repeats FROM STEP 2. PR-70 granted it in validate(), which
-            // runs on a COPY, and in next(), which this path never calls
-            // because the line exits straight into the drill. So the grant
-            // was proven and never performed. It travels with the drill order
-            // now, and the controller performs it before the first ping.
-            return Optional.of(Action.drill(new DrillOrder(pingLoop.pinger(),
-                    pingLoop.lifelinkSource(), pingLoop.lifelinkCost())));
         }
         if (activeExecutor instanceof SpellCopyLoop copyLoop) {
             // PR-27b: token product — compress to a flood order; the route
