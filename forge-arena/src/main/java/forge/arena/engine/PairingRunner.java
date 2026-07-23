@@ -48,13 +48,27 @@ public final class PairingRunner {
     private final String wipeCard;
     private final String protectionCard;
     private final String programPath;
+    /** CREATURES | LANDS | NONLAND_PERMANENTS | ALL_PERMANENTS — what the wipe hits, so what we count. */
+    private final String scope;
+    /**
+     * PR-theta: stack_empty (default) or next_untap. A phasing shield
+     * (Teferi's Protection) makes our permanents INVISIBLE to battlefield
+     * counts until they phase in before our untap — an end-of-stack own-side
+     * measure would false-abort a textbook execution, so the own measure
+     * waits for our next turn while the opponents' losses are taken at
+     * stack-empty (they are real immediately, and an opponent replaying
+     * lands meanwhile must not launder the reduction).
+     */
+    private final boolean measureAtNextUntap;
 
-    private enum State { PREFLIGHT, WIPE_CAST, PROTECTED }
+    private enum State { PREFLIGHT, WIPE_CAST, PROTECTED, MEASURE_DEFERRED }
 
     private State state = State.PREFLIGHT;
     private boolean finished;
     private int ownBefore = -1;
     private int oppBefore = -1;
+    private int oppAfterAtResolution = -1;
+    private int castTurn = -1;
     /** The shield must be SEEN on the stack before the measure counts. */
     private boolean protectionSeen;
 
@@ -73,6 +87,9 @@ public final class PairingRunner {
         this.pairingId = p != null ? p.path("pairing_id").asText("?") : "?";
         this.wipeCard = p != null ? p.path("wipe").path("card").asText(null) : null;
         this.protectionCard = p != null ? p.path("protection").path("card").asText(null) : null;
+        this.scope = p != null ? p.path("wipe").path("scope").asText("CREATURES") : "CREATURES";
+        this.measureAtNextUntap = p != null
+                && "next_untap".equals(p.path("verify").path("measure_at").asText("stack_empty"));
         if (wipeCard == null || protectionCard == null) {
             finished = true;
             // aborts are LOUD, even this one (panel finding: a swallowed
@@ -91,6 +108,14 @@ public final class PairingRunner {
     public List<SpellAbility> next(int turn) {
         if (finished) {
             return null;
+        }
+        if (player.hasLost()) {
+            // reachable during a multi-turn deferral in 4p — without this
+            // the runner freezes silently, the exact signature the loud-
+            // abort rule exists to prevent (a game ENDING mid-deferral is
+            // scored as truncated by the fidelity scorer instead; no window
+            // ever arrives to emit anything)
+            return abort(turn, "seat_eliminated_during_pairing");
         }
         switch (state) {
             case PREFLIGHT -> {
@@ -118,8 +143,9 @@ public final class PairingRunner {
                             + manaOf(wipe) + " + protection " + protMana
                             + " > available " + availableMana());
                 }
-                ownBefore = creatures(player);
-                oppBefore = opponentCreatures();
+                ownBefore = countScoped(player);
+                oppBefore = opponentScoped();
+                castTurn = turn;
                 state = State.WIPE_CAST;
                 return List.of(wipe);
             }
@@ -144,41 +170,71 @@ public final class PairingRunner {
                     protectionSeen = protectionSeen || onStack(protectionCard);
                     return null; // both spells resolving, LIFO — shield first
                 }
-                finished = true;
                 if (!protectionSeen) {
                     // the shield's cast can fail as silently as a wipe's —
                     // without this the failure would be misattributed to
                     // delta_mismatch (or worse, a one-sided wipe would emit
                     // a false pairing_complete)
+                    finished = true;
                     return abort(turn, "protection_cast_failed: '" + protectionCard
                             + "' never reached the stack");
                 }
-                int ownAfter = creatures(player);
-                int oppAfter = opponentCreatures();
-                boolean preserved = ownAfter >= ownBefore;
-                // sweeping to zero is not promised by 'destroy' — opposing
-                // indestructible/regeneration legally survive. Measured
-                // contract: our board holds, theirs shrank; full_sweep is
-                // recorded, not required.
-                boolean reduced = oppAfter < oppBefore;
-                if (preserved && reduced) {
-                    pilot.observe(ArenaEvent.of("pairing_complete", turn, seat)
-                            .with("pairing", pairingId)
-                            .with("own_before", ownBefore).with("own_after", ownAfter)
-                            .with("opp_before", oppBefore).with("opp_after", oppAfter)
-                            .with("full_sweep", oppAfter == 0));
-                } else {
-                    pilot.observe(ArenaEvent.of("pairing_abort", turn, seat)
-                            .with("pairing", pairingId)
-                            .with("reason", "delta_mismatch: own " + ownBefore + "->"
-                                    + ownAfter + ", opp " + oppBefore + "->" + oppAfter));
+                // opponents' losses are real the moment the wipe resolves —
+                // snapshot NOW so later land replays cannot launder them
+                oppAfterAtResolution = opponentScoped();
+                if (measureAtNextUntap) {
+                    state = State.MEASURE_DEFERRED;
+                    return null;
                 }
-                return null;
+                finished = true;
+                return measure(turn, countScoped(player));
+            }
+            case MEASURE_DEFERRED -> {
+                // our phased permanents return before our untap; the first
+                // priority window of our NEXT turn is after that
+                if (turn <= castTurn
+                        || game.getPhaseHandler().getPlayerTurn() != player) {
+                    return null;
+                }
+                finished = true;
+                return measure(turn, countScoped(player));
             }
             default -> {
                 return null;
             }
         }
+    }
+
+    /**
+     * The verdict, from measured counts: our side held (post phase-in when
+     * deferred), theirs shrank. Sweeping to zero is not promised by
+     * 'destroy' — indestructible/regeneration legally survive — so
+     * full_sweep is recorded, never required.
+     */
+    private List<SpellAbility> measure(int turn, int ownAfter) {
+        boolean preserved = ownAfter >= ownBefore;
+        boolean reduced = oppAfterAtResolution < oppBefore;
+        if (preserved && reduced) {
+            pilot.observe(ArenaEvent.of("pairing_complete", turn, seat)
+                    .with("pairing", pairingId)
+                    .with("own_before", ownBefore).with("own_after", ownAfter)
+                    .with("opp_before", oppBefore).with("opp_after", oppAfterAtResolution)
+                    .with("full_sweep", oppAfterAtResolution == 0)
+                    .with("measured_at", measureAtNextUntap ? "next_untap" : "stack_empty"));
+        } else {
+            // name the failing SIDE — a countered shield (own collapsed), a
+            // countered wipe (opp unchanged), and a both-sides mess are
+            // different investigations (verifier finding: one reason string
+            // conflated opponent interaction with runner malfunction)
+            String side = !preserved && !reduced ? "both"
+                    : !preserved ? "own" : "opp";
+            pilot.observe(ArenaEvent.of("pairing_abort", turn, seat)
+                    .with("pairing", pairingId)
+                    .with("reason", "delta_mismatch[" + side + "]: own " + ownBefore
+                            + "->" + ownAfter
+                            + ", opp " + oppBefore + "->" + oppAfterAtResolution));
+        }
+        return null;
     }
 
     private List<SpellAbility> abort(int turn, String reason) {
@@ -261,21 +317,28 @@ public final class PairingRunner {
         return false;
     }
 
-    private static int creatures(Player p) {
+    /** Count what the wipe's declared scope hits (battlefield, unphased). */
+    private int countScoped(Player p) {
         int n = 0;
         for (Card c : p.getCardsIn(ZoneType.Battlefield)) {
-            if (c.isCreature()) {
+            boolean hit = switch (scope) {
+                case "LANDS" -> c.isLand();
+                case "NONLAND_PERMANENTS" -> !c.isLand();
+                case "ALL_PERMANENTS" -> true;
+                default -> c.isCreature();
+            };
+            if (hit) {
                 n++;
             }
         }
         return n;
     }
 
-    private int opponentCreatures() {
+    private int opponentScoped() {
         int n = 0;
         for (Player other : game.getPlayers()) {
             if (other != player && !other.hasLost()) {
-                n += creatures(other);
+                n += countScoped(other);
             }
         }
         return n;

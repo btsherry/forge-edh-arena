@@ -145,7 +145,10 @@ public class GiadaDoomskarPairTest {
                 .filter(e -> e.t().equals("pairing_abort"))
                 .map(e -> String.valueOf(e.fields())).toList();
         List<ArenaEvent> completes = events.stream()
-                .filter(e -> e.t().equals("pairing_complete")).toList();
+                .filter(e -> e.t().equals("pairing_complete")
+                        && "pp-doomskar-flawless-maneuver"
+                                .equals(String.valueOf(e.fields().get("pairing"))))
+                .toList();
 
         assertTrue("the compiled pairing must enter (entered=" + entered
                 + ") events=" + events.stream().map(ArenaEvent::t).distinct().toList(),

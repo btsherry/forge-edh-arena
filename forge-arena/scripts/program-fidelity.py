@@ -33,6 +33,10 @@ def main(run_dir: Path) -> None:
                for line in (run_dir / "game-records.jsonl").open()]
     decks = sorted({name for r in records for name in r["seats"]})
     entered = Counter()
+    pair_entered = Counter()
+    pair_completed = Counter()
+    pair_aborts = defaultdict(Counter)
+    pair_truncated = Counter()
     iterations = Counter()
     iter_per_game = defaultdict(list)
     plans = defaultdict(list)
@@ -50,6 +54,7 @@ def main(run_dir: Path) -> None:
         if log.exists():
             events = [json.loads(line) for line in log.open()]
         entered_this_game = set()
+        pairs_open = {}
         game_iters = Counter()
         for e in events:
             deck = seats[e["seat"]] if e.get("seat") is not None else None
@@ -67,6 +72,19 @@ def main(run_dir: Path) -> None:
                 suppressed[deck] += 1
             elif t == "loop_prereq":
                 prereqs[deck] += 1
+            elif t == "pairing_entered":
+                pair_entered[deck] += 1
+                pairs_open[(deck, str(e.get("pairing")))] = True
+            elif t == "pairing_complete":
+                pair_completed[deck] += 1
+                pairs_open.pop((deck, str(e.get("pairing"))), None)
+            elif t == "pairing_abort":
+                pair_aborts[deck][str(e.get("reason", "?")).split(":")[0]] += 1
+                pairs_open.pop((deck, str(e.get("pairing"))), None)
+        # a pairing still open when the game ended (deferred measure never
+        # got a window) is TRUNCATED, not clean — count it as such
+        for (deck, _pid) in pairs_open:
+            pair_truncated[deck] += 1
         for deck in entered_this_game:
             entered[deck] += 1
             iter_per_game[deck].append(game_iters[deck])
@@ -93,6 +111,11 @@ def main(run_dir: Path) -> None:
             print(f"  governor plans  {len(plans[deck])} (first: {recent})")
         if aborts[deck]:
             print(f"  aborts          {dict(aborts[deck])}")
+        if pair_entered[deck] or pair_truncated[deck]:
+            print(f"  pairings        entered={pair_entered[deck]}"
+                  f" completed={pair_completed[deck]}"
+                  f" truncated_by_game_end={pair_truncated[deck]}"
+                  + (f" aborts={dict(pair_aborts[deck])}" if pair_aborts[deck] else ""))
         if suppressed[deck]:
             print(f"  drill_suppressed {suppressed[deck]}")
 
