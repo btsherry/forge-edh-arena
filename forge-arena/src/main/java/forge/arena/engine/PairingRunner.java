@@ -135,13 +135,20 @@ public final class PairingRunner {
                             + protectionCard + "'");
                 }
                 int protMana = manaOf(protection);
-                if (protMana > 0
-                        && manaOf(wipe) + protMana > availableMana()) {
-                    // coarse (counts sources, not pips) but conservative in
-                    // the direction that matters; the retry fires next turn
-                    return abortRetryable(turn, "preflight_joint_mana: wipe "
-                            + manaOf(wipe) + " + protection " + protMana
-                            + " > available " + availableMana());
+                if (protMana > 0) {
+                    // PIP-AWARE joint check (kappa60 batch, measured twice:
+                    // the colorless source count passed, the wipe's payment
+                    // tapped the W sources, and the shield's {W}{W} went
+                    // unpayable — Doomskar swept our own board in game 18,
+                    // Armageddon ate our own lands in game 39)
+                    int needTotal = manaOf(wipe) + protMana;
+                    int needWhite = coloredPips(wipe, 'W') + coloredPips(protection, 'W');
+                    if (needTotal > availableMana()
+                            || needWhite > whiteCapableSources()) {
+                        return abortRetryable(turn, "preflight_joint_mana: total "
+                                + needTotal + "/" + availableMana()
+                                + " whitePips " + needWhite + "/" + whiteCapableSources());
+                    }
                 }
                 ownBefore = countScoped(player);
                 oppBefore = opponentScoped();
@@ -307,6 +314,40 @@ public final class PairingRunner {
     private static int manaOf(SpellAbility sa) {
         return sa.getPayCosts() == null || sa.getPayCosts().getTotalMana() == null
                 ? 0 : sa.getPayCosts().getTotalMana().getCMC();
+    }
+
+    /** Colored pips of one color in the SA's structured mana cost. */
+    private static int coloredPips(SpellAbility sa, char color) {
+        if (sa.getPayCosts() == null || sa.getPayCosts().getTotalMana() == null) {
+            return 0;
+        }
+        int pips = 0;
+        for (forge.card.mana.ManaCostShard shard : sa.getPayCosts().getTotalMana()) {
+            if (shard.toString().contains(String.valueOf(color))) {
+                pips++;
+            }
+        }
+        return pips;
+    }
+
+    /** Untapped sources whose mana abilities can produce this deck's color. */
+    private int whiteCapableSources() {
+        int n = 0;
+        for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+            if (c.isTapped() || c.getManaAbilities().isEmpty()
+                    || (c.isCreature() && c.hasSickness())) {
+                continue;
+            }
+            for (SpellAbility ma : c.getManaAbilities()) {
+                String produced = ma.getParam("Produced");
+                if (produced != null
+                        && (produced.contains("W") || produced.contains("Any"))) {
+                    n++;
+                    break;
+                }
+            }
+        }
+        return n;
     }
 
     /** Pool plus untapped mana sources, one each — coarse, conservative. */
