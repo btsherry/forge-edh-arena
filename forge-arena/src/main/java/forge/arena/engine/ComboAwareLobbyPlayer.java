@@ -85,6 +85,25 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private DrillOrder activeDrill;
         /** Phase 11: the running compiled-program interpreter, if any. */
         private ProgramRunner activeProgram;
+        /** PR-lambda: the mana-loop interpreter (program_class: mana_loop). */
+        private ManaLoopRunner activeManaLoop;
+
+        private final java.util.Map<String, String> programClassCache =
+                new java.util.HashMap<>();
+
+        /** Cached per path; "unreadable" on parse failure — never a silent
+         *  misroute to the wrong interpreter (panel). */
+        private String programClassOf(String programPath) {
+            return programClassCache.computeIfAbsent(programPath, path -> {
+                try {
+                    return new com.fasterxml.jackson.databind.ObjectMapper()
+                            .readTree(new java.io.File(path))
+                            .path("program_class").asText("ping_loop");
+                } catch (Exception e) {
+                    return "unreadable";
+                }
+            });
+        }
         /** PR-eta: the live pairing runner — polled even with a non-empty
          *  stack, because respond-on-stack IS its job. */
         private PairingRunner activePairing;
@@ -508,6 +527,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return null;
                 }
             }
+            if (activeManaLoop != null) {
+                List<SpellAbility> step = activeManaLoop.next(turn);
+                if (activeManaLoop.finished()) {
+                    activeManaLoop = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activeManaLoop != null) {
+                    return null;
+                }
+            }
             ComboPilot.Action action = pilot.nextAction(view, entryWindowOpen, validator)
                     .orElse(null);
             if (action == null) {
@@ -562,9 +593,14 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         // just as surely as casting — stock exiled Doomskar
                         // face-down at t3 and wiped uncoordinated at t5,
                         // sailing straight past the cast-only veto
+                        // PR-lambda (panel): an AURA program piece is as
+                        // destructive misplayed as a spent one-shot — stock
+                        // enchanting Power Artifact onto the wrong artifact
+                        // dead-ends the compiled program for the game
                         boolean spends = sa.isForetelling()
                                 || (sa.isSpell() && host != null
-                                        && !host.getType().isPermanent());
+                                        && (!host.getType().isPermanent()
+                                            || host.isAura()));
                         if (spends && host != null
                                 && pilot.reservedCastNames(view).contains(host.getName())) {
                             return null; // pass — reserved for the pilot's play
@@ -576,6 +612,25 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             if (!action.isStep() && action.program() != null) {
                 // Phase 11: hand the window to the interpreter. No drill, no
                 // archetype — the program is the only path for this combo.
+                // PR-lambda: the program's declared class picks the runner.
+                String programClass = programClassOf(action.program().programPath());
+                if ("unreadable".equals(programClass)) {
+                    pilot.observe(forge.arena.report.ArenaEvent.of(
+                            "program_abort", turn, seatIndex)
+                            .with("combo", action.program().comboId())
+                            .with("reason", "program_unreadable: "
+                                    + action.program().programPath()));
+                    return super.chooseSpellAbilityToPlay();
+                }
+                if ("mana_loop".equals(programClass)) {
+                    activeManaLoop = new ManaLoopRunner(getGame(), player, pilot,
+                            seatIndex, action.program().programPath());
+                    List<SpellAbility> first = activeManaLoop.next(turn);
+                    if (activeManaLoop.finished()) {
+                        activeManaLoop = null;
+                    }
+                    return first;
+                }
                 activeProgram = new ProgramRunner(getGame(), player, pilot,
                         seatIndex, action.program().programPath());
                 return activeProgram.next(turn);

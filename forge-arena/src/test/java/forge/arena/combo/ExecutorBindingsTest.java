@@ -36,7 +36,13 @@ public class ExecutorBindingsTest {
         // addition and says nothing about whether the library is correct. It
         // is a FLOOR instead: bindings may be added freely, and losing one
         // still fails loudly.
-        assertTrue("binding library shrank: " + bindings.size(), bindings.size() >= 29);
+        // Floor updated deliberately, twice, under the one-path rule:
+        // PR-lambda removed 4131-5149 (compiled as the mana-loop program)
+        // and 2585-5149 (Grim+PA — TapForManaUntapLoop ignores cost_reducer,
+        // PA never attaches to Grim, so the binding entered and
+        // validation-aborted EVERY turn, burning a window; unbound-by-design
+        // backlog until compiled as a mana_loop program).
+        assertTrue("binding library shrank: " + bindings.size(), bindings.size() >= 28);
         // PR-61: the cast-bounce family now covers Hullbreaker Horror as
         // well as Tidespout Tyrant. Both are "whenever you cast a spell,
         // return a permanent to its owner's hand" plus a rock that produces

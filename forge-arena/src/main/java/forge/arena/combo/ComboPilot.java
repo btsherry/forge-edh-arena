@@ -231,6 +231,20 @@ public final class ComboPilot {
         firedPairings.remove(pairingId);
     }
 
+    /**
+     * PR-lambda (panel): a program whose SETUP could not proceed spent
+     * NOTHING — it must not burn the ~8-turn refire lockout nor leave the
+     * pilot in a phantom conversion state (currentRoute/bankedPhase set for
+     * a loop that never ran). The runner defers; the pilot hands the combo
+     * back; attemptedThisTurn still blocks a same-turn spin.
+     */
+    public void programDeferred(String comboId) {
+        firedShortcuts.remove(comboId);
+        firedTurns.remove(comboId);
+        currentRoute = null;
+        bankedPhase = null;
+    }
+
     public void setPairingPrograms(Map<String, String> paths) {
         java.util.List<PairingSpec> specs = new java.util.ArrayList<>();
         for (Map.Entry<String, String> e : (paths == null ? Map.<String, String>of() : paths)
