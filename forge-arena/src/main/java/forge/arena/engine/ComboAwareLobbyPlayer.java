@@ -529,6 +529,13 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             }
             if (activeManaLoop != null) {
                 List<SpellAbility> step = activeManaLoop.next(turn);
+                String imprint = activeManaLoop.pendingImprint();
+                if (imprint != null) {
+                    // the Scepter cast just returned — steer its imprint
+                    // trigger through the proven PR-27a choice seam
+                    pendingChoice = imprint;
+                    pendingChoiceTurn = turn;
+                }
                 if (activeManaLoop.finished()) {
                     activeManaLoop = null;
                 }
@@ -626,6 +633,11 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     activeManaLoop = new ManaLoopRunner(getGame(), player, pilot,
                             seatIndex, action.program().programPath());
                     List<SpellAbility> first = activeManaLoop.next(turn);
+                    String imprint = activeManaLoop.pendingImprint();
+                    if (imprint != null) {
+                        pendingChoice = imprint;
+                        pendingChoiceTurn = turn;
+                    }
                     if (activeManaLoop.finished()) {
                         activeManaLoop = null;
                     }

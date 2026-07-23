@@ -131,6 +131,11 @@ public class GoldfishGauntletTest {
                      {"name": "Dramatic Reversal"}, {"name": "Isochron Scepter"}]}]}""");
         Files.writeString(urzaDossier.resolve("dossier.json"),
                 "{\"deck_id\":\"t\",\"deck_hash\":\"x\",\"status\":{},\"versions\":{}}");
+        // PR-mu: the scepter row now runs the compiled program — the facade
+        // discovers it from the dossier, so the synthetic dossier carries it
+        Files.copy(Path.of("decks", "urza-lord-high-artificer", "dossier",
+                        "combo-program-4821-5261.json"),
+                urzaDossier.resolve("combo-program-4821-5261.json"));
     }
 
     /** One gauntlet row; expectWin only where the kill is opponent-independent. */

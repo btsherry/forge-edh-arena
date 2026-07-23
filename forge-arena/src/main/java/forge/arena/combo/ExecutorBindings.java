@@ -165,9 +165,6 @@ public final class ExecutorBindings {
         if (PairedPlay.ARCHETYPE.equals(binding.archetype())) {
             return Optional.of(new PairedPlay(binding.params(), binding.entryPhase()));
         }
-        if (ImprintCopyLoop.ARCHETYPE.equals(binding.archetype())) {
-            return Optional.of(new ImprintCopyLoop(binding.params(), binding.entryPhase()));
-        }
         if (SelfBounceRecastLoop.ARCHETYPE.equals(binding.archetype())) {
             return Optional.of(new SelfBounceRecastLoop(binding.params(), binding.entryPhase()));
         }

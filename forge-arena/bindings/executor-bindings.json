@@ -208,21 +208,6 @@
    "note": "Second Giada pair: Hour of Revelation (cheap with 10+ nonlands out) + Akroma's Will (protection + the alpha-strike mode)."
   },
   {
-   "combo_id": "4821-5261",
-   "archetype": "ImprintCopyLoop",
-   "params": {
-    "scepter": "Isochron Scepter",
-    "imprint": "Dramatic Reversal",
-    "activation_cost": "{2}",
-    "scepter_mana_value": "2",
-    "imprint_mana_value": "2",
-    "pool_color": "U"
-   },
-   "payoffs": [],
-   "entry_phase": "MAIN1",
-   "note": "PR-32 (Urza primer core line): Scepter+Reversal \u2014 activate {2}, the copy untaps everything, rocks re-fund; validation = one engine activation succeeding AND leaving the scepter untapped (the copy-chain proof)."
-  },
-  {
    "combo_id": "542-5034",
    "archetype": "CastBounceManaLoop",
    "params": {

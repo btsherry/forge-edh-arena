@@ -69,6 +69,17 @@ public class BindGenTest {
         });
         Path bindings = Files.createTempDirectory("bindgen-lib").resolve("executor-bindings.json");
         Files.copy(ExecutorBindings.defaultPath(), bindings);
+        // PR-mu: 4821-5261 left the SHIPPED library (compiled as a program);
+        // this test pins bindgen's cache-hit behavior, so the fixture keeps
+        // a stand-in entry — fixture-only, never shipped
+        String json = Files.readString(bindings);
+        json = json.replaceFirst("\\[",
+                "[\n {\"combo_id\": \"4821-5261\", \"archetype\": \"TapForManaUntapLoop\","
+                + " \"params\": {\"engine\": \"Isochron Scepter\","
+                + " \"untapper\": \"Isochron Scepter\", \"activation_cost\": \"{2}\","
+                + " \"untap_cost\": \"{2}\", \"untap_ability_host\": \"engine\"},"
+                + " \"payoffs\": [], \"entry_phase\": \"MAIN1\"},");
+        Files.writeString(bindings, json);
         return new Path[] { dossier, bindings };
     }
 

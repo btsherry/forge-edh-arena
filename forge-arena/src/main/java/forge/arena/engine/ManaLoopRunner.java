@@ -58,6 +58,25 @@ public final class ManaLoopRunner {
     private boolean pendingSink;
     private int libraryAtSink = -1;
     private int normalizeAttempts;
+    /** float_then_copy: pool at the iteration's first float action. */
+    private int poolAtIterStart = -1;
+    private boolean iterationOpen;
+    /** Pool right after the floats, before the {2} activation — the spend
+     *  proof (reviewer: a FAILED play left floats-grown pool passing the
+     *  net check, scoring a phantom iteration). */
+    private int poolAtActivation = -1;
+    /** Float progress guard (reviewer: an unpayable float SA returned
+     *  verbatim every window livelocks the seat). */
+    private int lastFloatPool = -1;
+    private int floatStalls;
+    /** Imprint choice for the cast just returned; controller consumes it. */
+    private String pendingImprint;
+
+    public String pendingImprint() {
+        String out = pendingImprint;
+        pendingImprint = null;
+        return out;
+    }
 
     ManaLoopRunner(Game game, Player player, ComboPilot pilot, int seat, String programPath) {
         this.game = game;
@@ -109,6 +128,14 @@ public final class ManaLoopRunner {
                 if (AbilityResolver.findBattlefield(player, card) != null) {
                     continue;
                 }
+                String imprint = step.path("imprint").asText(null);
+                if (imprint != null && !inHand(imprint)) {
+                    // the imprint trigger takes its card from HAND — casting
+                    // the Scepter without it is a dead Scepter; defer
+                    finished = true;
+                    pilot.programDeferred(comboId);
+                    return null;
+                }
                 SpellAbility cast = AbilityResolver.resolveCast(player, card);
                 if (cast == null) {
                     // panel: an unaffordable/unreachable setup cast spent
@@ -117,6 +144,9 @@ public final class ManaLoopRunner {
                     finished = true;
                     pilot.programDeferred(comboId);
                     return null;
+                }
+                if (imprint != null) {
+                    pendingImprint = imprint; // controller arms pendingChoice
                 }
                 String attachTo = step.path("target").asText(null);
                 if (attachTo != null && cast.usesTargeting()) {
@@ -141,6 +171,19 @@ public final class ManaLoopRunner {
                     return abort(turn, "piece_misattached: '" + pre.path("card").asText()
                             + "' not on '" + pre.path("host").asText() + "'");
                 }
+                if ("imprinted".equals(check) && !imprinted(pre.path("card").asText(),
+                        pre.path("host").asText())) {
+                    return abort(turn, "not_imprinted: '" + pre.path("card").asText()
+                            + "' not on '" + pre.path("host").asText() + "'");
+                }
+                if ("artifact_mana_production_at_least".equals(check)
+                        && artifactManaProduction(false) < pre.path("n").asInt(3)) {
+                    // the secondary requirement is a WAIT, not a failure —
+                    // more rocks arrive; defer for a later refire
+                    finished = true;
+                    pilot.programDeferred(comboId);
+                    return null;
+                }
             }
             // governor: bank exactly what the sinks will spend, bounded by
             // the declared library floor (each sink exiles our top card)
@@ -160,6 +203,94 @@ public final class ManaLoopRunner {
                     .with("tranche", 1)
                     .with("iterations_done", 0));
             state = State.LOOP_TAP;
+        }
+        if ((state == State.LOOP_TAP || state == State.LOOP_UNTAP)
+                && "float_then_copy".equals(program.path("loop").path("shape").asText(""))) {
+            int perSink = program.path("sink").path("per_activation_pool").asInt(5);
+            int netMin = program.path("loop").path("expected_net_min_per_iteration").asInt(1);
+            int pool = player.getManaPool().totalMana();
+            String scepterCard = program.path("loop").path("activate").path("card").asText();
+            Card scepter = AbilityResolver.findBattlefield(player, scepterCard);
+            if (scepter == null) {
+                return abort(turn, "piece_lost: '" + scepterCard + "' mid-loop");
+            }
+            if (pendingPair) {
+                // MEASURED iteration completion, spend-proof included: the
+                // {2} left the pool (pool == poolAtActivation - 2 — a play
+                // that failed to happen leaves it untouched) and the copy
+                // RESOLVED (the Reversal untapped the scepter) and the net
+                // over the iteration start held
+                if (pool >= poolAtActivation) {
+                    return abort(turn, "activation_never_played: pool "
+                            + poolAtActivation + " unchanged after the {2}");
+                }
+                if (scepter.isTapped() || pool < poolAtIterStart + netMin) {
+                    return abort(turn, "iteration_incomplete: scepter "
+                            + (scepter.isTapped() ? "TAPPED" : "untapped")
+                            + ", pool " + poolAtIterStart + "->" + pool
+                            + " (net_min " + netMin + ") after iteration "
+                            + (iterations + 1));
+                }
+                pendingPair = false;
+                iterationOpen = false;
+                iterations++;
+                pilot.observe(ArenaEvent.of("outlet_drill", turn, seat)
+                        .with("outlet", scepterCard).with("kind", "copy_iteration")
+                        .with("iteration", iterations)
+                        .with("own_life", player.getLife()));
+            }
+            if (pool >= plannedSinks * perSink) {
+                state = State.SINK;
+            } else if (iterations >= ITERATION_CAP) {
+                return abort(turn, "iteration_cap: " + ITERATION_CAP);
+            } else {
+                // tapped-scepter check FIRST (reviewer: floating every rock
+                // and THEN discovering the defer banked a phase-dying pool
+                // for nothing)
+                if (scepter.isTapped()) {
+                    finished = true;
+                    pilot.programDeferred(comboId);
+                    return null;
+                }
+                // FLOAT: one untapped artifact mana ability per window,
+                // highest USABLE yield first (PR-60) — legality-gated
+                // (canPlay: Metalcraft-off Mox Opal never floats) and
+                // restriction-aware (Throne of Eldraine's spell-only mana
+                // cannot pay the {2} or the {5} and never enters the bank)
+                SpellAbility floatAct = bestUntappedArtifactMana();
+                if (floatAct != null) {
+                    if (!iterationOpen) {
+                        poolAtIterStart = pool;
+                        iterationOpen = true;
+                    }
+                    if (pool == lastFloatPool && ++floatStalls >= 3) {
+                        return abort(turn, "float_stalled: pool " + pool
+                                + " unchanged across " + floatStalls + " floats");
+                    }
+                    if (pool != lastFloatPool) {
+                        floatStalls = 0;
+                    }
+                    lastFloatPool = pool;
+                    return List.of(floatAct);
+                }
+                if (!iterationOpen) {
+                    poolAtIterStart = pool;
+                    iterationOpen = true;
+                }
+                if (pool < 2) {
+                    return abort(turn, "float_underfunded: pool " + pool
+                            + " < {2} with no untapped artifact mana left");
+                }
+                SpellAbility act = AbilityResolver.resolve(player, scepterCard,
+                        program.path("loop").path("activate").path("cost").asText("{2}"),
+                        List.of());
+                if (act == null) {
+                    return abort(turn, "loop_action_unresolvable: '" + scepterCard + "'");
+                }
+                poolAtActivation = pool;
+                pendingPair = true;
+                return List.of(act);
+            }
         }
         if (state == State.LOOP_TAP || state == State.LOOP_UNTAP) {
             int perSink = program.path("sink").path("per_activation_pool").asInt(5);
@@ -268,6 +399,103 @@ public final class ManaLoopRunner {
             return List.of(act);
         }
         return null;
+    }
+
+    private boolean inHand(String cardName) {
+        for (Card c : player.getCardsIn(ZoneType.Hand)) {
+            if (c.getName().equals(cardName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean imprinted(String cardName, String hostName) {
+        Card host = AbilityResolver.findBattlefield(player, hostName);
+        if (host == null) {
+            return false;
+        }
+        for (Card imp : host.getImprintedCards()) {
+            if (imp.getName().equals(cardName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Total mana the untapped, USABLE artifact sources can produce right
+     * now. Reviewer-hardened: skips artifact LANDS (the Reversal untaps
+     * nonland only, so their float never recurs), spend-restricted mana
+     * (Throne of Eldraine's RestrictValid — the PR-B lesson, runner form),
+     * unplayable abilities (Metalcraft-off, unimprinted Chrome Mox), and
+     * scores Amount$ X as 0 for the GATE (underestimate is safe: it defers).
+     */
+    private int artifactManaProduction(boolean unused) {
+        int total = 0;
+        for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+            SpellAbility usable = bestUsableManaAbility(c);
+            if (usable != null) {
+                total += yieldOf(usable);
+            }
+        }
+        return total;
+    }
+
+    /** The single best usable float, or null when the float is done. */
+    private SpellAbility bestUntappedArtifactMana() {
+        SpellAbility best = null;
+        int bestYield = 0;
+        for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+            SpellAbility sa = bestUsableManaAbility(c);
+            if (sa != null && yieldOf(sa) > bestYield) {
+                bestYield = yieldOf(sa);
+                best = sa;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * The card's highest-yield mana ability that is actually USABLE for the
+     * loop — the ABILITY is returned, never getFirst() (the PR-60 wrong-half
+     * class the reviewer flagged latent here).
+     */
+    private SpellAbility bestUsableManaAbility(Card c) {
+        if (!c.isArtifact() || c.isLand() || c.isTapped()
+                || c.getManaAbilities().isEmpty()) {
+            return null;
+        }
+        SpellAbility best = null;
+        int bestYield = 0;
+        for (SpellAbility ma : c.getManaAbilities()) {
+            if (ma.hasParam("RestrictValid")) {
+                continue; // spell-only mana cannot pay the {2} or the {5}
+            }
+            ma.setActivatingPlayer(player);
+            if (!ma.canPlay()) {
+                continue;
+            }
+            int y = yieldOf(ma);
+            if (y > bestYield) {
+                bestYield = y;
+                best = ma;
+            }
+        }
+        return best;
+    }
+
+    /** Amount as a number; X and other variables score 0 (conservative). */
+    private static int yieldOf(SpellAbility ma) {
+        String amount = ma.getParam("Amount");
+        if (amount == null) {
+            return 1;
+        }
+        try {
+            return Integer.parseInt(amount.trim());
+        } catch (NumberFormatException variable) {
+            return 0;
+        }
     }
 
     private boolean attached(String auraName, String hostName) {
