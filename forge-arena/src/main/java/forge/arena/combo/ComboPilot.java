@@ -249,6 +249,13 @@ public final class ComboPilot {
                 // the runner aborts loudly on use; nothing to do here
             }
         }
+        // PR-49's lesson, pairing form: cheapest-first meant the strongest
+        // play (land destruction) never fired in 300 games. assembly_gated
+        // MLD outranks threat_gated creature wipes (Ben: it puts you so far
+        // ahead most opponents can't catch back up); stable by id within.
+        specs.sort(java.util.Comparator
+                .comparing((PairingSpec sp) -> !"assembly_gated".equals(sp.policyType()))
+                .thenComparing(PairingSpec::id));
         this.pairingSpecs = specs;
     }
 

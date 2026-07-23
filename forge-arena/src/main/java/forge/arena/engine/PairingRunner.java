@@ -273,6 +273,22 @@ public final class PairingRunner {
                     if (!sa.isSpell()) {
                         continue;
                     }
+                    // never pick an alternative that SACRIFICES a permanent
+                    // just because its mana is low — Flare of Fortitude's
+                    // sac-a-white-creature mode reads as 0 mana and would
+                    // eat an angel (or Avacyn) to save the rest
+                    boolean sacrifices = false;
+                    if (sa.getPayCosts() != null) {
+                        for (forge.game.cost.CostPart part : sa.getPayCosts().getCostParts()) {
+                            if (part instanceof forge.game.cost.CostSacrifice) {
+                                sacrifices = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (sacrifices) {
+                        continue;
+                    }
                     sa.setActivatingPlayer(player);
                     if (!forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
                         continue;
