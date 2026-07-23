@@ -119,5 +119,17 @@ public class UrzaManaLoopTest {
         var f = completes.get(0).fields();
         assertTrue("sinks must actually fire, got " + f,
                 ((Number) f.get("sinks")).intValue() >= 2);
+        // PR-xi: with storm_mode=program_casts the program casts its own
+        // exiles from the banked reserve — MEASURED by exile departure.
+        // Skips are honest (lands, timing, cost); the floor asserts the
+        // stage RAN, not that every card was castable.
+        int stormCasts = ((Number) f.get("storm_casts")).intValue();
+        int stormSkips = ((Number) f.get("storm_skips")).intValue();
+        assertTrue("the storm stage must attempt every sink's exile (casts "
+                + stormCasts + " + skips " + stormSkips + " vs sinks "
+                + f.get("sinks") + ")",
+                stormCasts + stormSkips >= ((Number) f.get("sinks")).intValue());
+        assertTrue("the storm must land at least one real cast, got casts="
+                + stormCasts, stormCasts >= 1);
     }
 }

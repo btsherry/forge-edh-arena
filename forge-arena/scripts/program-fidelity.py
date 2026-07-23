@@ -72,6 +72,8 @@ def main(run_dir: Path) -> None:
                 suppressed[deck] += 1
             elif t == "loop_prereq":
                 prereqs[deck] += 1
+            elif t == "storm_cast":
+                iterations[deck + ":storm"] = iterations.get(deck + ":storm", 0) + 1
             elif t == "pairing_entered":
                 pair_entered[deck] += 1
                 pairs_open[(deck, str(e.get("pairing")))] = True
@@ -109,6 +111,8 @@ def main(run_dir: Path) -> None:
             print(f"  prereq grants   {prereqs[deck]}")
             recent = plans[deck][:3]
             print(f"  governor plans  {len(plans[deck])} (first: {recent})")
+            if iterations.get(deck + ":storm"):
+                print(f"  storm casts     {iterations[deck + ':storm']}")
         if aborts[deck]:
             print(f"  aborts          {dict(aborts[deck])}")
         if pair_entered[deck] or pair_truncated[deck]:
