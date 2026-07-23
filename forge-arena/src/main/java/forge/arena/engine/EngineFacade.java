@@ -299,6 +299,19 @@ public final class EngineFacade {
                     });
         } catch (java.io.IOException ignored) {
         }
+        // PR-kappa: compiled engine programs, same discovery pattern
+        java.util.Map<String, String> enginePaths = new java.util.LinkedHashMap<>();
+        try (java.util.stream.Stream<java.nio.file.Path> files =
+                java.nio.file.Files.list(seat.dossierDir())) {
+            files.filter(x -> x.getFileName().toString().startsWith("engine-program-")
+                            && x.getFileName().toString().endsWith(".json"))
+                    .forEach(x -> {
+                        String n = x.getFileName().toString();
+                        enginePaths.put(n.substring(15, n.length() - 5),
+                                x.toAbsolutePath().toString());
+                    });
+        } catch (java.io.IOException ignored) {
+        }
         return new ComboAwareLobbyPlayer(name, player -> {
             forge.arena.combo.ComboTracker tracker = new forge.arena.combo.ComboTracker(defs);
             forge.arena.combo.ComboPilot p = new forge.arena.combo.ComboPilot(tracker, bindings,
@@ -306,6 +319,7 @@ public final class EngineFacade {
                     0.0, seatIndex, sink);
             p.setProgramPaths(programPaths);
             p.setPairingPrograms(pairingPaths);
+            p.setEnginePrograms(enginePaths);
             return p;
         });
     }

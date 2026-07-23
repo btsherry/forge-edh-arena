@@ -44,6 +44,8 @@ public final class TutorWeights {
     public static final String DERIVATION =
             "combo pieces: (0.5 + 0.45*logNorm(popularity)) * min(1, 2/pieces), commanders x0.2; "
             + "route payoffs: 0.35 + 0.35*(routes served / expressible routes); "
+            + "engine-program pieces: flat 0.9 (PR-kappa: compiled card-advantage "
+            + "engines are prime tutor targets); "
             + "card weight = max over contributions (win-routes/4 static proxies for "
             + "quality * scarcity * completion_leverage)";
 
@@ -110,6 +112,25 @@ public final class TutorWeights {
                     : 0.0;
             offer(best, e.getKey(), 0.35 + 0.35 * share,
                     "route payoff: " + String.join(", ", e.getValue()));
+        }
+
+        // --- engine-program pieces (PR-kappa): a compiled card-advantage
+        // engine's pieces are prime tutor targets — Land Tax and Scroll Rack
+        // are exactly what Enlightened Tutor should fetch, and neither is a
+        // combo piece nor a route payoff, so nothing above sees them ---
+        try (java.util.stream.Stream<Path> files = java.nio.file.Files.list(dossierDir)) {
+            for (Path f : files.sorted().filter(x -> x.getFileName().toString()
+                            .startsWith("engine-program-")
+                            && x.getFileName().toString().endsWith(".json")).toList()) {
+                JsonNode program = MAPPER.readTree(f.toFile());
+                for (JsonNode piece : program.path("pieces")) {
+                    String card = piece.path("card").asText();
+                    if (!card.isEmpty()) {
+                        offer(best, card, 0.9,
+                                "engine program piece: " + program.path("engine_id").asText("?"));
+                    }
+                }
+            }
         }
 
         // --- assemble: commander discount, rounding, deterministic order ---

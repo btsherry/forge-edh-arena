@@ -88,6 +88,8 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         /** PR-eta: the live pairing runner — polled even with a non-empty
          *  stack, because respond-on-stack IS its job. */
         private PairingRunner activePairing;
+        /** PR-kappa: one engine cycle in flight (brief — its own resolution only). */
+        private EngineProgramRunner activeEngine;
         private int drillIterations;
         /** Bounded per game — a runaway drill is a stall, not a win. */
         static final int DRILL_BOUND = 200;
@@ -285,7 +287,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             }
         }
 
-        /**
+                /**
          * PR-73: would paying the outlet's own activation cost kill it?
          *
          * <p>Walking Ballista removes a +1/+1 counter to deal damage, and its
@@ -453,6 +455,20 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return null;
                 }
             }
+            // PR-kappa: an engine cycle owns windows only across its own
+            // resolution — the measure lands, the seat comes right back
+            if (activeEngine != null) {
+                List<SpellAbility> step = activeEngine.next(turn);
+                if (activeEngine.finished()) {
+                    activeEngine = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activeEngine != null) {
+                    return null;
+                }
+            }
             // PR-31: an armed paired-play protection fires at the first
             // priority with our trigger on the stack — cast it in response.
             // PR-eta: only the turn it was armed — a stale shield (its wipe's
@@ -563,6 +579,30 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 activeProgram = new ProgramRunner(getGame(), player, pilot,
                         seatIndex, action.program().programPath());
                 return activeProgram.next(turn);
+            }
+            if (!action.isStep() && action.engine() != null) {
+                // PR-kappa panel blocker: a gate-failed cycle must HAND THE
+                // WINDOW BACK — returning the runner's null told PhaseHandler
+                // 'I pass' and silently forfeited the seat's entire MAIN1
+                // every turn the pieces were out with a failed gate. And an
+                // armed drill outranks a card-advantage durdle: it IS the
+                // conversion in progress.
+                if (activeDrill == null) {
+                    activeEngine = new EngineProgramRunner(getGame(), player, pilot,
+                            seatIndex, action.engine().programPath());
+                    List<SpellAbility> first = activeEngine.next(turn);
+                    if (activeEngine.finished()) {
+                        activeEngine = null;
+                    }
+                    if (first != null) {
+                        return first;
+                    }
+                }
+                List<SpellAbility> drill = drillStep(turn);
+                if (drill != null) {
+                    return drill;
+                }
+                return super.chooseSpellAbilityToPlay();
             }
             if (!action.isStep() && action.pairing() != null) {
                 // PR-eta: wipe + shield, respond-on-stack, measured verify.
@@ -1398,6 +1438,34 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 SpellAbility sa, forge.game.card.CardCollection fetchList,
                 forge.game.player.DelayedReveal delayedReveal, String selectPrompt,
                 boolean isOptional, Player decider) {
+            // PR-kappa: Scroll Rack's exile choice reaches the AI ONE CARD
+            // AT A TIME — ChangeZoneEffect.allowMultiSelect excludes AI
+            // controllers, so the multi-select callback NEVER fires for us
+            // (measured by the first diagnostic run; the dead branch was
+            // deleted, the PR-72 lesson again). While OUR engine cycle
+            // resolves its own rack: hand over excess basics one by one,
+            // stopping while one remains for the land drop.
+            if (activeEngine != null && sa != null && sa.getHostCard() != null
+                    && sa.getHostCard().getName().equals(activeEngine.rackCard())
+                    && destination == forge.game.zone.ZoneType.Exile
+                    && origin != null && origin.contains(forge.game.zone.ZoneType.Hand)) {
+                forge.game.card.Card pick = null;
+                int basics = 0;
+                for (forge.game.card.Card cd : fetchList) {
+                    if (cd.isBasicLand()) {
+                        basics++;
+                        if (pick == null) {
+                            pick = cd;
+                        }
+                    }
+                }
+                if (basics > 1 && pick != null) {
+                    activeEngine.recordExiled();
+                    return pick;
+                }
+                return null; // keep the last basic; never exile nonlands in v1
+            }
+
             // an armed step choice wins outright (the PR-27a seam)
             if (pendingChoice != null && decider == player) {
                 for (forge.game.card.Card card : fetchList) {

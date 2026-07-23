@@ -37,13 +37,13 @@ public final class ComboPilot {
 
     /** One pilot output: a scripted step, a mana shortcut, or a token flood. */
     public record Action(LineExecutor.Step step, ShortcutOrder shortcut, TokenFlood flood,
-            DrillOrder drill, ProgramOrder program, PairingOrder pairing) {
+            DrillOrder drill, ProgramOrder program, PairingOrder pairing, EngineOrder engine) {
         public Action(LineExecutor.Step step, ShortcutOrder shortcut, TokenFlood flood) {
-            this(step, shortcut, flood, null, null, null);
+            this(step, shortcut, flood, null, null, null, null);
         }
 
         public Action(LineExecutor.Step step, ShortcutOrder shortcut) {
-            this(step, shortcut, null, null, null, null);
+            this(step, shortcut, null, null, null, null, null);
         }
 
         public boolean isStep() {
@@ -51,32 +51,40 @@ public final class ComboPilot {
         }
 
         static Action play(LineExecutor.Step step) {
-            return new Action(step, null, null, null, null, null);
+            return new Action(step, null, null, null, null, null, null);
         }
 
         static Action shortcut(ShortcutOrder order) {
-            return new Action(null, order, null, null, null, null);
+            return new Action(null, order, null, null, null, null, null);
         }
 
         static Action flood(TokenFlood order) {
-            return new Action(null, null, order, null, null, null);
+            return new Action(null, null, order, null, null, null, null);
         }
 
         static Action drill(DrillOrder order) {
-            return new Action(null, null, null, order, null, null);
+            return new Action(null, null, null, order, null, null, null);
         }
 
         static Action program(ProgramOrder order) {
-            return new Action(null, null, null, null, order, null);
+            return new Action(null, null, null, null, order, null, null);
         }
 
         static Action pairing(PairingOrder order) {
-            return new Action(null, null, null, null, null, order);
+            return new Action(null, null, null, null, null, order, null);
+        }
+
+        static Action engine(EngineOrder order) {
+            return new Action(null, null, null, null, null, null, order);
         }
     }
 
     /** PR-eta: dispatch a compiled pairing program (wipe + shield, respond-on-stack). */
     public record PairingOrder(String pairingId, String programPath) {
+    }
+
+    /** PR-kappa: dispatch one cycle of a compiled engine program. */
+    public record EngineOrder(String engineId, String programPath) {
     }
 
     /**
@@ -259,6 +267,89 @@ public final class ComboPilot {
         this.pairingSpecs = specs;
     }
 
+    /**
+     * PR-kappa: compiled engine programs — background card-advantage cycles.
+     * The pilot knows only what the ENTRY decisions need: which cards to
+     * cast early and when a cycle is worth dispatching; the runner
+     * re-verifies everything live.
+     */
+    public record EngineSpec(String id, String path, java.util.List<String> pieces,
+            Map<String, Integer> castCosts) {
+    }
+
+    private java.util.List<EngineSpec> engineSpecs = java.util.List.of();
+
+    public void setEnginePrograms(Map<String, String> paths) {
+        java.util.List<EngineSpec> specs = new java.util.ArrayList<>();
+        for (Map.Entry<String, String> e : (paths == null ? Map.<String, String>of() : paths)
+                .entrySet()) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode program =
+                        new com.fasterxml.jackson.databind.ObjectMapper()
+                                .readTree(new java.io.File(e.getValue()));
+                java.util.List<String> pieces = new java.util.ArrayList<>();
+                Map<String, Integer> costs = new java.util.LinkedHashMap<>();
+                for (com.fasterxml.jackson.databind.JsonNode piece : program.path("pieces")) {
+                    String card = piece.path("card").asText();
+                    if (!card.isEmpty()) {
+                        pieces.add(card);
+                        costs.put(card, symbolCount(piece.path("cost").asText("")));
+                    }
+                }
+                // a program the runner cannot cycle (no activate card) must
+                // not dispatch daily re-aborts (panel event-hygiene finding)
+                if (!pieces.isEmpty()
+                        && program.path("cycle").path("action").hasNonNull("activate")) {
+                    specs.add(new EngineSpec(e.getKey(), e.getValue(), pieces, costs));
+                }
+            } catch (Exception unreadable) {
+                // the runner aborts loudly on use
+            }
+        }
+        specs.sort(java.util.Comparator.comparing(EngineSpec::id)); // determinism
+        this.engineSpecs = specs;
+    }
+
+    /**
+     * PR-kappa setup: cast engine pieces EARLY — the measured stock failure
+     * was Land Tax at turn 15 (condition dead) and Scroll Rack never
+     * (AI:RemoveDeck:All). Cheap casts that fill otherwise-idle early
+     * windows; runs BELOW combos and pairings, so it never delays a kill.
+     */
+    private Optional<Action> engineSetup(SeatView view) {
+        Set<String> hand = view.cardsIn(SeatView.Zone.HAND);
+        Set<String> battlefield = view.cardsIn(SeatView.Zone.BATTLEFIELD);
+        for (EngineSpec spec : engineSpecs) {
+            for (String piece : spec.pieces()) {
+                if (!hand.contains(piece) || battlefield.contains(piece)
+                        || attemptedDeploys.contains(piece)) {
+                    continue;
+                }
+                if (view.manaPool() + view.untappedManaSources()
+                        < spec.castCosts().getOrDefault(piece, 0)) {
+                    continue;
+                }
+                attemptedDeploys.add(piece);
+                return Optional.of(Action.play(LineExecutor.Step.cast(piece)));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** PR-kappa cycle: both pieces out — dispatch one gated cycle per turn. */
+    private Optional<Action> engineCycle(SeatView view) {
+        Set<String> battlefield = view.cardsIn(SeatView.Zone.BATTLEFIELD);
+        for (EngineSpec spec : engineSpecs) {
+            if (attemptedThisTurn.contains(spec.id())
+                    || !battlefield.containsAll(spec.pieces())) {
+                continue;
+            }
+            attemptedThisTurn.add(spec.id());
+            return Optional.of(Action.engine(new EngineOrder(spec.id(), spec.path())));
+        }
+        return Optional.empty();
+    }
+
     /** Mana-value estimate of a canonical brace cost string ("{3}{W}{W}" -> 5). */
     private static int symbolCount(String cost) {
         int total = 0;
@@ -428,7 +519,15 @@ public final class ComboPilot {
     }
 
     private boolean executorExists(String comboId) {
-        return bindings.forCombo(comboId).flatMap(ExecutorBindings::executorFor).isPresent();
+        // PR-kappa (Ben's weights-freshness check found this): a combo whose
+        // binding was DELETED when its compiled program landed (PR-beta,
+        // one-path rule) must still count as executable — this gate feeds
+        // the mulligan keep, mulligan protection, hasBoundCombo, and the
+        // TUTOR PUSH, all of which had been blind to Giada's programmed
+        // combos since the migration. Giada was assembling on natural draws
+        // alone.
+        return programPaths.containsKey(comboId)
+                || bindings.forCombo(comboId).flatMap(ExecutorBindings::executorFor).isPresent();
     }
 
     /**
@@ -512,6 +611,7 @@ public final class ComboPilot {
 
     /** Piece names of every bound, fully-specified combo (static per deck). */
     private Set<String> boundPieces(ComboTracker.Snapshot snap) {
+        // program pieces ride along even when no binding remains
         Set<String> pieces = new java.util.LinkedHashSet<>();
         for (ComboTracker.ComboStatus status : snap.statuses()) {
             if (status.fullySpecified() && executorExists(status.id())) {
@@ -702,6 +802,7 @@ public final class ComboPilot {
             return assemblyAction(view, validator);
         }
         return compiledPairings(view).or(() -> pairedPlays(view))
+                .or(() -> engineCycle(view)).or(() -> engineSetup(view))
                 .or(() -> preAssembly(view));
     }
 
@@ -883,6 +984,11 @@ public final class ComboPilot {
         for (PairingSpec spec : pairingSpecs) {
             cards.add(spec.wipe());
             cards.add(spec.protection());
+        }
+        // PR-kappa: engine pieces too — stock casts Land Tax 12+ turns late
+        // and would waste it; the pilot owns these casts
+        for (EngineSpec spec : engineSpecs) {
+            cards.addAll(spec.pieces());
         }
         return cards;
     }
