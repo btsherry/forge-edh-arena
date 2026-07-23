@@ -1,9 +1,9 @@
 {
-  "run_id": "standard",
-  "seed_base": 3033,
-  "games": 100,
+  "run_id": "rebaseline-det",
+  "seed_base": 6200,
+  "games": 30,
   "workers": 6,
-  "out_dir": "runs/standard",
+  "out_dir": "runs/rebaseline-det",
   "assets_dir": "forge-gui",
   "limits": {
     "turns": 40,
