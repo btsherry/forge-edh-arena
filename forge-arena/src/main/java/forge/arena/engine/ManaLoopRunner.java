@@ -205,7 +205,14 @@ public final class ManaLoopRunner {
             }
             int floor = program.path("self_consumption").path("floor").asInt(5);
             int library = player.getCardsIn(ZoneType.Library).size();
-            plannedSinks = Math.min(8, Math.max(0, library - floor));
+            // Ben (PR-omicron): play out the DECK, not a sample. Aetherflux's
+            // trigger is storm-count lifegain (kth cast of the turn gains k)
+            // — a table kill needs ~150+ life, which 8 casts can never reach
+            // (+36 max from 40) and ~35 casts reach trivially (+600). The
+            // xi30 batch measured the 8-sink shape working mechanically and
+            // converting nothing: 4 random casts, no Aetherflux surfaced.
+            int maxSinks = program.path("sink").path("max_sinks").asInt(8);
+            plannedSinks = Math.min(maxSinks, Math.max(0, library - floor));
             if (plannedSinks == 0) {
                 return abort(turn, "self_floor: library " + library + " at floor " + floor);
             }

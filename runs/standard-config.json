@@ -7,8 +7,8 @@
   "assets_dir": "forge-gui",
   "limits": {
     "turns": 40,
-    "wall_clock_sec": 600,
-    "priority_passes_per_turn": 2000
+    "wall_clock_sec": 900,
+    "priority_passes_per_turn": 6000
   },
   "seats": [
     {
