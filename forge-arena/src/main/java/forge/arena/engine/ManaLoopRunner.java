@@ -325,12 +325,16 @@ public final class ManaLoopRunner {
             if (engine == null) {
                 return abort(turn, "piece_lost: '" + engineCard + "' mid-loop");
             }
+            // Gadgeteer/Grim generalization: the net per pair is the
+            // program's fact, not the runner's — PA reduces by {2} (net +2),
+            // Gadgeteer and Grim's PA line net +1. Still infinite; slower.
+            int netPerPair = program.path("loop").path("expected_net_per_pair").asInt(2);
             if (state == State.LOOP_TAP && pendingPair) {
                 // MEASURED pair completion: the untap RESOLVED (host is
                 // untapped) and the pool grew. A countered untap leaves the
-                // host tapped at exactly poolAtPairStart+2 — the numeric
+                // host tapped at exactly poolAtPairStart+net — the numeric
                 // check alone cannot see it (panel).
-                if (engine.isTapped() || pool < poolAtPairStart + 2) {
+                if (engine.isTapped() || pool < poolAtPairStart + netPerPair) {
                     return abort(turn, "pair_incomplete: host "
                             + (engine.isTapped() ? "TAPPED" : "untapped")
                             + ", pool " + poolAtPairStart + "->" + pool
