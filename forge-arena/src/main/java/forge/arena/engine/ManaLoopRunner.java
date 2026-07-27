@@ -60,6 +60,8 @@ public final class ManaLoopRunner {
     /** PR-xi storm (rollback: sink.storm_mode="stock" in the program JSON —
      *  reverts to bank=sinks*5 and hand-back, the exact pre-storm shape). */
     private boolean stormEnabled;
+    private boolean storming;
+    private final java.util.Set<Integer> stormAttempted = new java.util.HashSet<>();
     private java.util.Set<Integer> exileIdsAtSink = java.util.Set.of();
     private int pendingStormCardId = -1;
     private String pendingStormCardName;
@@ -416,25 +418,38 @@ public final class ManaLoopRunner {
                 pendingSink = false;
                 if (player.getCardsIn(ZoneType.Library).size() < libraryAtSink) {
                     sinksDone++;
-                    if (stormEnabled) {
-                        // the card this sink just exiled: cast it NOW while
-                        // the reserve is in the pool. Forge decides legality
-                        // and affordability; we only choose the intent.
-                        SpellAbility stormCast = playableFromNewExile();
-                        if (stormCast != null) {
-                            pendingStormCardId = stormCast.getHostCard().getId();
-                            pendingStormCardName = stormCast.getHostCard().getName();
-                            return List.of(stormCast);
-                        }
-                        stormSkips++;
-                    }
                 } else {
                     return abort(turn, "sink_never_resolved after " + sinksDone
                             + " completed sinks");
                 }
             }
-            if (sinksDone >= plannedSinks
+            if (storming || sinksDone >= plannedSinks
                     || player.getManaPool().totalMana() < perSink) {
+                // SINK-THEN-STORM (omicron30 forensics): a free cast's
+                // OPTIONAL additional costs are still payable — Everflowing
+                // Chalice's Multikicker ate the whole 180-mana sink budget
+                // mid-interleave (pool_remaining 0 at 4/40 sinks). The
+                // MayPlay grants last until end of turn, so the storm now
+                // runs AFTER the sinks, when a greedy kicker can only eat
+                // leftovers. One attempt per exile, one action per window.
+                if (stormEnabled) {
+                    storming = true;
+                    for (Card c : player.getCardsIn(ZoneType.Exile)) {
+                        if (exileIdsAtSink.contains(c.getId())
+                                || stormAttempted.contains(c.getId())) {
+                            continue;
+                        }
+                        stormAttempted.add(c.getId());
+                        SpellAbility cast = playableCast(c);
+                        if (cast != null) {
+                            pendingStormCardId = c.getId();
+                            pendingStormCardName = c.getName();
+                            return List.of(cast);
+                        }
+                        stormSkips++;
+                        return null; // honest skip; next exile next window
+                    }
+                }
                 finished = true;
                 pilot.observe(ArenaEvent.of("program_complete", turn, seat)
                         .with("combo", comboId)
@@ -443,7 +458,7 @@ public final class ManaLoopRunner {
                         .with("storm_casts", stormCasts)
                         .with("storm_skips", stormSkips)
                         .with("pool_remaining", player.getManaPool().totalMana()));
-                return null; // hand back (storm handled per storm_mode)
+                return null; // hand back
             }
             JsonNode sink = program.path("sink");
             SpellAbility act = AbilityResolver.resolve(player,
@@ -452,11 +467,15 @@ public final class ManaLoopRunner {
                 return abort(turn, "sink_unresolvable: '" + sink.path("card").asText() + "'");
             }
             libraryAtSink = player.getCardsIn(ZoneType.Library).size();
-            java.util.Set<Integer> ids = new java.util.HashSet<>();
-            for (Card c : player.getCardsIn(ZoneType.Exile)) {
-                ids.add(c.getId());
+            if (sinksDone == 0) {
+                // stage-level snapshot: everything in exile BEFORE the first
+                // sink is not ours to cast
+                java.util.Set<Integer> ids = new java.util.HashSet<>();
+                for (Card c : player.getCardsIn(ZoneType.Exile)) {
+                    ids.add(c.getId());
+                }
+                exileIdsAtSink = ids;
             }
-            exileIdsAtSink = ids;
             pendingSink = true;
             return List.of(act);
         }
@@ -478,19 +497,14 @@ public final class ManaLoopRunner {
      * the affordability. Null (a land, wrong timing, unaffordable) means an
      * honest skip: the exile stays for stock to try after hand-back.
      */
-    private SpellAbility playableFromNewExile() {
-        for (Card c : player.getCardsIn(ZoneType.Exile)) {
-            if (exileIdsAtSink.contains(c.getId())) {
-                continue; // was already there before this sink
+    private SpellAbility playableCast(Card c) {
+        for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
+            if (!sa.isSpell()) {
+                continue;
             }
-            for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
-                if (!sa.isSpell()) {
-                    continue;
-                }
-                sa.setActivatingPlayer(player);
-                if (forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
-                    return sa;
-                }
+            sa.setActivatingPlayer(player);
+            if (forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                return sa;
             }
         }
         return null;

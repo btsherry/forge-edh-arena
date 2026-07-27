@@ -6,7 +6,6 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -90,7 +89,11 @@ public class UrzaScepterLoopTest {
         System.setProperty("arena.stall.dir",
                 Files.createTempDirectory("urza-scepter-stalls").toString());
         Path dossier = Path.of("decks", "urza-lord-high-artificer", "dossier");
-        List<ArenaEvent> events = new CopyOnWriteArrayList<>();
+        // COW re-copies the whole array per append — a 40-sink storm game
+        // emits enough events to OOM the shared fork (measured: 812s
+        // TimeoutDrawTest death by inherited heap). Synchronized ArrayList
+        // keeps the thread-safety with O(1) amortized appends.
+        List<ArenaEvent> events = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         Consumer<ArenaEvent> sink = events::add;
         EngineFacade.playCommanderGame(
                 List.of(SeatSpec.comboAware(new File("decks/urza-lord-high-artificer.dck"), dossier),
