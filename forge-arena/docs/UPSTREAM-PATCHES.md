@@ -1,0 +1,3 @@
+
+## Patch #3 — Combat.getAttackers defensive snapshot (2026-07-28)
+`forge-game/src/main/java/forge/game/combat/Combat.java`: getAttackers() iterates a copied ArrayList of attackedByBands values instead of the live multimap view. Fixes ConcurrentModificationException thrown when AI speculative combat evaluation (AnimateAi.animateTgtAI -> ComputerUtilCard.doesSpecifiedCreatureAttackAI -> AiAttackController.declareAttackers) mutates the bands mid-iteration on large boards — measured killing 2 of 3 Urza program games in the tau30 batch (previously 1-in-30 background). Ben-approved as the third logged infrastructure patch; not AI-logic modification. Candidate for upstream PR.

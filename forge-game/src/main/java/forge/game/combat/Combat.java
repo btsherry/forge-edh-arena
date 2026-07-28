@@ -355,7 +355,12 @@ public class Combat {
 
     public final CardCollection getAttackers() {
         CardCollection result = new CardCollection();
-        for (AttackingBand ab : attackedByBands.get().values()) {
+        // ARENA UPSTREAM PATCH #3 (see forge-arena UPSTREAM-PATCHES.md):
+        // snapshot the band collection before iterating — AI speculative
+        // combat evaluation (AnimateAi -> doesSpecifiedCreatureAttackAI ->
+        // declareAttackers) mutates attackedByBands mid-iteration and threw
+        // ConcurrentModificationException on large boards.
+        for (AttackingBand ab : new java.util.ArrayList<>(attackedByBands.get().values())) {
             result.addAll(ab.getAttackers());
         }
         return result;
