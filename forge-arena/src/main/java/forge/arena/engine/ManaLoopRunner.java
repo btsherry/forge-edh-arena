@@ -57,6 +57,9 @@ public final class ManaLoopRunner {
     private boolean pendingPair;
     private boolean pendingSink;
     private int libraryAtSink = -1;
+    /** g17 forensics: a sink fault must SALVAGE the accumulated storm, not
+     *  abandon it — 36 free exiles including Aetherflux died with the abort. */
+    private String sinkFault;
     /** PR-xi storm (rollback: sink.storm_mode="stock" in the program JSON —
      *  reverts to bank=sinks*5 and hand-back, the exact pre-storm shape). */
     private boolean stormEnabled;
@@ -420,11 +423,24 @@ public final class ManaLoopRunner {
                 // so the library must have shrunk by one (a countered sink
                 // leaves it unchanged with the {5} already spent — panel)
                 pendingSink = false;
-                if (player.getCardsIn(ZoneType.Library).size() < libraryAtSink) {
+                // verification by EXILE GROWTH — the sink's direct product
+                // (one new exile per resolution) — never the library-shrink
+                // proxy, which any concurrent library-touching effect
+                // confounds (g17: 36 good sinks, one false negative, program
+                // dead with Aetherflux stranded in exile)
+                int newExiles = 0;
+                for (Card c : player.getCardsIn(ZoneType.Exile)) {
+                    if (!exileIdsAtSink.contains(c.getId())) {
+                        newExiles++;
+                    }
+                }
+                if (newExiles > sinksDone) {
                     sinksDone++;
                 } else {
-                    return abort(turn, "sink_never_resolved after " + sinksDone
-                            + " completed sinks");
+                    // fault recorded, storm SALVAGED: the exiles already
+                    // taken are castable until end of turn
+                    sinkFault = "sink_unverified after " + sinksDone + " sinks";
+                    storming = true;
                 }
             }
             if (storming || sinksDone >= plannedSinks
@@ -455,13 +471,17 @@ public final class ManaLoopRunner {
                     }
                 }
                 finished = true;
-                pilot.observe(ArenaEvent.of("program_complete", turn, seat)
+                ArenaEvent done = ArenaEvent.of("program_complete", turn, seat)
                         .with("combo", comboId)
                         .with("iterations", iterations)
                         .with("sinks", sinksDone)
                         .with("storm_casts", stormCasts)
                         .with("storm_skips", stormSkips)
-                        .with("pool_remaining", player.getManaPool().totalMana()));
+                        .with("pool_remaining", player.getManaPool().totalMana());
+                if (sinkFault != null) {
+                    done = done.with("sink_fault", sinkFault);
+                }
+                pilot.observe(done);
                 return null; // hand back
             }
             JsonNode sink = program.path("sink");
