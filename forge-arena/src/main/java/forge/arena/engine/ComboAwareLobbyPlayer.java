@@ -621,6 +621,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 // archetype — the program is the only path for this combo.
                 // PR-lambda: the program's declared class picks the runner.
                 String programClass = programClassOf(action.program().programPath());
+                if (!"ping_loop".equals(programClass) && !"mana_loop".equals(programClass)
+                        && !"unreadable".equals(programClass)) {
+                    // a compiled program whose runner is not built yet ships
+                    // FLAGGED: abort loudly, never misroute to ProgramRunner
+                    pilot.observe(forge.arena.report.ArenaEvent.of(
+                            "program_abort", turn, seatIndex)
+                            .with("combo", action.program().comboId())
+                            .with("reason", "program_class_unsupported: " + programClass));
+                    return super.chooseSpellAbilityToPlay();
+                }
                 if ("unreadable".equals(programClass)) {
                     pilot.observe(forge.arena.report.ArenaEvent.of(
                             "program_abort", turn, seatIndex)
