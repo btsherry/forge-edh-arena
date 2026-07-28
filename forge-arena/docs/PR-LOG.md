@@ -210,3 +210,6 @@ Same three organic entries (identical 475-iteration prefix — determinism holdi
 
 ## PR-upsilon — upstream patch #3: Combat.getAttackers defensive snapshot (Ben-approved)
 The third logged infrastructure patch, matching the class of the existing two: getAttackers() now iterates a snapshot of the attack bands instead of the live multimap view, fixing the speculative-combat ConcurrentModificationException that had graduated to killing 2 of 3 Urza program games (tau30). Logged in UPSTREAM-PATCHES.md; upstream PR candidate. 242/242.
+
+## upsilon30 batch — URZA'S FIRST ORGANIC WIN
+Game 15, turn 42, AllOpponentsLost: Urza converted a full table kill organically — program entered on natural draws, 197 verified loop iterations, bank, sinks, storm, dead table. The deck that was 0/120 at baseline and 0 in every batch since has a 1 in its win column, produced by the complete compiled pipeline: clone-widened entry (PR-rho/sigma), spend-proofed loops (PR-lambda), sink-then-storm (PR-pi), exile-growth verification + salvage (PR-tau), cap 48 (Ben), and the crash defused by upstream patch #3 (PR-upsilon) — the game Purphoros had stolen at t43 in tau30 now closes for Urza at t42. Also: g22 played out post-patch (Selvala win, no CME); g17 still crashed (next session: classify — old timeout class vs residual CME site). 25/30 decided. Everything committed; suite 242/242.
