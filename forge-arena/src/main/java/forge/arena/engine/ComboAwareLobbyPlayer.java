@@ -87,6 +87,8 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private ProgramRunner activeProgram;
         /** PR-lambda: the mana-loop interpreter (program_class: mana_loop). */
         private ManaLoopRunner activeManaLoop;
+        /** PR-chi: the cast-bounce interpreter (program_class: cast_bounce). */
+        private CastBounceRunner activeCastBounce;
 
         private final java.util.Map<String, String> programClassCache =
                 new java.util.HashMap<>();
@@ -276,14 +278,21 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
          */
         @Override
         public void orderAndPlaySimultaneousSa(List<SpellAbility> activePlayerSAs) {
-            if (activeProgram == null) {
+            if (activeProgram == null && activeCastBounce == null) {
                 super.orderAndPlaySimultaneousSa(activePlayerSAs);
                 return;
             }
             List<SpellAbility> rest = new java.util.ArrayList<>();
             for (SpellAbility sa : activePlayerSAs) {
+                // PR-chi: the cast-bounce runner's obligation ALTERNATES by
+                // loop half (bounce the rock while the fodder's cast is
+                // live, the fodder while the rock's recast is), so it is
+                // asked per-phase rather than per-program
                 String obliged = sa.isTrigger() && !sa.isCopied() && sa.getHostCard() != null
-                        ? activeProgram.obligedTargetFor(sa.getHostCard().getName())
+                        ? (activeProgram != null
+                                ? activeProgram.obligedTargetFor(sa.getHostCard().getName())
+                                : activeCastBounce.obligedTargetForPhase(
+                                        sa.getHostCard().getName()))
                         : null;
                 forge.game.card.Card target = obliged == null ? null
                         : AbilityResolver.findBattlefield(player, obliged);
@@ -546,6 +555,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return null;
                 }
             }
+            if (activeCastBounce != null) {
+                List<SpellAbility> step = activeCastBounce.next(turn);
+                if (activeCastBounce.finished()) {
+                    activeCastBounce = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activeCastBounce != null) {
+                    return null;
+                }
+            }
             ComboPilot.Action action = pilot.nextAction(view, entryWindowOpen, validator)
                     .orElse(null);
             if (action == null) {
@@ -622,6 +643,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 // PR-lambda: the program's declared class picks the runner.
                 String programClass = programClassOf(action.program().programPath());
                 if (!"ping_loop".equals(programClass) && !"mana_loop".equals(programClass)
+                        && !"cast_bounce".equals(programClass)
                         && !"unreadable".equals(programClass)) {
                     // a compiled program whose runner is not built yet ships
                     // FLAGGED: abort loudly, never misroute to ProgramRunner
@@ -638,6 +660,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                             .with("reason", "program_unreadable: "
                                     + action.program().programPath()));
                     return super.chooseSpellAbilityToPlay();
+                }
+                if ("cast_bounce".equals(programClass)) {
+                    // PR-chi: the Tidespout family's interpreter
+                    activeCastBounce = new CastBounceRunner(getGame(), player, pilot,
+                            seatIndex, action.program().programPath());
+                    List<SpellAbility> first = activeCastBounce.next(turn);
+                    if (activeCastBounce.finished()) {
+                        activeCastBounce = null;
+                    }
+                    return first;
                 }
                 if ("mana_loop".equals(programClass)) {
                     activeManaLoop = new ManaLoopRunner(getGame(), player, pilot,
