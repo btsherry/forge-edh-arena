@@ -110,10 +110,41 @@ compile queue.
    PayLife overkill class is gone by construction. (Finding 3, corrected
    form.)
 
-## pr-psi100 / pr-omega100 (pending)
+## pr-omega100 — the first completed 100-game batch (2026-07-29)
 
-psi100 measures PR-psi (self-prime, Hullbreaker family, dispatch fix);
-omega100 — same seeds — measures these three improvements on top. Run the
-observer on both; expected deltas: 513/542 program entries appear, entry
-latency shrinks for template ids, ALPHA_HELD_BACK windows shorten, drill
-churn vanishes, and mana_reserved ignores become self-explaining.
+100/100 records, 106.5 min wall, one worker JVM death mid-run absorbed by
+the new supervisor respawn + resume (without it: short again). Results:
+81 wins / 13 crash-records / 6 timeouts. Wins: **Purphoros 40** (25.8%
+baseline), **Giada 27** (20.8%), **Selvala 8** (4.2%), **Urza 6** (0
+baseline; 9 program entries, 1749 verified iterations, 4 engine wins).
+The combat-deck surges (Purphoros +14, Giada +6, Selvala doubled) are the
+expected fingerprint of the multi-head lethal partition — combat decks
+cash overkill into extra eliminations — though psi-era changes and cap 48
+share credit; chi30-paired per-seed comparison can attribute precisely.
+
+Cast_bounce in the wild, the bottleneck MOVED as designed: the template
+dispatch fix produced **105 family entries** (513-5034--46: 24, 513-3682:
+28, 542-2364: 15, 542-5034: 15, 513-2364--47: 16, 542-2585: 1, plus
+legacy-id entries) where chi30 had zero — but ~104 deferred quietly at
+SETUP and one game ran 7 measured iterations (542-5034, ended by the game
+before its lifegain target). The dominant defer causes are structural:
+the Aetherflux outlet (a 1-of) in neither hand nor battlefield — the
+deliberate no-durdle gate — and 7-8 mana engines reachable-in-hand but
+unaffordable. Next-lever candidates for Ben: tutor weighting toward the
+outlet when the family is otherwise assembled, and/or a peel-value close
+(run the loop for mana + board removal with a combat finish) per his
+dual-trigger strategy note.
+
+Entry-gate telemetry (improvement 2) adjudicates: 109 first_cast_
+unaffordable vs 21 refire_lockout. Top offenders are Selvala's Mantle/
+Staff lines (71 ignores at estimate 3 — a seat showing <3 untapped
+sources for dozens of turns points at the VIEW's untapped-source count,
+not the estimate) and 35/109 were within 1 mana of the bar. The estimate
+itself looks roughly honest; the source COUNT is the suspect. Follow-up:
+audit SeatView.untappedManaSources against boards with dorks/tapped-rock
+mixes before touching the gate.
+
+Observer method note for next pass: ENTRY_LATENCY of +4 global turns in a
+4-player pod is one own-turn — i.e. optimal — so the metric needs
+own-turn normalization before the next reading; chi30's +8/+12/+18
+mana_reserved cases remain real.
