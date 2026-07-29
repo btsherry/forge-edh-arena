@@ -204,25 +204,62 @@ public final class BatchMain {
         for (JsonNode arg : cfg.path("worker_jvm_args")) {
             extraArgs.add(arg.asText());
         }
+        List<List<String>> cmds = new ArrayList<>();
         for (int w = 0; w < workers; w++) {
             List<String> cmd = new ArrayList<>(List.of(javaBin, workerHeap));
             cmd.addAll(extraArgs);
             cmd.addAll(List.of("-cp", System.getProperty("java.class.path"),
                     WorkerMain.class.getName(), outDir.toString(), String.valueOf(w),
                     String.valueOf(workers)));
+            cmds.add(cmd);
             ProcessBuilder pb = new ProcessBuilder(cmd)
                     .redirectErrorStream(true)
                     .redirectOutput(outDir.resolve("worker-" + w + ".out").toFile());
             pool.add(pb.start());
             System.out.println("spawned worker " + w + " (pid " + pool.get(w).pid() + ")");
         }
+        // SUPERVISOR (the omega100 lesson): a worker JVM killed by the
+        // host's measured GC-crash family used to take its whole remaining
+        // stride with it — the batch finished short by construction. A dead
+        // worker is now respawned (bounded per slot); WorkerMain's resume
+        // scan skips already-recorded games, so a respawn replays only what
+        // is genuinely missing and the shared ledger gains no duplicates.
+        final int respawnCap = 3;
         int failures = 0;
-        for (int w = 0; w < pool.size(); w++) {
-            int code = pool.get(w).waitFor();
-            if (code != 0) {
-                failures++;
-                System.err.println("worker " + w + " exited " + code + " — see worker-" + w + ".out");
+        int respawns = 0;
+        int[] attempts = new int[workers];
+        boolean[] settled = new boolean[workers];
+        int running = workers;
+        while (running > 0) {
+            for (int w = 0; w < workers; w++) {
+                if (settled[w] || pool.get(w).isAlive()) {
+                    continue;
+                }
+                int code = pool.get(w).exitValue();
+                if (code == 0) {
+                    settled[w] = true;
+                    running--;
+                } else if (attempts[w] < respawnCap) {
+                    attempts[w]++;
+                    respawns++;
+                    System.err.println("worker " + w + " exited " + code
+                            + " — respawning (attempt " + attempts[w]
+                            + "; resume skips recorded games)");
+                    ProcessBuilder pb = new ProcessBuilder(cmds.get(w))
+                            .redirectErrorStream(true)
+                            .redirectOutput(ProcessBuilder.Redirect.appendTo(
+                                    outDir.resolve("worker-" + w + ".out").toFile()));
+                    pool.set(w, pb.start());
+                } else {
+                    failures++;
+                    settled[w] = true;
+                    running--;
+                    System.err.println("worker " + w + " exited " + code + " after "
+                            + attempts[w] + " respawns — giving up; see worker-"
+                            + w + ".out");
+                }
             }
+            Thread.sleep(2000);
         }
         long wallMs = System.currentTimeMillis() - started;
 
@@ -233,6 +270,7 @@ public final class BatchMain {
         ledgerEnd.put("ended", java.time.Instant.now().toString());
         ledgerEnd.put("wall_ms", wallMs);
         ledgerEnd.put("worker_failures", failures);
+        ledgerEnd.put("worker_respawns", respawns);
         ledgerEnd.putAll(outcome);
         try (RecordWriter ledger = new RecordWriter(batchRoot.resolve("batches.jsonl"))) {
             ledger.write(ledgerEnd);

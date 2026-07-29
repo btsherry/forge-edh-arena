@@ -54,6 +54,13 @@ import forge.game.zone.ZoneType;
  * short (the only half where that is legitimate); every in-loop recast is
  * fully pool-funded (tap_produces >= recast_cost) and stays exact.
  *
+ * <p>Battlefield-resident fodder SELF-PRIMES (Ben, 2026-07-29): moxen are
+ * played early as ramp toward the engine — the right line, per the deck's
+ * own primer — and once the engine is out, a setup cast's obliged trigger
+ * bounces our own mox back to hand, manufacturing the entry state instead
+ * of preserving it. Reserving fodder in hand was the wrong design and is
+ * explicitly retired (THIRDS-REVIEW addendum).
+ *
  * <p>The governor plans iterations from the outlet's declared lifegain
  * target against the LIVE storm count and judges completion by MEASURED
  * life, replanning at tranche boundaries; on completion it hands the seat
@@ -190,6 +197,12 @@ public final class CastBounceRunner {
             pendingFodder = false;
             bounceTarget = null;
             int pool = player.getManaPool().totalMana();
+            // reviewer nit (PR-chi round 3): an engine removed mid-half must
+            // read as the piece loss it is, not as a bounce mystery
+            if (AbilityResolver.findBattlefield(player, engineName) == null) {
+                return abort(turn, "piece_lost: '" + engineName
+                        + "' left the battlefield mid-half");
+            }
             if (!inHand(rockName)) {
                 return abort(turn, "bounce_unverified: '" + rockName
                         + "' not in HAND after the fodder cast (trigger mistargeted,"
@@ -212,6 +225,10 @@ public final class CastBounceRunner {
             bounceTarget = null;
             int pool = player.getManaPool().totalMana();
             Card rock = AbilityResolver.findBattlefield(player, rockName);
+            if (AbilityResolver.findBattlefield(player, engineName) == null) {
+                return abort(turn, "piece_lost: '" + engineName
+                        + "' left the battlefield mid-half");
+            }
             if (!inHand(fodderName)) {
                 return abort(turn, "bounce_unverified: '" + fodderName
                         + "' not in HAND after the rock recast");
@@ -252,10 +269,15 @@ public final class CastBounceRunner {
         }
         // ---- SETUP: resolve the template, deploy missing pieces ----
         if (state == State.SETUP) {
-            // the template piece resolves at ENTRY against the LIVE hand —
-            // the compiler pattern: the program lists candidates, the runner
-            // picks what is actually there; nothing there = quiet defer
+            bounceTarget = null; // recomputed per pass; a prime may re-arm it
+            // the template piece resolves at ENTRY against the live HAND
+            // first, then our own BATTLEFIELD (Ben, 2026-07-29: holding
+            // moxen back is bad strategy — they ramp toward the engine, and
+            // once the engine is out ANY of our casts can bounce our own
+            // mox back to hand; the entry state is MANUFACTURED, not
+            // preserved). Nothing in either zone = quiet defer.
             if (fodderName == null) {
+                outer:
                 for (JsonNode piece : program.path("pieces")) {
                     if (!piece.has("template")) {
                         continue;
@@ -263,7 +285,13 @@ public final class CastBounceRunner {
                     for (JsonNode cand : piece.path("resolve_from")) {
                         if (inHand(cand.asText())) {
                             fodderName = cand.asText();
-                            break;
+                            break outer;
+                        }
+                    }
+                    for (JsonNode cand : piece.path("resolve_from")) {
+                        if (AbilityResolver.findBattlefield(player, cand.asText()) != null) {
+                            fodderName = cand.asText();
+                            break outer;
                         }
                     }
                 }
@@ -288,9 +316,30 @@ public final class CastBounceRunner {
                     pilot.programDeferred(comboId);
                     return null;
                 }
+                // SELF-PRIME: if the fodder currently sits on OUR
+                // battlefield and the engine is already out, this setup cast
+                // fires the engine's trigger — oblige it to bounce our own
+                // fodder into hand (measured by the presence loop next pass:
+                // fodder in HAND ends the priming). The engine's own cast
+                // cannot prime (its trigger is not live until it resolves).
+                if (!inHand(fodderName)
+                        && AbilityResolver.findBattlefield(player, fodderName) != null
+                        && AbilityResolver.findBattlefield(player, engineName) != null
+                        && !card.equals(engineName)) {
+                    bounceTarget = fodderName;
+                }
                 return List.of(cast);
             }
             if (!inHand(fodderName)) {
+                if (AbilityResolver.findBattlefield(player, fodderName) != null) {
+                    // fodder on our battlefield with NO setup cast left to
+                    // prime with (everything already deployed): nothing to
+                    // spend, nothing to abort — defer for a turn that has a
+                    // primer. Honest v1 limit, recorded in THIRDS-REVIEW.
+                    finished = true;
+                    pilot.programDeferred(comboId);
+                    return null;
+                }
                 // present at entry, gone before the loop — intervention
                 return abort(turn, "piece_lost: fodder '" + fodderName + "' left HAND");
             }

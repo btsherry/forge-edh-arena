@@ -728,8 +728,19 @@ public final class ComboPilot {
         }
 
         for (ComboTracker.ComboStatus status : tracker.recompute(view).statuses()) {
-            if (!status.ready() || !status.fullySpecified()
-                    || attemptedThisTurn.contains(status.id())) {
+            // PR-psi: a TEMPLATE combo (Spellbook template_requirements —
+            // never `ready` in detection-only mode) becomes dispatchable
+            // once a COMPILED PROGRAM carries its template resolution: the
+            // compiler resolved the unnamed piece against the deck
+            // (resolve_from), and the runner re-verifies it against the
+            // LIVE game at entry, deferring quietly when it is absent.
+            // Found the hard way: 513-5034--46 — the deck's most popular
+            // Spellbook line — was structurally undispatchable, program or
+            // not, while its prose-prerequisite sibling 513-3682 fired.
+            // Non-program combos keep the old semantics exactly.
+            boolean dispatchable = status.ready()
+                    || (status.distance() == 0 && programPaths.containsKey(status.id()));
+            if (!dispatchable || attemptedThisTurn.contains(status.id())) {
                 continue;
             }
             if (firedShortcuts.contains(status.id())) {
@@ -743,7 +754,9 @@ public final class ComboPilot {
                 Integer firedAt = firedTurns.get(status.id());
                 int refireWindow = 2 * (view.opponents().size() + 1);
                 if (firedAt == null || view.turn() - firedAt < refireWindow) {
-                    ignore(status.id(), view.turn(), "mana_reserved");
+                    ignore(status.id(), view.turn(), "mana_reserved",
+                            Map.of("cause", "refire_lockout",
+                                    "fired_at", firedAt == null ? -1 : firedAt));
                     continue;
                 }
             }
@@ -794,7 +807,13 @@ public final class ComboPilot {
             if (!assembly.isEmpty() && assembly.get(0).isCast()
                     && view.manaPool() + view.untappedManaSources()
                             < executor.get().castCostEstimate(assembly.get(0).card())) {
-                ignore(status.id(), view.turn(), "mana_reserved");
+                ignore(status.id(), view.turn(), "mana_reserved",
+                        Map.of("cause", "first_cast_unaffordable",
+                                "first_cast", assembly.get(0).card(),
+                                "estimate", executor.get()
+                                        .castCostEstimate(assembly.get(0).card()),
+                                "pool", view.manaPool(),
+                                "untapped", view.untappedManaSources()));
                 continue;
             }
             firstReadyTurn.putIfAbsent(status.id(), view.turn());
@@ -1535,13 +1554,32 @@ public final class ComboPilot {
     }
 
     private void ignore(String comboId, int turn, String reason) {
+        ignore(comboId, turn, reason, null);
+    }
+
+    /**
+     * PLAY-OBSERVATIONS finding 2: chi30 measured 11 ready-combos entering
+     * 2+ turns late (worst +18), every one attributed to a bare
+     * "mana_reserved" — indistinguishable between a genuine mana wait and
+     * an estimate over-pricing the line. The detailed form carries the
+     * gate's own numbers so the NEXT batch adjudicates; the fix, if any,
+     * follows the measurement.
+     */
+    private void ignore(String comboId, int turn, String reason,
+            Map<String, Object> details) {
         if (Integer.valueOf(turn).equals(lastIgnoredTurn.get(comboId))) {
             return; // one decision record per combo per turn, not per priority
         }
         lastIgnoredTurn.put(comboId, turn);
-        events.accept(ArenaEvent.of("combo_ignored", turn, seat)
+        ArenaEvent e = ArenaEvent.of("combo_ignored", turn, seat)
                 .with("combo", comboId)
-                .with("reason", reason));
+                .with("reason", reason);
+        if (details != null) {
+            for (Map.Entry<String, Object> d : details.entrySet()) {
+                e = e.with(d.getKey(), d.getValue());
+            }
+        }
+        events.accept(e);
     }
 
     public String activeComboId() {

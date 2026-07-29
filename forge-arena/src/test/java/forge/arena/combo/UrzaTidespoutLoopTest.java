@@ -37,6 +37,11 @@ import forge.game.zone.ZoneType;
  * conversion downstream is the drill machinery's business and deliberately
  * NOT asserted here.
  *
+ * <p>PR-psi adds the SELF-PRIME entry (Ben's strategy correction): the
+ * fodder starts on OUR BATTLEFIELD — moxen are played early as ramp, and
+ * the Aetherflux setup cast's obliged trigger bounces our own mox home
+ * before the loop starts. The entry state is manufactured, not preserved.
+ *
  * <p>Urza comes from the COMMAND zone (the real commander object). Every
  * iteration must be MEASURED — the aborts list rides every failure message
  * so a counting-at-return phantom can never hide.
@@ -50,7 +55,12 @@ public class UrzaTidespoutLoopTest {
 
     static final class TidespoutBoardProbe implements GameAware {
         private Game game;
+        private final ZoneType fodderZone;
         private final AtomicBoolean applied = new AtomicBoolean();
+
+        TidespoutBoardProbe(ZoneType fodderZone) {
+            this.fodderZone = fodderZone;
+        }
 
         @Override
         public void onGameCreated(Game game) {
@@ -72,9 +82,12 @@ public class UrzaTidespoutLoopTest {
             for (String name : List.of("Tidespout Tyrant", "Sol Ring")) {
                 game.getAction().moveToPlay(card(name, p0), null, null);
             }
-            for (String name : List.of("Mox Amber", "Aetherflux Reservoir")) {
-                game.getAction().moveTo(ZoneType.Hand, card(name, p0), null, null);
+            if (fodderZone == ZoneType.Battlefield) {
+                game.getAction().moveToPlay(card("Mox Amber", p0), null, null);
+            } else {
+                game.getAction().moveTo(ZoneType.Hand, card("Mox Amber", p0), null, null);
             }
+            game.getAction().moveTo(ZoneType.Hand, card("Aetherflux Reservoir", p0), null, null);
             for (int i = 0; i < 8; i++) {
                 game.getAction().moveToPlay(card("Island", p0), null, null);
             }
@@ -88,8 +101,7 @@ public class UrzaTidespoutLoopTest {
         }
     }
 
-    @Test
-    public void theCastBounceLoopStormsToTheLifegainTarget() throws Exception {
+    private List<ArenaEvent> play(ZoneType fodderZone) throws Exception {
         System.setProperty("arena.stall.dir",
                 Files.createTempDirectory("urza-tidespout-stalls").toString());
         Path dossier = Path.of("decks", "urza-lord-high-artificer", "dossier");
@@ -101,27 +113,37 @@ public class UrzaTidespoutLoopTest {
         EngineFacade.playCommanderGame(
                 List.of(SeatSpec.comboAware(new File("decks/urza-lord-high-artificer.dck"), dossier),
                         SeatSpec.goldfish(new File("decks/giada-font-of-hope.dck"))),
-                42L, new ArenaLimits(14, 400, 2000), sink, new TidespoutBoardProbe());
+                42L, new ArenaLimits(14, 400, 2000), sink, new TidespoutBoardProbe(fodderZone));
+        return events;
+    }
 
+    static void assertLoopConverts(List<ArenaEvent> events, String combo) {
         List<ArenaEvent> plans = events.stream()
                 .filter(e -> e.t().equals("governor_plan")
-                        && "542-5034".equals(String.valueOf(e.fields().get("combo"))))
+                        && combo.equals(String.valueOf(e.fields().get("combo"))))
                 .toList();
         List<String> aborts = events.stream()
                 .filter(e -> e.t().equals("program_abort")
-                        && "542-5034".equals(String.valueOf(e.fields().get("combo"))))
+                        && combo.equals(String.valueOf(e.fields().get("combo"))))
                 .map(e -> String.valueOf(e.fields())).toList();
         List<ArenaEvent> completes = events.stream()
                 .filter(e -> e.t().equals("program_complete")
-                        && "542-5034".equals(String.valueOf(e.fields().get("combo"))))
+                        && combo.equals(String.valueOf(e.fields().get("combo"))))
                 .toList();
         long iterations = events.stream()
                 .filter(e -> e.t().equals("outlet_drill")
                         && "cast_bounce".equals(String.valueOf(e.fields().get("kind"))))
                 .count();
 
-        assertTrue("the governor must plan the storm (plans=" + plans.size()
-                + ") aborts=" + aborts + " events="
+        assertTrue("the governor must plan the storm for " + combo
+                + " (plans=" + plans.size() + ") aborts=" + aborts
+                + " all_plans=" + events.stream()
+                        .filter(e -> e.t().equals("governor_plan"))
+                        .map(e -> String.valueOf(e.fields().get("combo"))).toList()
+                + " all_entries=" + events.stream()
+                        .filter(e -> e.t().equals("line_entered"))
+                        .map(e -> String.valueOf(e.fields().get("combo"))).toList()
+                + " events="
                 + events.stream().map(ArenaEvent::t).distinct().toList(),
                 !plans.isEmpty());
         assertTrue("the loop must run MEASURED cast-bounce iterations (iterations="
@@ -132,10 +154,28 @@ public class UrzaTidespoutLoopTest {
         // measured (spend-proof + zone-proof), so the program that completed
         // must have no aborts on its record — an abort here means a half
         // failed verification and the run should not have counted
-        assertTrue("542-5034 must complete without aborts, got " + aborts,
+        assertTrue(combo + " must complete without aborts, got " + aborts,
                 aborts.isEmpty());
         var f = completes.get(0).fields();
         assertTrue("completion must record the measured lifegain, got " + f,
                 ((Number) f.get("life_gained")).intValue() >= 150);
+    }
+
+    @Test
+    public void theCastBounceLoopStormsToTheLifegainTarget() throws Exception {
+        assertLoopConverts(play(ZoneType.Hand), "542-5034");
+    }
+
+    /**
+     * PR-psi: fodder on OUR BATTLEFIELD at entry — the runner must resolve
+     * the template against the battlefield and SELF-PRIME it home with the
+     * Aetherflux setup cast's obliged bounce, then loop to completion
+     * exactly as if the mox had been held in hand. Holding it back was the
+     * wrong strategy (Ben, 2026-07-29; the deck primer's own T0-2 line);
+     * this test pins the right one.
+     */
+    @Test
+    public void battlefieldFodderSelfPrimesAndConverts() throws Exception {
+        assertLoopConverts(play(ZoneType.Battlefield), "542-5034");
     }
 }

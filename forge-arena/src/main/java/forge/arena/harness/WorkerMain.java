@@ -23,10 +23,49 @@ import forge.arena.report.RunLogRenderer;
  *
  * <p>Usage: {@code WorkerMain <runDir> <workerId> <numWorkers>} — reads
  * {@code <runDir>/worker-config.json} written by BatchMain.
+ *
+ * <p>RESUME-SAFE (the omega100 lesson): a worker JVM killed by a host-level
+ * fault (the measured Homebrew-JDK GC crash family) used to take its whole
+ * remaining stride of games with it — a 100-game batch could only finish
+ * short. On start the worker now reads the shared game-records ledger and
+ * SKIPS every game_index already recorded, so BatchMain can respawn a dead
+ * worker and the replacement replays only what is genuinely missing
+ * (including the one game in flight at the crash — its partial event file
+ * is not a record, so it is replayed).
  */
 public final class WorkerMain {
 
     private WorkerMain() {
+    }
+
+    /** game_index values already in the shared ledger (crash-respawn resume). */
+    static java.util.Set<Integer> recordedGames(Path runDir) {
+        java.util.Set<Integer> done = new java.util.HashSet<>();
+        File ledger = runDir.resolve("game-records.jsonl").toFile();
+        if (!ledger.exists()) {
+            return done;
+        }
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            for (String line : java.nio.file.Files.readAllLines(ledger.toPath())) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                try {
+                    JsonNode row = mapper.readTree(line);
+                    if (row.has("game_index")) {
+                        done.add(row.get("game_index").asInt());
+                    }
+                } catch (Exception torn) {
+                    // a torn tail line from the crashed writer is not a record
+                }
+            }
+        } catch (java.io.IOException unreadable) {
+            // no resume info — replaying a stride only duplicates records,
+            // so fail loudly rather than guess
+            throw new IllegalStateException("resume scan failed: " + ledger, unreadable);
+        }
+        return done;
     }
 
     public static void main(String[] args) throws Exception {
@@ -59,7 +98,11 @@ public final class WorkerMain {
                 RunLogRenderer.Tier.DEFAULT);
                 RecordWriter records = new RecordWriter(runDir.resolve("game-records.jsonl"))) {
             RunConfig runConfig = new RunConfig(seedBase, seats, limits, runDir, runLog);
+            java.util.Set<Integer> done = recordedGames(runDir);
             for (int i = workerId; i < games; i += numWorkers) {
+                if (done.contains(i)) {
+                    continue; // recorded before a respawn — never replayed
+                }
                 GameRecord record = ArenaRunner.runOne(runConfig, i);
                 records.write(record.toJsonMap());
             }

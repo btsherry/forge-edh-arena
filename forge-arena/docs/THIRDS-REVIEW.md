@@ -255,3 +255,74 @@ These three cards are entry accelerants for the whole family, not roles.
 
 Items 1–2 raise fire rates with zero code. Item 3 is the single extension
 with the largest combined coverage gain across both decks.
+
+---
+
+## Addendum — PR-psi (2026-07-29): Ben's strategy correction, encoded
+
+Ben, verbatim intent: *holding back moxen is not a good strategy — get the
+mana base down as fast as possible to cast the engine; any cast after that
+puts the mox back in your hand; with a clone, Lithoform Engine, or
+Hullbreaker Horror alongside you get TWO triggers per spell — pick up your
+own piece with one and peel the opponents' board with the other.*
+
+**1. Retraction.** The PR-chi summary floated a reserved-cast veto to keep
+fodder in hand. WRONG, and the deck's own primer already said so (T0-2:
+play the fast mana immediately). The entry state is MANUFACTURED, not
+preserved: once the engine is out, a setup cast's obliged trigger bounces
+our own battlefield mox home. Nothing anywhere reserves fodder; the idea
+is retired.
+
+**2. Self-prime entry — BUILT.** The fodder template now resolves against
+hand first, then OUR battlefield; a battlefield-resident fodder is primed
+home by the first setup cast made with the engine already out (measured:
+`UrzaTidespoutLoopTest.battlefieldFodderSelfPrimesAndConverts`). Honest v1
+limit: when every setup piece is already deployed there is no primer cast
+left and the program defers quietly — a "prime with any castable spell in
+hand" generalization is the queued follow-up.
+
+**3. Hullbreaker family — COMPILED (upgrading the NEEDS RUNNER WORK
+verdict above).** The mode-control this review predicted turned out to be
+one seam: `CharmEffect.makeChoices` routes every charm mode decision
+through the controller's `chooseModeForAbility`, and the override picks
+the mode that CAN TARGET the obliged card — structurally, no mode names in
+code. Programs: 513-5034--46 (Sol Ring — the deck's most popular Spellbook
+line, pop 330k), 513-2364--47 (Mana Vault), 513-3682 (Mox Amber as ROCK —
+the zero-mana entry this review recommended, with Urza cast as setup to
+satisfy ManaReflected's legendary requirement). All three ship with the
+recommended fodder order (Lotus Petal / Welding Jar in, Chrome Mox last,
+Mox Diamond / Everflowing Chalice excluded); the 542 programs' lists are
+unchanged pending Ben's approval of recommendation 1. Precision on the
+ranked list's item 3: this seam handles obliged TRIGGER charms
+(mode + target). Akroma's Will is a CAST-type charm with an untargeted
+team grant — it still needs the cast-grant runner extension and is NOT
+unlocked by this work.
+
+**4. Peel-scope distinction (Ben's note, script-verified).** Tidespout's
+trigger returns ANY permanent (`ValidTgts$ Permanent` — lands included:
+repeated casts can remove an opponent's entire board, mana base and all).
+Hullbreaker's bounce mode is `ValidTgts$ Permanent.nonLand` plus a
+spell-return mode — no lands. With BOTH engines out, each cast fires two
+triggers: the program obliges its own engine's trigger onto the loop
+piece, and the OTHER engine's trigger falls through to stock targeting —
+which bounces opponents' best permanents. The peel therefore works TODAY
+for mixed engines with zero additional code. A same-name surplus (Glasspool
+Mimic copying Tidespout) currently obliges both triggers onto the same
+piece and the second fizzles safely; steering surplus same-name triggers
+at threat-scored opponent permanents is the queued refinement.
+
+**5. Dispatch gap found and fixed while compiling the family.** Spellbook
+combos that carry structured `template_requirements` (513-5034--46,
+513-2364--47) are NEVER `ready` in detection-only mode — `fullySpecified`
+is false — so no program for them could ever dispatch: the deck's most
+popular combo was structurally unreachable, while its prose-prerequisite
+sibling 513-3682 fired. The pilot now dispatches a template combo when its
+NAMED pieces are all reachable AND a compiled program carries the template
+resolution; the runner re-verifies the template live and defers quietly
+when it is absent. Non-program combos keep the old semantics exactly.
+
+**6. Recorded for the backlog.** Gate 4's fixture derivation reads
+`pieces[].card` and template pieces have none — the next Urza prep run
+would derive fixtures with empty battlefield entries for the six
+cast_bounce programs. The gate needs template resolution (pick the first
+resolve_from card) before the next `arena prep`.

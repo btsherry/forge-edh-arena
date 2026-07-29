@@ -296,6 +296,19 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         : null;
                 forge.game.card.Card target = obliged == null ? null
                         : AbilityResolver.findBattlefield(player, obliged);
+                // PR-psi: an obliged CHARM trigger (Hullbreaker Horror's
+                // "choose up to one") needs its mode chosen before any
+                // targeting sub-ability exists. CharmEffect.makeChoices
+                // routes through our chooseModeForAbility override below,
+                // which picks the mode that can target the obliged card —
+                // structurally, no mode names in code. A charm whose choice
+                // fails falls to stock (MinCharmNum 0: stock may decline;
+                // the runner's zone-proof measures the consequence).
+                if (target != null && sa.getApi() == forge.game.ability.ApiType.Charm
+                        && !forge.game.ability.effects.CharmEffect.makeChoices(sa)) {
+                    rest.add(sa);
+                    continue;
+                }
                 // the wrapper itself may not target — walk to the
                 // (sub)ability that does
                 SpellAbility targeting = sa;
@@ -313,6 +326,43 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             if (!rest.isEmpty()) {
                 super.orderAndPlaySimultaneousSa(rest);
             }
+        }
+
+        /**
+         * PR-psi: mode choice for an obliged CHARM trigger. Forge routes
+         * every charm mode decision through this controller method (
+         * {@code CharmEffect.makeChoices -> chooseModeForAbility}); while a
+         * cast-bounce program is live and the trigger's source carries the
+         * program's obligation, the chosen mode is the one that CAN TARGET
+         * the obliged card — for Hullbreaker Horror that is structurally
+         * "return target nonland permanent" over the spell-return mode,
+         * with no mode names or indices in code. Everything else keeps
+         * stock behavior, including declining (MinCharmNum 0).
+         */
+        @Override
+        public List<forge.game.spellability.AbilitySub> chooseModeForAbility(
+                SpellAbility sa, List<forge.game.spellability.AbilitySub> possible,
+                int min, int num, boolean allowRepeat) {
+            if (activeCastBounce != null && sa != null && sa.isTrigger()
+                    && sa.getHostCard() != null) {
+                String obliged = activeCastBounce.obligedTargetForPhase(
+                        sa.getHostCard().getName());
+                forge.game.card.Card target = obliged == null ? null
+                        : AbilityResolver.findBattlefield(player, obliged);
+                if (target != null) {
+                    for (forge.game.spellability.AbilitySub sub : possible) {
+                        if (sub.usesTargeting() && sub.canTarget(target)) {
+                            // MUTABLE list — CharmEffect.chainAbilities sorts
+                            // the returned list in place (List.of() throws)
+                            java.util.List<forge.game.spellability.AbilitySub> chosen =
+                                    new java.util.ArrayList<>();
+                            chosen.add(sub);
+                            return chosen;
+                        }
+                    }
+                }
+            }
+            return super.chooseModeForAbility(sa, possible, min, num, allowRepeat);
         }
 
                 /**
@@ -350,6 +400,17 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         /** The next drill activation, or null (disarms when done/failed). */
         private List<SpellAbility> drillStep(int turn) {
             if (activeDrill == null) {
+                return null;
+            }
+            // PLAY-OBSERVATIONS finding 3: ONE shot in flight at a time. The
+            // drill used to re-activate every priority window while its own
+            // shot sat on the stack — measured: four stacked PayLife<50>
+            // shots against a 40-life opponent (150 life of overkill), then
+            // 196 refused windows to the bound before the stack resolved.
+            // Waiting for resolution lets the kill be SEEN before the next
+            // cost is paid; opponent interaction landing mid-drill still
+            // works (the wait is the step model's interrupt window).
+            if (!getGame().getStack().isEmpty()) {
                 return null;
             }
             // PR-77: lifelink is granted "until end of turn". The drill runs
@@ -1256,7 +1317,25 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
          * conservative lower bound — trample, menace, and flash blockers
          * all shift it in known directions; guarantee beats greed.
          */
+        /**
+         * PLAY-OBSERVATIONS finding 1 (chi30 game 17): the all-at-one-head
+         * rule sent 50 power into a 9-life head — 41 damage of overkill —
+         * and cleared the table in three combats where two sufficed. The
+         * order now PARTITIONS: after the first head's worst-case-lethal
+         * allocation is reserved, the remaining pool is tested against the
+         * next head under the same worst-case rule, and only INDIVIDUALLY
+         * guaranteed allocations split off. Leftover power piles onto the
+         * first head as trick-buffer, so the single-head case is exactly
+         * the old behavior. Greedy biggest-first per head — suboptimal
+         * partitions are possible, but every claimed kill keeps the PR-34
+         * guarantee semantics (worst case: the head's untapped creatures
+         * absorb the TOP-B allocated attackers).
+         */
+        private java.util.Map<Integer, List<forge.game.card.Card>> lethalPartition;
+        private int lethalPartitionTurn = -1;
+
         private ComboPilot.CombatOrder lethalAlphaOrder(int turn) {
+            lethalPartition = null;
             List<forge.game.card.Card> ready = new java.util.ArrayList<>();
             for (forge.game.card.Card c : player.getCreaturesInPlay()) {
                 if (forge.game.combat.CombatUtil.canAttack(c)) {
@@ -1273,38 +1352,80 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 }
             }
             alive.sort(java.util.Comparator.comparingInt(Player::getLife));
+            // biggest-first pool; each head consumes its allocation
+            List<forge.game.card.Card> pool = new java.util.ArrayList<>(ready);
+            pool.sort(java.util.Comparator.comparingInt(
+                    forge.game.card.Card::getNetPower).reversed());
+            java.util.Map<Integer, List<forge.game.card.Card>> partition =
+                    new java.util.LinkedHashMap<>();
+            List<Player> killedHeads = new java.util.ArrayList<>();
             for (Player opp : alive) {
-                List<Integer> powers = new java.util.ArrayList<>();
-                for (forge.game.card.Card c : ready) {
-                    if (forge.game.combat.CombatUtil.canAttack(c, opp)) {
-                        powers.add(Math.max(0, c.getNetPower()));
-                    }
-                }
-                powers.sort(java.util.Collections.reverseOrder());
                 int blockers = 0;
                 for (forge.game.card.Card c : opp.getCreaturesInPlay()) {
                     if (!c.isTapped()) {
                         blockers++;
                     }
                 }
-                int guaranteed = 0;
-                for (int i = blockers; i < powers.size(); i++) {
-                    guaranteed += powers.get(i);
-                }
-                guaranteed = amplified(guaranteed);
-                if (guaranteed >= opp.getLife() && guaranteed > 0) {
-                    List<Integer> killOrder = new java.util.ArrayList<>();
-                    killOrder.add(opp.getId());
-                    for (Player p : alive) {
-                        if (p != opp) {
-                            killOrder.add(p.getId());
+                List<forge.game.card.Card> alloc = new java.util.ArrayList<>();
+                int allocatedBeyondAbsorbers = 0;
+                boolean lethal = false;
+                for (forge.game.card.Card c : pool) {
+                    if (!forge.game.combat.CombatUtil.canAttack(c, opp)) {
+                        continue;
+                    }
+                    alloc.add(c);
+                    if (alloc.size() > blockers) {
+                        // pool is power-desc, so alloc is too: the first B
+                        // are the worst-case absorbers, everything after
+                        // them is guaranteed through
+                        allocatedBeyondAbsorbers += Math.max(0, c.getNetPower());
+                        int guaranteed = amplified(allocatedBeyondAbsorbers);
+                        if (guaranteed >= opp.getLife() && guaranteed > 0) {
+                            lethal = true;
+                            break;
                         }
                     }
-                    pilot.reportLethalAlpha(turn, opp.getId(), guaranteed, opp.getLife());
-                    return new ComboPilot.CombatOrder("LETHAL_ALPHA", killOrder);
+                }
+                if (lethal) {
+                    partition.put(opp.getId(), alloc);
+                    killedHeads.add(opp);
+                    pool.removeAll(alloc);
                 }
             }
-            return null;
+            if (killedHeads.isEmpty()) {
+                return null;
+            }
+            // leftover, non-guaranteeing power piles onto the FIRST head as
+            // buffer against tricks — with one guaranteed head this is
+            // byte-for-byte the old all-in behavior
+            Player head0 = killedHeads.get(0);
+            partition.get(head0.getId()).addAll(pool);
+            List<Integer> killOrder = new java.util.ArrayList<>();
+            for (Player p : killedHeads) {
+                killOrder.add(p.getId());
+            }
+            for (Player p : alive) {
+                if (!killOrder.contains(p.getId())) {
+                    killOrder.add(p.getId());
+                }
+            }
+            int head0Blockers = 0;
+            for (forge.game.card.Card c : head0.getCreaturesInPlay()) {
+                if (!c.isTapped()) {
+                    head0Blockers++;
+                }
+            }
+            List<forge.game.card.Card> alloc0 = partition.get(head0.getId());
+            alloc0.sort(java.util.Comparator.comparingInt(
+                    forge.game.card.Card::getNetPower).reversed());
+            int beyond = 0;
+            for (int i = head0Blockers; i < alloc0.size(); i++) {
+                beyond += Math.max(0, alloc0.get(i).getNetPower());
+            }
+            lethalPartition = partition;
+            lethalPartitionTurn = turn;
+            pilot.reportLethalAlpha(turn, head0.getId(), amplified(beyond), head0.getLife());
+            return new ComboPilot.CombatOrder("LETHAL_ALPHA", killOrder);
         }
 
         /**
@@ -1326,6 +1447,47 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             }
             if (targets.isEmpty()) {
                 return false;
+            }
+            // PLAY-OBSERVATIONS finding 1: a LETHAL_ALPHA order computed
+            // with a multi-head partition executes that exact partition —
+            // each guaranteed head gets its worst-case-lethal allocation
+            // instead of the whole board piling onto head[0]
+            if ("LETHAL_ALPHA".equals(order.route()) && lethalPartition != null
+                    && lethalPartitionTurn == getGame().getPhaseHandler().getTurn()) {
+                java.util.Map<Integer, List<forge.game.card.Card>> plan = lethalPartition;
+                lethalPartition = null;
+                boolean anyPlanned = false;
+                for (java.util.Map.Entry<Integer, List<forge.game.card.Card>> e
+                        : plan.entrySet()) {
+                    Player head = null;
+                    for (Player p : targets) {
+                        if (p.getId() == e.getKey()) {
+                            head = p;
+                        }
+                    }
+                    if (head == null) {
+                        continue; // head died between order and declaration
+                    }
+                    for (forge.game.card.Card c : e.getValue()) {
+                        if (forge.game.combat.CombatUtil.canAttack(c, head)) {
+                            combat.addAttacker(c, head);
+                            anyPlanned = true;
+                        } else {
+                            for (Player alt : targets) {
+                                if (forge.game.combat.CombatUtil.canAttack(c, alt)) {
+                                    combat.addAttacker(c, alt);
+                                    anyPlanned = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (anyPlanned) {
+                    return true;
+                }
+                // partition unexecutable (mass removal mid-window): fall
+                // through to the generic assignment below
             }
             List<forge.game.card.Card> attackers = new java.util.ArrayList<>();
             for (forge.game.card.Card c : player.getCreaturesInPlay()) {
