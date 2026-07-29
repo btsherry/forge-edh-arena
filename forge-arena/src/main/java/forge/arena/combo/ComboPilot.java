@@ -187,10 +187,14 @@ public final class ComboPilot {
      * the programs themselves, never from code.
      */
     private Set<String> programPieces = Set.of();
+    /** PR-aa: each program's declared conversion OUTLET (Aetherflux class)
+     *  — from the program JSONs, never from code. */
+    private Set<String> programOutlets = Set.of();
 
     public void setProgramPaths(Map<String, String> paths) {
         this.programPaths = paths == null ? Map.of() : paths;
         Set<String> pieces = new HashSet<>();
+        Set<String> outlets = new HashSet<>();
         for (String path : this.programPaths.values()) {
             try {
                 com.fasterxml.jackson.databind.JsonNode program =
@@ -202,11 +206,17 @@ public final class ComboPilot {
                         pieces.add(card);
                     }
                 }
+                String outlet = program.path("outlet").asText(
+                        program.path("sink").path("outlet").asText(""));
+                if (!outlet.isEmpty()) {
+                    outlets.add(outlet);
+                }
             } catch (Exception unreadable) {
                 // the runner aborts loudly on use; nothing to do here
             }
         }
         this.programPieces = pieces;
+        this.programOutlets = outlets;
     }
 
     /**
@@ -479,6 +489,32 @@ public final class ComboPilot {
      */
     public List<TutorRanker.Ranked> rankTutor(String source, List<String> options, SeatView view) {
         List<TutorRanker.Ranked> ranked = tutorRanker.rank(options, view, tutorUrgency(view));
+        // PR-aa (omega100: 104 cast_bounce entries deferred quietly on the
+        // outlet gate — engines assembled, Aetherflux a 1-of nowhere in
+        // reach): when any program PIECE is already on our battlefield and
+        // a declared program OUTLET is in neither hand nor battlefield,
+        // fetching that outlet outranks everything — it is the difference
+        // between a durdle and a kill. Names from program JSONs only.
+        if (!programOutlets.isEmpty()
+                && view.cardsIn(SeatView.Zone.BATTLEFIELD).stream()
+                        .anyMatch(programPieces::contains)) {
+            Set<String> reach = new java.util.HashSet<>(view.cardsIn(SeatView.Zone.HAND));
+            reach.addAll(view.cardsIn(SeatView.Zone.BATTLEFIELD));
+            for (String option : options) {
+                if (programOutlets.contains(option) && !reach.contains(option)) {
+                    List<TutorRanker.Ranked> boosted = new java.util.ArrayList<>();
+                    boosted.add(new TutorRanker.Ranked(option, 0.99,
+                            "program outlet missing while pieces deployed (PR-aa)"));
+                    for (TutorRanker.Ranked r : ranked) {
+                        if (!r.card().equals(option)) {
+                            boosted.add(r);
+                        }
+                    }
+                    ranked = boosted;
+                    break;
+                }
+            }
+        }
         if (ranked.isEmpty() || ranked.get(0).score() <= 0) {
             return List.of();
         }
