@@ -43,8 +43,13 @@ public class PurphorosCastRecurTest {
     }
 
     static final class RecurBoardProbe implements GameAware {
+        private final boolean useBirgi;
         private Game game;
         private final AtomicBoolean applied = new AtomicBoolean();
+
+        RecurBoardProbe(boolean useBirgi) {
+            this.useBirgi = useBirgi;
+        }
 
         @Override
         public void onGameCreated(Game game) {
@@ -66,10 +71,16 @@ public class PurphorosCastRecurTest {
                     game.getAction().moveToPlay(c, null, null);
                 }
             }
-            forge.game.card.Card steamKin = card("Runaway Steam-Kin", p0);
-            game.getAction().moveToPlay(steamKin, null, null);
-            steamKin.addCounterInternal(forge.game.card.CounterEnumType.P1P1, 3, p0, false,
-                    null, null);
+            if (useBirgi) {
+                // Ben's paper line — Birgi's per-cast {R} makes the recast
+                // break-even every single cast (no counter cycle)
+                game.getAction().moveToPlay(card("Birgi, God of Storytelling", p0), null, null);
+            } else {
+                forge.game.card.Card steamKin = card("Runaway Steam-Kin", p0);
+                game.getAction().moveToPlay(steamKin, null, null);
+                steamKin.addCounterInternal(forge.game.card.CounterEnumType.P1P1, 3, p0, false,
+                        null, null);
+            }
             game.getAction().moveToPlay(card("Grinning Ignus", p0), null, null);
             for (int i = 0; i < 6; i++) {
                 game.getAction().moveToPlay(card("Mountain", p0), null, null);
@@ -86,6 +97,15 @@ public class PurphorosCastRecurTest {
 
     @Test
     public void theIgnusSteamKinLoopKillsTheTable() throws Exception {
+        runVariant(false, "411-3101");
+    }
+
+    @Test
+    public void theIgnusBirgiLoopKillsTheTable() throws Exception {
+        runVariant(true, "ben-ignus-birgi");
+    }
+
+    private void runVariant(boolean useBirgi, String comboId) throws Exception {
         System.setProperty("arena.stall.dir",
                 Files.createTempDirectory("purph-castrecur-stalls").toString());
         Path dossier = Path.of("decks", "purphoros-god-of-the-forge", "dossier");
@@ -94,11 +114,11 @@ public class PurphorosCastRecurTest {
         ArenaGameResult result = EngineFacade.playCommanderGame(
                 List.of(SeatSpec.comboAware(new File("decks/purphoros-god-of-the-forge.dck"), dossier),
                         SeatSpec.goldfish(new File("decks/giada-font-of-hope.dck"))),
-                42L, new ArenaLimits(14, 400, 2000), sink, new RecurBoardProbe());
+                42L, new ArenaLimits(14, 400, 2000), sink, new RecurBoardProbe(useBirgi));
 
         List<ArenaEvent> plans = events.stream()
                 .filter(e -> e.t().equals("governor_plan")
-                        && "411-3101".equals(String.valueOf(e.fields().get("combo"))))
+                        && comboId.equals(String.valueOf(e.fields().get("combo"))))
                 .toList();
         List<String> aborts = events.stream()
                 .filter(e -> e.t().equals("program_abort"))

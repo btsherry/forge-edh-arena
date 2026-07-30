@@ -247,7 +247,7 @@ public final class EngineFacade {
         final forge.arena.combo.RoutePlan routePlan;
         final java.util.Map<String, Double> tutorWeights;
         try {
-            defs = forge.arena.combo.ComboDef.load(seat.dossierDir().resolve("combos.json"));
+            defs = forge.arena.combo.ComboDef.loadWithDiscovered(seat.dossierDir());
             bindings = forge.arena.combo.ExecutorBindings.load(
                     forge.arena.combo.ExecutorBindings.defaultPath())
                     // PR-48: the deck's own generated wipe+shield pairs
@@ -329,7 +329,7 @@ public final class EngineFacade {
             java.util.function.Consumer<forge.arena.report.ArenaEvent> eventSink) {
         try {
             java.util.List<forge.arena.combo.ComboDef> defs =
-                    forge.arena.combo.ComboDef.load(seat.dossierDir().resolve("combos.json"));
+                    forge.arena.combo.ComboDef.loadWithDiscovered(seat.dossierDir());
             java.util.function.Consumer<forge.arena.report.ArenaEvent> sink =
                     eventSink != null ? eventSink : event -> {
                     };
