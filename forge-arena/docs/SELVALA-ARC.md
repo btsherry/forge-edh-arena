@@ -108,3 +108,9 @@ Genesis Wave force-cast (#1); Omnath (AI:RemoveDeck:All, manual green retention)
 Axis A = untap mana engine online? Axis B = untapper artifact present? A&B->execute; A-only->dig for artifact (Genesis Hydra/Inventors' Fair, NOT creature tutors); B-only/neither->tutor a power>=6 strict-max body; no-infinite-but-high-ceiling->storm-dig into Genesis Wave X~=ceiling-3. Median goldfish T5.
 
 ## Next: PHASE 3 — planning (Fable): spec the anchor 527-2645/527-2816 + extensions A & B concretely, then check in.
+
+## CORRECTION (Ben, 2026-07-30) — trample is BROADLY available; research was wrong
+Ben challenged "Rhonas is the only trample source." Verified from scripts:
+- 8 BUILT-IN tramplers: Defiler of Vigor, Frenzied Baloth, Goldvein Hydra, Managorger Hydra, Ojer Kaslem, Phyrexian Dreadnought, Sheltering Ancient, Surrak and Goreclaw.
+- 3 GRANT trample to your team: Craterhoof Behemoth (KW$ Trample to all your creatures + X/+X), Garruk Wildspeaker (ult), Rhonas.
+Outlet-tree corrections: (1) Craterhoof from hand IS a trample overrun (upgrade its ranking — it was wrongly gated as no-trample). (2) Finale->Craterhoof IS trample (Finale's OWN pump grants none, but the fetched Craterhoof grants the whole board trample + X/+X). (3) The "wide board / Selvala-huge needs Rhonas" caveat is largely dissolved — trample is available from 8 natives + 3 grants; only making SELVALA HERSELF (commander, no native trample) connect still needs a grant, of which there are now three, not one.
