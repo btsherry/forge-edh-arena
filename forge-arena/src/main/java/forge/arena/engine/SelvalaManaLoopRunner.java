@@ -88,6 +88,9 @@ public final class SelvalaManaLoopRunner {
     private int poolAtCycleStart = -1;
     private boolean pendingMeasure;
     private int settleWait;
+    /** a one-shot untap pass to ready a producer stock tapped before entry. */
+    private boolean normalizing;
+    private int normalizeAttempts;
     /** greatest power at THIS cycle's tap — the X Selvala actually produced. */
     private int xAtCycleTap = -1;
 
@@ -299,42 +302,54 @@ public final class SelvalaManaLoopRunner {
         }
 
         if (cyclePhase == 0) {
-            // phase 0 — tap the producer for X. It must be untapped (the
-            // previous cycle's measure proved it) and not summoning-sick.
+            // phase 0 — tap the producer for X. If it comes in TAPPED (stock
+            // AI taps mana sources like Cradle/Weaver/Fanatic before the combo
+            // fires), run the untap sequence once as a NORMALIZATION pass (no
+            // tap, no measure) to ready it, rather than aborting.
             if (producer.isTapped()) {
-                return abort(turn, "producer_tapped at cycle start (untap failed?)");
+                if (normalizeAttempts >= 2) {
+                    return abort(turn, "producer_stuck_tapped after "
+                            + normalizeAttempts + " untap attempts");
+                }
+                normalizeAttempts++;
+                normalizing = true;
+                cyclePhase = 1;
+                // fall through to the untap block below
+            } else {
+                normalizeAttempts = 0;
+                poolAtCycleStart = pool;
+                xAtCycleTap = computeYield();
+                SpellAbility tap = AbilityResolver.resolve(
+                        player, producerCard, activateCost, List.of());
+                // the tap's own coloured cost ({G} for Selvala) must be
+                // PAYABLE from the banked pool; resolve() finds the ability but
+                // does not price it, so a silently-unpayable tap would fizzle
+                if (tap == null || !forge.ai.ComputerUtilCost.canPayCost(tap, player, false)) {
+                    pilot.observe(ArenaEvent.of("program_deferred", turn, seat)
+                            .with("combo", comboId).with("iterations", iterations)
+                            .with("pool", pool)
+                            .with("green", player.getManaPool()
+                                    .getAmountOfColor(forge.card.MagicColor.GREEN))
+                            .with("resolvable", tap != null)
+                            .with("reason", "producer_tap_unpayable"));
+                    finished = true;
+                    pilot.programDeferred(comboId);
+                    return null;
+                }
+                // Selvala/Weaver produce "any combination of colors" — the
+                // controller banks GREEN at RESOLUTION (chooseColor/
+                // specifyManaCombo overrides) so the pool pays the producer's
+                // own coloured activation and Genesis Wave's {G}{G}{G}; setting
+                // it on the pre-play SA is lost when Forge clones onto the stack.
+                cyclePhase = 1;
+                return List.of(tap);
             }
-            poolAtCycleStart = pool;
-            xAtCycleTap = computeYield();
-            SpellAbility tap = AbilityResolver.resolve(player, producerCard, activateCost, List.of());
-            // the tap's own colored cost ({G} for Selvala) must be PAYABLE
-            // from the banked pool; resolve() finds the ability but does not
-            // price it, so a silently-unpayable tap would just fizzle
-            if (tap == null || !forge.ai.ComputerUtilCost.canPayCost(tap, player, false)) {
-                pilot.observe(ArenaEvent.of("program_deferred", turn, seat)
-                        .with("combo", comboId).with("iterations", iterations)
-                        .with("pool", pool)
-                        .with("green", player.getManaPool().getAmountOfColor(forge.card.MagicColor.GREEN))
-                        .with("resolvable", tap != null)
-                        .with("reason", "producer_tap_unpayable"));
-                // nothing spent: hand back for a better-funded turn
-                finished = true;
-                pilot.programDeferred(comboId);
-                return null;
-            }
-            // Selvala/Weaver produce "any combination of colors" — a human
-            // banks GREEN so the pool pays the producer's own {G} activation
-            // (and Genesis Wave's {G}{G}{G}). The colour is chosen at
-            // RESOLUTION by the controller (ComboAwareController overrides
-            // chooseColor/specifyManaCombo to bank neededColor() while this
-            // runner is active) — setting it on the pre-play SA is lost when
-            // Forge clones the ability onto the stack.
-            cyclePhase = 1;
-            return List.of(tap);
         }
 
-        // phase i — the i-th untap step, on its OWN card, targeting the
-        // producer where the ability targets (Staff's {3}{T} untaps Selvala).
+        // untap step — runs for cyclePhase >= 1, whether a normal cycle (after
+        // the producer tap) or a normalization pass. Each step is on its OWN
+        // card, targeting the producer where the ability targets (Staff's
+        // {3}{T} untaps Selvala; Satyr's {T} untaps Gaea's Cradle).
         JsonNode step = untapSequence.get(cyclePhase - 1);
         String stepCard = step.path("card").asText();
         String cost = step.path("cost").asText();
@@ -346,8 +361,14 @@ public final class SelvalaManaLoopRunner {
                     + (tgt != null ? " -> " + tgt : ""));
         }
         if (cyclePhase >= untapSequence.size()) {
-            pendingMeasure = true;
+            // sequence done. A normalization pass just readied the producer —
+            // no mana produced, no measure; a normal cycle now measures.
             cyclePhase = 0;
+            if (normalizing) {
+                normalizing = false;
+            } else {
+                pendingMeasure = true;
+            }
         } else {
             cyclePhase++;
         }
