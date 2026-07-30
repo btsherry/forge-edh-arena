@@ -1683,6 +1683,12 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             // draws themselves to death while already assembling lethal — the
             // strict-max draw-sequencing synergy. Scoped to Draw APIs during
             // the loop only, so normal draws stay intact.
+            // Decline our own OPTIONAL self-draw while the loop converts (a
+            // human never draws themselves toward decking mid-win). NOTE: the
+            // Genesis-Wave flip's real deck-out pressure is The Great Henge's
+            // MANDATORY "creature enters -> draw", which never routes here — so
+            // this only trims Selvala's own may-draw; the library_reserve is
+            // what actually absorbs the forced Henge draws.
             if (activeSelvalaLoop != null && sa != null
                     && sa.getApi() == forge.game.ability.ApiType.Draw) {
                 return false;

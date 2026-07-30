@@ -117,7 +117,8 @@ public final class SelvalaManaLoopRunner {
         JsonNode producer = loop != null ? loop.path("producer") : null;
         this.producerCard = producer != null ? producer.path("card").asText(null) : null;
         this.activateCost = producer != null ? producer.path("activate_cost").asText("{G}") : "{G}";
-        this.manaColor = producer != null ? producer.path("mana_color").asText("G") : "G";
+        String mc = producer != null ? producer.path("mana_color").asText("G") : "G";
+        this.manaColor = mc.isEmpty() ? "G" : mc; // asText returns "" for a present-but-empty field
         this.yieldModel = loop != null ? loop.path("yield_model").asText("POWER_CONSTANT") : "POWER_CONSTANT";
         this.rampPerCycle = loop != null ? loop.path("ramp_per_cycle").asInt(0) : 0;
         this.yieldConstant = loop != null ? loop.path("yield_constant").asInt(0) : 0;
@@ -128,7 +129,10 @@ public final class SelvalaManaLoopRunner {
                 untapSequence.add(step);
             }
         }
-        this.libraryReserve = p != null ? p.path("sink").path("library_reserve").asInt(10) : 10;
+        // default 35, not 10: the Genesis Wave flip forces ~one draw per
+        // nontoken creature via The Great Henge (mandatory), so a small reserve
+        // decks us out mid-win (measured). Programs may still override.
+        this.libraryReserve = p != null ? p.path("sink").path("library_reserve").asInt(35) : 35;
         if (producerCard == null || untapSequence.isEmpty()) {
             finished = true;
             pilot.observe(ArenaEvent.of("program_abort", game.getPhaseHandler().getTurn(), seat)
@@ -267,30 +271,30 @@ public final class SelvalaManaLoopRunner {
         if (pendingMeasure) {
             // MEASURED cycle completion: the producer came back UNTAPPED and
             // the pool moved by at least the model's expected net for the X
-            // Selvala produced THIS cycle. A ramping loop's early nets are
-            // negative — the expected number carries the sign, so a genuine
-            // stall (producer stuck tapped, untap countered) is still caught.
+            // produced THIS cycle (ramping nets carry a NEGATIVE sign during
+            // priming). NO settle grace: next()'s stack gate already absorbed
+            // every in-flight resolution, so a failed first measure is final
+            // (the parent ManaLoopRunner aborts on first failure too; a null
+            // return here on an empty stack would only pass priority, end the
+            // phase, and empty the very pool we are measuring). The
+            // tap-actually-happened check in the untap block catches the
+            // negative-net NO-OP that this pool test alone would pass.
             int expectedNet = xAtCycleTap - cycleCost;
-            if (!producer.isTapped() && pool >= poolAtCycleStart + expectedNet) {
-                pendingMeasure = false;
-                settleWait = 0;
-                iterations++;
-                xAtCycleTap = computeYield(); // ramps for the next cycle
-                pilot.observe(ArenaEvent.of("outlet_drill", turn, seat)
-                        .with("outlet", producerCard).with("kind", "mana_pair")
-                        .with("iteration", iterations)
-                        .with("pool", pool)
-                        .with("yield", xAtCycleTap)
-                        .with("own_life", player.getLife()));
-            } else if (settleWait < SETTLE_GRACE_WINDOWS) {
-                settleWait++;
-                return null;
-            } else {
+            if (producer.isTapped() || pool < poolAtCycleStart + expectedNet) {
                 return abort(turn, "cycle_incomplete: producer "
                         + (producer.isTapped() ? "TAPPED" : "untapped") + ", pool "
                         + poolAtCycleStart + "->" + pool + " (expected net " + expectedNet
                         + ") after cycle " + (iterations + 1));
             }
+            pendingMeasure = false;
+            iterations++;
+            xAtCycleTap = computeYield();
+            pilot.observe(ArenaEvent.of("outlet_drill", turn, seat)
+                    .with("outlet", producerCard).with("kind", "mana_pair")
+                    .with("iteration", iterations)
+                    .with("pool", pool)
+                    .with("yield", xAtCycleTap)
+                    .with("own_life", player.getLife()));
         }
 
         if (pool >= target) {
@@ -350,6 +354,18 @@ public final class SelvalaManaLoopRunner {
         // the producer tap) or a normalization pass. Each step is on its OWN
         // card, targeting the producer where the ability targets (Staff's
         // {3}{T} untaps Selvala; Satyr's {T} untaps Gaea's Cradle).
+        //
+        // At the FIRST untap step of a normal cycle the producer MUST be tapped
+        // — the phase-0 tap should have tapped it. If it is not, the tap
+        // fizzled (canPayCost prices the cost, not activation restrictions like
+        // Cursed Totem), no mana was produced, and continuing would false-
+        // complete the cycle on a negative-net measure. Not checked at later
+        // Staff steps (the producer is already untapped by then) or in a
+        // normalization pass (the producer is legitimately still tapped).
+        if (!normalizing && cyclePhase == 1 && !producer.isTapped()) {
+            return abort(turn, "producer_tap_failed: '" + producerCard
+                    + "' not tapped after its activation (blocked?)");
+        }
         JsonNode step = untapSequence.get(cyclePhase - 1);
         String stepCard = step.path("card").asText();
         String cost = step.path("cost").asText();
@@ -434,27 +450,35 @@ public final class SelvalaManaLoopRunner {
      */
     private SpellAbility chooseOutlet() {
         int library = player.getCardsIn(ZoneType.Library).size();
-        // 1) Genesis Wave — flip the deck onto the board (leave the reserve)
-        if (library > libraryReserve) {
+        int pool = player.getManaPool().totalMana();
+        // 1) Genesis Wave — flip the deck onto the board (leave the reserve).
+        // Only when the flip is MEANINGFUL (>=10 cards) and the pool can pay
+        // {X}{G}{G}{G}; a 1-card flip near the reserve boundary is not a win.
+        int gwX = library - libraryReserve;
+        if (gwX >= 10 && pool >= gwX + GENESIS_WAVE_TAIL) {
             SpellAbility gw = AbilityResolver.resolveCast(player, "Genesis Wave");
             if (gw != null && gw.getPayCosts() != null
                     && gw.getPayCosts().hasXInAnyCostPart()) {
-                int x = library - libraryReserve;
-                gw.setXManaCostPaid(x);
+                gw.setXManaCostPaid(gwX);
                 outletCard = "Genesis Wave";
-                outletX = x;
+                outletX = gwX;
                 return gw;
             }
         }
-        // 2) Finale of Devastation — fetch Craterhoof (trample) + pump, big X
-        SpellAbility finale = AbilityResolver.resolveCast(player, "Finale of Devastation");
-        if (finale != null && finale.getPayCosts() != null
-                && finale.getPayCosts().hasXInAnyCostPart()) {
-            int x = Math.max(10, player.getManaPool().totalMana() - GENESIS_WAVE_TAIL);
-            finale.setXManaCostPaid(x);
-            outletCard = "Finale of Devastation";
-            outletX = x;
-            return finale;
+        // 2) Finale of Devastation ({X}{G}{G}) — fetch Craterhoof (trample) +
+        // pump. Bound X by what the pool can actually pay (tail 2), and only
+        // fire when X is meaningful; a floored-but-unpayable X would fizzle and
+        // strand the bank.
+        int finaleX = pool - 2;
+        if (finaleX >= 10) {
+            SpellAbility finale = AbilityResolver.resolveCast(player, "Finale of Devastation");
+            if (finale != null && finale.getPayCosts() != null
+                    && finale.getPayCosts().hasXInAnyCostPart()) {
+                finale.setXManaCostPaid(finaleX);
+                outletCard = "Finale of Devastation";
+                outletX = finaleX;
+                return finale;
+            }
         }
         // 3) Craterhoof from hand — a one-shot team trample overrun
         SpellAbility hoof = AbilityResolver.resolveCast(player, "Craterhoof Behemoth");
