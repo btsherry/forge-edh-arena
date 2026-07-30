@@ -141,3 +141,48 @@ Standing team-trample: **Surrak and Goreclaw** (S:Mode$ Continuous | Affected$ C
 - **Zilortha (Invasion of Ikoria back)**: non-Human team assigns combat damage AS UNBLOCKED — stronger than trample, a distinct combat payoff.
 - Inventors' Fair / Genesis Hydra are the deck's ONLY Staff/Umbral tutors (first-class tutor-routing fact).
 Full census in scratchpad (Opus report) — the coverage layer for the pilot beyond the 7 combos + their sinks.
+
+## PHASE 3 — PLANNING (Fable, 2026-07-30) — the build spec, grounded in the code
+
+### The structural fact that defines the whole arc
+The existing `mana_loop` tap_untap path (ManaLoopRunner lines ~322-370, Urza's Basalt/Grim + Power-Artifact combos) assumes **producer == untapper**: one `engineCard = body[0].card` is tapped for mana AND untapped by `body[1].cost`, with a CONSTANT `expected_net_per_pair` (Urza = +1). Selvala breaks BOTH assumptions:
+- **producer != untapper.** Selvala (body[0]) taps for X; a SEPARATE card untaps her — Staff of Domination in two steps ({3}{T} untap Selvala, then {1} untap Staff itself = {4} total), or Umbral Mantle in one ({3}, untap+`+2/+2`).
+- **X is VARIABLE**, not a constant net. Selvala's `AB$ Mana | Amount$ X`, X = greatest creature power. Staff line: X constant per loop (power fixed) -> net = X-4. Umbral line: each untap pumps Selvala +2/+2 -> X RAMPS +2/cycle -> net = X-3 growing.
+These two breaks ARE extensions A and B. Neither is Selvala-specific in the code — `yield_model` + producer/untapper split are general capabilities (they also serve Fanatic, Weaver, Satyr+Cradle rows). No deck-specific logic.
+
+### Extension A — variable-yield, producer!=untapper tap_untap (ManaLoopRunner)
+Generalize the tap_untap loop:
+- `loop.producer` = body[0] (Selvala): activate her mana ability; yield X from `yield_model`.
+- `loop.untap_sequence` = body[1..] : the ORDERED abilities that untap the producer (Staff = 2 steps, Umbral = 1). Resolve each on `body[i].card` (NOT reused engineCard — the current bug for this shape), targeting the producer where the ability targets.
+- `loop.yield_model` in {POWER_CONSTANT, POWER_RAMPING, ENCHANTMENT_COUNT, CREATURE_COUNT, CONSTANT}: computes expected X from LIVE board each cycle. Per-cycle expected net = X(model,live) - sum(untap step generic costs).
+- MEASURED per-cycle delta check already exists (pool grew >= expected net AND producer untapped) — feed it the COMPUTED net, not a constant.
+- **RAMPING divergence proof (Umbral):** do NOT gate on entry-net>=1 (Umbral opens at -2, then 0, +2, +4...). Prove MONOTONIC DIVERGENCE: X strictly increases (+2/cycle from the Mantle pump) => exists cycle k past which net>0 and the pool diverges. Governor primes the small deficit (~{2}{G}) then rides the ramp; cap by ITERATION_CAP as backstop.
+- **Reject non-diverging net<=0 (the E=3 Weaver regression):** ENCHANTMENT_COUNT E=3 -> net 0 forever -> abort at entry `zero_yield: E=3 net 0`. This is the canonical guard the dossier's "E>=4 not 3" bug demands.
+- Precondition: producer not summoning-sick (Selvala can't tap the turn she lands).
+- **Guard so Urza stays byte-identical:** the new path activates ONLY when `yield_model` is present; absent -> the existing constant-net path runs unchanged. Seed-paired Urza regression check before/after.
+
+### Extension B — cast_x_spell / outlet-selection sink
+Once pool >= target, pick the LETHAL outlet by the Phase-2 decision tree instead of the Aetherflux storm sink:
+- **DEFAULT Genesis Wave X=all, FORCE-CAST bypassing NeedsToPlayVar** (the AI's >=6-untapped-LANDS gate; Selvala mana is creature-based so stock silently refuses). This is the #1-value seam and the main new mechanism — hosted on the existing obligation/force seam (orderAndPlaySimultaneousSa machinery from the Heliod fix).
+- X = pool - reserve; per-spell X thresholds (Genesis Wave >= deck size; Finale >= 10; Goldvein >= life).
+- Best-value fetch: Finale -> Craterhoof (trample-correct now). Trample/haste/board gating from the CORRECTED census (Surrak standing team-trample anthem + hastes ETBs; Craterhoof one-shot grant).
+- **Golden path 527-2645 uses Staff's BUILT-IN sink** ({5}{T}: draw a card, repeat to draw the deck) -> then a real in-hand outlet. No cast_x_spell/force-cast needed for the FIRST gate — sequences the risk.
+
+### Proving order (Ben's) — risk sequenced low->high
+1. **527-2645 Selvala+Staff (GOLDEN PATH)** — POWER_CONSTANT, producer!=untapper 2-step untap, Staff built-in draw sink. Flat math, self-contained, NO force-cast. First gate.
+2. **527-2816 Selvala+Umbral (RAMPING)** — POWER_RAMPING divergence path + first cast_x_spell outlet (Genesis Wave force-cast). Second gate.
+3. **1355-2816 Weaver+Umbral (THRESHOLD REGRESSION)** — ENCHANTMENT_COUNT, proves the E>=4 zero-yield reject. Third gate.
+Then SWEEP the remaining 4 tap_untap rows (Fanatic CONSTANT, Weaver+Staff, Satyr+Cradle x2) — clones of A/B, no new mechanism.
+
+### Explicitly NOT in this pass
+Sabertooth blink family (HELD). Setup/dig storm layer (separate concern, later). The 68 unverified discovered-synergies (research already surfaced the 12 that matter).
+
+### Phase 4 deliverables (code — awaiting check-in)
+1. ManaLoopRunner: producer!=untapper generalization + `yield_model` + monotonic-divergence entry guard + zero-yield reject. Guarded so Urza is unchanged.
+2. Outlet-selection sink (small OutletSelector) with Genesis Wave force-cast on the obligation seam.
+3. Three combo-program JSONs (527-2645, 527-2816, 1355-2816) to the extended schema; discovered nothing new — all three are Spellbook combos already in combos.json.
+4. Gate fixtures per combo; seed-paired Urza regression check.
+
+### Technical risks flagged for the check-in
+- **R1 (shared-runner regression):** generalizing ManaLoopRunner touches Urza's passing combos. Mitigation: yield_model-gated new path + seed-paired Urza before/after. Recommend GENERALIZE (keeps one runner, capability is general) over forking a SelvalaManaLoopRunner.
+- **R2 (force-cast seam):** Genesis Wave force-cast past NeedsToPlayVar is the one genuinely new mechanism. Mitigation: golden path (gate 1) needs none; prove the runner on Staff's built-in sink FIRST, add force-cast only for gate 2. If the obligation seam can't host a clean force-cast, fall back to Staff-built-in + Finale-from-hand outlets and treat force-cast as its own spike.
