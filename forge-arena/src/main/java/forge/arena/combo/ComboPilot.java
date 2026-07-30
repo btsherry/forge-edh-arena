@@ -206,10 +206,19 @@ public final class ComboPilot {
                         pieces.add(card);
                     }
                 }
-                String outlet = program.path("outlet").asText(
-                        program.path("sink").path("outlet").asText(""));
-                if (!outlet.isEmpty()) {
-                    outlets.add(outlet);
+                // the outlet is a structured OBJECT in the cast_bounce
+                // programs ({card, target_cumulative_lifegain, why}) and
+                // may be plain text elsewhere — read both shapes. asText()
+                // on an object returns "" — the aa30 batch measured the
+                // lever dead-wired for exactly that reason (0 boosts/30).
+                for (com.fasterxml.jackson.databind.JsonNode node
+                        : java.util.List.of(program.path("outlet"),
+                                program.path("sink").path("outlet"))) {
+                    String outlet = node.isObject()
+                            ? node.path("card").asText("") : node.asText("");
+                    if (!outlet.isEmpty()) {
+                        outlets.add(outlet);
+                    }
                 }
             } catch (Exception unreadable) {
                 // the runner aborts loudly on use; nothing to do here
