@@ -92,6 +92,21 @@ public final class TutorWeights {
             }
         }
 
+        // --- discovered-combo pieces (cast_recur/PR): Ben's domain-knowledge
+        // lines Spellbook omits (Birgi + Grinning Ignus) still deserve tutor
+        // weight so the deck's tutors (Gamble, Reckless Handling) fetch them.
+        // Flat 0.85 — real combo pieces, no Spellbook popularity to scale by.
+        Path discovered = dossierDir.resolve("discovered-combos.json");
+        if (java.nio.file.Files.exists(discovered)) {
+            JsonNode disc = MAPPER.readTree(discovered.toFile());
+            for (JsonNode combo : disc.path("combos")) {
+                String why = "discovered combo " + combo.path("id").asText();
+                for (JsonNode card : combo.path("cards")) {
+                    offer(best, card.get("name").asText(), 0.85, why);
+                }
+            }
+        }
+
         // --- route-payoff contributions (the v3.3 Crossroads/Craterhoof rule) ---
         JsonNode routes = coverage.path("deck").path("routes");
         Map<String, List<String>> routesServed = new LinkedHashMap<>();

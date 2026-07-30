@@ -291,7 +291,10 @@ public final class CastRecurRunner {
         int total = 0;
         for (Player other : game.getPlayers()) {
             if (other != player && !other.hasLost()) {
-                total += Math.max(0, other.getLife());
+                // raw life, NOT max(0,...): a 'can't lose' opponent held at
+                // negative life (Platinum Angel class) must still register a
+                // dropping delta, or the loop false-aborts (Gemini review)
+                total += other.getLife();
             }
         }
         return total;
