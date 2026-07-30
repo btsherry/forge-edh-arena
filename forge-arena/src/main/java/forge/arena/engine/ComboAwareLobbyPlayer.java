@@ -87,6 +87,8 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private ProgramRunner activeProgram;
         /** PR-lambda: the mana-loop interpreter (program_class: mana_loop). */
         private ManaLoopRunner activeManaLoop;
+        /** PR: the forked Selvala variable-yield loop (program_class: selvala_mana_loop). */
+        private SelvalaManaLoopRunner activeSelvalaLoop;
         /** cast_recur (Body C self_recast + future bodies). */
         private CastRecurRunner activeCastRecur;
         /** PR-chi: the cast-bounce interpreter (program_class: cast_bounce). */
@@ -519,6 +521,40 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private String pendingChoice;
         private int pendingChoiceTurn = -1;
 
+        /**
+         * While the forked Selvala loop is active, bank ITS needed colour from
+         * every "any/combo" mana its producer makes. ManaEffect asks the
+         * controller for combo colours at RESOLUTION — after the ability is
+         * cloned onto the stack, which drops any express choice set on the
+         * pre-play SA — so the controller is the only place the pick sticks.
+         * Selvala's own {G} re-activation and Genesis Wave's {G}{G}{G} tail
+         * both need the banked pool to actually be green.
+         */
+        @Override
+        public byte chooseColor(String message, SpellAbility sa, forge.card.ColorSet colors) {
+            if (activeSelvalaLoop != null) {
+                byte need = activeSelvalaLoop.neededColor();
+                if (colors.hasAnyColor(need)) {
+                    return need;
+                }
+            }
+            return super.chooseColor(message, sa, colors);
+        }
+
+        @Override
+        public java.util.Map<Byte, Integer> specifyManaCombo(SpellAbility sa,
+                forge.card.ColorSet colorSet, int manaAmount, boolean different) {
+            if (activeSelvalaLoop != null && !different) {
+                byte need = activeSelvalaLoop.neededColor();
+                if (colorSet.hasAnyColor(need)) {
+                    java.util.Map<Byte, Integer> all = new java.util.LinkedHashMap<>();
+                    all.put(need, manaAmount);
+                    return all;
+                }
+            }
+            return super.specifyManaCombo(sa, colorSet, manaAmount, different);
+        }
+
         @Override
         public List<SpellAbility> chooseSpellAbilityToPlay() {
             Game game = getGame();
@@ -630,6 +666,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return null;
                 }
             }
+            if (activeSelvalaLoop != null) {
+                List<SpellAbility> step = activeSelvalaLoop.next(turn);
+                if (activeSelvalaLoop.finished()) {
+                    activeSelvalaLoop = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activeSelvalaLoop != null) {
+                    return null;
+                }
+            }
             if (activeCastBounce != null) {
                 List<SpellAbility> step = activeCastBounce.next(turn);
                 if (activeCastBounce.finished()) {
@@ -720,6 +768,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 if (!"ping_loop".equals(programClass) && !"mana_loop".equals(programClass)
                         && !"cast_bounce".equals(programClass)
                         && !"cast_recur".equals(programClass)
+                        && !"selvala_mana_loop".equals(programClass)
                         && !"unreadable".equals(programClass)) {
                     // a compiled program whose runner is not built yet ships
                     // FLAGGED: abort loudly, never misroute to ProgramRunner
@@ -753,6 +802,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     List<SpellAbility> first = activeCastRecur.next(turn);
                     if (activeCastRecur.finished()) {
                         activeCastRecur = null;
+                    }
+                    return first;
+                }
+                if ("selvala_mana_loop".equals(programClass)) {
+                    // PR: the forked variable-yield loop (producer != untapper)
+                    activeSelvalaLoop = new SelvalaManaLoopRunner(getGame(), player, pilot,
+                            seatIndex, action.program().programPath());
+                    List<SpellAbility> first = activeSelvalaLoop.next(turn);
+                    if (activeSelvalaLoop.finished()) {
+                        activeSelvalaLoop = null;
                     }
                     return first;
                 }
@@ -1616,6 +1675,17 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             if (sa != null && sa.getHostCard() != null && pilot.lineActive()
                     && pilot.activeLineCards().contains(sa.getHostCard().getName())) {
                 return true;
+            }
+            // While the Selvala loop is converting, DECLINE her optional
+            // self-draw. A mass Genesis Wave flip fires her "draw if the
+            // entering creature is the biggest" trigger many times; drawing
+            // into a near-empty library decks us out mid-win. A human never
+            // draws themselves to death while already assembling lethal — the
+            // strict-max draw-sequencing synergy. Scoped to Draw APIs during
+            // the loop only, so normal draws stay intact.
+            if (activeSelvalaLoop != null && sa != null
+                    && sa.getApi() == forge.game.ability.ApiType.Draw) {
+                return false;
             }
             return super.confirmAction(sa, mode, message, options, cardToShow, params);
         }
