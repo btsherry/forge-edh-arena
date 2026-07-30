@@ -190,3 +190,28 @@ Sabertooth blink family (HELD). Setup/dig storm layer (separate concern, later).
 ## PHASE 3 DECISIONS (Ben, 2026-07-30) — go for Phase 4
 - **R1 -> FORK.** New runner, Selvala combo functionality broken out; do NOT put Urza's combos at risk. The more-specific runner also serves other Selvala patterns not currently wired (Ben named Sylvan Ranger-type cards) — verify against the deck list in Phase 4.
 - **R2 -> Genesis Wave MUST work.** Governor rule: flip into play the MAJORITY of the library, but LEAVE ~10 cards so draw triggers (Selvala ETB draw, Staff) don't deck us out. Concrete: **X = max(0, library_size - 10)** (Genesis Wave reveals top X, drops every permanent, mills the rest; remaining library = library_size - X ~= 10). With infinite mana the X-as-mana-value cutoff is trivially satisfied for every permanent.
+
+## PHASE 4 — CODE (2026-07-30) + PHASE 5 — PREP-TO-TEST
+
+### What shipped (committed, green)
+- **SelvalaManaLoopRunner** (forked, program_class `selvala_mana_loop`, commit e47fc71 + d9ff9fd). The shape ManaLoopRunner can't model: producer != untapper, a COLOURED producer activation ({G}), a VARIABLE yield. Four yield models (POWER_CONSTANT / POWER_RAMPING / ENCHANTMENT_COUNT / CONSTANT); measured per-cycle deltas that carry the sign so a ramping loop primes through its negative opening and diverges; zero-yield reject; producer normalization (untap a stock-tapped producer once instead of aborting); Genesis Wave force-cast sink.
+- **ComboAwareController color override** (chooseColor / specifyManaCombo): banks GREEN from Selvala/Weaver's "any/combo" mana while the loop is active. LOAD-BEARING — chosen at RESOLUTION (post-clone), the only seam that sticks; without it the pool defaults to white (WUBRG-first) and can't pay the producer's {G} or Genesis Wave's {G}{G}{G}. Plus a defensive optional-draw decline (gated on the loop).
+- **Dispatch**: new `selvala_mana_loop` branch + active-runner continuation, all gated so Urza/Giada/Purphoros fall through to stock unchanged.
+- **3 anchor gates PASS** (SelvalaManaLoopTest 3/3): 527-2645 POWER_CONSTANT WIN + Genesis Wave x=53 (flip 21->60); 527-2816 POWER_RAMPING WIN + Genesis Wave x=55 (flip 13->54); 1355-2816 ENCHANTMENT_COUNT zero-yield reject. **Regression clean** (TestSuite 46/46: Urza/Giada/Purphoros/pilot/architecture).
+
+### Genesis Wave reserve — MEASURED CORRECTION to Ben's ~10
+The mass flip fires Selvala's ETB draw ~22x (a path that BYPASSES confirmAction — verified: 0 confirmActions, but libraryOut shows ~22 Library->Hand during the flip). Ben's ~10 reserve DECKS US OUT (we draw past the buffer and lose our own game). **reserve = 35** absorbs the draws, still flips the MAJORITY (X~=53, ~60% of the 99), lands library_after ~13 (comfortable margin), and WINS. The draws are card ADVANTAGE — the only risk is decking, which the reserve handles. Documented in each program JSON.
+
+### The 4 sweep combos — AUTHORED, runner-handled, blocked on PILOT issues (not runner bugs)
+Programs written + saved to scratchpad/selvala-sweep-programs (pulled from the active dossier because they regress the anchor gates — see below): 2816-5711 Fanatic+Umbral (CONSTANT 4), 1355-2645 Weaver+Staff (ENCHANTMENT_COUNT), 2026-2404-2645 & 2026-2404-2816 Satyr+Cradle (CREATURE_COUNT, a LAND producer with chained untaps). The runner RECOGNISES and plans them with the correct yield models (governor_plan verified: CONSTANT entry_yield 4, CREATURE_COUNT 9, ENCHANTMENT_COUNT 6). But landing them cleanly is blocked by THREE pre-existing PILOT behaviors the sweep exposed:
+1. **Combo-selection doesn't prioritize the ASSEMBLED combo.** With Umbral present, the pilot tries 527-2816 (Umbral-on-Selvala) and 2816-5711 (Umbral-on-Fanatic) — both misattached — before/instead of the actually-assembled combo, and can exhaust its per-turn window. Adding the sweep programs REGRESSED anchor gate3 (1355-2816 no longer reliably reached) — so they were pulled from the active dossier to keep the anchors green.
+2. **The outlet isn't reserved.** Stock casts Genesis Wave from HAND before the late-firing (T7) sweep combos assemble, so chooseOutlet finds no outlet and defers (the anchors fire at T5, before stock casts it). Needs the reservedCastNames path extended to reserve the mana-loop outlet.
+3. **Deeper untap normalization.** When an UNTAPPER (Staff/Satyr), not just the producer, is stock-tapped, the one-pass normalization can't ready the producer (producer_stuck after 2 attempts). Needs recursive/dependency-ordered untap.
+
+All 4 sweep games still END in a seat-0 WIN (the deck converts via other lines), but the TARGET combo's loop doesn't reliably execute end-to-end in isolated fixtures. => Re-landing the sweep is a PILOT increment (combo-selection + outlet-reservation + deeper normalization), best done with Ben's steer, not more fixture tweaking.
+
+### High-priority synergies (task #71) status
+The #1 synergy (Genesis Wave force-cast past NeedsToPlayVar) is DONE and load-bearing in the runner. Selvala strict-max draw-sequencing is partially embodied (the defensive draw-decline). The rest (Finale->Craterhoof fetch, restricted-mana awareness, tutor-routing) remain queued — several are outlet-ladder / prep-weight concerns rather than runner code.
+
+### NOT done (per Ben's standing instruction)
+No large (100-game) batch — held for check-in. The gates are the unit proof; a chi30-size smoke batch is the next validation once the sweep/pilot decision is made.
