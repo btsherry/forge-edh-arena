@@ -215,3 +215,11 @@ The #1 synergy (Genesis Wave force-cast past NeedsToPlayVar) is DONE and load-be
 
 ### NOT done (per Ben's standing instruction)
 No large (100-game) batch — held for check-in. The gates are the unit proof; a chi30-size smoke batch is the next validation once the sweep/pilot decision is made.
+
+## DECK-OUT ROOT CAUSE — corrected (Ben's may-draw challenge, 2026-07-30)
+Ben challenged "the flip's draws are Selvala's optional MAY — decline them and reserve 10 works." Investigated with an unconditional confirmAction log: **only 2 confirmActions the whole game (both ChangeZone = Genesis Wave's own 'may put onto battlefield')** — Selvala's draw NEVER routes through confirmAction. And with a big body out (Ghalta p12), Selvala's "draw if the entering creature is the biggest" can only fire a handful of times, not ~22.
+**The real deck-out engine is The Great Henge** (in the 99): "Whenever a nontoken creature you control enters, draw a card" — MANDATORY, no may. Genesis Wave flips ~40 nontoken creatures, so a Henge on board forces ~40 draws → deck-out. Mandatory => confirmAction=0 (never asks) => NOT declinable => the library_reserve is the real handle (why ~10 fails, 35 wins). Selvala's own may-draw is a minor contributor; the confirmAction decline (gated on the loop) trims only that.
+**Future optimization (not built):** override Genesis Wave's ChangeNum$ Any choice to NOT put draw-engines (The Great Henge / Guardian Project class) onto the battlefield during the flip -> no forced draws -> reserve could drop toward Ben's ~10 and flip ~89%. Left as a lever for Ben's call.
+
+### Fable review folded in (commit 113ea73)
+HIGH (ramping no-op false-completes to the cap) fixed via a producer-actually-tapped check; settle-grace removed from the loop measure; Finale/Genesis Wave X bounded by the pool with a meaningful-flip floor; default reserve 35; neededColor guard. Anchors stay 3/3.
