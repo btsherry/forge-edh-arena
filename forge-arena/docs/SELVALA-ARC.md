@@ -223,3 +223,6 @@ Ben challenged "the flip's draws are Selvala's optional MAY — decline them and
 
 ### Fable review folded in (commit 113ea73)
 HIGH (ramping no-op false-completes to the cap) fixed via a producer-actually-tapped check; settle-grace removed from the loop measure; Finale/Genesis Wave X bounded by the pool with a meaningful-flip floor; default reserve 35; neededColor guard. Anchors stay 3/3.
+
+## RESERVE DECISION — CLOSED (Ben, 2026-07-30)
+Root cause of the flip deck-out is SELVALA'S OWN "may draw" (not The Great Henge — Henge is excluded from the flip and is a minor contributor; the deck scan shows Selvala is the only remaining ETB-draw source). Her draw fires ~4-21x per flip (scales with flip size), bypasses confirmAction (Forge auto-takes it in the batch-trigger resolution), and is not yet declinable at that seam. **Ben: do NOT tune the reserve further — reserve=35 + draw-engine exclusion is good enough for now** (both anchors WIN with a comfortable margin). Declining her may-draw to reach ~10 (flip ~89%) is a deferred, well-defined follow-up (needs the AI's batch-optional-trigger seam), not a blocker.
