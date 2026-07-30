@@ -114,3 +114,30 @@ Ben challenged "Rhonas is the only trample source." Verified from scripts:
 - 8 BUILT-IN tramplers: Defiler of Vigor, Frenzied Baloth, Goldvein Hydra, Managorger Hydra, Ojer Kaslem, Phyrexian Dreadnought, Sheltering Ancient, Surrak and Goreclaw.
 - 3 GRANT trample to your team: Craterhoof Behemoth (KW$ Trample to all your creatures + X/+X), Garruk Wildspeaker (ult), Rhonas.
 Outlet-tree corrections: (1) Craterhoof from hand IS a trample overrun (upgrade its ranking — it was wrongly gated as no-trample). (2) Finale->Craterhoof IS trample (Finale's OWN pump grants none, but the fetched Craterhoof grants the whole board trample + X/+X). (3) The "wide board / Selvala-huge needs Rhonas" caveat is largely dissolved — trample is available from 8 natives + 3 grants; only making SELVALA HERSELF (commander, no native trample) connect still needs a grant, of which there are now three, not one.
+
+## PHASE 2b — SYNERGY CENSUS (re-run, Opus + Gemini, plain-text/no-schema — both succeeded)
+The failed coverage angle re-run with improved instructions. Opus read EVERY card script; Gemini corroborated (12.9k). ~40 synergies across 6 families (A ramp-burst/land-tricks, B value engines, C cheat-into-play/tutor-routing, D protection, E combat/overrun, F recursion).
+
+### Trample, fully corrected (Ben + Opus + scripts)
+Standing team-trample: **Surrak and Goreclaw** (S:Mode$ Continuous | Affected$ Creature.Other+YouCtrl | AddKeyword$ Trample — "other creatures you control have trample" + ETB +1/+1 & haste). One-shot team grants: Craterhoof (+trample +X/+X), Garruk ult. Repeatable per-target: Rhonas. Plus 8 native tramplers. => the "needs Rhonas" caveat is fully dead; Surrak converts a Genesis-Wave/Finale mass-dump into an immediate lethal (standing trample + hastes every ETB).
+
+### Ranked shortlist — synergies worth a compiled program (stock AI provably wrong/absent)
+1. Genesis Wave force-cast past NeedsToPlayVar (>=6 untapped LANDS; Selvala mana is creature-based) — highest value.
+2. Combo-half tutor ROUTING: Genesis Hydra (Permanent.nonLand->battlefield) & Inventors' Fair (Artifact->hand, metalcraft) are the ONLY finders of Staff/Umbral — no creature tutor (GSZ/Finale/Nature's Rhythm/Invasion) can reach an artifact.
+3. Selvala strict-max draw sequencing (cast ascending; ties draw nothing) + Sabertooth/Kogla blink-replay of the biggest body.
+4. Restricted-mana awareness: Castle Garenbrig 6 (creature-only, cannot pay Staff/Umbral), Delighted Halfling (legendary-only), Gemstone Caverns.
+5. Finale->Craterhoof best-value fetch + X>=10 (Craterhoof supplies the trample, corrected).
+6. Omnath green-mana retention (AI:RemoveDeck:All; pool persists across phases).
+7. Land-untap-target selection: untap Cradle/Nykthos (highest yield), not a Forest; Deserted Temple/Magus/Garruk-+1/Saryth as burst enablers.
+8. Surrak standing trample + Concordant Crossroads haste — convert a mass-dump to same-turn lethal.
+9. Smuggler's Surprise Spree (flash 2 creatures into play / protect / dig).
+10. Lightning Greaves (SHROUD) blocks your own Umbral equip -> use Swiftfoot Boots (hexproof) on the Umbral target.
+11. Greater Good/Life's Legacy/Momentous Fall sac-target discipline (sac biggest expendable, preserve Selvala + pieces).
+12. Dosan green-light detection (hold the all-in turn until Dosan / uncounterability stack online).
+
+### Corrections to prior research (from the script reads)
+- **Earthcraft is NOT infinite mana in this 99** (untaps BASICS only, no free creature-untap/token loop) — the primer's infinite claim is FALSE; it's finite creature->mana ramp.
+- **Archdruid's Charm tutor mode puts creatures to HAND** (lands to battlefield tapped), does NOT cheat creatures into play.
+- **Zilortha (Invasion of Ikoria back)**: non-Human team assigns combat damage AS UNBLOCKED — stronger than trample, a distinct combat payoff.
+- Inventors' Fair / Genesis Hydra are the deck's ONLY Staff/Umbral tutors (first-class tutor-routing fact).
+Full census in scratchpad (Opus report) — the coverage layer for the pilot beyond the 7 combos + their sinks.
