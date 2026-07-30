@@ -414,25 +414,6 @@
    "entry_phase": "MAIN1"
   },
   {
-   "combo_id": "411-3101",
-   "archetype": "SelfBounceRecastLoop",
-   "params": {
-    "engine": "Grinning Ignus",
-    "activation_cost": "{R}",
-    "engine_produces": "3",
-    "recast_cost": "3",
-    "battery": "Runaway Steam-Kin",
-    "battery_cost": "SubCounter<3/P1P1>",
-    "battery_produces": "3",
-    "casts_per_charge": "3",
-    "bank_cycles": "12"
-   },
-   "payoffs": [
-    "Purphoros, God of the Forge"
-   ],
-   "entry_phase": "MAIN1"
-  },
-  {
    "combo_id": "1355-2816",
    "archetype": "TapForManaUntapLoop",
    "params": {

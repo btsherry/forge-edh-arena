@@ -87,6 +87,8 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private ProgramRunner activeProgram;
         /** PR-lambda: the mana-loop interpreter (program_class: mana_loop). */
         private ManaLoopRunner activeManaLoop;
+        /** cast_recur (Body C self_recast + future bodies). */
+        private CastRecurRunner activeCastRecur;
         /** PR-chi: the cast-bounce interpreter (program_class: cast_bounce). */
         private CastBounceRunner activeCastBounce;
 
@@ -597,6 +599,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return null;
                 }
             }
+            if (activeCastRecur != null) {
+                List<SpellAbility> step = activeCastRecur.next(turn);
+                if (activeCastRecur.finished()) {
+                    activeCastRecur = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activeCastRecur != null) {
+                    return null;
+                }
+            }
             if (activeManaLoop != null) {
                 List<SpellAbility> step = activeManaLoop.next(turn);
                 String imprint = activeManaLoop.pendingImprint();
@@ -705,6 +719,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 String programClass = programClassOf(action.program().programPath());
                 if (!"ping_loop".equals(programClass) && !"mana_loop".equals(programClass)
                         && !"cast_bounce".equals(programClass)
+                        && !"cast_recur".equals(programClass)
                         && !"unreadable".equals(programClass)) {
                     // a compiled program whose runner is not built yet ships
                     // FLAGGED: abort loudly, never misroute to ProgramRunner
@@ -729,6 +744,15 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     List<SpellAbility> first = activeCastBounce.next(turn);
                     if (activeCastBounce.finished()) {
                         activeCastBounce = null;
+                    }
+                    return first;
+                }
+                if ("cast_recur".equals(programClass)) {
+                    activeCastRecur = new CastRecurRunner(getGame(), player, pilot,
+                            seatIndex, action.program().programPath());
+                    List<SpellAbility> first = activeCastRecur.next(turn);
+                    if (activeCastRecur.finished()) {
+                        activeCastRecur = null;
                     }
                     return first;
                 }
