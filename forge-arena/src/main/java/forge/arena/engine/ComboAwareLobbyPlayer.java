@@ -555,6 +555,48 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             return super.specifyManaCombo(sa, colorSet, manaAmount, different);
         }
 
+        /**
+         * Deck-agnostic ETB-draw engines: a creature entering under our control
+         * makes us draw. The Genesis Wave flip (SP$ Dig, DestinationZone
+         * Battlefield, ChangeNum Any) enters ~40 creatures at once and each
+         * fires a MANDATORY draw that never routes through confirmAction — the
+         * only reason library_reserve had to sit at 35. "Order the engine last"
+         * does NOT help: Forge collects the batch's ETB triggers in one
+         * deferred pass over the full active-trigger set after every card has
+         * entered, so the engine sees every co-entrant regardless of move order
+         * (verified against DigEffect/TriggerHandler). Keeping the engine OUT
+         * of the flip (it falls to the graveyard via DestinationZone2) is the
+         * only fix — then the reserve can drop to ~10 and we flip ~89%.
+         */
+        static final java.util.Set<String> FLIP_DRAW_ENGINES = java.util.Set.of(
+                "The Great Henge", "Guardian Project", "Beast Whisperer",
+                "Garruk's Uprising", "Elemental Bond", "Colossal Majesty");
+
+        @Override
+        public <T extends forge.game.GameEntity> List<T> chooseEntitiesForEffect(
+                forge.util.collect.FCollectionView<T> optionList, int min, int max,
+                forge.game.player.DelayedReveal delayedReveal, SpellAbility sa, String title,
+                Player relatedPlayer, java.util.Map<String, Object> params) {
+            // Scope: ONLY the live Selvala flip. ApiType.Dig is Genesis Wave's
+            // selection; every other effect and every other deck (activeSelvala
+            // Loop == null) falls straight through to stock.
+            if (activeSelvalaLoop != null && sa != null
+                    && sa.getApi() == forge.game.ability.ApiType.Dig) {
+                forge.util.collect.FCollection<T> kept = new forge.util.collect.FCollection<>();
+                for (T t : optionList) {
+                    if (t instanceof forge.game.card.Card
+                            && FLIP_DRAW_ENGINES.contains(((forge.game.card.Card) t).getName())) {
+                        continue; // don't flip a mandatory ETB-draw engine onto the board
+                    }
+                    kept.add(t);
+                }
+                return super.chooseEntitiesForEffect(kept, Math.min(min, kept.size()),
+                        Math.min(max, kept.size()), delayedReveal, sa, title, relatedPlayer, params);
+            }
+            return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title,
+                    relatedPlayer, params);
+        }
+
         @Override
         public List<SpellAbility> chooseSpellAbilityToPlay() {
             Game game = getGame();
