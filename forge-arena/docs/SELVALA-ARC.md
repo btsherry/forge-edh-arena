@@ -186,3 +186,7 @@ Sabertooth blink family (HELD). Setup/dig storm layer (separate concern, later).
 ### Technical risks flagged for the check-in
 - **R1 (shared-runner regression):** generalizing ManaLoopRunner touches Urza's passing combos. Mitigation: yield_model-gated new path + seed-paired Urza before/after. Recommend GENERALIZE (keeps one runner, capability is general) over forking a SelvalaManaLoopRunner.
 - **R2 (force-cast seam):** Genesis Wave force-cast past NeedsToPlayVar is the one genuinely new mechanism. Mitigation: golden path (gate 1) needs none; prove the runner on Staff's built-in sink FIRST, add force-cast only for gate 2. If the obligation seam can't host a clean force-cast, fall back to Staff-built-in + Finale-from-hand outlets and treat force-cast as its own spike.
+
+## PHASE 3 DECISIONS (Ben, 2026-07-30) — go for Phase 4
+- **R1 -> FORK.** New runner, Selvala combo functionality broken out; do NOT put Urza's combos at risk. The more-specific runner also serves other Selvala patterns not currently wired (Ben named Sylvan Ranger-type cards) — verify against the deck list in Phase 4.
+- **R2 -> Genesis Wave MUST work.** Governor rule: flip into play the MAJORITY of the library, but LEAVE ~10 cards so draw triggers (Selvala ETB draw, Staff) don't deck us out. Concrete: **X = max(0, library_size - 10)** (Genesis Wave reveals top X, drops every permanent, mills the rest; remaining library = library_size - X ~= 10). With infinite mana the X-as-mana-value cutoff is trivially satisfied for every permanent.
