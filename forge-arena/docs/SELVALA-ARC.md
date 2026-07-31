@@ -223,6 +223,15 @@ Two fixes did it (both general, no deck-specific logic):
 
 Sweep programs are back in the active dossier; anchor gate3's zero_yield reject and the Selvala/Urza/Purphoros/Giada program gates all stay green.
 
+### SWEEP30 BATCH — seed-paired A/B (2026-07-31, seed 3033, same pod)
+Ran a 30-game smoke batch (runs/selvala-sweep30) against the pre-sweep smoke30 baseline to measure lift. **The fixes are a clean CORRECTNESS win; the win rate is UNMOVED — assembly is confirmed as the frontier.**
+- Selvala combo aborts **22 -> 4**, and **piece_lost/piece_misattached 22 -> 0**: the assembly gate eliminated every wasted/incorrect dispatch. The 4 remaining aborts are legitimate runtime states (2 bounce_outlet_lost = Sabertooth removed mid-loop; 2 zero_yield = a loop correctly refusing break-even).
+- The one governor_plan that DID fire is now the correctly-assembled combo (ben-kogla-sabertooth) instead of the misattached 527-2816 the old gate picked — the disambiguation works live.
+- line_entered **23 -> 5**: the pilot no longer spams un-assembled combos; it only dispatches when pieces are truly in play + attached — which is RARE organically.
+- **Selvala wins 1/30 -> 1/30, conversions 0 -> 0.** Pod essentially unchanged (25->26 wins, noise).
+
+**Verdict:** the combos are proven (33 gates) and the churn is fixed, but Selvala's pieces almost never assemble ORGANICALLY (she sits in the command zone; Umbral/Staff go uncast or unattached; nothing deploys + protects them). Program combos dispatch straight to the runner (Action.program) and have NO deploy phase — unlike archetype combos, which have assemblyAction/deployAction stages. **The win-rate lever is an ASSEMBLY-DEPLOY workstream for program combos**: reuse each program's own on_battlefield/attached preconditions (already parsed for the gate) to CAST the missing pieces from hand/command and EQUIP the artifact to the right host BEFORE dispatch — the offensive counterpart to the defensive gate built this session. Tutor-toward-piece + protect-the-assembled-piece are the follow-ons.
+
 ### High-priority synergies (task #71) status
 The #1 synergy (Genesis Wave force-cast past NeedsToPlayVar) is DONE and load-bearing in the runner. Selvala strict-max draw-sequencing is partially embodied (the defensive draw-decline). The rest (Finale->Craterhoof fetch, restricted-mana awareness, tutor-routing) remain queued — several are outlet-ladder / prep-weight concerns rather than runner code.
 
