@@ -93,6 +93,15 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private CastRecurRunner activeCastRecur;
         /** PR-chi: the cast-bounce interpreter (program_class: cast_bounce). */
         private CastBounceRunner activeCastBounce;
+        /** PR: the mana-funded bounce/ETB-recursion sink (program_class: bounce_recur). */
+        private BounceRecurRunner activeBounceRecur;
+        /** the creature the active bounce_recur runner wants Sabertooth/Kogla to
+         * return this window — steers the hidden ChangeZone choice. */
+        private String pendingRecurBounce;
+
+        void setPendingRecurBounce(String cardName) {
+            this.pendingRecurBounce = cardName;
+        }
 
         private final java.util.Map<String, String> programClassCache =
                 new java.util.HashMap<>();
@@ -689,6 +698,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return null;
                 }
             }
+            if (activeBounceRecur != null) {
+                List<SpellAbility> step = activeBounceRecur.next(turn);
+                if (activeBounceRecur.finished()) {
+                    activeBounceRecur = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activeBounceRecur != null) {
+                    return null;
+                }
+            }
             if (activeManaLoop != null) {
                 List<SpellAbility> step = activeManaLoop.next(turn);
                 String imprint = activeManaLoop.pendingImprint();
@@ -810,6 +831,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 if (!"ping_loop".equals(programClass) && !"mana_loop".equals(programClass)
                         && !"cast_bounce".equals(programClass)
                         && !"cast_recur".equals(programClass)
+                        && !"bounce_recur".equals(programClass)
                         && !"selvala_mana_loop".equals(programClass)
                         && !"unreadable".equals(programClass)) {
                     // a compiled program whose runner is not built yet ships
@@ -827,6 +849,16 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                             .with("reason", "program_unreadable: "
                                     + action.program().programPath()));
                     return super.chooseSpellAbilityToPlay();
+                }
+                if ("bounce_recur".equals(programClass)) {
+                    // PR: the mana-funded bounce/ETB-recursion sink
+                    activeBounceRecur = new BounceRecurRunner(getGame(), player, pilot,
+                            this, seatIndex, action.program().programPath());
+                    List<SpellAbility> first = activeBounceRecur.next(turn);
+                    if (activeBounceRecur.finished()) {
+                        activeBounceRecur = null;
+                    }
+                    return first;
                 }
                 if ("cast_bounce".equals(programClass)) {
                     // PR-chi: the Tidespout family's interpreter
@@ -1851,6 +1883,19 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 SpellAbility sa, forge.game.card.CardCollection fetchList,
                 forge.game.player.DelayedReveal delayedReveal, String selectPrompt,
                 boolean isOptional, Player decider) {
+            // Steer Temur Sabertooth's / Kogla's HIDDEN "return a creature"
+            // choice to the bounce_recur runner's recur creature (Eternal
+            // Witness). The bounce is a choice, not a target, so the AI would
+            // otherwise pick whatever it values — the runner sets
+            // pendingRecurBounce for exactly one activation; consume it here.
+            if (activeBounceRecur != null && pendingRecurBounce != null && fetchList != null) {
+                for (forge.game.card.Card c : fetchList) {
+                    if (c.getName().equals(pendingRecurBounce)) {
+                        pendingRecurBounce = null; // one-shot
+                        return c;
+                    }
+                }
+            }
             // PR-kappa: Scroll Rack's exile choice reaches the AI ONE CARD
             // AT A TIME — ChangeZoneEffect.allowMultiSelect excludes AI
             // controllers, so the multi-select callback NEVER fires for us
