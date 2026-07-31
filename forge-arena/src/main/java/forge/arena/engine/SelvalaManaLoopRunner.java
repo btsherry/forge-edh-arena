@@ -533,12 +533,19 @@ public final class SelvalaManaLoopRunner {
                 return finale;
             }
         }
-        // 3) Craterhoof from hand — a one-shot team trample overrun
-        SpellAbility hoof = AbilityResolver.resolveCast(player, "Craterhoof Behemoth");
-        if (hoof != null) {
-            outletCard = "Craterhoof Behemoth";
-            outletX = 0;
-            return hoof;
+        // 3) Craterhoof from hand — a team trample overrun. Craterhoof pumps
+        // every creature +X/+X where X = creatures you control, so it is only a
+        // win on a board wide enough to be lethal; on a 1-2 creature board it is
+        // a wasted 8-mana last resort. Gate on a meaningful board.
+        long creatures = player.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(Card::isCreature).count();
+        if (creatures >= 4) {
+            SpellAbility hoof = AbilityResolver.resolveCast(player, "Craterhoof Behemoth");
+            if (hoof != null) {
+                outletCard = "Craterhoof Behemoth";
+                outletX = 0;
+                return hoof;
+            }
         }
         return null;
     }

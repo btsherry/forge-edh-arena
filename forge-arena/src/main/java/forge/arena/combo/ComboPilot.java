@@ -382,6 +382,51 @@ public final class ComboPilot {
     }
 
     /**
+     * PR-protect: reactive INSTANT covers (Heroic Intervention class), cheapest
+     * first, from protection-priorities.json. The controller casts one to save a
+     * threatened combo piece — the offensive counterpart of keeping the pieces
+     * alive long enough to loop. From the deck's own card text, never from code.
+     */
+    public record ProtectionSpec(String card, forge.arena.prep.ProtectionFinder.Scope scope,
+            int manaValue) {
+    }
+
+    private java.util.List<ProtectionSpec> protectionSpecs = java.util.List.of();
+
+    public void setProtection(java.util.List<ProtectionSpec> specs) {
+        this.protectionSpecs = specs == null ? java.util.List.of()
+                : specs.stream().sorted(java.util.Comparator.comparingInt(ProtectionSpec::manaValue))
+                        .toList();
+    }
+
+    /** Every protection card, so the controller reserves them from stock casts. */
+    public Set<String> protectionCards() {
+        Set<String> cards = new HashSet<>();
+        for (ProtectionSpec spec : protectionSpecs) {
+            cards.add(spec.card());
+        }
+        return cards;
+    }
+
+    /** Is this card a piece of some compiled PROGRAM combo — a thing worth
+     *  saving when an opponent targets it? */
+    public boolean isProgramPiece(String cardName) {
+        return programPieces.contains(cardName);
+    }
+
+    /** The cheapest reactive cover we hold that saves a piece of the given kind,
+     *  or null when we hold none. */
+    public String reactiveCover(SeatView view, boolean pieceIsCreature) {
+        Set<String> hand = view.cardsIn(SeatView.Zone.HAND);
+        for (ProtectionSpec spec : protectionSpecs) { // cheapest first
+            if (spec.scope().covers(pieceIsCreature) && hand.contains(spec.card())) {
+                return spec.card();
+            }
+        }
+        return null;
+    }
+
+    /**
      * PR-kappa: compiled engine programs — background card-advantage cycles.
      * The pilot knows only what the ENTRY decisions need: which cards to
      * cast early and when a cycle is worth dispatching; the runner

@@ -259,6 +259,24 @@ public final class ComboPrep {
         MAPPER.writerWithDefaultPrettyPrinter()
                 .writeValue(dossierDir.resolve("paired-plays.json").toFile(), pairedJson);
 
+        // --- protection-priorities.json ---
+        // Reactive INSTANT covers (Heroic Intervention class) the pilot casts to
+        // keep an assembled combo alive through targeted removal — read from card
+        // text, cheapest first, deck-scoped. Empty is a valid, common result.
+        List<ProtectionFinder.Cover> covers = ProtectionFinder.find(deckCards);
+        ObjectNode protectionJson = MAPPER.createObjectNode();
+        protectionJson.put("schema", "arena.protection-priorities/1");
+        protectionJson.put("deck_hash", index.get("deck_hash").asText());
+        var coverArray = protectionJson.putArray("covers");
+        for (ProtectionFinder.Cover cover : covers) {
+            ObjectNode node = coverArray.addObject();
+            node.put("card", cover.card());
+            node.put("scope", cover.scope().name());
+            node.put("mana_value", cover.manaValue());
+        }
+        MAPPER.writerWithDefaultPrettyPrinter()
+                .writeValue(dossierDir.resolve("protection-priorities.json").toFile(), protectionJson);
+
         // --- dossier index ---
         ((ObjectNode) index.get("status")).put("route_coverage", status);
         ((ObjectNode) index.get("versions")).put("spellbook_snapshot", snapshot.fetchedDate());

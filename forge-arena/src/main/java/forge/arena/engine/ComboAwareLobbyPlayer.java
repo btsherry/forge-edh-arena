@@ -661,6 +661,15 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return Collections.singletonList(protection);
                 }
             }
+            // REACTIVE PROTECTION: an opponent's spell/ability on the stack is
+            // pointed at one of OUR combo pieces -> cast the cheapest covering
+            // instant (Heroic Intervention class) in response to save it, before
+            // resuming any loop. Keeps an assembled combo alive through removal —
+            // the resilience half of the assembly frontier.
+            SpellAbility cover = reactiveProtect(turn);
+            if (cover != null) {
+                return Collections.singletonList(cover);
+            }
             SeatView view = SeatViews.of(player, seatIndex, turn);
             boolean entryWindowOpen = game.getPhaseHandler().is(PhaseType.MAIN1, player)
                     && game.getStack().isEmpty();
@@ -1064,6 +1073,47 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             return step.targets().isEmpty()
                     ? "activate_ability_not_found"
                     : "activate_target_illegal";
+        }
+
+        /**
+         * An opponent's stack object aimed at one of our combo pieces -> the
+         * cheapest covering instant we can cast in response, or null. Only the
+         * TOP object (the imminent threat); our own spells/abilities are skipped
+         * (so the cover we just cast never re-triggers this).
+         */
+        private SpellAbility reactiveProtect(int turn) {
+            if (getGame().getStack().isEmpty()) {
+                return null;
+            }
+            SpellAbility top = getGame().getStack().peekAbility();
+            if (top == null || top.getActivatingPlayer() == null
+                    || player.equals(top.getActivatingPlayer()) // our own spell/ability
+                    || top.getTargets() == null) {
+                return null;
+            }
+            forge.game.card.Card threatened = null;
+            for (forge.game.card.Card t : top.getTargets().getTargetCards()) {
+                if (player.equals(t.getController()) && pilot.isProgramPiece(t.getName())) {
+                    threatened = t;
+                    break;
+                }
+            }
+            if (threatened == null) {
+                return null;
+            }
+            String cover = pilot.reactiveCover(SeatViews.of(player, seatIndex, turn),
+                    threatened.isCreature());
+            if (cover == null) {
+                return null;
+            }
+            SpellAbility sa = AbilityResolver.resolveCast(player, cover);
+            if (sa != null) {
+                pilot.observe(forge.arena.report.ArenaEvent.of("piece_protected", turn, seatIndex)
+                        .with("piece", threatened.getName()).with("cover", cover)
+                        .with("threat", top.getHostCard() != null
+                                ? top.getHostCard().getName() : "?"));
+            }
+            return sa;
         }
 
         /** Step → engine ability; null = failure handled, stock takes the priority. */

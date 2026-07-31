@@ -320,8 +320,31 @@ public final class EngineFacade {
             p.setProgramPaths(programPaths);
             p.setPairingPrograms(pairingPaths);
             p.setEnginePrograms(enginePaths);
+            p.setProtection(loadProtection(seat.dossierDir().resolve("protection-priorities.json")));
             return p;
         });
+    }
+
+    /** Load the deck's reactive protection covers (protection-priorities.json).
+     *  Missing/unreadable = no covers (a deck may hold none), never fatal. */
+    private static java.util.List<forge.arena.combo.ComboPilot.ProtectionSpec> loadProtection(
+            java.nio.file.Path path) {
+        java.util.List<forge.arena.combo.ComboPilot.ProtectionSpec> specs =
+                new java.util.ArrayList<>();
+        try {
+            com.fasterxml.jackson.databind.JsonNode root =
+                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(path.toFile());
+            for (com.fasterxml.jackson.databind.JsonNode c : root.path("covers")) {
+                specs.add(new forge.arena.combo.ComboPilot.ProtectionSpec(
+                        c.path("card").asText(),
+                        forge.arena.prep.ProtectionFinder.Scope.valueOf(
+                                c.path("scope").asText("ALL_PERMANENTS")),
+                        c.path("mana_value").asInt(0)));
+            }
+        } catch (Exception noneOrUnreadable) {
+            // no protection artifact for this deck — inert, like an empty pairing set
+        }
+        return specs;
     }
 
     /** The detection-only observation bridge for a combo-aware seat (PR-11 machinery). */
