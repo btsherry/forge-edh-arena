@@ -143,18 +143,18 @@ public final class BounceRecurRunner {
             }
         }
 
-        // terminate: the board can swing lethal (board_counters), or the cap
-        if (state == State.LOOP && "board_counters".equals(payoffMeasure) && boardIsLethal()) {
+        // terminate: the payoff has reached its natural end (board_counters ->
+        // lethal board; hand_size -> library at the floor; opp_creatures -> the
+        // opponents' creatures are all gone). Then the measured product IS the
+        // win setup and we hand back (combat / a downstream outlet closes).
+        if (state == State.LOOP && terminalReached()) {
             state = State.WIN;
         }
         if (state == State.WIN) {
-            // the loop built a lethal board; hand back so the deploy/combat
-            // path takes the alpha strike (haste from Concordant Crossroads /
-            // Craterhoof / Finale). The measured product IS the win setup.
             finished = true;
             pilot.observe(ArenaEvent.of("program_complete", turn, seat)
                     .with("combo", comboId).with("iterations", iterations)
-                    .with("exit", "board_lethal"));
+                    .with("exit", terminalExit()));
             return null;
         }
         if (iterations >= ITERATION_CAP) {
@@ -270,6 +270,34 @@ public final class BounceRecurRunner {
             }
         }
         return power >= maxLife && maxLife > 0;
+    }
+
+    /** Leave a draw-buffer so a hand_size (draw-the-deck) loop stops short of
+     * decking; a player who would win and lose simultaneously LOSES (CR 104.3f). */
+    static final int LIBRARY_FLOOR = 8;
+
+    private boolean terminalReached() {
+        switch (payoffMeasure) {
+            case "hand_size":
+                return player.getCardsIn(ZoneType.Library).size() <= LIBRARY_FLOOR;
+            case "opp_creatures":
+                return opponentCreatureCount() == 0;
+            case "board_counters":
+            default:
+                return boardIsLethal();
+        }
+    }
+
+    private String terminalExit() {
+        switch (payoffMeasure) {
+            case "hand_size":
+                return "library_floor";
+            case "opp_creatures":
+                return "opponents_cleared";
+            case "board_counters":
+            default:
+                return "board_lethal";
+        }
     }
 
     private boolean inHand(String cardName) {
