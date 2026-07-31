@@ -1087,6 +1087,11 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 // PR-29: the biggest affordable creature in hand — engine
                 // data (power, castability) the pilot structurally lacks
                 sa = biggestCastableCreature();
+            } else if ("equip".equals(step.action())) {
+                // assemble-and-deploy: attach a combo's equipment to its host
+                // (Umbral Mantle -> Selvala) so the untapper combo comes online
+                sa = AbilityResolver.resolveEquip(player, step.card(),
+                        step.targets().isEmpty() ? null : step.targets().get(0));
             } else {
                 sa = step.isCast()
                         ? AbilityResolver.resolveCast(player, step.card())

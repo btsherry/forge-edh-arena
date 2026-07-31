@@ -244,6 +244,38 @@ final class AbilityResolver {
     }
 
     /**
+     * The equipment's own Equip ability, aimed at a host — used by the pilot's
+     * assemble-and-deploy phase to attach a combo's equipment to its declared
+     * host (Umbral Mantle -> Selvala) instead of waiting on stock AI. Equip is a
+     * sorcery-speed activated ability; returns null when either card is not on
+     * the battlefield, the host is not a legal target, or the cost is unpayable.
+     */
+    static SpellAbility resolveEquip(Player player, String equipName, String hostName) {
+        Card equip = findBattlefield(player, equipName);
+        Card host = findBattlefield(player, hostName);
+        if (equip == null || host == null) {
+            return null;
+        }
+        for (SpellAbility sa : equip.getAllPossibleAbilities(player, false)) {
+            if (!sa.isEquip()) {
+                continue;
+            }
+            sa.setActivatingPlayer(player);
+            if (sa.usesTargeting()) {
+                sa.resetTargets();
+                if (!sa.canTarget(host)) {
+                    continue;
+                }
+                sa.getTargets().add(host);
+            }
+            if (forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                return sa;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Cost matching by normalized symbol containment: hint "{3}" matches
      * "{3}, {Q}: ..." but not "{13}". Hints are whole symbols, so a binding
      * distinguishes Staff's {1}/{3}/{5} abilities unambiguously.

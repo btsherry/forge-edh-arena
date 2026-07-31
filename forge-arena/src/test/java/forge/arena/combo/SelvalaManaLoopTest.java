@@ -265,6 +265,47 @@ public class SelvalaManaLoopTest {
         assertConverts(events, "2026-2404-2816");
     }
 
+    // --- ASSEMBLE-AND-DEPLOY --------------------------------------------
+    // The win-rate frontier: pieces that never assemble organically. Leave
+    // Selvala in the COMMAND zone and Umbral Mantle in HAND (as in a real game
+    // pre-assembly), give mana, and prove the pilot PROACTIVELY casts the
+    // commander + the equipment and ATTACHES it, so the combo comes online
+    // instead of waiting on stock AI (which produced 14x piece_lost in the
+    // smoke batch).
+
+    /** Deploy from hand+command: cast Selvala, cast Umbral, equip, then the
+     * 527-2816 combo assembles and the runner plans it. */
+    @Test
+    public void deployAssemblesUmbralComboFromHandAndCommand() throws Exception {
+        List<ArenaEvent> events = runGate("deploy-umbral", new SelvalaBoardProbe(
+                null, // leave Selvala in the command zone
+                List.of(),
+                List.of(),
+                List.of("Umbral Mantle", "Genesis Wave"),
+                14));
+        // the deploy phase fired the right actions
+        var deploys = events.stream()
+                .filter(e -> e.t().equals("line_step")
+                        && "PROGRAM_DEPLOY".equals(String.valueOf(e.fields().get("stage"))))
+                .map(e -> String.valueOf(e.fields().get("deploy")) + ":"
+                        + String.valueOf(e.fields().get("card"))).toList();
+        System.out.println("[deploy-umbral] deploys=" + deploys);
+        assertTrue("must CAST Selvala from the command zone, deploys=" + deploys,
+                deploys.contains("cast:Selvala, Heart of the Wilds"));
+        assertTrue("must CAST Umbral Mantle from hand, deploys=" + deploys,
+                deploys.contains("cast:Umbral Mantle"));
+        assertTrue("must EQUIP Umbral Mantle (attach to Selvala), deploys=" + deploys,
+                deploys.contains("equip:Umbral Mantle"));
+        // and the combo actually assembled -> the runner planned it
+        boolean planned = events.stream().anyMatch(e -> e.t().equals("governor_plan")
+                && "527-2816".equals(String.valueOf(e.fields().get("combo"))));
+        List<String> aborts = events.stream()
+                .filter(e -> e.t().equals("program_abort"))
+                .map(e -> String.valueOf(e.fields())).toList();
+        assertTrue("deployed combo 527-2816 must ASSEMBLE and be planned, aborts=" + aborts,
+                planned);
+    }
+
     // --- assertion helpers ----------------------------------------------
 
     private Map<String, Object> firstPlan(List<ArenaEvent> events, String combo) {

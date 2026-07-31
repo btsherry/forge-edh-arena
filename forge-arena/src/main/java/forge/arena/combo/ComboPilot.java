@@ -970,7 +970,7 @@ public final class ComboPilot {
                     .with("entry_phase", executor.get().entryPhase()));
             return assemblyAction(view, validator);
         }
-        return compiledPairings(view).or(() -> pairedPlays(view))
+        return deployProgram(view).or(() -> compiledPairings(view)).or(() -> pairedPlays(view))
                 .or(() -> engineCycle(view)).or(() -> engineSetup(view))
                 .or(() -> preAssembly(view));
     }
@@ -1089,6 +1089,79 @@ public final class ComboPilot {
      * stock (inertness). Soft decision: no event (the cast itself is
      * recorded as spell_cast), and a live refusal is skipped, not aborted.
      */
+    /**
+     * ASSEMBLE-AND-DEPLOY for PROGRAM combos — the offensive counterpart to the
+     * assembly gate. When a program combo's pieces are all REACHABLE (in hand,
+     * command, or on the battlefield) but not yet ASSEMBLED (a piece still in
+     * hand/command, or its equipment on the wrong host), proactively cast the
+     * missing piece or attach the equipment so the combo actually comes online —
+     * instead of waiting on stock AI's generic sequencing, which is why the
+     * ~1/30 win rate was dominated by pieces that never assembled (14x Selvala in
+     * the command zone, 7x Umbral unattached in the smoke batch). One deploy
+     * action per window; reuses each program's own on_battlefield/attached
+     * preconditions (the same data the assembly gate reads). Deck-agnostic.
+     */
+    private Optional<Action> deployProgram(SeatView view) {
+        ComboTracker.Snapshot snap = tracker.recompute(view);
+        // pick the CLOSEST deployable program combo: every piece reachable
+        // (status.ready()) but not yet assembled, fewest casts remaining
+        ComboTracker.ComboStatus best = null;
+        int bestOffBoard = Integer.MAX_VALUE;
+        for (ComboTracker.ComboStatus status : snap.statuses()) {
+            if (!programPaths.containsKey(status.id())
+                    || firedShortcuts.contains(status.id())
+                    || !status.ready()                                   // a piece is unreachable
+                    || programAssembled(status.id(), status, view)) {    // assembled -> dispatch path owns it
+                continue;
+            }
+            int offBoard = (int) programOnBattlefield.getOrDefault(status.id(), Set.of())
+                    .stream().filter(p -> !"BATTLEFIELD".equals(status.where().get(p))).count();
+            if (offBoard < bestOffBoard) {
+                bestOffBoard = offBoard;
+                best = status;
+            }
+        }
+        if (best == null) {
+            return Optional.empty();
+        }
+        String id = best.id();
+        // 1) cast a required piece not yet in play (commander from COMMAND, or a
+        //    combo piece from HAND). An unaffordable cast resolves to null in the
+        //    controller and soft-skips; attemptedDeploys stops a same-turn retry.
+        for (String piece : programOnBattlefield.getOrDefault(id, Set.of())) {
+            String zone = best.where().get(piece);
+            if ("BATTLEFIELD".equals(zone) || attemptedDeploys.contains(piece)) {
+                continue;
+            }
+            if ("HAND".equals(zone) || "COMMAND".equals(zone)) {
+                attemptedDeploys.add(piece);
+                events.accept(ArenaEvent.of("line_step", view.turn(), seat)
+                        .with("stage", "PROGRAM_DEPLOY").with("combo", id)
+                        .with("deploy", "cast").with("card", piece));
+                return Optional.of(Action.play(LineExecutor.Step.cast(piece)));
+            }
+        }
+        // 2) every piece is in play -> attach the equipment to its declared host
+        Map<String, String> attachments = view.ownAttachments();
+        for (String[] pair : programAttach.getOrDefault(id, List.of())) {
+            String equip = pair[0];
+            String host = pair[1];
+            if (host.equals(attachments.get(equip))
+                    || attemptedDeploys.contains("equip:" + equip)) {
+                continue;
+            }
+            if ("BATTLEFIELD".equals(best.where().get(equip))
+                    && "BATTLEFIELD".equals(best.where().get(host))) {
+                attemptedDeploys.add("equip:" + equip);
+                events.accept(ArenaEvent.of("line_step", view.turn(), seat)
+                        .with("stage", "PROGRAM_DEPLOY").with("combo", id)
+                        .with("deploy", "equip").with("card", equip).with("host", host));
+                return Optional.of(Action.play(LineExecutor.Step.equip(equip, host)));
+            }
+        }
+        return Optional.empty();
+    }
+
     private Optional<Action> preAssembly(SeatView view) {
         for (ComboTracker.ComboStatus status : tracker.recompute(view).statuses()) {
             if (!status.fullySpecified() || firedShortcuts.contains(status.id())) {

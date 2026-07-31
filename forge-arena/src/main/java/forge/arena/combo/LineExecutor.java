@@ -130,6 +130,12 @@ public interface LineExecutor {
             return new Step("cast", card, null, List.of(), null, choice);
         }
 
+        /** Assemble-and-deploy: attach {@code card} (equipment) to {@code host}
+         *  — the controller resolves the Equip ability aimed at the host. */
+        public static Step equip(String card, String host) {
+            return new Step("equip", card, null, List.of(host));
+        }
+
         public static Step done() {
             return new Step("done", null, null, List.of());
         }
