@@ -226,3 +226,13 @@ HIGH (ramping no-op false-completes to the cap) fixed via a producer-actually-ta
 
 ## RESERVE DECISION — CLOSED (Ben, 2026-07-30)
 Root cause of the flip deck-out is SELVALA'S OWN "may draw" (not The Great Henge — Henge is excluded from the flip and is a minor contributor; the deck scan shows Selvala is the only remaining ETB-draw source). Her draw fires ~4-21x per flip (scales with flip size), bypasses confirmAction (Forge auto-takes it in the batch-trigger resolution), and is not yet declinable at that seam. **Ben: do NOT tune the reserve further — reserve=35 + draw-engine exclusion is good enough for now** (both anchors WIN with a comfortable margin). Declining her may-draw to reach ~10 (flip ~89%) is a deferred, well-defined follow-up (needs the AI's batch-optional-trigger seam), not a blocker.
+
+## SMOKE BATCH (selvala-smoke30, 2026-07-31) — the honest win-rate read
+30 games, 4-deck pod, seed 3033. Results: win=25, timeout_draw=4, crash=1 (pre-existing JVM fork fault). Wins by deck: Purphoros 16, Giada 6, Urza 2, **Selvala 1/30 — UNCHANGED from her ~1/100 baseline.**
+
+**The arc built working combos that do NOT yet lift the win rate. Why (from the event stream):**
+- Selvala's combo entered the runner **once** in 30 games (1 governor_plan: 527-2816 POWER_RAMPING, entry_yield 2). The pod's 251 outlet_drill cycles / 197-deep iterations are mostly Urza/Purphoros loops, not Selvala.
+- **21 Selvala combo attempts ABORTED on piece_lost** (14x 'Selvala, Heart of the Wilds', 7x 'Umbral Mantle'): the pilot flags the combo READY and hands it to the runner, but the pieces aren't truly in play (Selvala still in the command zone / Umbral unattached or removed). The runner correctly refuses — this is an ASSEMBLY-DETECTION gap, not a runner bug.
+- **Zero outlet conversions**: Genesis Wave was drawn to hand 5x but CAST as an outlet 0x (spell_cast=0). Even the one loop that ran did not fire the outlet.
+
+**Reprioritization:** the win-rate lever is NOT more combos/synergies — it's the ASSEMBLY + CONVERSION pipeline: (a) combo-detection should require the pieces ACTUALLY assembled (on board + attached) before handing to the runner (stop the piece_lost churn), and (b) outlet reservation + reachability so a banked loop actually fires Genesis Wave. These are the same pilot-level issues the sweep exposed. The runner/combos are proven (gates 3/3, pod loops run 197-deep); the frontier is getting Selvala's pieces assembled and the outlet fired ORGANICALLY. Synergy shortlist + blink loops matter, but they ride on top of a combo that assembles + converts — which is the real gap.
