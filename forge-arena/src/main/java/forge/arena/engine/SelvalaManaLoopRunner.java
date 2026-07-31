@@ -526,10 +526,15 @@ public final class SelvalaManaLoopRunner {
      *  can field at least one attacker per opponent — either creatures that can
      *  already attack, or Nylea to dig a whole board out of the library. */
     private boolean godWinPlanViable() {
-        if (AbilityResolver.findBattlefield(player, "Rhonas the Indomitable") == null) {
+        boolean rhonas = AbilityResolver.findBattlefield(player, "Rhonas the Indomitable") != null;
+        boolean nylea = AbilityResolver.findBattlefield(player, "Nylea, Keen-Eyed") != null;
+        if (!rhonas && !nylea) {
             return false;
         }
-        boolean nylea = AbilityResolver.findBattlefield(player, "Nylea, Keen-Eyed") != null;
+        // EITHER God alone can close the game: Nylea digs a whole board out of the
+        // library and swings wide (hasty via Crossroads); Rhonas pumps a board
+        // that is already present into a trampling lethal. So Nylea is viable on
+        // its own; Rhonas is viable when we already have attackers to pump.
         return nylea || nonSickAttackers().size() >= Math.max(1, liveOpponentCount());
     }
 
@@ -561,12 +566,14 @@ public final class SelvalaManaLoopRunner {
             }
             winPlanPhase = 2;
         }
-        // PHASE 2 — PUMP: Rhonas gives +2/+0 and trample; distribute across the
+        // PHASE 2 — PUMP (Rhonas only): +2/+0 and trample, distributed across the
         // attackers (lowest power first) until the board can alpha-strike lethal.
+        // Skipped entirely with a Nylea-only board — there the wide hasty swing is
+        // the kill, no pump required.
         if (winPlanPhase == 2) {
-            List<Card> attackers = nonSickAttackers();
-            if (!boardTrampleLethal(attackers) && winPlanPumps < GOD_PUMP_CAP) {
-                Card rhonas = AbilityResolver.findBattlefield(player, "Rhonas the Indomitable");
+            Card rhonas = AbilityResolver.findBattlefield(player, "Rhonas the Indomitable");
+            if (rhonas != null && !boardTrampleLethal(nonSickAttackers())
+                    && winPlanPumps < GOD_PUMP_CAP) {
                 Card target = pumpTarget(nonSickAttackersOrAll(), rhonas);
                 if (target != null) {
                     SpellAbility pump = AbilityResolver.resolve(player,
@@ -582,14 +589,17 @@ public final class SelvalaManaLoopRunner {
         // PHASE 3 — DONE: the board is as lethal as we can make it; hand to combat.
         finished = true;
         List<Card> attackers = nonSickAttackers();
+        // label by whichever God actually closed — Rhonas if we pumped, else Nylea
+        String godOutlet = winPlanPumps > 0 ? "Rhonas the Indomitable"
+                : winPlanDigs > 0 ? "Nylea, Keen-Eyed" : "God win-plan";
         pilot.observe(ArenaEvent.of("outlet_fired", turn, seat)
-                .with("combo", comboId).with("outlet", "Rhonas the Indomitable")
+                .with("combo", comboId).with("outlet", godOutlet)
                 .with("x", winPlanPumps).with("digs", winPlanDigs)
                 .with("attackers", attackers.size())
                 .with("board_power", totalPower(attackers)));
         pilot.observe(ArenaEvent.of("program_complete", turn, seat)
                 .with("combo", comboId).with("iterations", iterations)
-                .with("outlet", "Rhonas the Indomitable"));
+                .with("outlet", godOutlet));
         return null;
     }
 

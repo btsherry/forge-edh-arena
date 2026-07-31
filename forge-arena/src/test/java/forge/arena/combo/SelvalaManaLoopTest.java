@@ -322,14 +322,52 @@ public class SelvalaManaLoopTest {
                 List.of(),
                 List.of(),
                 40));
-        boolean rhonasFired = events.stream().anyMatch(e -> e.t().equals("outlet_fired")
-                && "Rhonas the Indomitable".equals(String.valueOf(e.fields().get("outlet"))));
+        // with both Gods up, whichever closes first fires: Nylea's flood can be
+        // lethal on its own before Rhonas needs to pump, so accept either outlet
+        java.util.Set<String> godOutlets = java.util.Set.of(
+                "Rhonas the Indomitable", "Nylea, Keen-Eyed", "God win-plan");
+        boolean godFired = events.stream().anyMatch(e -> e.t().equals("outlet_fired")
+                && godOutlets.contains(String.valueOf(e.fields().get("outlet"))));
         List<String> aborts = events.stream()
                 .filter(e -> e.t().equals("program_abort"))
                 .map(e -> String.valueOf(e.fields())).toList();
-        System.out.println("[god-winplan] rhonasFired=" + rhonasFired + " aborts=" + aborts);
+        System.out.println("[god-winplan] godFired=" + godFired + " aborts=" + aborts);
         assertTrue("the Rhonas/Nylea win-plan must fire as the outlet, aborts=" + aborts,
-                rhonasFired);
+                godFired);
+    }
+
+    /** Rhonas ALONE (no Nylea): pump the existing board +2/+0 trample to lethal. */
+    @Test
+    public void rhonasAlonePumpsExistingBoardToLethal() throws Exception {
+        List<ArenaEvent> events = runGate("god-rhonas", new SelvalaBoardProbe(
+                "Selvala, Heart of the Wilds",
+                List.of("Staff of Domination", "Ghalta, Primal Hunger",
+                        "Rhonas the Indomitable", "Concordant Crossroads",
+                        "Llanowar Elves", "Elvish Mystic", "Birds of Paradise"),
+                List.of(), List.of(), 40));
+        boolean fired = events.stream().anyMatch(e -> e.t().equals("outlet_fired")
+                && "Rhonas the Indomitable".equals(String.valueOf(e.fields().get("outlet"))));
+        List<String> aborts = events.stream().filter(e -> e.t().equals("program_abort"))
+                .map(e -> String.valueOf(e.fields())).toList();
+        System.out.println("[god-rhonas] fired=" + fired + " aborts=" + aborts);
+        assertTrue("Rhonas alone must pump the board to lethal, aborts=" + aborts, fired);
+    }
+
+    /** Nylea ALONE (no Rhonas): dig the deck's creatures, cast them wide (hasty),
+     * and swing lethal — no pump. Proves each God closes independently. */
+    @Test
+    public void nyleaAloneFloodsWideAndWins() throws Exception {
+        List<ArenaEvent> events = runGate("god-nylea", new SelvalaBoardProbe(
+                "Selvala, Heart of the Wilds",
+                List.of("Staff of Domination", "Ghalta, Primal Hunger",
+                        "Nylea, Keen-Eyed", "Concordant Crossroads"),
+                List.of(), List.of(), 40));
+        boolean fired = events.stream().anyMatch(e -> e.t().equals("outlet_fired")
+                && "Nylea, Keen-Eyed".equals(String.valueOf(e.fields().get("outlet"))));
+        List<String> aborts = events.stream().filter(e -> e.t().equals("program_abort"))
+                .map(e -> String.valueOf(e.fields())).toList();
+        System.out.println("[god-nylea] fired=" + fired + " aborts=" + aborts);
+        assertTrue("Nylea alone must flood a wide board and fire, aborts=" + aborts, fired);
     }
 
     // --- assertion helpers ----------------------------------------------
