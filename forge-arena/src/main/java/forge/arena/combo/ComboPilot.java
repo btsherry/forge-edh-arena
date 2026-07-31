@@ -1,5 +1,6 @@
 package forge.arena.combo;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -191,10 +192,27 @@ public final class ComboPilot {
      *  — from the program JSONs, never from code. */
     private Set<String> programOutlets = Set.of();
 
+    /**
+     * PR-sweep: per program, the assembly its preconditions require — pieces
+     * that must be ON THE BATTLEFIELD and equip->host attachments — so the
+     * pilot disambiguates combos that SHARE a piece. Four Selvala combos share
+     * Umbral Mantle; without this the pilot burns turn after turn dispatching a
+     * sibling whose OTHER piece is in hand (Fanatic) or whose Umbral sits on the
+     * wrong host, each only to abort piece_lost/piece_misattached, and never
+     * reaches the one combo that IS assembled. Skipped for programs with a
+     * non-empty setup (their setup places pieces). From the JSONs, not code.
+     */
+    private Map<String, Set<String>> programOnBattlefield = Map.of();
+    private Map<String, List<String[]>> programAttach = Map.of();
+    private Set<String> programHasSetup = Set.of();
+
     public void setProgramPaths(Map<String, String> paths) {
         this.programPaths = paths == null ? Map.of() : paths;
         Set<String> pieces = new HashSet<>();
         Set<String> outlets = new HashSet<>();
+        Map<String, Set<String>> onBattlefield = new HashMap<>();
+        Map<String, List<String[]>> attach = new HashMap<>();
+        Set<String> hasSetup = new HashSet<>();
         for (String path : this.programPaths.values()) {
             try {
                 com.fasterxml.jackson.databind.JsonNode program =
@@ -204,6 +222,33 @@ public final class ComboPilot {
                     String card = piece.path("card").asText();
                     if (!card.isEmpty()) {
                         pieces.add(card);
+                    }
+                }
+                // assembly preconditions: which pieces must be in play and how
+                // they must be attached — the pilot's dispatch gate reads these
+                // to skip a shared-piece sibling that is not actually assembled
+                String comboId = program.path("combo_id").asText("");
+                if (!comboId.isEmpty()) {
+                    Set<String> bf = new HashSet<>();
+                    List<String[]> att = new ArrayList<>();
+                    for (com.fasterxml.jackson.databind.JsonNode pc
+                            : program.path("preconditions")) {
+                        String check = pc.path("check").asText("");
+                        if ("on_battlefield".equals(check)) {
+                            bf.add(pc.path("card").asText());
+                        } else if ("attached".equals(check)) {
+                            att.add(new String[] {pc.path("card").asText(),
+                                    pc.path("host").asText()});
+                        }
+                    }
+                    if (!bf.isEmpty()) {
+                        onBattlefield.put(comboId, bf);
+                    }
+                    if (!att.isEmpty()) {
+                        attach.put(comboId, att);
+                    }
+                    if (program.path("setup").isArray() && program.path("setup").size() > 0) {
+                        hasSetup.add(comboId);
                     }
                 }
                 // the outlet is a structured OBJECT in the cast_bounce
@@ -226,6 +271,42 @@ public final class ComboPilot {
         }
         this.programPieces = pieces;
         this.programOutlets = outlets;
+        this.programOnBattlefield = Map.copyOf(onBattlefield);
+        this.programAttach = Map.copyOf(attach);
+        this.programHasSetup = Set.copyOf(hasSetup);
+    }
+
+    /**
+     * A program combo is dispatchable only when its declared pieces are truly
+     * ASSEMBLED: no piece stuck in the command zone (an uncast commander), every
+     * on_battlefield piece actually on the battlefield, and every required equip
+     * on its declared host. Programs with a setup step place their own pieces, so
+     * they keep the looser command-zone-only gate. This is what lets four combos
+     * that share Umbral Mantle coexist: only the one whose Umbral is on the right
+     * host — and whose other piece is in play, not still in hand — dispatches.
+     */
+    private boolean programAssembled(String comboId, ComboTracker.ComboStatus status,
+            SeatView view) {
+        // baseline (smoke-batch fix #73): never dispatch with a piece still in
+        // the command zone — no runner casts the commander in setup
+        if (status.where().values().stream().anyMatch("COMMAND"::equals)) {
+            return false;
+        }
+        if (programHasSetup.contains(comboId)) {
+            return true; // setup places the remaining pieces
+        }
+        for (String piece : programOnBattlefield.getOrDefault(comboId, Set.of())) {
+            if (!"BATTLEFIELD".equals(status.where().get(piece))) {
+                return false;
+            }
+        }
+        Map<String, String> attachments = view.ownAttachments();
+        for (String[] pair : programAttach.getOrDefault(comboId, List.of())) {
+            if (!pair[1].equals(attachments.get(pair[0]))) {
+                return false; // equip absent or on the wrong host
+            }
+        }
+        return true;
     }
 
     /**
@@ -784,18 +865,17 @@ public final class ComboPilot {
             // not, while its prose-prerequisite sibling 513-3682 fired.
             // Non-program combos keep the old semantics exactly.
             boolean hasProgram = programPaths.containsKey(status.id());
-            // ASSEMBLY GATE (smoke-batch fix): a program runner needs its
-            // pieces IN PLAY, but detection counts command/hand as "reachable".
-            // Do NOT dispatch a program combo while a named piece is still in
-            // the COMMAND zone — the commander is uncast and no runner casts it
-            // in setup, so it dispatches only to abort piece_lost (14x Selvala
-            // in the smoke batch). Non-program combos keep the old zone-
-            // agnostic semantics; hand pieces stay allowed (setup can cast).
-            boolean piecesPlaced = status.where().values().stream()
-                    .noneMatch("COMMAND"::equals);
+            // ASSEMBLY GATE (smoke-batch fix #73, extended for shared pieces): a
+            // program runner needs its pieces IN PLAY and correctly attached, but
+            // detection counts command/hand as "reachable". programAssembled()
+            // reads the program's own on_battlefield/attached preconditions so a
+            // combo dispatches only when it is TRULY assembled — not while its
+            // commander is uncast (COMMAND), a piece sits in hand, or its equip is
+            // on the wrong host. Without this the pilot spins on Umbral-sharing
+            // siblings (Fanatic/Selvala variants) and never reaches the ready one.
             boolean dispatchable = (status.ready()
                     || (status.distance() == 0 && hasProgram))
-                    && (!hasProgram || piecesPlaced);
+                    && (!hasProgram || programAssembled(status.id(), status, view));
             if (!dispatchable || attemptedThisTurn.contains(status.id())) {
                 continue;
             }

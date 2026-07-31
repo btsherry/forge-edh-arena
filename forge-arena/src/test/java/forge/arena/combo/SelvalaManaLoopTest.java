@@ -198,6 +198,73 @@ public class SelvalaManaLoopTest {
                 aborts.stream().anyMatch(r -> r.contains("zero_yield")));
     }
 
+    // --- SWEEP: the remaining four tap-untap pairings ---------------------
+    // Each proves a DIFFERENT producer/untapper shape banks through the forked
+    // runner and force-casts Genesis Wave, exercising the untap FIXPOINT that
+    // readies a board stock pre-tapped (the pieces enter tapped/sick in a real
+    // game). Forests fund the untap costs during the fixpoint (the producer is
+    // tapped, so the pool is empty until the first normal tap).
+
+    /** Sweep A — Sanctum Weaver + Staff of Domination (ENCHANTMENT_COUNT).
+     * Weaver taps for one mana per enchantment; six enchantments -> net +2. */
+    @Test
+    public void weaverStaffEnchantmentLoopBanksAndFires() throws Exception {
+        List<ArenaEvent> events = runGate("sweepA-weaver-staff", new SelvalaBoardProbe(
+                null,
+                List.of("Sanctum Weaver", "Staff of Domination",
+                        "Sylvan Library", "Ghostly Prison", "Propaganda",
+                        "Rhystic Study", "Mystic Remora", "Sterling Grove"),
+                List.of(),
+                List.of("Genesis Wave"),
+                10));
+        assertConverts(events, "1355-2645");
+    }
+
+    /** Sweep B — Fanatic of Rhonas + Umbral Mantle (CONSTANT GGGG).
+     * Ghalta supplies the Ferocious power-4 body; Umbral's {3}{Q} self-untaps. */
+    @Test
+    public void fanaticUmbralConstantLoopBanksAndFires() throws Exception {
+        List<ArenaEvent> events = runGate("sweepB-fanatic-umbral", new SelvalaBoardProbe(
+                null,
+                List.of("Fanatic of Rhonas", "Umbral Mantle", "Ghalta, Primal Hunger"),
+                List.<String[]>of(new String[] {"Umbral Mantle", "Fanatic of Rhonas"}),
+                List.of("Genesis Wave"),
+                10));
+        assertConverts(events, "2816-5711");
+    }
+
+    /** Sweep C — Voyaging Satyr + Gaea's Cradle + Staff (CREATURE_COUNT, the
+     * DEEP 3-link chain: Satyr untaps Cradle, Staff untaps Satyr + itself).
+     * Six creatures -> Cradle yields 6, net +2; the fixpoint must ready a
+     * three-piece stock-tapped chain. */
+    @Test
+    public void satyrCradleStaffCreatureLoopBanksAndFires() throws Exception {
+        List<ArenaEvent> events = runGate("sweepC-satyr-cradle-staff", new SelvalaBoardProbe(
+                null,
+                List.of("Gaea's Cradle", "Staff of Domination", "Voyaging Satyr",
+                        "Llanowar Elves", "Elvish Mystic", "Birds of Paradise",
+                        "Fyndhorn Elves", "Arbor Elf"),
+                List.of(),
+                List.of("Genesis Wave"),
+                8));
+        assertConverts(events, "2026-2404-2645");
+    }
+
+    /** Sweep D — Voyaging Satyr + Gaea's Cradle + Umbral Mantle (CREATURE_COUNT,
+     * Umbral self-untaps Satyr). Five creatures -> net +2. */
+    @Test
+    public void satyrCradleUmbralCreatureLoopBanksAndFires() throws Exception {
+        List<ArenaEvent> events = runGate("sweepD-satyr-cradle-umbral", new SelvalaBoardProbe(
+                null,
+                List.of("Gaea's Cradle", "Umbral Mantle", "Voyaging Satyr",
+                        "Llanowar Elves", "Elvish Mystic", "Birds of Paradise",
+                        "Fyndhorn Elves"),
+                List.<String[]>of(new String[] {"Umbral Mantle", "Voyaging Satyr"}),
+                List.of("Genesis Wave"),
+                8));
+        assertConverts(events, "2026-2404-2816");
+    }
+
     // --- assertion helpers ----------------------------------------------
 
     private Map<String, Object> firstPlan(List<ArenaEvent> events, String combo) {

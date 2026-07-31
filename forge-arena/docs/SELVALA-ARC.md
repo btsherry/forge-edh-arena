@@ -210,6 +210,19 @@ Programs written + saved to scratchpad/selvala-sweep-programs (pulled from the a
 
 All 4 sweep games still END in a seat-0 WIN (the deck converts via other lines), but the TARGET combo's loop doesn't reliably execute end-to-end in isolated fixtures. => Re-landing the sweep is a PILOT increment (combo-selection + outlet-reservation + deeper normalization), best done with Ben's steer, not more fixture tweaking.
 
+### SWEEP LANDED — all 4 combos convert (2026-07-31, Ben: "proceed with the sweep and normalization fix")
+The three pilot blockers above are FIXED; **all 4 sweep combos now bank and force-cast Genesis Wave in their own gates** (SelvalaManaLoopTest 7/7, BounceRecurTest 3/3, cross-deck regression clean):
+- sweepA Weaver+Staff (ENCHANTMENT_COUNT): outlet_fired X=53, flip 20->60.
+- sweepB Fanatic+Umbral (CONSTANT): X=55, flip 16->56.
+- sweepC Satyr+Cradle+**Staff** (CREATURE_COUNT, the DEEP 3-link chain): X=55, flip 18->58.
+- sweepD Satyr+Cradle+Umbral (CREATURE_COUNT): X=55, flip 17->57.
+
+Two fixes did it (both general, no deck-specific logic):
+1. **Untap FIXPOINT normalization** (`SelvalaManaLoopRunner`). The old one-pass normalization ran the untap SEQUENCE, which taps each untapper as it untaps the producer — so a 2-piece chain ended with the untapper tapped and the first real cycle stalled; a 3-link chain (Satyr->Cradle, Staff->Satyr, Staff->self) never readied at all. Replaced with `loopReady()` (producer AND every distinct untapper untapped) + `firstReadyingUntap()` (fire, per window, the first PAYABLE untap that readies a still-tapped piece), bounded by `untapSequence.size()*2+3`. Untap costs are paid from OTHER mana (lands) because the producer is tapped — the gate fixtures supply Forests to fund the fixpoint, mirroring a real board.
+2. **Assembly gate reads the program's OWN preconditions** (`ComboPilot.programAssembled`). Four combos share Umbral Mantle; the old gate (piece not in COMMAND) let the pilot dispatch a sibling whose other piece was in HAND (Fanatic) or whose Umbral sat on the wrong host — each aborting piece_lost/piece_misattached — and it never reached the assembled one (this is what regressed anchor gate3). The gate now checks each program's `on_battlefield` + `attached` preconditions against the live board (`SeatView.ownAttachments()`), so only the truly-assembled combo dispatches. Programs with a non-empty `setup` keep the looser gate. This is the general "disambiguate combos that share a piece" capability Ben's drop-in-a-deck vision needs.
+
+Sweep programs are back in the active dossier; anchor gate3's zero_yield reject and the Selvala/Urza/Purphoros/Giada program gates all stay green.
+
 ### High-priority synergies (task #71) status
 The #1 synergy (Genesis Wave force-cast past NeedsToPlayVar) is DONE and load-bearing in the runner. Selvala strict-max draw-sequencing is partially embodied (the defensive draw-decline). The rest (Finale->Craterhoof fetch, restricted-mana awareness, tutor-routing) remain queued — several are outlet-ladder / prep-weight concerns rather than runner code.
 

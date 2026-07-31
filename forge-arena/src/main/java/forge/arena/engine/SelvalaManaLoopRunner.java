@@ -88,8 +88,7 @@ public final class SelvalaManaLoopRunner {
     private int poolAtCycleStart = -1;
     private boolean pendingMeasure;
     private int settleWait;
-    /** a one-shot untap pass to ready a producer stock tapped before entry. */
-    private boolean normalizing;
+    /** untap-fixpoint windows spent readying a board stock pre-tapped. */
     private int normalizeAttempts;
     /** greatest power at THIS cycle's tap — the X Selvala actually produced. */
     private int xAtCycleTap = -1;
@@ -259,6 +258,49 @@ public final class SelvalaManaLoopRunner {
         return null;
     }
 
+    // --- NORMALIZATION (untap fixpoint) ----------------------------------
+
+    /** The state a normal cycle expects at phase 0: the producer AND every
+     * distinct untapper card untapped. Stock AI taps mana sources — and often
+     * the untappers — before the combo fires; until every piece is untapped the
+     * first untap step (which needs its own card untapped to pay {T}) can't run. */
+    private boolean loopReady(Card producer) {
+        if (producer.isTapped()) {
+            return false;
+        }
+        for (JsonNode step : untapSequence) {
+            Card c = AbilityResolver.findBattlefield(player, step.path("card").asText());
+            if (c != null && c.isTapped()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The first untap step that is currently PAYABLE and would untap a piece
+     * that is presently tapped — the next useful move toward {@link #loopReady}.
+     * Returns null when no affordable step advances readiness (out of external
+     * mana for the untap costs, or a piece is otherwise stuck). Untapping one
+     * piece can re-tap another (Satyr taps to untap Cradle); the phase-0 caller
+     * re-invokes this each window until the whole chain settles. */
+    private SpellAbility firstReadyingUntap() {
+        for (JsonNode step : untapSequence) {
+            String tgt = step.path("target").asText(null);
+            // the card this step untaps: its target, or itself for a self-untap
+            Card untapped = AbilityResolver.findBattlefield(player,
+                    tgt != null ? tgt : step.path("card").asText());
+            if (untapped == null || !untapped.isTapped()) {
+                continue; // that piece is already untapped — no gain
+            }
+            SpellAbility act = AbilityResolver.resolve(player, step.path("card").asText(),
+                    step.path("cost").asText(), tgt != null ? List.of(tgt) : List.of());
+            if (act != null && forge.ai.ComputerUtilCost.canPayCost(act, player, false)) {
+                return act;
+            }
+        }
+        return null;
+    }
+
     // --- LOOP ------------------------------------------------------------
 
     private List<SpellAbility> loop(int turn) {
@@ -306,48 +348,62 @@ public final class SelvalaManaLoopRunner {
         }
 
         if (cyclePhase == 0) {
-            // phase 0 — tap the producer for X. If it comes in TAPPED (stock
-            // AI taps mana sources like Cradle/Weaver/Fanatic before the combo
-            // fires), run the untap sequence once as a NORMALIZATION pass (no
-            // tap, no measure) to ready it, rather than aborting.
-            if (producer.isTapped()) {
-                if (normalizeAttempts >= 2) {
-                    return abort(turn, "producer_stuck_tapped after "
-                            + normalizeAttempts + " untap attempts");
+            // phase 0 — the board must be READY (the producer AND every distinct
+            // untapper untapped) before a normal cycle: the first untap step
+            // (Staff {3}{T} -> producer) needs its own card untapped to fire.
+            // Stock AI taps the producer (Cradle/Weaver/Fanatic) and often the
+            // untappers too before the combo fires, so run an UNTAP FIXPOINT:
+            // fire one payable untap that readies a still-tapped piece per
+            // window until ready. A CHAIN (Satyr->Cradle, Staff->Satyr,
+            // Staff->self) needs several passes because untapping one piece taps
+            // the next; the loop converges. These untap costs are paid from
+            // OTHER mana (lands) — the producer is tapped, so the pool is empty
+            // until the first normal tap.
+            if (!loopReady(producer)) {
+                if (normalizeAttempts >= untapSequence.size() * 2 + 3) {
+                    return abort(turn, "producer_stuck_tapped: board not ready after "
+                            + normalizeAttempts + " untap attempts (producer "
+                            + (producer.isTapped() ? "TAPPED" : "untapped") + ")");
+                }
+                SpellAbility untap = firstReadyingUntap();
+                if (untap == null) {
+                    // no affordable untap advances readiness — out of external
+                    // mana for the {3}/{1} untap costs, or a piece is otherwise
+                    // stuck; hand back rather than spin
+                    return abort(turn, "normalize_no_payable_untap: no affordable "
+                            + "untap readies the loop (external mana for the untap "
+                            + "costs exhausted?)");
                 }
                 normalizeAttempts++;
-                normalizing = true;
-                cyclePhase = 1;
-                // fall through to the untap block below
-            } else {
-                normalizeAttempts = 0;
-                poolAtCycleStart = pool;
-                xAtCycleTap = computeYield();
-                SpellAbility tap = AbilityResolver.resolve(
-                        player, producerCard, activateCost, List.of());
-                // the tap's own coloured cost ({G} for Selvala) must be
-                // PAYABLE from the banked pool; resolve() finds the ability but
-                // does not price it, so a silently-unpayable tap would fizzle
-                if (tap == null || !forge.ai.ComputerUtilCost.canPayCost(tap, player, false)) {
-                    pilot.observe(ArenaEvent.of("program_deferred", turn, seat)
-                            .with("combo", comboId).with("iterations", iterations)
-                            .with("pool", pool)
-                            .with("green", player.getManaPool()
-                                    .getAmountOfColor(forge.card.MagicColor.GREEN))
-                            .with("resolvable", tap != null)
-                            .with("reason", "producer_tap_unpayable"));
-                    finished = true;
-                    pilot.programDeferred(comboId);
-                    return null;
-                }
-                // Selvala/Weaver produce "any combination of colors" — the
-                // controller banks GREEN at RESOLUTION (chooseColor/
-                // specifyManaCombo overrides) so the pool pays the producer's
-                // own coloured activation and Genesis Wave's {G}{G}{G}; setting
-                // it on the pre-play SA is lost when Forge clones onto the stack.
-                cyclePhase = 1;
-                return List.of(tap);
+                return List.of(untap);
             }
+            normalizeAttempts = 0;
+            poolAtCycleStart = pool;
+            xAtCycleTap = computeYield();
+            SpellAbility tap = AbilityResolver.resolve(
+                    player, producerCard, activateCost, List.of());
+            // the tap's own coloured cost ({G} for Selvala) must be PAYABLE from
+            // the banked pool; resolve() finds the ability but does not price it,
+            // so a silently-unpayable tap would fizzle
+            if (tap == null || !forge.ai.ComputerUtilCost.canPayCost(tap, player, false)) {
+                pilot.observe(ArenaEvent.of("program_deferred", turn, seat)
+                        .with("combo", comboId).with("iterations", iterations)
+                        .with("pool", pool)
+                        .with("green", player.getManaPool()
+                                .getAmountOfColor(forge.card.MagicColor.GREEN))
+                        .with("resolvable", tap != null)
+                        .with("reason", "producer_tap_unpayable"));
+                finished = true;
+                pilot.programDeferred(comboId);
+                return null;
+            }
+            // Selvala/Weaver produce "any combination of colors" — the controller
+            // banks GREEN at RESOLUTION (chooseColor/specifyManaCombo overrides)
+            // so the pool pays the producer's own coloured activation and Genesis
+            // Wave's {G}{G}{G}; setting it on the pre-play SA is lost when Forge
+            // clones onto the stack.
+            cyclePhase = 1;
+            return List.of(tap);
         }
 
         // untap step — runs for cyclePhase >= 1, whether a normal cycle (after
@@ -360,9 +416,10 @@ public final class SelvalaManaLoopRunner {
         // fizzled (canPayCost prices the cost, not activation restrictions like
         // Cursed Totem), no mana was produced, and continuing would false-
         // complete the cycle on a negative-net measure. Not checked at later
-        // Staff steps (the producer is already untapped by then) or in a
-        // normalization pass (the producer is legitimately still tapped).
-        if (!normalizing && cyclePhase == 1 && !producer.isTapped()) {
+        // Staff steps (the producer is already untapped by then). Normalization
+        // no longer runs through this block — the fixpoint above readies the
+        // board before any phase-0 tap.
+        if (cyclePhase == 1 && !producer.isTapped()) {
             return abort(turn, "producer_tap_failed: '" + producerCard
                     + "' not tapped after its activation (blocked?)");
         }
@@ -377,14 +434,10 @@ public final class SelvalaManaLoopRunner {
                     + (tgt != null ? " -> " + tgt : ""));
         }
         if (cyclePhase >= untapSequence.size()) {
-            // sequence done. A normalization pass just readied the producer —
-            // no mana produced, no measure; a normal cycle now measures.
+            // sequence done — the producer is untapped and the pool moved; a
+            // normal cycle now measures the per-cycle net.
             cyclePhase = 0;
-            if (normalizing) {
-                normalizing = false;
-            } else {
-                pendingMeasure = true;
-            }
+            pendingMeasure = true;
         } else {
             cyclePhase++;
         }
