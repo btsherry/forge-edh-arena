@@ -783,8 +783,19 @@ public final class ComboPilot {
             // Spellbook line — was structurally undispatchable, program or
             // not, while its prose-prerequisite sibling 513-3682 fired.
             // Non-program combos keep the old semantics exactly.
-            boolean dispatchable = status.ready()
-                    || (status.distance() == 0 && programPaths.containsKey(status.id()));
+            boolean hasProgram = programPaths.containsKey(status.id());
+            // ASSEMBLY GATE (smoke-batch fix): a program runner needs its
+            // pieces IN PLAY, but detection counts command/hand as "reachable".
+            // Do NOT dispatch a program combo while a named piece is still in
+            // the COMMAND zone — the commander is uncast and no runner casts it
+            // in setup, so it dispatches only to abort piece_lost (14x Selvala
+            // in the smoke batch). Non-program combos keep the old zone-
+            // agnostic semantics; hand pieces stay allowed (setup can cast).
+            boolean piecesPlaced = status.where().values().stream()
+                    .noneMatch("COMMAND"::equals);
+            boolean dispatchable = (status.ready()
+                    || (status.distance() == 0 && hasProgram))
+                    && (!hasProgram || piecesPlaced);
             if (!dispatchable || attemptedThisTurn.contains(status.id())) {
                 continue;
             }

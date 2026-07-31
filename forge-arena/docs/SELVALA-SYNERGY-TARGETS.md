@@ -24,12 +24,44 @@ into repeated ETB value/recursion.
 - **Recursion payloads:** Eternal Witness (ETB: return a card from graveyard) —
   loop it to recur a spell every cycle; Selvala herself (blink to re-trigger
   her draw-on-biggest-ETB); Kogla (ETB fight = repeatable removal).
-- **Why it needs the runner:** stock AI will not assemble a mana-fed blink loop;
-  and the loop's PRODUCT (infinite recursion of X, infinite fights, or a draw
-  engine) must be measured per cycle and converted.
-- **Status: AWAITING RESEARCH** (a Claude subagent is mapping the exact loop
-  lines, mana math, win/payoff, and the cleanest shape). Fill this section from
-  its report, then spec the runner + gate. Likely the highest-value new work.
+### Research verdict (Claude subagent, 2026-07-31) — these are SINKS on the mana loop, not standalone loops
+Neither Eternal Witness nor Kogla self-loops in this 99: both are **mana-NEGATIVE
+bounce-recursion engines** (~4-8 mana/cycle) that only go infinite when fed by
+Selvala's already-online infinite mana. They are OUTLETS on the mana loop, like
+Genesis Wave — not loops in their own right. The only repeatable no-tap bounce
+outlets in the deck are **Temur Sabertooth** ({1}{G}: bounce any other creature)
+and **Kogla** ({1}{G}: bounce a Human — cannot self-bounce, so Kogla-loops
+hard-require Sabertooth). Eternal Witness returns to HAND (not infinite
+graveyard); Selvala's own draw never fires off the 2-power Witness; Surrak/Henge
+counters land on the bounced Witness and are WASTED — only Defiler accumulates.
+
+**The new shape (one runner covers all variants):** per cycle — (1) activate the
+bounce outlet targeting the creature [measure: creature Battlefield->Hand, pool
+-{1}{G}]; (2) recast the creature [measure: on stack, pool -cast]; (3) let the
+ETB/cast trigger resolve [measure: creature back on battlefield AND the payoff
+delta realised, strictly positive]. One action per window, yield, measured
+delta. Terminate on mana/cap; guards (library non-empty; legal fight target).
+Distinct from cast_recur (mana-refund) and cast_bounce (Tidespout cast-trigger):
+the "refund" is EXTERNAL infinite mana and the outlet is an activated bounce on
+ANOTHER permanent.
+
+**Flagship targets (build the runner once, swap the measured payoff):**
+- **C1 (DIRECT KILL): Eternal Witness + Temur Sabertooth + Defiler of Vigor** —
+  Defiler's on-cast trigger puts a +1/+1 counter on EVERY creature you control
+  (PutCounterAll), and they stay (not bounced) -> infinite board-wide counters
+  -> swing lethal with haste. The Witness loop that actually WINS. Payoff delta =
+  total counters on your creatures.
+- **C2 (draw the deck): E-Wit + Sabertooth + The Great Henge** — Henge draws per
+  creature ETB -> draw the library (stop before decking). Payoff delta = hand+1.
+- **C3 (removal, not a kill): Kogla + Temur Sabertooth** — infinite ETB fights ->
+  destroy every opponent creature (does NOT hit players; needs a separate swing).
+  Payoff delta = opponent creature count -1; guard TargetMin 0 (no target -> stop).
+- **C4 (redundancy): Kogla-bounces-Witness / E-Wit + Silverback Elder** — weaker
+  outlets/payoffs, same runner.
+- **Also #1 (the real win it all rides on): mana_loop -> Finale of Devastation**
+  (X>=10: fetch a creature AND +X/+X + haste to your board -> swing) is the
+  single cleanest kill; the outlet ladder (T2) should prioritise it.
+- **Status: RESEARCHED, spec ready.** Build the runner + C1/C2 programs + gates.
 
 ---
 
