@@ -55,6 +55,10 @@ public final class SelvalaManaLoopRunner {
     static final int SETTLE_GRACE_WINDOWS = 3;
     /** Genesis Wave's {X}{G}{G}{G} — the coloured tail on top of the X. */
     static final int GENESIS_WAVE_TAIL = 3;
+    // GOD WIN-PLAN (Rhonas/Nylea flood-pump) bounds.
+    static final int GOD_DIG_CAP = 80;
+    static final int GOD_PUMP_CAP = 400;
+    static final int GOD_HAND_CREATURE_TARGET = 14;
 
     private enum State { SETUP, LOOP, SINK }
 
@@ -98,6 +102,10 @@ public final class SelvalaManaLoopRunner {
     private int permanentsAtOutlet = -1;
     private String outletCard;
     private int outletX;
+    /** GOD WIN-PLAN phase: -1 idle, 0 dig (Nylea), 1 cast, 2 pump (Rhonas), 3 done. */
+    private int winPlanPhase = -1;
+    private int winPlanDigs;
+    private int winPlanPumps;
 
     SelvalaManaLoopRunner(Game game, Player player, ComboPilot pilot, int seat, String programPath) {
         this.game = game;
@@ -474,6 +482,20 @@ public final class SelvalaManaLoopRunner {
                     + " left the board at " + permanentsNow + " (was " + permanentsAtOutlet + ")");
         }
 
+        // GOD WIN-PLAN (Rhonas/Nylea flood-pump) — a same-turn kill that needs NO
+        // Genesis Wave: Nylea digs the deck's creatures into hand, we cast them
+        // (hasty via Concordant Crossroads, {1} cheaper via Nylea), then Rhonas
+        // pumps the board +2/+0 and grants trample until it alpha-strikes lethal.
+        // Both Gods are indestructible, so the plan is hard to disrupt. Preferred
+        // over the flip when Rhonas is online (it wins THIS turn, no sick board).
+        if (winPlanPhase >= 0) {
+            return godWinPlan(turn); // already committed to the plan
+        }
+        if (godWinPlanViable()) {
+            winPlanPhase = 0;
+            return godWinPlan(turn);
+        }
+
         SpellAbility outlet = chooseOutlet();
         if (outlet == null) {
             // banked but no outlet reachable — hand back rather than stall;
@@ -491,6 +513,190 @@ public final class SelvalaManaLoopRunner {
                 .with("combo", comboId).with("outlet", outletCard).with("x", outletX)
                 .with("permanents_before", permanentsAtOutlet));
         return List.of(outlet);
+    }
+
+    // --- GOD WIN-PLAN (Rhonas/Nylea flood-pump) -------------------------
+    // A two-card "pairing" (powerful play, not a combo): with infinite mana,
+    // Nylea, Keen-Eyed digs the deck's creatures into hand, we cast them (hasty
+    // via Concordant Crossroads, {1} cheaper via Nylea), and Rhonas the
+    // Indomitable pumps the board +2/+0 with trample until it alpha-strikes
+    // lethal. Both Gods are indestructible. No Genesis Wave required.
+
+    /** Worth running when Rhonas (the pump engine) is on the battlefield and we
+     *  can field at least one attacker per opponent — either creatures that can
+     *  already attack, or Nylea to dig a whole board out of the library. */
+    private boolean godWinPlanViable() {
+        if (AbilityResolver.findBattlefield(player, "Rhonas the Indomitable") == null) {
+            return false;
+        }
+        boolean nylea = AbilityResolver.findBattlefield(player, "Nylea, Keen-Eyed") != null;
+        return nylea || nonSickAttackers().size() >= Math.max(1, liveOpponentCount());
+    }
+
+    /** One action per window across the plan's phases; sets finished when the
+     *  board is lethal and hands to combat (the pilot's lethalAlphaOrder swings). */
+    private List<SpellAbility> godWinPlan(int turn) {
+        // PHASE 0 — DIG: Nylea banks creatures from the top of the library into
+        // hand, widening the eventual attack. Stop at a target hand or thin deck.
+        if (winPlanPhase == 0) {
+            if (AbilityResolver.findBattlefield(player, "Nylea, Keen-Eyed") != null
+                    && countIn(ZoneType.Library, Card::isCreature) > 0
+                    && winPlanDigs < GOD_DIG_CAP
+                    && countIn(ZoneType.Hand, Card::isCreature) < GOD_HAND_CREATURE_TARGET) {
+                SpellAbility dig = AbilityResolver.resolve(
+                        player, "Nylea, Keen-Eyed", "{2}{G}", List.of());
+                if (dig != null && forge.ai.ComputerUtilCost.canPayCost(dig, player, false)) {
+                    winPlanDigs++;
+                    return List.of(dig);
+                }
+            }
+            winPlanPhase = 1;
+        }
+        // PHASE 1 — CAST: put the creatures onto the battlefield (hasty via
+        // Concordant Crossroads). One per window; when none is castable, pump.
+        if (winPlanPhase == 1) {
+            SpellAbility cast = castCreatureFromHand();
+            if (cast != null) {
+                return List.of(cast);
+            }
+            winPlanPhase = 2;
+        }
+        // PHASE 2 — PUMP: Rhonas gives +2/+0 and trample; distribute across the
+        // attackers (lowest power first) until the board can alpha-strike lethal.
+        if (winPlanPhase == 2) {
+            List<Card> attackers = nonSickAttackers();
+            if (!boardTrampleLethal(attackers) && winPlanPumps < GOD_PUMP_CAP) {
+                Card rhonas = AbilityResolver.findBattlefield(player, "Rhonas the Indomitable");
+                Card target = pumpTarget(nonSickAttackersOrAll(), rhonas);
+                if (target != null) {
+                    SpellAbility pump = AbilityResolver.resolve(player,
+                            "Rhonas the Indomitable", "{2}{G}", List.of(target.getName()));
+                    if (pump != null && forge.ai.ComputerUtilCost.canPayCost(pump, player, false)) {
+                        winPlanPumps++;
+                        return List.of(pump);
+                    }
+                }
+            }
+            winPlanPhase = 3;
+        }
+        // PHASE 3 — DONE: the board is as lethal as we can make it; hand to combat.
+        finished = true;
+        List<Card> attackers = nonSickAttackers();
+        pilot.observe(ArenaEvent.of("outlet_fired", turn, seat)
+                .with("combo", comboId).with("outlet", "Rhonas the Indomitable")
+                .with("x", winPlanPumps).with("digs", winPlanDigs)
+                .with("attackers", attackers.size())
+                .with("board_power", totalPower(attackers)));
+        pilot.observe(ArenaEvent.of("program_complete", turn, seat)
+                .with("combo", comboId).with("iterations", iterations)
+                .with("outlet", "Rhonas the Indomitable"));
+        return null;
+    }
+
+    private int countIn(ZoneType zone, java.util.function.Predicate<Card> pred) {
+        int n = 0;
+        for (Card c : player.getCardsIn(zone)) {
+            if (pred.test(c)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** Creatures we control that can ATTACK this turn — CombatUtil.canAttack is
+     *  haste-aware (Concordant Crossroads) and honours Rhonas's "not alone"
+     *  restriction, unlike Card.isSick which ignores haste. */
+    private List<Card> nonSickAttackers() {
+        List<Card> out = new ArrayList<>();
+        for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+            if (c.isCreature() && forge.game.combat.CombatUtil.canAttack(c)) {
+                out.add(c);
+            }
+        }
+        return out;
+    }
+
+    /** Pump candidates: creatures that are not summoning sick (or are hasted) —
+     *  broader than {@link #nonSickAttackers} because Rhonas can't attack until
+     *  another creature reaches power 4, so we must be allowed to pump one that
+     *  canAttack() currently rejects only for the "not alone" reason. */
+    private List<Card> nonSickAttackersOrAll() {
+        List<Card> out = new ArrayList<>();
+        for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+            if (c.isCreature() && (!c.isSick() || c.hasKeyword(forge.game.keyword.Keyword.HASTE))) {
+                out.add(c);
+            }
+        }
+        return out;
+    }
+
+    private int totalPower(List<Card> cards) {
+        int p = 0;
+        for (Card c : cards) {
+            p += Math.max(0, c.getNetPower());
+        }
+        return p;
+    }
+
+    private int liveOpponentCount() {
+        int n = 0;
+        for (Player o : game.getPlayers()) {
+            if (o != player && !o.hasLost()) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** Trample means blockers don't save the table: total attacker power over the
+     *  opponents' combined life plus a buffer, with at least one attacker per
+     *  opponent so the damage can be spread. */
+    private boolean boardTrampleLethal(List<Card> attackers) {
+        int opps = liveOpponentCount();
+        if (opps == 0 || attackers.size() < opps) {
+            return false;
+        }
+        int need = 20; // blocker / distribution buffer
+        for (Player o : game.getPlayers()) {
+            if (o != player && !o.hasLost()) {
+                need += Math.max(0, o.getLife());
+            }
+        }
+        return totalPower(attackers) >= need;
+    }
+
+    /** The next creature to pump — the lowest-power one Rhonas may target (any
+     *  creature other than Rhonas itself), so the pumps spread evenly. */
+    private Card pumpTarget(List<Card> candidates, Card rhonas) {
+        Card best = null;
+        for (Card c : candidates) {
+            if (rhonas != null && c == rhonas) {
+                continue; // Rhonas pumps ANOTHER creature
+            }
+            if (best == null || c.getNetPower() < best.getNetPower()) {
+                best = c;
+            }
+        }
+        return best;
+    }
+
+    /** A creature spell in hand we can afford, biggest body first (fewer pumps to
+     *  lethal). Null when none is castable. */
+    private SpellAbility castCreatureFromHand() {
+        List<Card> creatures = new ArrayList<>();
+        for (Card c : player.getCardsIn(ZoneType.Hand)) {
+            if (c.isCreature()) {
+                creatures.add(c);
+            }
+        }
+        creatures.sort((a, b) -> Integer.compare(b.getNetPower(), a.getNetPower()));
+        for (Card c : creatures) {
+            SpellAbility cast = AbilityResolver.resolveCast(player, c.getName());
+            if (cast != null && forge.ai.ComputerUtilCost.canPayCost(cast, player, false)) {
+                return cast;
+            }
+        }
+        return null;
     }
 
     /**

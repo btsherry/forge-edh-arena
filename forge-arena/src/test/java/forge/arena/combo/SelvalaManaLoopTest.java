@@ -306,6 +306,32 @@ public class SelvalaManaLoopTest {
                 planned);
     }
 
+    // --- GOD WIN-PLAN (Rhonas/Nylea flood-pump pairing) -----------------
+
+    /** With infinite mana + Rhonas + Nylea + Concordant Crossroads, the runner
+     * digs creatures, casts them (hasty), pumps the board with Rhonas (+2/+0
+     * trample) and alpha-strikes lethal — no Genesis Wave. This is a two-card
+     * "pairing" (powerful play), the first executed as a first-class win-plan. */
+    @Test
+    public void rhonasNyleaFloodPumpWinsWithoutGenesisWave() throws Exception {
+        List<ArenaEvent> events = runGate("god-winplan", new SelvalaBoardProbe(
+                "Selvala, Heart of the Wilds",
+                List.of("Staff of Domination", "Ghalta, Primal Hunger",
+                        "Rhonas the Indomitable", "Nylea, Keen-Eyed",
+                        "Concordant Crossroads", "Llanowar Elves", "Elvish Mystic"),
+                List.of(),
+                List.of(),
+                40));
+        boolean rhonasFired = events.stream().anyMatch(e -> e.t().equals("outlet_fired")
+                && "Rhonas the Indomitable".equals(String.valueOf(e.fields().get("outlet"))));
+        List<String> aborts = events.stream()
+                .filter(e -> e.t().equals("program_abort"))
+                .map(e -> String.valueOf(e.fields())).toList();
+        System.out.println("[god-winplan] rhonasFired=" + rhonasFired + " aborts=" + aborts);
+        assertTrue("the Rhonas/Nylea win-plan must fire as the outlet, aborts=" + aborts,
+                rhonasFired);
+    }
+
     // --- assertion helpers ----------------------------------------------
 
     private Map<String, Object> firstPlan(List<ArenaEvent> events, String combo) {
