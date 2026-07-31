@@ -1373,6 +1373,38 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return sa;
                 }
             }
+            // B6: activated-ability tutors already ON THE BATTLEFIELD (Inventors'
+            // Fair {5},{T},Sac an artifact: search for an artifact) — the hand-
+            // only scan above misses them, and for an artifact deck that is the
+            // ONLY library route to Staff/Umbral. Same ChangeZone-from-Library
+            // structure, activated rather than cast; the target is still steered
+            // by rankTutor at resolution.
+            for (forge.game.card.Card c : player.getCardsIn(forge.game.zone.ZoneType.Battlefield)) {
+                if (tutorTried.contains(c.getName()) || reserved.contains(c.getName())) {
+                    continue;
+                }
+                for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
+                    if (!sa.isActivatedAbility()
+                            || sa.getApi() != forge.game.ability.ApiType.ChangeZone
+                            || !String.valueOf(sa.getParam("Origin")).contains("Library")) {
+                        continue;
+                    }
+                    sa.setActivatingPlayer(player);
+                    if (sa.getPayCosts() != null && sa.getPayCosts().hasXInAnyCostPart()) {
+                        int pool = player.getManaPool().totalMana();
+                        int x = pool > 1 ? Math.min(pool - 1, POOL_TUTOR_X) : 0;
+                        if (x <= 0) {
+                            continue;
+                        }
+                        sa.setXManaCostPaid(x);
+                    }
+                    if (!forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                        continue;
+                    }
+                    tutorTried.add(c.getName());
+                    return sa;
+                }
+            }
             return null;
         }
 
