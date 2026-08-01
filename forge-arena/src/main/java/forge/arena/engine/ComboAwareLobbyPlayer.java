@@ -356,6 +356,24 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         public List<forge.game.spellability.AbilitySub> chooseModeForAbility(
                 SpellAbility sa, List<forge.game.spellability.AbilitySub> possible,
                 int min, int num, boolean allowRepeat) {
+            // PR-nu: a CAST charm the pilot chose as a library tutor picks its
+            // library-search mode (Archdruid's Charm: creature/land search).
+            // The fetch target is then steered by chooseCardsForZoneChange ->
+            // rankTutor (PR-mu completes the closest combo). Consumed once.
+            if (pilotCharmTutorHost != null && sa != null && !sa.isTrigger()
+                    && sa.getHostCard() != null
+                    && pilotCharmTutorHost.equals(sa.getHostCard().getName())) {
+                pilotCharmTutorHost = null;
+                for (forge.game.spellability.AbilitySub sub : possible) {
+                    if (sub.getApi() == forge.game.ability.ApiType.ChangeZone
+                            && String.valueOf(sub.getParam("Origin")).contains("Library")) {
+                        java.util.List<forge.game.spellability.AbilitySub> chosen =
+                                new java.util.ArrayList<>();
+                        chosen.add(sub);
+                        return chosen;
+                    }
+                }
+            }
             if (activeCastBounce != null && sa != null && sa.isTrigger()
                     && sa.getHostCard() != null) {
                 String obliged = activeCastBounce.obligedTargetForPhase(
@@ -1308,6 +1326,25 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
 
         private int tutorTriedTurn = -1;
         private final java.util.Set<String> tutorTried = new java.util.HashSet<>();
+        /** PR-nu: host name of a modal CHARM the pilot cast AS a tutor, so the
+         *  mode-choice hook forces its library-search mode (Archdruid's Charm).
+         *  Set when findCastableTutor returns a charm; consumed once at the
+         *  resolving chooseModeForAbility. */
+        private String pilotCharmTutorHost;
+
+        /** PR-nu: does this Charm have a mode that searches the LIBRARY (a
+         *  ChangeZone from Library)? makePossibleOptions already drops modes
+         *  that would be illegal now, so a returned search mode is castable. */
+        private boolean charmHasLibrarySearch(SpellAbility charm) {
+            for (forge.game.spellability.AbilitySub sub
+                    : forge.game.ability.effects.CharmEffect.makePossibleOptions(charm)) {
+                if (sub.getApi() == forge.game.ability.ApiType.ChangeZone
+                        && String.valueOf(sub.getParam("Origin")).contains("Library")) {
+                    return true;
+                }
+            }
+            return false;
+        }
 
         /**
          * PR-26: a castable search-effect spell in hand, found STRUCTURALLY
@@ -1334,8 +1371,22 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     continue;
                 }
                 for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
-                    if (!sa.isSpell() || sa.getApi() != forge.game.ability.ApiType.ChangeZone
-                            || !String.valueOf(sa.getParam("Origin")).contains("Library")) {
+                    if (!sa.isSpell()) {
+                        continue;
+                    }
+                    boolean directTutor = sa.getApi() == forge.game.ability.ApiType.ChangeZone
+                            && String.valueOf(sa.getParam("Origin")).contains("Library");
+                    // PR-nu: a modal CHARM whose search mode is a library
+                    // ChangeZone is a tutor too (Archdruid's Charm: creature/
+                    // land search). getApi() is Charm, so the direct test above
+                    // misses it — inspect the mode options. The search mode is
+                    // forced at resolution by chooseModeForAbility below.
+                    boolean charmTutor = false;
+                    if (!directTutor && sa.getApi() == forge.game.ability.ApiType.Charm) {
+                        sa.setActivatingPlayer(player);
+                        charmTutor = charmHasLibrarySearch(sa);
+                    }
+                    if (!directTutor && !charmTutor) {
                         continue;
                     }
                     sa.setActivatingPlayer(player);
@@ -1370,6 +1421,9 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         continue;
                     }
                     tutorTried.add(c.getName());
+                    if (charmTutor) {
+                        pilotCharmTutorHost = c.getName(); // steer the mode choice
+                    }
                     return sa;
                 }
             }
