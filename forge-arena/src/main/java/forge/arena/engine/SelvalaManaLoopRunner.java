@@ -235,8 +235,26 @@ public final class SelvalaManaLoopRunner {
         // entry decision + governor plan
         int x0 = computeYield();
         boolean ramping = "POWER_RAMPING".equals(yieldModel);
+        boolean powerScaling = yieldModel.startsWith("POWER");
         int entryNet = x0 - cycleCost;
         if (!ramping && entryNet < minNet) {
+            // PR-xi (loop-dispatch timing): a POWER_CONSTANT loop's yield IS the
+            // greatest creature power, so a low yield is a WAIT, not a failure —
+            // the board can still grow a bigger creature. The batch showed the
+            // loop dispatching at power 2-4 and aborting while Kogla (6/6) sat on
+            // the board 7x/30; it never re-fired at the higher power. DEFER so it
+            // re-dispatches once power clears the untap cost. Non-power counts
+            // (enchantment/creature count) keep the canonical zero-yield reject —
+            // a single big creature does not lift them (gate 1355-2816).
+            if (powerScaling) {
+                pilot.observe(ArenaEvent.of("program_deferred", turn, seat)
+                        .with("combo", comboId).with("entry_yield", x0)
+                        .with("entry_net", entryNet).with("cycle_cost", cycleCost)
+                        .with("reason", "low_power"));
+                finished = true;
+                pilot.programDeferred(comboId);
+                return null;
+            }
             // the canonical zero-yield reject (Weaver+Umbral at E=3 nets 0)
             abortNow(turn, "zero_yield: " + yieldModel + " X=" + x0
                     + " - cycle_cost " + cycleCost + " = net " + entryNet
@@ -260,8 +278,10 @@ public final class SelvalaManaLoopRunner {
         // deficit, so this never fires there. Only guards the net-negative
         // opening; a net>=0 loop (POWER_CONSTANT, or ramping already positive)
         // is untouched.
-        if (ramping && entryNet < 0) {
-            int deficit = -entryNet;                        // first-cycle shortfall
+        if (ramping && entryNet <= 0) {
+            // net 0 still can't prime: the producer's own {G} activation must be
+            // paid from EXTERNAL mana before it yields anything (deficit >= 1).
+            int deficit = Math.max(1, -entryNet);           // first-cycle shortfall
             Card producer = AbilityResolver.findBattlefield(player, producerCard);
             int have = player.getManaPool().totalMana() + externalUntappedSources(producer);
             if (have < deficit) {
