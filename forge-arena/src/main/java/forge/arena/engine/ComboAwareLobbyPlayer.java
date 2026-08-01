@@ -2081,8 +2081,19 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     names.add(card.getName());
                 }
                 int turn = getGame().getPhaseHandler().getTurn();
-                var ranked = pilot.rankTutor(sa.getHostCard().getName(), names,
-                        SeatViews.of(player, seatIndex, turn));
+                SeatView view = SeatViews.of(player, seatIndex, turn);
+                var ranked = pilot.rankTutor(sa.getHostCard().getName(), names, view);
+                // PR-nu power lever: with a POWER-loop producer on board, fetch
+                // the biggest creature (>=5 power) to lift the loop's tap-yield
+                // over the untap cost — unless the ranker has a strong pick
+                // (>=0.98: a missing program piece or the outlet itself).
+                if (pilot.wantsPowerCreature(view)
+                        && (ranked.isEmpty() || ranked.get(0).score() < 0.98)) {
+                    forge.game.card.Card big = powerCreaturePick(fetchList);
+                    if (big != null) {
+                        return big;
+                    }
+                }
                 if (!ranked.isEmpty()) {
                     String best = ranked.get(0).card();
                     for (forge.game.card.Card card : fetchList) {
@@ -2121,8 +2132,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     names.add(card.getName());
                 }
                 int turn = getGame().getPhaseHandler().getTurn();
-                var ranked = pilot.rankTutor(sa.getHostCard().getName(), names,
-                        SeatViews.of(player, seatIndex, turn));
+                SeatView view = SeatViews.of(player, seatIndex, turn);
+                var ranked = pilot.rankTutor(sa.getHostCard().getName(), names, view);
+                // PR-nu power lever (same rule as the single-card path): feed a
+                // POWER-loop producer a big creature when the ranker has no
+                // strong assembly/outlet pick.
+                if (pilot.wantsPowerCreature(view)
+                        && (ranked.isEmpty() || ranked.get(0).score() < 0.98)) {
+                    forge.game.card.Card big = powerCreaturePick(fetchList);
+                    if (big != null) {
+                        return List.of(big);
+                    }
+                }
                 if (!ranked.isEmpty()) {
                     String best = ranked.get(0).card();
                     for (forge.game.card.Card card : fetchList) {
@@ -2134,6 +2155,28 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             }
             return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max,
                     delayedReveal, selectPrompt, decider);
+        }
+
+        /** PR-nu: the highest-power creature in the fetch list worth fetching to
+         *  power a POWER-scaling loop — at least 5 power (a real payoff, not a
+         *  ramp dork) AND bigger than our current greatest creature (so it
+         *  actually lifts the producer's tap-yield). null if none qualifies. */
+        private forge.game.card.Card powerCreaturePick(forge.game.card.CardCollection fetchList) {
+            int curMax = 0;
+            for (forge.game.card.Card c
+                    : player.getCardsIn(forge.game.zone.ZoneType.Battlefield)) {
+                if (c.isCreature()) {
+                    curMax = Math.max(curMax, c.getNetPower());
+                }
+            }
+            forge.game.card.Card best = null;
+            for (forge.game.card.Card c : fetchList) {
+                if (c.isCreature() && c.getNetPower() >= 5 && c.getNetPower() > curMax
+                        && (best == null || c.getNetPower() > best.getNetPower())) {
+                    best = c;
+                }
+            }
+            return best;
         }
     }
 }

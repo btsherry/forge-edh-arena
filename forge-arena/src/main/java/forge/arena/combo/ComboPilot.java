@@ -216,11 +216,22 @@ public final class ComboPilot {
     private Map<String, Set<String>> programOnBattlefield = Map.of();
     private Map<String, List<String[]>> programAttach = Map.of();
     private Set<String> programHasSetup = Set.of();
+    /**
+     * PR-nu (power lever): producers of a POWER-scaling mana_loop — a creature
+     * whose tap-yield equals the greatest creature power (Selvala class). When
+     * one is on our battlefield the loop opens net-negative until a bigger
+     * creature lifts the yield over the untap cost, so a creature tutor should
+     * fetch a HIGH-POWER creature, not a small ramp dork. The batch proved this:
+     * Selvala survives ~37 turns but her tap-power stalls at 2-4 and the loop
+     * never converts. From the program JSONs (loop.yield_model starts POWER).
+     */
+    private Set<String> powerProducers = Set.of();
 
     public void setProgramPaths(Map<String, String> paths) {
         this.programPaths = paths == null ? Map.of() : paths;
         Set<String> pieces = new HashSet<>();
         Set<String> outlets = new HashSet<>();
+        Set<String> powerProds = new HashSet<>();
         Map<String, Set<String>> onBattlefield = new HashMap<>();
         Map<String, List<String[]>> attach = new HashMap<>();
         Set<String> hasSetup = new HashSet<>();
@@ -262,6 +273,15 @@ public final class ComboPilot {
                         hasSetup.add(comboId);
                     }
                 }
+                // PR-nu: a POWER-scaling loop's producer — a creature tutor
+                // should feed it a big creature (see powerProducers).
+                com.fasterxml.jackson.databind.JsonNode loop = program.path("loop");
+                if (loop.path("yield_model").asText("").startsWith("POWER")) {
+                    String prod = loop.path("producer").path("card").asText("");
+                    if (!prod.isEmpty()) {
+                        powerProds.add(prod);
+                    }
+                }
                 // the outlet is a structured OBJECT in the cast_bounce
                 // programs ({card, target_cumulative_lifegain, why}) and
                 // may be plain text elsewhere — read both shapes. asText()
@@ -282,6 +302,7 @@ public final class ComboPilot {
         }
         this.programPieces = pieces;
         this.programOutlets = outlets;
+        this.powerProducers = Set.copyOf(powerProds);
         this.programOnBattlefield = Map.copyOf(onBattlefield);
         this.programAttach = Map.copyOf(attach);
         this.programHasSetup = Set.copyOf(hasSetup);
@@ -1379,6 +1400,21 @@ public final class ComboPilot {
      */
     public boolean wantsTutor(SeatView view) {
         return !firedShortcuts.isEmpty() || hasBoundCombo(view);
+    }
+
+    /**
+     * PR-nu (power lever): is a POWER-scaling loop producer (Selvala class) on
+     * our battlefield? Then a creature tutor should fetch a HIGH-POWER creature
+     * to lift the loop's tap-yield over the untap cost so it converges, rather
+     * than a small ramp dork. The controller — which holds live card power —
+     * makes the actual pick; this is only the "now is the time" signal.
+     */
+    public boolean wantsPowerCreature(SeatView view) {
+        if (powerProducers.isEmpty()) {
+            return false;
+        }
+        Set<String> board = view.cardsIn(SeatView.Zone.BATTLEFIELD);
+        return powerProducers.stream().anyMatch(board::contains);
     }
 
     /**
