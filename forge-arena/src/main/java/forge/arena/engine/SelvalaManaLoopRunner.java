@@ -247,6 +247,34 @@ public final class SelvalaManaLoopRunner {
             abortNow(turn, "non_diverging_ramp: ramp_per_cycle " + rampPerCycle);
             return null;
         }
+        // PR-mu (bootstrap gate): POWER_RAMPING opens net-NEGATIVE and relies on
+        // the board's power ramping the yield positive over cycles. The priming
+        // cycles run at a loss, funded from EXTERNAL mana (lands/rocks other than
+        // the producer). With too small a board (low producer power) AND too
+        // little external mana to cover even the first cycle's shortfall, the
+        // loop CANNOT bootstrap: it taps the producer, cannot pay the untap, and
+        // aborts cycle_incomplete — burning the turn (the 30-game batch showed
+        // 527-2816 doing exactly this ~6x). DEFER instead: wait for a bigger
+        // board or more mana, so the pilot plays its real game this turn. The
+        // GATE-2 fixture funds the priming with 8 Forests, far above the
+        // deficit, so this never fires there. Only guards the net-negative
+        // opening; a net>=0 loop (POWER_CONSTANT, or ramping already positive)
+        // is untouched.
+        if (ramping && entryNet < 0) {
+            int deficit = -entryNet;                        // first-cycle shortfall
+            Card producer = AbilityResolver.findBattlefield(player, producerCard);
+            int have = player.getManaPool().totalMana() + externalUntappedSources(producer);
+            if (have < deficit) {
+                pilot.observe(ArenaEvent.of("program_deferred", turn, seat)
+                        .with("combo", comboId)
+                        .with("entry_yield", x0).with("entry_net", entryNet)
+                        .with("external_mana", have).with("deficit", deficit)
+                        .with("reason", "bootstrap_unfunded"));
+                finished = true;
+                pilot.programDeferred(comboId);
+                return null;
+            }
+        }
         int library = player.getCardsIn(ZoneType.Library).size();
         // bank enough to force-cast Genesis Wave at X = library - reserve
         target = Math.max(cycleCost, (library - libraryReserve) + GENESIS_WAVE_TAIL);
@@ -307,6 +335,33 @@ public final class SelvalaManaLoopRunner {
             }
         }
         return null;
+    }
+
+    /** Untapped mana sources OTHER than the producer — the external mana that
+     * funds a POWER_RAMPING loop's net-negative priming cycles. Mirrors
+     * {@code SeatViews}: untapped, has a mana ability, not a restricted source
+     * (Workshop-class), not a summoning-sick creature. Counts one per source (a
+     * conservative lower bound; sources that make >1 only make bootstrapping
+     * more likely, never less). */
+    private int externalUntappedSources(Card producer) {
+        int n = 0;
+        for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+            if (c == producer || c.isTapped() || c.getManaAbilities().isEmpty()
+                    || (c.isCreature() && c.hasSickness())) {
+                continue;
+            }
+            boolean restricted = false;
+            for (SpellAbility ma : c.getManaAbilities()) {
+                if (ma.hasParam("RestrictValid")) {
+                    restricted = true;
+                    break;
+                }
+            }
+            if (!restricted) {
+                n++;
+            }
+        }
+        return n;
     }
 
     // --- LOOP ------------------------------------------------------------
