@@ -692,18 +692,29 @@ public final class ComboPilot {
         // assembled because the fetchable missing piece was never prioritized.
         // Ranks one rung below the outlet boost (an outlet with pieces down IS
         // the kill; a missing piece is the assembly that precedes it). Names
-        // from the program JSONs only.
-        if (!boostedForOutlet && !programOnBattlefield.isEmpty()) {
+        // from the program JSONs only. GUARD: apply only when the ranker has no
+        // STRONGER opinion (top score < 0.98) — a conversion payoff (1.2) or a
+        // distance-1 finishing piece (leverage 1.0) already outranks assembly and
+        // must keep rank 0 (TutorRanker's "finish the hardware first" ordering).
+        // The deck's static tutor weights top out at 0.95, so PR-mu still
+        // outranks every dossier static.
+        if (!boostedForOutlet && !programOnBattlefield.isEmpty()
+                && (ranked.isEmpty() || ranked.get(0).score() < 0.98)) {
             Set<String> board = new java.util.HashSet<>(view.cardsIn(SeatView.Zone.BATTLEFIELD));
             Set<String> reach = new java.util.HashSet<>(board);
             reach.addAll(view.cardsIn(SeatView.Zone.HAND));
             String pick = null;
             int bestReach = -1;
             int bestMissing = Integer.MAX_VALUE;
-            for (Map.Entry<String, Set<String>> e : programOnBattlefield.entrySet()) {
+            // sorted-key iteration keeps the pick deterministic across batch runs:
+            // programOnBattlefield is a Map.copyOf whose order is salted per JVM,
+            // so ties would otherwise resolve differently run-to-run. Sorted keys
+            // + strict comparators make the lowest combo id win a tie.
+            for (Map.Entry<String, Set<String>> e
+                    : new java.util.TreeMap<>(programOnBattlefield).entrySet()) {
                 Set<String> pieces = e.getValue();
                 if (pieces.isEmpty() || pieces.stream().noneMatch(board::contains)) {
-                    continue;                    // only combos we have already committed to
+                    continue;                    // only combos with a piece already on our battlefield
                 }
                 String fetch = null;
                 for (String p : pieces) {

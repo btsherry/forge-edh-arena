@@ -275,9 +275,11 @@ public final class SelvalaManaLoopRunner {
         // 527-2816 doing exactly this ~6x). DEFER instead: wait for a bigger
         // board or more mana, so the pilot plays its real game this turn. The
         // GATE-2 fixture funds the priming with 8 Forests, far above the
-        // deficit, so this never fires there. Only guards the net-negative
-        // opening; a net>=0 loop (POWER_CONSTANT, or ramping already positive)
-        // is untouched.
+        // deficit, so this never fires there. Guards a NON-POSITIVE ramping
+        // opening (entryNet <= 0 — the loop-patience commit widened this from
+        // < 0 because a net-0 open still owes the producer's own {G} activation,
+        // see the inner note); a strictly net-positive ramping open, and every
+        // non-ramping model, are untouched.
         if (ramping && entryNet <= 0) {
             // net 0 still can't prime: the producer's own {G} activation must be
             // paid from EXTERNAL mana before it yields anything (deficit >= 1).
@@ -842,9 +844,11 @@ public final class SelvalaManaLoopRunner {
         // haste, enters with X +1/+1 counters (X = mana paid), so off infinite
         // mana it is a lone X/X trampler that swings the turn it lands. It only
         // kills ONE opponent (single body, no board flood), so it ranks below
-        // the multi-kill outlets above; fire it only when the pool is large
-        // enough that a trampler is unconditionally lethal to one seat even
-        // through a chump (>=40), and nothing better was castable.
+        // the multi-kill outlets above; fire it only when the pool makes a lone
+        // trampler lethal to a full-life seat if unblocked (>=40). Any excess
+        // over 40 also punches through small chump blockers (through a
+        // toughness-T chump, lethality needs X >= 40+T); in practice the banked
+        // pool far exceeds the floor. Fires only when nothing better was castable.
         int goldX = pool - 1; // {X}{G}: reserve one green for the coloured pip
         if (goldX >= 40) {
             SpellAbility gold = AbilityResolver.resolveCast(player, "Goldvein Hydra");

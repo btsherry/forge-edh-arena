@@ -359,18 +359,23 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             // PR-nu: a CAST charm the pilot chose as a library tutor picks its
             // library-search mode (Archdruid's Charm: creature/land search).
             // The fetch target is then steered by chooseCardsForZoneChange ->
-            // rankTutor (PR-mu completes the closest combo). Consumed once.
+            // rankTutor (PR-mu completes the closest combo). Consumed once, at
+            // cast. Only single-mode charms are ever flagged (charmHasLibrarySearch
+            // gates on CharmNum 1), so returning ONE mode honours the num==1
+            // contract; num > 1 falls through to stock as defence in depth.
             if (pilotCharmTutorHost != null && sa != null && !sa.isTrigger()
                     && sa.getHostCard() != null
                     && pilotCharmTutorHost.equals(sa.getHostCard().getName())) {
-                pilotCharmTutorHost = null;
-                for (forge.game.spellability.AbilitySub sub : possible) {
-                    if (sub.getApi() == forge.game.ability.ApiType.ChangeZone
-                            && String.valueOf(sub.getParam("Origin")).contains("Library")) {
-                        java.util.List<forge.game.spellability.AbilitySub> chosen =
-                                new java.util.ArrayList<>();
-                        chosen.add(sub);
-                        return chosen;
+                pilotCharmTutorHost = null;      // consume on match, never leaves stale
+                if (num == 1) {
+                    for (forge.game.spellability.AbilitySub sub : possible) {
+                        if (sub.getApi() == forge.game.ability.ApiType.ChangeZone
+                                && String.valueOf(sub.getParam("Origin")).contains("Library")) {
+                            java.util.List<forge.game.spellability.AbilitySub> chosen =
+                                    new java.util.ArrayList<>();
+                            chosen.add(sub);
+                            return chosen;
+                        }
                     }
                 }
             }
@@ -1328,14 +1333,25 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private final java.util.Set<String> tutorTried = new java.util.HashSet<>();
         /** PR-nu: host name of a modal CHARM the pilot cast AS a tutor, so the
          *  mode-choice hook forces its library-search mode (Archdruid's Charm).
-         *  Set when findCastableTutor returns a charm; consumed once at the
-         *  resolving chooseModeForAbility. */
+         *  Set when findCastableTutor returns a charm; consumed once at cast
+         *  (CharmEffect.makeChoices runs during announcement, before the spell
+         *  goes on the stack, so the flag is set and cleared inside one priority
+         *  window and cannot survive to wrong-mode a later cast). */
         private String pilotCharmTutorHost;
 
-        /** PR-nu: does this Charm have a mode that searches the LIBRARY (a
-         *  ChangeZone from Library)? makePossibleOptions already drops modes
-         *  that would be illegal now, so a returned search mode is castable. */
+        /** PR-nu: is this a SINGLE-MODE ("choose one") Charm with a mode that
+         *  searches the LIBRARY (a ChangeZone from Library)? Restricted to
+         *  CharmNum 1 so the mode-choice hook can force exactly one mode without
+         *  violating a choose-two charm's min/num contract. For a returned mode:
+         *  makePossibleOptions applies the CR 603.3c legality filter (drops only
+         *  targeted modes with no legal target), and the search mode is
+         *  untargeted so it always survives; full-spell castability (mana/timing)
+         *  is checked separately by canPayCost in findCastableTutor. */
         private boolean charmHasLibrarySearch(SpellAbility charm) {
+            if (!"1".equals(charm.getParamOrDefault("CharmNum", "1"))
+                    || !"1".equals(charm.getParamOrDefault("MinCharmNum", "1"))) {
+                return false;                    // multi-mode charm — leave to stock
+            }
             for (forge.game.spellability.AbilitySub sub
                     : forge.game.ability.effects.CharmEffect.makePossibleOptions(charm)) {
                 if (sub.getApi() == forge.game.ability.ApiType.ChangeZone
@@ -1374,22 +1390,22 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     if (!sa.isSpell()) {
                         continue;
                     }
+                    // set once here: charmHasLibrarySearch (makePossibleOptions)
+                    // and the X estimate below both need the activating player.
+                    sa.setActivatingPlayer(player);
                     boolean directTutor = sa.getApi() == forge.game.ability.ApiType.ChangeZone
                             && String.valueOf(sa.getParam("Origin")).contains("Library");
                     // PR-nu: a modal CHARM whose search mode is a library
                     // ChangeZone is a tutor too (Archdruid's Charm: creature/
                     // land search). getApi() is Charm, so the direct test above
                     // misses it — inspect the mode options. The search mode is
-                    // forced at resolution by chooseModeForAbility below.
-                    boolean charmTutor = false;
-                    if (!directTutor && sa.getApi() == forge.game.ability.ApiType.Charm) {
-                        sa.setActivatingPlayer(player);
-                        charmTutor = charmHasLibrarySearch(sa);
-                    }
+                    // forced at CAST by the chooseModeForAbility override above.
+                    boolean charmTutor = !directTutor
+                            && sa.getApi() == forge.game.ability.ApiType.Charm
+                            && charmHasLibrarySearch(sa);
                     if (!directTutor && !charmTutor) {
                         continue;
                     }
-                    sa.setActivatingPlayer(player);
                     // PR-41d — the oldest engine trap in this project, hit
                     // again: determineLeftoverMana and canPayCost are
                     // DECISION-layer helpers and the decision layer cannot
@@ -2085,12 +2101,22 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 var ranked = pilot.rankTutor(sa.getHostCard().getName(), names, view);
                 // PR-nu power lever: with a POWER-loop producer on board, fetch
                 // the biggest creature (>=5 power) to lift the loop's tap-yield
-                // over the untap cost — unless the ranker has a strong pick
-                // (>=0.98: a missing program piece or the outlet itself).
+                // over the untap cost — unless the ranker has a strong pick. The
+                // >=0.98 gate covers ALL the ranker's high signals, not just this
+                // session's boosts: the PR-mu piece boost (0.98), the PR-aa outlet
+                // boost (0.99), a distance-1 finishing piece (leverage 1.0), and a
+                // conversion payoff (1.2) all keep rank 0.
                 if (pilot.wantsPowerCreature(view)
                         && (ranked.isEmpty() || ranked.get(0).score() < 0.98)) {
                     forge.game.card.Card big = powerCreaturePick(fetchList);
                     if (big != null) {
+                        // rankTutor already emitted tutor_decision with ITS pick;
+                        // record what the override actually fetched (and displaced)
+                        // so the audit stream matches the real fetch.
+                        pilot.observe(forge.arena.report.ArenaEvent.of("power_steer", turn, seatIndex)
+                                .with("source", sa.getHostCard().getName())
+                                .with("chosen", big.getName()).with("power", big.getNetPower())
+                                .with("overrode", ranked.isEmpty() ? null : ranked.get(0).card()));
                         return big;
                     }
                 }
@@ -2134,13 +2160,17 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                 int turn = getGame().getPhaseHandler().getTurn();
                 SeatView view = SeatViews.of(player, seatIndex, turn);
                 var ranked = pilot.rankTutor(sa.getHostCard().getName(), names, view);
-                // PR-nu power lever (same rule as the single-card path): feed a
-                // POWER-loop producer a big creature when the ranker has no
-                // strong assembly/outlet pick.
+                // PR-nu power lever (same rule/gate as the single-card path): feed
+                // a POWER-loop producer a big creature when the ranker has no
+                // strong (>=0.98) assembly/outlet/finisher pick.
                 if (pilot.wantsPowerCreature(view)
                         && (ranked.isEmpty() || ranked.get(0).score() < 0.98)) {
                     forge.game.card.Card big = powerCreaturePick(fetchList);
                     if (big != null) {
+                        pilot.observe(forge.arena.report.ArenaEvent.of("power_steer", turn, seatIndex)
+                                .with("source", sa.getHostCard().getName())
+                                .with("chosen", big.getName()).with("power", big.getNetPower())
+                                .with("overrode", ranked.isEmpty() ? null : ranked.get(0).card()));
                         return List.of(big);
                     }
                 }
