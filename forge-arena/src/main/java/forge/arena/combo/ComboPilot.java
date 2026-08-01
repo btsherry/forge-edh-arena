@@ -178,6 +178,17 @@ public final class ComboPilot {
     private String currentRoute;
     private int lastPlanTurn = -1;
     private final Set<String> attemptedDeploys = new HashSet<>();
+    /**
+     * PR-mu (assembly lever): the combo {@code deployProgram} committed to
+     * assembling. The 30-game synergy smoke showed multi-piece combos
+     * deployed-but-never-assembled — each turn {@code deployProgram} re-picked
+     * the momentarily-closest target and switched, casting piece 1 of combo A,
+     * then piece 1 of combo B, finishing neither. Once we start deploying a
+     * combo we STICK with it until it assembles or a piece leaves reach; only
+     * then does the closest-target heuristic re-choose. Released (set null) when
+     * no deploy candidate remains.
+     */
+    private String committedDeploy;
     /** Phase 11: combo id -> compiled program path (strings only — W8 pure). */
     private Map<String, String> programPaths = Map.of();
     /**
@@ -630,6 +641,7 @@ public final class ComboPilot {
         // a declared program OUTLET is in neither hand nor battlefield,
         // fetching that outlet outranks everything — it is the difference
         // between a durdle and a kill. Names from program JSONs only.
+        boolean boostedForOutlet = false;
         if (!programOutlets.isEmpty()
                 && view.cardsIn(SeatView.Zone.BATTLEFIELD).stream()
                         .anyMatch(programPieces::contains)) {
@@ -646,8 +658,62 @@ public final class ComboPilot {
                         }
                     }
                     ranked = boosted;
+                    boostedForOutlet = true;
                     break;
                 }
+            }
+        }
+        // PR-mu (assembly lever): when a program combo already has piece(s) on
+        // OUR battlefield but is a piece short, and that missing piece sits in
+        // the library (fetchable now), completing the CLOSEST such combo
+        // outranks a generic tutor. This is the 30-game synergy smoke's finding
+        // made actionable — multi-piece combos were detected but never
+        // assembled because the fetchable missing piece was never prioritized.
+        // Ranks one rung below the outlet boost (an outlet with pieces down IS
+        // the kill; a missing piece is the assembly that precedes it). Names
+        // from the program JSONs only.
+        if (!boostedForOutlet && !programOnBattlefield.isEmpty()) {
+            Set<String> board = new java.util.HashSet<>(view.cardsIn(SeatView.Zone.BATTLEFIELD));
+            Set<String> reach = new java.util.HashSet<>(board);
+            reach.addAll(view.cardsIn(SeatView.Zone.HAND));
+            String pick = null;
+            int bestReach = -1;
+            int bestMissing = Integer.MAX_VALUE;
+            for (Map.Entry<String, Set<String>> e : programOnBattlefield.entrySet()) {
+                Set<String> pieces = e.getValue();
+                if (pieces.isEmpty() || pieces.stream().noneMatch(board::contains)) {
+                    continue;                    // only combos we have already committed to
+                }
+                String fetch = null;
+                for (String p : pieces) {
+                    if (!reach.contains(p) && options.contains(p)) {
+                        fetch = p;               // a missing piece, fetchable from the library now
+                        break;
+                    }
+                }
+                if (fetch == null) {
+                    continue;
+                }
+                int reachCount = (int) pieces.stream().filter(reach::contains).count();
+                int missing = (int) pieces.stream().filter(p -> !reach.contains(p)).count();
+                if (reachCount > bestReach
+                        || (reachCount == bestReach && missing < bestMissing)) {
+                    bestReach = reachCount;
+                    bestMissing = missing;
+                    pick = fetch;                // closest to assembled: most reached, fewest missing
+                }
+            }
+            if (pick != null) {
+                final String chosen = pick;
+                List<TutorRanker.Ranked> boosted = new java.util.ArrayList<>();
+                boosted.add(new TutorRanker.Ranked(chosen, 0.98,
+                        "program piece completes closest assembly (PR-mu)"));
+                for (TutorRanker.Ranked r : ranked) {
+                    if (!r.card().equals(chosen)) {
+                        boosted.add(r);
+                    }
+                }
+                ranked = boosted;
             }
         }
         if (ranked.isEmpty() || ranked.get(0).score() <= 0) {
@@ -1151,6 +1217,7 @@ public final class ComboPilot {
         // pick the CLOSEST deployable program combo: every piece reachable
         // (status.ready()) but not yet assembled, fewest casts remaining
         ComboTracker.ComboStatus best = null;
+        ComboTracker.ComboStatus committed = null;
         int bestOffBoard = Integer.MAX_VALUE;
         for (ComboTracker.ComboStatus status : snap.statuses()) {
             if (!programPaths.containsKey(status.id())
@@ -1159,6 +1226,9 @@ public final class ComboPilot {
                     || programAssembled(status.id(), status, view)) {    // assembled -> dispatch path owns it
                 continue;
             }
+            if (status.id().equals(committedDeploy)) {
+                committed = status;                                      // still a live candidate
+            }
             int offBoard = (int) programOnBattlefield.getOrDefault(status.id(), Set.of())
                     .stream().filter(p -> !"BATTLEFIELD".equals(status.where().get(p))).count();
             if (offBoard < bestOffBoard) {
@@ -1166,7 +1236,16 @@ public final class ComboPilot {
                 best = status;
             }
         }
+        // PR-mu deploy-commit: stay on the combo we already started assembling
+        // (if it is still a candidate); only re-choose the closest when the
+        // commitment lapsed (assembled, or a piece left reach).
+        if (committed != null) {
+            best = committed;
+        } else if (best != null) {
+            committedDeploy = best.id();
+        }
         if (best == null) {
+            committedDeploy = null;                                      // nothing to deploy -> release
             return Optional.empty();
         }
         String id = best.id();

@@ -763,6 +763,24 @@ public final class SelvalaManaLoopRunner {
                 return hoof;
             }
         }
+        // 4) Goldvein Hydra ({X}{G}) — FLOOR outlet. Native vigilance+trample+
+        // haste, enters with X +1/+1 counters (X = mana paid), so off infinite
+        // mana it is a lone X/X trampler that swings the turn it lands. It only
+        // kills ONE opponent (single body, no board flood), so it ranks below
+        // the multi-kill outlets above; fire it only when the pool is large
+        // enough that a trampler is unconditionally lethal to one seat even
+        // through a chump (>=40), and nothing better was castable.
+        int goldX = pool - 1; // {X}{G}: reserve one green for the coloured pip
+        if (goldX >= 40) {
+            SpellAbility gold = AbilityResolver.resolveCast(player, "Goldvein Hydra");
+            if (gold != null && gold.getPayCosts() != null
+                    && gold.getPayCosts().hasXInAnyCostPart()) {
+                gold.setXManaCostPaid(goldX);
+                outletCard = "Goldvein Hydra";
+                outletX = goldX;
+                return gold;
+            }
+        }
         return null;
     }
 
