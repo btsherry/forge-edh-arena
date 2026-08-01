@@ -680,7 +680,6 @@ The Win Routes spec (route definitions + classification rules) is a documentatio
 - `forge-arena/docs/WIN-ROUTES.md` — Win Routes spec (v1): closed set of conversion routes, per-deck feature classification rules (cache-first, library-driven).
 - `forge-arena/docs/PROJECT-BRIEF.md` — Canonical project brief (one sentence): drop in ANY deck, prep detects combos, pilot assembles and converts to wins with no hardcoded logic.
 - `forge-arena/docs/T0-VERIFICATION.md` — Forge internals verification (complete) against Plan v3.1 §1: all assumptions confirmed except 4 corrections.
-- `forge-arena/docs/PR-66-SYNERGY-CLASSES.md` — PR-66 queued design (not built): 31 card pairings named by two independent subagents, absent from Spellbook.
 
 ### Deck dossier artifacts
 

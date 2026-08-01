@@ -26,3 +26,20 @@ calling thread. Unseeded behaviour is unchanged — each thread lazily gets a
 
 **Merge risk.** Low. One file, no signature removed; `setRandom` keeps its
 name and arity.
+
+## 3. `forge-game/src/main/java/forge/game/combat/Combat.java` — getAttackers defensive snapshot
+
+**Why.** `getAttackers()` iterated the live `attackedByBands` multimap view,
+throwing ConcurrentModificationException when AI speculative combat evaluation
+(`AnimateAi.animateTgtAI` → `ComputerUtilCard.doesSpecifiedCreatureAttackAI` →
+`AiAttackController.declareAttackers`) mutated the bands mid-iteration on large
+boards.
+
+**Measured.** Killed 2 of 3 Urza program games in the tau30 batch (previously a
+1-in-30 background rate).
+
+**Change.** Iterate a copied `ArrayList` of `attackedByBands` values instead of
+the live multimap view. Not an AI-logic modification; Ben-approved as the third
+logged infrastructure patch. Candidate for an upstream PR.
+
+**Since.** 2026-07-28.
