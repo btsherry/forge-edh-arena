@@ -148,15 +148,32 @@ public final class ProgramGate {
                     0, false);
         }
 
-        long iterations = events.stream().filter(e -> e.t().equals("outlet_drill")).count();
+        long loopIters = events.stream().filter(e -> e.t().equals("outlet_drill")).count();
+        // the newer shapes prove a MEASURED product without an outlet_drill:
+        // a one-shot value burst (dreadnought_window) or a multi-turn engine
+        // cycle (engine_cycle). Count them toward the verified total.
+        long burstIters = events.stream()
+                .filter(e -> e.t().equals("dreadnought_window") || e.t().equals("engine_cycle"))
+                .count();
+        long verified = loopIters + burstIters;
+        boolean complete = events.stream()
+                .anyMatch(e -> e.t().equals("program_complete")
+                        && comboId.equals(String.valueOf(e.fields().get("combo"))));
         boolean win = result.type() == ArenaGameResult.ResultType.WIN
                 && result.winnerSeat() == 0;
-        if (win || iterations >= SUSTAIN_BAR) {
-            return new Verdict(comboId, "executable",
-                    win ? "engine win: " + result.winCondition() + " t" + result.turns()
-                            : "sustained " + iterations + " verified iterations",
-                    iterations, win);
+        // a loop proves out by a sustained run or a win; a one-shot burst /
+        // engine proves out by a verified product plus a clean program_complete
+        if (win || loopIters >= SUSTAIN_BAR || (verified >= 1 && complete)) {
+            String reason = win
+                    ? "engine win: " + result.winCondition() + " t" + result.turns()
+                    : loopIters >= SUSTAIN_BAR
+                            ? "sustained " + loopIters + " verified iterations"
+                            : "verified " + verified
+                                    + (burstIters > 0 ? " burst/cycle" : " iteration")
+                                    + " to program_complete";
+            return new Verdict(comboId, "executable", reason, verified, win);
         }
+        long iterations = verified;
         String abort = events.stream()
                 .filter(e -> e.t().equals("program_abort")
                         && comboId.equals(String.valueOf(e.fields().get("combo"))))
@@ -202,11 +219,51 @@ public final class ProgramGate {
                 manaNeed += parseCost(step.path("cost").asText(), 0, colors);
             }
         }
+        // Newer shapes carry their activation costs OUTSIDE setup: the
+        // dreadnought window's exploit (and the body it casts from hand), and
+        // the seedborn engine's producer/sink. Fold them into the mana need +
+        // colours so the derived fixture actually funds them (task #65 — gate-4
+        // derivation for the classes past mana_loop).
+        JsonNode window = program.path("window");
+        if (window.isObject()) {
+            manaNeed += parseCost(ProgramFixtureProbe.manaCostOf(window.path("body").asText("")), 0, colors);
+            JsonNode ex = window.path("exploit");
+            if (ex.hasNonNull("cost")) {
+                manaNeed += parseCost(ex.path("cost").asText(), 0, colors);
+            }
+            if (!ex.path("activate").asBoolean(false) && ex.hasNonNull("card")) {
+                manaNeed += parseCost(ProgramFixtureProbe.manaCostOf(ex.path("card").asText()), 0, colors);
+            }
+        }
+        JsonNode engine = program.path("engine");
+        if (engine.isObject()) {
+            JsonNode prod = engine.path("producer");
+            if (prod.hasNonNull("activate_cost")) {
+                manaNeed += parseCost(prod.path("activate_cost").asText(), 0, colors);
+            }
+            JsonNode sink = engine.path("sink");
+            if (sink.hasNonNull("cost")) {
+                manaNeed += parseCost(sink.path("cost").asText(), 0, colors) * 4; // several cycles
+            }
+        }
         List<String> battlefield = new ArrayList<>();
         List<String> hand = new ArrayList<>();
         for (JsonNode piece : program.path("pieces")) {
             String card = piece.path("card").asText();
-            (castCards.contains(card) ? hand : battlefield).add(card);
+            // an explicit requires:HAND (the runner casts it) goes to hand; a
+            // setup-cast card goes to hand; everything else to the battlefield
+            boolean toHand = "HAND".equalsIgnoreCase(piece.path("requires").asText(""))
+                    || castCards.contains(card);
+            (toHand ? hand : battlefield).add(card);
+            // a mono-colour loop's pieces are the only colour signal — let them
+            // pick the basic land when setup/window/engine costs were silent
+            if (colors.isEmpty()) {
+                for (char c : ProgramFixtureProbe.manaCostOf(card).toCharArray()) {
+                    if ("WUBRG".indexOf(c) >= 0) {
+                        colors.add(c);
+                    }
+                }
+            }
         }
         String basic = colors.isEmpty() ? "Wastes" : switch (colors.iterator().next()) {
             case 'W' -> "Plains";

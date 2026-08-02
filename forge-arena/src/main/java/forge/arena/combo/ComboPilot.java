@@ -226,12 +226,21 @@ public final class ComboPilot {
      * never converts. From the program JSONs (loop.yield_model starts POWER).
      */
     private Set<String> powerProducers = Set.of();
+    /**
+     * PR (dreadnought_window): the {@code window.body} of every window program
+     * (Phyrexian Dreadnought) — a permanent the RUNNER must cast in its own
+     * respond-on-stack window. Stock would cast the 12/12 as a plain creature
+     * and it would sacrifice itself to its ETB trigger outside the window,
+     * wasting the line; the veto reserves it so only the runner casts it.
+     */
+    private Set<String> windowBodies = Set.of();
 
     public void setProgramPaths(Map<String, String> paths) {
         this.programPaths = paths == null ? Map.of() : paths;
         Set<String> pieces = new HashSet<>();
         Set<String> outlets = new HashSet<>();
         Set<String> powerProds = new HashSet<>();
+        Set<String> bodies = new HashSet<>();
         Map<String, Set<String>> onBattlefield = new HashMap<>();
         Map<String, List<String[]>> attach = new HashMap<>();
         Set<String> hasSetup = new HashSet<>();
@@ -282,6 +291,11 @@ public final class ComboPilot {
                         powerProds.add(prod);
                     }
                 }
+                // a window program's body is runner-cast in its own window
+                String wbody = program.path("window").path("body").asText("");
+                if (!wbody.isEmpty()) {
+                    bodies.add(wbody);
+                }
                 // the outlet is a structured OBJECT in the cast_bounce
                 // programs ({card, target_cumulative_lifegain, why}) and
                 // may be plain text elsewhere — read both shapes. asText()
@@ -303,6 +317,7 @@ public final class ComboPilot {
         this.programPieces = pieces;
         this.programOutlets = outlets;
         this.powerProducers = Set.copyOf(powerProds);
+        this.windowBodies = Set.copyOf(bodies);
         this.programOnBattlefield = Map.copyOf(onBattlefield);
         this.programAttach = Map.copyOf(attach);
         this.programHasSetup = Set.copyOf(hasSetup);
@@ -1391,16 +1406,27 @@ public final class ComboPilot {
         return cards;
     }
 
-    /** PR-31: everything the veto reserves — one-shot payoffs ∪ paired plays. */
+    /** PR-31: everything the veto reserves — one-shot payoffs ∪ paired plays
+     *  ∪ window bodies (the 12/12 the dreadnought runner casts in-window). */
     public Set<String> reservedCastNames(SeatView view) {
         Set<String> reserved = new java.util.LinkedHashSet<>(conversionPayoffNames(view));
         reserved.addAll(pairedPlayCards());
+        reserved.addAll(windowBodies);
         return reserved;
+    }
+
+    /** PR (dreadnought_window): is this a window program's body — a permanent
+     *  the RUNNER must cast in its own window, never stock? The veto uses this
+     *  to reserve a body that IS a permanent (the aura/one-shot test would
+     *  otherwise let the 12/12 through). */
+    public boolean isWindowBody(String card) {
+        return windowBodies.contains(card);
     }
 
     /** PR-31: does the veto have anything to guard? */
     public boolean hasReservedPlays(SeatView view) {
-        return hasBoundCombo(view) || !pairedPlayCards().isEmpty();
+        return hasBoundCombo(view) || !pairedPlayCards().isEmpty()
+                || !windowBodies.isEmpty();
     }
 
     /**

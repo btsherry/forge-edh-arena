@@ -95,12 +95,33 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private CastBounceRunner activeCastBounce;
         /** PR: the mana-funded bounce/ETB-recursion sink (program_class: bounce_recur). */
         private BounceRecurRunner activeBounceRecur;
+        /** PR (dreadnought_window): the value-burst-in-the-ETB-window runner,
+         *  polled even with a non-empty stack (the exploit IS respond-on-stack). */
+        private DreadnoughtWindowRunner activeDreadnought;
+        /** PR (seedborn_engine): the multi-turn Seedborn mana engine (new shape). */
+        private SeedbornEngineRunner activeSeedbornEngine;
         /** the creature the active bounce_recur runner wants Sabertooth/Kogla to
          * return this window — steers the hidden ChangeZone choice. */
         private String pendingRecurBounce;
+        /** the creature the active dreadnought_window runner wants a Sacrifice
+         *  COST to consume (the 12/12 body, not a dork) — steers
+         *  choosePermanentsToSacrifice for exactly one activation. */
+        private String pendingSacChoice;
+        /** a charm the dreadnought_window runner is casting for its DRAW mode
+         *  (Return of the Wildspeaker: draw = greatest non-Human power) — steers
+         *  chooseModeForAbility to the Draw sub-ability, consumed at cast. */
+        private String pendingCharmDrawHost;
 
         void setPendingRecurBounce(String cardName) {
             this.pendingRecurBounce = cardName;
+        }
+
+        void setPendingSacChoice(String cardName) {
+            this.pendingSacChoice = cardName;
+        }
+
+        void setPendingCharmDrawHost(String cardName) {
+            this.pendingCharmDrawHost = cardName;
         }
 
         private final java.util.Map<String, String> programClassCache =
@@ -371,6 +392,25 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     for (forge.game.spellability.AbilitySub sub : possible) {
                         if (sub.getApi() == forge.game.ability.ApiType.ChangeZone
                                 && String.valueOf(sub.getParam("Origin")).contains("Library")) {
+                            java.util.List<forge.game.spellability.AbilitySub> chosen =
+                                    new java.util.ArrayList<>();
+                            chosen.add(sub);
+                            return chosen;
+                        }
+                    }
+                }
+            }
+            // PR (dreadnought_window, power_draw): the pilot's cast charm
+            // (Return of the Wildspeaker) picks its DRAW mode — draw = greatest
+            // non-Human power, which the 12/12 Dreadnought pins at 12. Consumed
+            // at cast, single-mode only (num == 1).
+            if (pendingCharmDrawHost != null && sa != null && !sa.isTrigger()
+                    && sa.getHostCard() != null
+                    && pendingCharmDrawHost.equals(sa.getHostCard().getName())) {
+                pendingCharmDrawHost = null; // consume on match
+                if (num == 1) {
+                    for (forge.game.spellability.AbilitySub sub : possible) {
+                        if (sub.getApi() == forge.game.ability.ApiType.Draw) {
                             java.util.List<forge.game.spellability.AbilitySub> chosen =
                                     new java.util.ArrayList<>();
                             chosen.add(sub);
@@ -656,6 +696,20 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return null;
                 }
             }
+            // PR (dreadnought_window): the value burst is taken WITH the body's
+            // ETB sac-trigger on the stack — respond-on-stack, like the pairing.
+            if (activeDreadnought != null) {
+                List<SpellAbility> step = activeDreadnought.next(turn);
+                if (activeDreadnought.finished()) {
+                    activeDreadnought = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activeDreadnought != null) {
+                    return null;
+                }
+            }
             // PR-kappa: an engine cycle owns windows only across its own
             // resolution — the measure lands, the seat comes right back
             if (activeEngine != null) {
@@ -761,6 +815,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return null;
                 }
             }
+            if (activeSeedbornEngine != null) {
+                List<SpellAbility> step = activeSeedbornEngine.next(turn);
+                if (activeSeedbornEngine.finished()) {
+                    activeSeedbornEngine = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activeSeedbornEngine != null) {
+                    return null;
+                }
+            }
             if (activeSelvalaLoop != null) {
                 List<SpellAbility> step = activeSelvalaLoop.next(turn);
                 if (activeSelvalaLoop.finished()) {
@@ -846,7 +912,12 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         boolean spends = sa.isForetelling()
                                 || (sa.isSpell() && host != null
                                         && (!host.getType().isPermanent()
-                                            || host.isAura()));
+                                            || host.isAura()
+                                            // a dreadnought_window body is a
+                                            // PERMANENT the runner must cast in
+                                            // its own window — stock casting the
+                                            // 12/12 wastes it to its own trigger
+                                            || pilot.isWindowBody(host.getName())));
                         if (spends && host != null
                                 && pilot.reservedCastNames(view).contains(host.getName())) {
                             return null; // pass — reserved for the pilot's play
@@ -865,6 +936,8 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         && !"cast_recur".equals(programClass)
                         && !"bounce_recur".equals(programClass)
                         && !"selvala_mana_loop".equals(programClass)
+                        && !"dreadnought_window".equals(programClass)
+                        && !"seedborn_engine".equals(programClass)
                         && !"unreadable".equals(programClass)) {
                     // a compiled program whose runner is not built yet ships
                     // FLAGGED: abort loudly, never misroute to ProgramRunner
@@ -889,6 +962,26 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     List<SpellAbility> first = activeBounceRecur.next(turn);
                     if (activeBounceRecur.finished()) {
                         activeBounceRecur = null;
+                    }
+                    return first;
+                }
+                if ("dreadnought_window".equals(programClass)) {
+                    // PR: the value-burst-in-the-ETB-window runner (new shape)
+                    activeDreadnought = new DreadnoughtWindowRunner(getGame(), player, pilot,
+                            this, seatIndex, action.program().programPath());
+                    List<SpellAbility> first = activeDreadnought.next(turn);
+                    if (activeDreadnought.finished()) {
+                        activeDreadnought = null;
+                    }
+                    return first;
+                }
+                if ("seedborn_engine".equals(programClass)) {
+                    // PR: the multi-turn Seedborn mana engine (new shape)
+                    activeSeedbornEngine = new SeedbornEngineRunner(getGame(), player, pilot,
+                            seatIndex, action.program().programPath());
+                    List<SpellAbility> first = activeSeedbornEngine.next(turn);
+                    if (activeSeedbornEngine.finished()) {
+                        activeSeedbornEngine = null;
                     }
                     return first;
                 }
@@ -2034,6 +2127,30 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
          * chooseSingleEntityForEffect to the plural form — and landed one
          * seam short. This is the singular form.
          */
+        /**
+         * PR (dreadnought_window): steer a SACRIFICE COST onto the runner's
+         * declared body. Momentous Fall's additional Sac and Greater Good's
+         * {@code Sac<1/Creature>} let stock pick the cheapest creature — it
+         * would spare the 12/12 Dreadnought and sacrifice a dork, drawing 1
+         * instead of 12. When the dreadnought runner has set pendingSacChoice
+         * and the named card is a legal sacrifice, force it (one activation).
+         */
+        @Override
+        public forge.game.card.CardCollectionView choosePermanentsToSacrifice(
+                SpellAbility sa, int min, int max,
+                forge.game.card.CardCollectionView validTargets, String message) {
+            if (activeDreadnought != null && pendingSacChoice != null && validTargets != null
+                    && max >= 1) {
+                for (forge.game.card.Card c : validTargets) {
+                    if (c.getName().equals(pendingSacChoice)) {
+                        pendingSacChoice = null; // one-shot
+                        return new forge.game.card.CardCollection(c);
+                    }
+                }
+            }
+            return super.choosePermanentsToSacrifice(sa, min, max, validTargets, message);
+        }
+
         @Override
         public forge.game.card.Card chooseSingleCardForZoneChange(
                 forge.game.zone.ZoneType destination, List<forge.game.zone.ZoneType> origin,

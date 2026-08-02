@@ -41,11 +41,20 @@ public final class TutorWeights {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /** Ceiling for a discovered-synergy HUB boost — deliberately below the
+     * combo-piece band (0.85+) so folding the whole-deck synergy graph into
+     * tutoring can order the synergy enablers among themselves but NEVER
+     * out-rank assembling a real combo. */
+    private static final double HUB_CAP = 0.5;
+
     public static final String DERIVATION =
             "combo pieces: (0.5 + 0.45*logNorm(popularity)) * min(1, 2/pieces), commanders x0.2; "
             + "route payoffs: 0.35 + 0.35*(routes served / expressible routes); "
             + "engine-program pieces: flat 0.9 (PR-kappa: compiled card-advantage "
             + "engines are prime tutor targets); "
+            + "discovered-synergy hubs: HUB_CAP*logNorm(weighted synergy appearances), "
+            + "capped 0.5 below the combo band (folds the whole-deck research graph "
+            + "into tutoring without out-ranking combo assembly); "
             + "card weight = max over contributions (win-routes/4 static proxies for "
             + "quality * scarcity * completion_leverage)";
 
@@ -104,6 +113,39 @@ public final class TutorWeights {
                 for (JsonNode card : combo.path("cards")) {
                     offer(best, card.get("name").asText(), 0.85, why);
                 }
+            }
+        }
+
+        // --- discovered-synergy HUBS (whole-deck research): fold the ~200
+        // discovered synergies into tutoring. A card in many high-value
+        // synergies is a hub the pilot should fetch when NOT assembling a
+        // specific combo; the boost is CAPPED (HUB_CAP) below the combo band,
+        // so it only orders the synergy enablers (ramp, value engines) among
+        // themselves. Weighted by confidence (high 1.0, else 0.6) and
+        // log-normalised. Guarded on the artifact's presence, so decks without
+        // a whole-deck catalog (and the unit fixture) are untouched. ---
+        Path synergies = dossierDir.resolve("discovered-synergies-wholedeck.json");
+        if (java.nio.file.Files.exists(synergies)) {
+            JsonNode cat = MAPPER.readTree(synergies.toFile()).path("fable_catalog");
+            Map<String, Double> hubScore = new LinkedHashMap<>();
+            for (JsonNode rec : cat) {
+                double conf = "high".equals(rec.path("confidence").asText()) ? 1.0 : 0.6;
+                Set<String> cards = new java.util.LinkedHashSet<>();
+                cards.add(rec.path("anchor").asText());
+                for (JsonNode pc : rec.path("partner_cards")) {
+                    cards.add(pc.asText());
+                }
+                for (String card : cards) {
+                    hubScore.merge(card, conf, Double::sum);
+                }
+            }
+            double maxScore = hubScore.values().stream()
+                    .mapToDouble(Double::doubleValue).max().orElse(1.0);
+            for (Map.Entry<String, Double> e : hubScore.entrySet()) {
+                double boost = maxScore > 0
+                        ? HUB_CAP * Math.log1p(e.getValue()) / Math.log1p(maxScore) : 0.0;
+                offer(best, e.getKey(), boost, "discovered-synergy hub: "
+                        + Math.round(e.getValue()) + " weighted synergies");
             }
         }
 
