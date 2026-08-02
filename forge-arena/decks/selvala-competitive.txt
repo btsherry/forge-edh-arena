@@ -40,12 +40,12 @@
 1 Infectious Bite (ONE) 172
 1 Invasion of Ikoria (MOM) 190
 1 Invigorate (A25) 173
-1 Jeweled Lotus (CMR) 319
+1 Wirewood Channeler (LGN) 137
 1 Kogla, the Titan Ape (IKO) 162
 1 Last March of the Ents (LTR) 172
 1 Legolas's Quick Reflexes (LTC) 493
 1 Llanowar Elves (GNT) 46
-1 Mana Crypt (EMA) 225
+1 Priest of Titania (DDU) 9
 1 Manglehorn (AKH) 175
 1 Might of Old Krosa (2X2) 153
 1 Momentous Fall (C19) 173
