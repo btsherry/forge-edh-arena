@@ -968,6 +968,10 @@ public final class SelvalaManaLoopRunner {
                 return count(Card::isEnchantment);
             case "CREATURE_COUNT":
                 return count(Card::isCreature);
+            case "ELF_COUNT":
+                // Wirewood Channeler / Priest of Titania: {T} add mana = Elves.
+                // Count OUR Elves (conservative vs the script's all-Elves count).
+                return count(c -> c.getType().hasCreatureType("Elf"));
             case "POWER_CONSTANT":
             case "POWER_RAMPING":
             default:
