@@ -1,19 +1,22 @@
 export const meta = {
   name: 'wholedeck-ingestion',
-  description: 'Whole-deck synergy discovery (deck-agnostic; pass args={deck,anchors,shards,cap}). LEAN: a few Fable shards emit compilable records; NO Phase-II and NO separate verify phase — verification is DEFERRED to the compile/goldfish gate (each record\'s engine_test, run by ProgramGate). Pair with gemini_wholedeck.py. Argless defaults use the Selvala deck.',
+  description: 'Whole-deck synergy discovery (deck-agnostic; args={deck,anchors,wideShards,deepShards,cap}). Phase I wide (a few Fable shards over all anchors) -> Phase II deep (re-run the richest anchors to exhaust 3-4 card chains) -> dedup + cap. NO separate adversarial-verify phase — verification is DEFERRED to the compile/goldfish gate (each record\'s engine_test, run by ProgramGate). Pair with gemini_wholedeck.py.',
   phases: [
-    { title: 'Discover', detail: 'a few Fable shards over all anchors; dedup + cap; verify deferred to the goldfish gate' },
+    { title: 'PhaseI-Wide', detail: 'a few Fable shards over all anchors' },
+    { title: 'PhaseII-Deep', detail: 'deeper re-run of the richest anchors (the 3-4 card chains)' },
   ],
 }
 
-// Deck-agnostic: pass args = { deck: '<slug>', anchors: [...non-basic card names...], shards, cap }.
-// The Selvala defaults below reproduce the Selvala deck when called with no args.
+// Deck-agnostic: pass args = { deck: '<slug>', anchors: [...non-basic names...], wideShards, deepShards, cap }.
+// Argless defaults use the Selvala deck.
 const DECK = (typeof args === 'object' && args && args.deck) || 'selvala-heart-of-the-wilds'
 const DOSSIER = `forge-arena/decks/${DECK}/dossier`
 const SELVALA_ANCHORS = ['Allosaurus Shepherd','Ancient Tomb','Arbor Elf','Archdruid\'s Charm','Asceticism','Bala Ged Recovery','Beast Within','Boseiju, Who Endures','Bridgeworks Battle','Castle Garenbrig','Collective Resistance','Concordant Crossroads','Craterhoof Behemoth','Defiler of Vigor','Delighted Halfling','Deserted Temple','Destiny Spinner','Disciple of Freyalise','Dosan the Falling Leaf','Earthcraft','Emerald Medallion','Eternal Witness','Fanatic of Rhonas','Fertile Ground','Finale of Devastation','Frenzied Baloth','Gaea\'s Cradle','Garruk Wildspeaker','Gemstone Caverns','Genesis Hydra','Genesis Wave','Goldvein Hydra','Greater Good','Green Sun\'s Zenith','Heroic Intervention','Hunter\'s Insight','Invasion of Ikoria','Inventors\' Fair','Keen-Eyed Curator','Kenrith\'s Transformation','Khalni Ambush','Kogla, the Titan Ape','Lair of the Hydra','Life\'s Legacy','Lightning Greaves','Lotus Field','Magus of the Candelabra','Managorger Hydra','Momentous Fall','Nature\'s Rhythm','Nykthos, Shrine to Nyx','Nylea, Keen-Eyed','Ojer Kaslem, Deepest Growth','Omnath, Locus of Mana','Overgrowth','Phyrexian Dreadnought','Polukranos, World Eater','Portent Tracker','Reclamation Sage','Return of the Wildspeaker','Rhonas the Indomitable','Sanctum Weaver','Saryth, the Viper\'s Fang','Seedborn Muse','Selvala, Heart of the Wilds','Sheltering Ancient','Shifting Woodland','Silverback Elder','Smuggler\'s Surprise','Sol Ring','Song of the Dryads','Staff of Domination','Surrak and Goreclaw','Swiftfoot Boots','Sylvan Library','Temur Sabertooth','The Great Henge','Turntimber Symbiosis','Umbral Mantle','Utopia Sprawl','Voyaging Satyr','Wild Growth','Wirewood Lodge','Wolfwillow Haven','Yavimaya, Cradle of Growth']
 const anchors = (typeof args === 'object' && args && Array.isArray(args.anchors) && args.anchors.length)
   ? args.anchors : SELVALA_ANCHORS
-const NUM_SHARDS = (typeof args === 'object' && args && args.shards) || 3   // few, not many
+const WIDE_SHARDS = (typeof args === 'object' && args && args.wideShards) || 3
+const DEEP_SHARDS = (typeof args === 'object' && args && args.deepShards) || 3
+const DEEP_TOP = (typeof args === 'object' && args && args.deepTop) || 12   // richest anchors to deepen
 const CAP = (typeof args === 'object' && args && args.cap) || 200
 
 // The FABLE agents are tool-using: they READ the shared brief + all resources
@@ -123,56 +126,78 @@ function collect(results) {
   }
   return { records: [...seen.values()], hallucinated }
 }
+// Bounded so a single shard's JSON output can't truncate (~35 detailed records is safe).
+const perShardCap = Math.min(35, Math.ceil(CAP / WIDE_SHARDS) + 10)
 
-// ---------- DISCOVER: a few Fable shards over ALL anchors ----------
-// Lean by design (Ben, 2026-08-03): a handful of shards, NOT 10 wide + 3 deep + 48 verify.
-// Each verify agent used to reload the full brief+scripts to check ONE record — 48x the
-// context churn, and it duplicated a stronger check we already run: ProgramGate goldfishes
-// each record's engine_test in the real engine at compile time. So verification is deferred.
-phase('Discover')
-const SHARDS = shard(anchors, Math.ceil(anchors.length / NUM_SHARDS))
-// Bounded so a single shard's JSON output can't truncate (~35 detailed records is
-// safe; fewer, bigger shards mean fewer agents but each must stay under its cap).
-const perShardCap = Math.min(35, Math.ceil(CAP / SHARDS.length) + 10)
-log(`Discover: ${anchors.length} anchors over ${SHARDS.length} shards (lean; verification deferred to the goldfish gate)`)
-const results = await parallel(SHARDS.map((batch, i) => () =>
+// ---------- PHASE I: WIDE (all anchors, a few big shards) ----------
+phase('PhaseI-Wide')
+const P1_SHARDS = shard(anchors, Math.ceil(anchors.length / WIDE_SHARDS))
+log(`Phase I: ${anchors.length} anchors over ${P1_SHARDS.length} shards`)
+const p1 = await parallel(P1_SHARDS.map((batch, i) => () =>
   agent(
-    `${METHOD}\n${INPUTS}\n\n===== YOUR ANCHORS (shard ${i + 1}/${SHARDS.length}) =====\n`
+    `${METHOD}\n${INPUTS}\n\n===== YOUR ANCHORS (shard ${i + 1}/${P1_SHARDS.length}) =====\n`
     + `Anchor ONLY on these cards (partners may be ANY non-basic deck card):\n`
     + batch.map((a, j) => `${j + 1}. ${a}`).join('\n')
-    + `\n\nDo the FULL method on each anchor: read SYNERGY-INGESTION.md + CANARY-BRIEF-GOLD.md,`
-    + ` deck-cards.json, the Forge scripts via the index, the primer and rules. Find genuine synergies`
-    + ` INCLUDING 3-4 card CHAINS. REJECT false positives (record why in false_positive_check). Every`
-    + ` partner MUST be in deck-cards.json (zero hallucinations). Give each record a RUNNABLE engine_test`
-    + ` — that test is how we verify it downstream, so make it exact. Emit your best ~${perShardCap}`
-    + ` records (highest compile_rank); quality over quantity, no filler. End with the coverage_note.`,
-    { label: `discover:shard${i + 1}`, phase: 'Discover', model: 'fable', effort: 'high',
+    + `\n\nDo the FULL method: read SYNERGY-INGESTION.md + CANARY-BRIEF-GOLD.md, deck-cards.json, the`
+    + ` Forge scripts via the index, the primer and rules. Find genuine synergies INCLUDING 3-4 card`
+    + ` CHAINS; REJECT false positives (say why); every partner MUST be in deck-cards.json (zero`
+    + ` hallucinations); give each record a RUNNABLE engine_test. Emit your best ~${perShardCap}`
+    + ` records (highest compile_rank); no filler. End with the coverage_note.`,
+    { label: `p1:shard${i + 1}`, phase: 'PhaseI-Wide', model: 'fable', effort: 'high',
+      agentType: 'general-purpose', schema: RECORD_SCHEMA })
+)).then(rs => rs.filter(Boolean))
+const c1 = collect(p1)
+log(`Phase I: ${c1.records.length} unique valid records (${c1.hallucinated} hallucinated dropped)`)
+
+// richest anchors by summed compile_rank -> deepen these
+const byAnchor1 = new Map()
+for (const r of c1.records) byAnchor1.set(r.anchor, (byAnchor1.get(r.anchor) || 0) + (r.compile_rank || 0))
+const topAnchors = [...byAnchor1.entries()].sort((a, b) => b[1] - a[1]).slice(0, DEEP_TOP).map(e => e[0])
+log(`Phase II targets (richest anchors): ${topAnchors.join(', ')}`)
+
+// ---------- PHASE II: DEEP (richest anchors, exhaust the 3-4 card chains) ----------
+phase('PhaseII-Deep')
+const P2_SHARDS = shard(topAnchors, Math.max(1, Math.ceil(topAnchors.length / DEEP_SHARDS)))
+const p2 = await parallel(P2_SHARDS.map((batch, i) => () =>
+  agent(
+    `${METHOD}\n${INPUTS}\n\n===== DEEP PASS — YOUR ANCHORS (${i + 1}/${P2_SHARDS.length}) =====\n`
+    + `These anchors were the RICHEST in the wide pass. Go DEEPER: exhaust their 3-4 card CHAINS,`
+    + ` their loop/outlet interactions, and any win-con lines. Read every relevant Forge script.\n`
+    + batch.map((a, j) => `${j + 1}. ${a}`).join('\n')
+    + `\n\nSame compilable schema, same zero-hallucination bar, each with a RUNNABLE engine_test. Note`
+    + ` novelty vs the dossier. Emit your best ~${perShardCap} records. End with the coverage_note.`,
+    { label: `p2:deep${i + 1}`, phase: 'PhaseII-Deep', model: 'fable', effort: 'high',
       agentType: 'general-purpose', schema: RECORD_SCHEMA })
 )).then(rs => rs.filter(Boolean))
 
-const c = collect(results)
-const ranked = c.records.slice().sort((a, b) => (b.compile_rank || 0) - (a.compile_rank || 0))
+// merge Phase I + Phase II (dedup keeps the higher compile_rank)
+const c2 = collect([...p1, ...p2])
+log(`After Phase II merge: ${c2.records.length} unique valid records (${c2.hallucinated} cumulative hallucinated)`)
+
+const ranked = c2.records.slice().sort((a, b) => (b.compile_rank || 0) - (a.compile_rank || 0))
 const capped = ranked.slice(0, CAP)
 const dropped_over_cap = Math.max(0, ranked.length - CAP)
 
 const byAnchor = new Map()
 for (const r of capped) byAnchor.set(r.anchor, (byAnchor.get(r.anchor) || 0) + (r.compile_rank || 0))
-const topAnchors = [...byAnchor.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(e => e[0])
+const finalTopAnchors = [...byAnchor.entries()].sort((a, b) => b[1] - a[1]).slice(0, DEEP_TOP).map(e => e[0])
 const shapeIsNew = capped.filter(r => r.shape_is_new)
   .map(r => ({ key: keyOf(r), program_class: r.program_class, mechanism: r.mechanism }))
 
-log(`FINAL: ${capped.length} records (cap ${CAP}). hallucinated_dropped=${c.hallucinated}, dropped_over_cap=${dropped_over_cap}, shape_is_new=${shapeIsNew.length}`)
+log(`FINAL: ${capped.length} records (cap ${CAP}). hallucinated_dropped=${c2.hallucinated}, dropped_over_cap=${dropped_over_cap}, shape_is_new=${shapeIsNew.length}`)
 return {
   catalog: capped,
-  note: `Lean discovery: ${SHARDS.length} Fable shards, no separate verify phase — verification is deferred to the compile/goldfish gate (each record's engine_test, run by ProgramGate).`,
+  note: `Wide (${P1_SHARDS.length} shards) + Deep (${P2_SHARDS.length} shards) Fable, no separate verify phase — verification is deferred to the compile/goldfish gate (each record's engine_test, run by ProgramGate).`,
   counts: {
-    discovered_valid: c.records.length,
-    hallucinated_dropped: c.hallucinated,
+    phase1_valid: c1.records.length,
+    phase2_merged_valid: c2.records.length,
+    hallucinated_dropped: c2.hallucinated,
     final_capped: capped.length,
     dropped_over_cap,
-    shards: SHARDS.length,
+    wide_shards: P1_SHARDS.length,
+    deep_shards: P2_SHARDS.length,
   },
-  top_anchors: topAnchors,
+  top_anchors: finalTopAnchors,
   shape_is_new_backlog: shapeIsNew,
-  coverage_notes: results.map(r => r.coverage_note).filter(Boolean),
+  coverage_notes: [...p1, ...p2].map(r => r.coverage_note).filter(Boolean),
 }
