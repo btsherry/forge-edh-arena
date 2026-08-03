@@ -53,4 +53,4 @@ is a prep bug (it should have been promoted to `combos.json`).
 ## Related
 
 - Runtime sibling: [combos](combos.md)
-- The Gate 3 rule: working-plan-Aug-3 §3; `docs/INGESTION-SPEC.md`
+- The Gate 3 rule: working-plan-Aug-3 §3; `docs/SYNERGY-INGESTION.md` + `docs/CANARY-BRIEF-GOLD.md`

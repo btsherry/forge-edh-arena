@@ -639,7 +639,7 @@ The Win Routes spec (route definitions + classification rules) is a documentatio
 - Bindgen outputs are untrusted until verified: schema → lint → sandbox-sim, in that order; only sim-passed bindings get executable. Store request hash, model id, and verbatim response with every library entry; run manifests pin the library version.
 - When in doubt between fidelity to this document and what the actual Forge source supports: **the source wins** — update this document in the same PR.
 
-## Project file inventory (2026-07-22)
+## Project file inventory (2026-08-03)
 
 ### Research
 
@@ -652,8 +652,12 @@ The Win Routes spec (route definitions + classification rules) is a documentatio
 - `forge-arena/docs/research/mtg-ai-survey.md` — Academic/commercial/hobby AI survey for MTG, focused on combo firing sequencing and resource-to-win conversion.
 - `forge-arena/docs/research/mtg-rules-digest-conversion.md` — Comprehensive Rules (June 2026) digest constraining the combo-conversion module (loops, X spells, mana pool, win/loss SBAs).
 - `forge-arena/docs/research/mtg-rules-summary.md` — General Comprehensive Rules companion covering turn structure, priority, stack, combat, replacements, and Commander format.
+- `forge-arena/docs/research/combo-ingestion-landscape.md` — Ecosystem research report: Commander Spellbook's data model, how other projects play MTG programmatically, combo-ingestion approaches, and "I have infinite X, now win" modeling.
+- `forge-arena/docs/research/land-tax-scroll-rack-feasibility.md` — Feasibility analysis for the Land Tax + Scroll Rack card-advantage engine (2026-07-23).
 
 ### Primers
+
+External DeckCheck.co analyses, one per deck — an input the discovery harnesses embed (the gold pipeline pastes the primer into each call) and a baseline for pilot grading / Gate-1.5 calibration. One per canonical deck:
 
 - `forge-arena/docs/primers/giada-font-of-hope-deckcheck.md` — DeckCheck.co analysis of Giada deck (external reference for pilot grading and calibration).
 - `forge-arena/docs/primers/purphoros-god-of-the-forge-deckcheck.md` — DeckCheck.co analysis of Purphoros deck (reference for decision audits and Gate 1.5 tuning).
@@ -674,12 +678,38 @@ The Win Routes spec (route definitions + classification rules) is a documentatio
 - `forge-arena/docs/PHASE-11-PLAN.md` — Ben-approved plan: one execution path per combo, no fallback tier, full oracle text as compiler input alongside scripts.
 - `forge-arena/docs/COMBO-ACCOUNTING.md` — Two-level audit of 42 detected combos (42 across all four decks, binding status + validation in batch).
 - `forge-arena/docs/COMBO-AUDIT-RESULTS.md` — 30-game combo-audit batch results (flat, all within noise of prior Phase 10 runs).
-- `forge-arena/docs/INGESTION-SPEC.md` — Executable contract for ingestion: what runs, what's handed to whom, what comes back, where it breaks.
-- `forge-arena/docs/INGESTION-WORKFLOW.md` — Design for replacing prep (not yet built), ordered: correctness first, then efficiency, then elegance.
 - `forge-arena/docs/GIADA-COMBO-RESULT.md` — First end-to-end combo execution result (Giada 30-game: 2 combos fired, 1 fired and won that game).
 - `forge-arena/docs/WIN-ROUTES.md` — Win Routes spec (v1): closed set of conversion routes, per-deck feature classification rules (cache-first, library-driven).
 - `forge-arena/docs/PROJECT-BRIEF.md` — Canonical project brief (one sentence): drop in ANY deck, prep detects combos, pilot assembles and converts to wins with no hardcoded logic.
 - `forge-arena/docs/T0-VERIFICATION.md` — Forge internals verification (complete) against Plan v3.1 §1: all assumptions confirmed except 4 corrections.
+- `forge-arena/docs/CAST-RECUR-PLAN.md` — cast_recur runner research + plan (Purphoros anchor, 2026-07-30).
+- `forge-arena/docs/CASTRECUR100-RESULTS.md` — castrecur100 full scored results (2026-07-30).
+- `forge-arena/docs/CONCERT-SCALING.md` — Concert scaling / interference report (concert60 batch, 2026-07-31).
+- `forge-arena/docs/PAIRING-AUDIT-GIADA.md` — Giada pairing audit: two-auditor card-text reconfirmation of the wipe+shield pairs (2026-07-23).
+- `forge-arena/docs/PLAY-OBSERVATIONS.md` — Play observations: batch game-states where a win was available sooner.
+- `forge-arena/docs/SELVALA-ARC.md` — Selvala mana-loop arc, a living plan (started 2026-07-30).
+- `forge-arena/docs/SELVALA-BUILD-MANIFEST.md` — Selvala win-rate build manifest: synthesis of five surveys.
+- `forge-arena/docs/SELVALA-SYNERGY-TARGETS.md` — Selvala synergy build targets (from the Phase-2b census shortlist).
+- `forge-arena/docs/SHAPE-CENSUS.md` — Shape census: does the build cycle converge? (2026-07-30).
+- `forge-arena/docs/THIRDS-REVIEW.md` — Thirds review: role redundancy across the nine compiled combo programs.
+
+### Documentation rails (Aug-2026 ingestion initiative)
+
+The artifact→code→execution map, plus the anchor plan for making deck ingestion repeatable/scalable/accurate.
+
+- `forge-arena/docs/working-plan-Aug-3.md` — The post-compaction anchor: the target pipeline, the completeness bar, caps/thresholds, decisions, and the ordered §8 deliverables.
+- `forge-arena/docs/atlas/` — One reference page per dossier artifact (file contract: what / who-generates / schema / example / consumer). `atlas/README.md` is the index + entry template + generator taxonomy; pages cover combo-program, engine-program, pairing-program, deck-cards, combos, advisory-combos, discovered-combos, discovered-synergies-wholedeck, tutor-priorities, protection-priorities, paired-plays, route-coverage, fixtures, dossier, program-backlog, build-manifest, capability-inventory.
+- `forge-arena/docs/runner-cat.md` — The runner catalog: per-runner execution semantics (shape it executes, exact program fields read, vocabularies, abort states, canonical example).
+- `forge-arena/schemas/*.schema.json` — JSON Schemas (draft 2020-12), keyed `arena.<name>.<ver>`, validating each artifact + `program_class`. The §8.2 additions cover the program family (combo/engine/pairing/fixture) plus protection-priorities, paired-plays, discovered-combos, advisory-combos, program-backlog, build-manifest, discovered-synergies-wholedeck; enforced by `SchemaValidationTest` + `ProgramSchemaValidationTest`.
+
+### Discovery pipeline (gold — the best-known-good run)
+
+The Selvala whole-deck run behind the 200 compilable synergy records (0 hallucinations), recovered from ephemeral session locations into the repo. `SYNERGY-INGESTION.md` is the contract; `CANARY-BRIEF-GOLD.md` is the brief; the two scripts are the harnesses that ran it.
+
+- `forge-arena/docs/SYNERGY-INGESTION.md` — The canonical Fable+Gemini discovery contract: the rules-lawyer method, the exact **compilable** record schema, the Forge-DSL primer, and the Gemini invocation spec. The FABLE agents read this first.
+- `forge-arena/docs/CANARY-BRIEF-GOLD.md` — The gold source brief (canary-scoped: 10 anchors); both harnesses widen it to whole-deck. The "reason holistically, the Forge script is ground truth, find 3–4 card chains, reject false positives" instruction set + DSL primer + compilable record shape.
+- `forge-arena/scripts/gemini_wholedeck.py` — Gemini-side harness: embeds brief + primer + rules digest + full decklist + all non-basic Forge scripts per call, shards the 85 anchors, `gemini-pro-latest` with Google Search grounding. Reads the API key from `hello/gemini-hello` at runtime (no key in the file). Carries session-specific paths — a faithful record of the run, not turnkey.
+- `forge-arena/scripts/selvala-wholedeck-ingestion-wf_87514c03-1a9.js` — Fable-side harness (Claude Code Workflow-tool script): 10 shards over 85 anchors → dedup (zero-hallucination bar) → richest 12 anchors → Phase II deep → adversarially verify top 48 → cap 200, forced through `RECORD_SCHEMA`.
 
 ### Deck dossier artifacts
 
@@ -717,3 +747,6 @@ The Win Routes spec (route definitions + classification rules) is a documentatio
 - `forge-arena/scripts/program-fidelity.py` — Phase 11 execution-fidelity scorer (program entry, sustain, convert rates; why programs stopped).
 - `forge-arena/scripts/build-ingestion-packages.py` — Assemble ingestion packages (per-card oracle+script, whole-deck package for Gemini).
 - `forge-arena/scripts/capability-prototype.py` — PROTOTYPE: extract capabilities from Forge card scripts, measure blind-spot closure vs. oracle-text alone.
+- `forge-arena/scripts/observe-play.py` — Scan a batch run dir for game-states where a seat could have won sooner.
+- `forge-arena/scripts/gemini_wholedeck.py` — Gemini-side gold discovery harness (full description under **Discovery pipeline (gold)** above).
+- `forge-arena/scripts/selvala-wholedeck-ingestion-wf_87514c03-1a9.js` — Fable-side gold discovery harness, a Claude Code Workflow-tool script (full description under **Discovery pipeline (gold)** above).
