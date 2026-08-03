@@ -8,16 +8,19 @@ export const meta = {
 
 // Deck-agnostic: pass args = { deck: '<slug>', anchors: [...non-basic names...], shards, cap }.
 // Argless defaults use the Selvala deck.
-const DECK = (typeof args === 'object' && args && args.deck) || 'selvala-heart-of-the-wilds'
+// args may arrive as a parsed object OR a JSON string (workflow-runtime dependent) — handle both.
+const ARGS = (typeof args === 'string')
+  ? (() => { try { return JSON.parse(args) } catch (e) { return {} } })()
+  : (args && typeof args === 'object' ? args : {})
+const DECK = ARGS.deck || 'selvala-heart-of-the-wilds'
 const DOSSIER = `forge-arena/decks/${DECK}/dossier`
 const SELVALA_ANCHORS = ['Allosaurus Shepherd','Ancient Tomb','Arbor Elf','Archdruid\'s Charm','Asceticism','Bala Ged Recovery','Beast Within','Boseiju, Who Endures','Bridgeworks Battle','Castle Garenbrig','Collective Resistance','Concordant Crossroads','Craterhoof Behemoth','Defiler of Vigor','Delighted Halfling','Deserted Temple','Destiny Spinner','Disciple of Freyalise','Dosan the Falling Leaf','Earthcraft','Emerald Medallion','Eternal Witness','Fanatic of Rhonas','Fertile Ground','Finale of Devastation','Frenzied Baloth','Gaea\'s Cradle','Garruk Wildspeaker','Gemstone Caverns','Genesis Hydra','Genesis Wave','Goldvein Hydra','Greater Good','Green Sun\'s Zenith','Heroic Intervention','Hunter\'s Insight','Invasion of Ikoria','Inventors\' Fair','Keen-Eyed Curator','Kenrith\'s Transformation','Khalni Ambush','Kogla, the Titan Ape','Lair of the Hydra','Life\'s Legacy','Lightning Greaves','Lotus Field','Magus of the Candelabra','Managorger Hydra','Momentous Fall','Nature\'s Rhythm','Nykthos, Shrine to Nyx','Nylea, Keen-Eyed','Ojer Kaslem, Deepest Growth','Omnath, Locus of Mana','Overgrowth','Phyrexian Dreadnought','Polukranos, World Eater','Portent Tracker','Reclamation Sage','Return of the Wildspeaker','Rhonas the Indomitable','Sanctum Weaver','Saryth, the Viper\'s Fang','Seedborn Muse','Selvala, Heart of the Wilds','Sheltering Ancient','Shifting Woodland','Silverback Elder','Smuggler\'s Surprise','Sol Ring','Song of the Dryads','Staff of Domination','Surrak and Goreclaw','Swiftfoot Boots','Sylvan Library','Temur Sabertooth','The Great Henge','Turntimber Symbiosis','Umbral Mantle','Utopia Sprawl','Voyaging Satyr','Wild Growth','Wirewood Lodge','Wolfwillow Haven','Yavimaya, Cradle of Growth']
-const anchors = (typeof args === 'object' && args && Array.isArray(args.anchors) && args.anchors.length)
-  ? args.anchors : SELVALA_ANCHORS
-const NUM_SHARDS = (typeof args === 'object' && args && args.shards) || 3
-const CAP = (typeof args === 'object' && args && args.cap) || 200
+const anchors = (Array.isArray(ARGS.anchors) && ARGS.anchors.length) ? ARGS.anchors : SELVALA_ANCHORS
+const NUM_SHARDS = ARGS.shards || 3
+const CAP = ARGS.cap || 200
 // Fable is the standing default (the strongest tool-using reasoner); override per
 // run via args.model (e.g. 'opus' when Fable quota is spent, 'sonnet' to economize).
-const AGENT_MODEL = (typeof args === 'object' && args && args.model) || 'fable'
+const AGENT_MODEL = ARGS.model || 'fable'
 
 // The FABLE agents are tool-using: they READ the shared brief + all resources
 // themselves. This block names every path (kept in sync with SYNERGY-INGESTION.md).
@@ -136,7 +139,7 @@ const perShardCap = Math.min(35, Math.ceil(CAP / NUM_SHARDS) + 10)
 // separate Phase-II agents, no separate verify — verification is deferred to the goldfish gate.
 phase('Discover')
 const SHARDS = shard(anchors, Math.ceil(anchors.length / NUM_SHARDS))
-log(`Discover: ${anchors.length} anchors over ${SHARDS.length} shards (each does wide + deep in one session)`)
+log(`Discover: model=${AGENT_MODEL}, deck=${DECK}, ${anchors.length} anchors over ${SHARDS.length} shards (each wide + deep in one session)`)
 const results = await parallel(SHARDS.map((batch, i) => () =>
   agent(
     `${METHOD}\n${INPUTS}\n\n===== YOUR ANCHORS (shard ${i + 1}/${SHARDS.length}) =====\n`
