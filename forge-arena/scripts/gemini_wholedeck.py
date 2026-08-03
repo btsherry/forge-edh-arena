@@ -5,40 +5,52 @@ call's JSON output stays under the token cap; embeds the shared brief + primer +
 rules digest + full decklist + ALL non-basic Forge scripts in every call (Gemini
 can't read our files). Google Search grounding ON. Never prints the API key.
 Aggregates every batch's records to one JSON file. Discovery only — no compile."""
-import json, re, os, glob, urllib.request, time
+import json, re, os, sys, glob, urllib.request, time
 
-ROOT = "/Users/toor/Claude"
-FA = ROOT + "/personal/forge-edh-arena"
-DOSSIER = FA + "/forge-arena/decks/selvala-heart-of-the-wilds/dossier"
-CARDS = FA + "/forge-gui/res/cardsfolder"
-SCRATCH = "/private/tmp/claude-501/-Users-toor-Claude/472653bf-a5b3-4295-8ed3-bc916e689d2e/scratchpad"
-OUT = SCRATCH + "/gemini-wholedeck-records.json"
-LOG = SCRATCH + "/gemini-wholedeck.log"
-BATCH = 22            # anchors per call -> ~4 calls; keeps output under the cap
+# ---- Repeatable, deck-agnostic config -------------------------------------
+# Usage: python3 scripts/gemini_wholedeck.py [<deck-slug>]
+DECK = sys.argv[1] if len(sys.argv) > 1 else "selvala-heart-of-the-wilds"
+
+# Paths derive from this script's location, so it runs on any machine/checkout.
+HERE = os.path.dirname(os.path.abspath(__file__))    # <repo>/forge-arena/scripts
+ARENA = os.path.dirname(HERE)                         # <repo>/forge-arena
+REPO = os.path.dirname(ARENA)                         # <repo> (forge-edh-arena)
+DOSSIER = f"{ARENA}/decks/{DECK}/dossier"
+CARDS = f"{REPO}/forge-gui/res/cardsfolder"
+BRIEF_PATH = f"{ARENA}/docs/CANARY-BRIEF-GOLD.md"
+PRIMER_PATH = f"{ARENA}/docs/primers/{DECK}-deckcheck.md"
+RULES_PATH = f"{ARENA}/docs/research/mtg-rules-digest-conversion.md"
+# The API key lives outside the repo (workspace hello/); override with GEMINI_KEY_FILE.
+KEY_FILE = os.environ.get(
+    "GEMINI_KEY_FILE",
+    os.path.join(os.path.dirname(os.path.dirname(REPO)), "hello", "gemini-hello"))
+OUT = f"{DOSSIER}/discovered-synergies-gemini.json"
+LOG = f"{DOSSIER}/discovered-synergies-gemini.log"
+BATCH = 22            # anchors per call -> keeps each call's JSON under the cap
 
 def log(m):
     with open(LOG, "a") as f:
         f.write(m + "\n")
 
-raw = open(ROOT + "/hello/gemini-hello").read()
+raw = open(KEY_FILE).read()
 m = re.search(r"AIza[0-9A-Za-z_\-]{35}", raw)
 key = m.group(0) if m else raw.strip().splitlines()[-1].strip()
 del raw
 
-brief = open(SCRATCH + "/canary-brief.md").read()
-# widen the canary scope line to whole-deck
-brief = brief.replace("canary: 10 anchors, ≤50 pairings", "whole deck, ≤200 pairings")
+# The deck-agnostic gold brief; the per-batch prompt below supplies the anchors +
+# whole-deck scope, so no in-place scope edit is needed.
+brief = open(BRIEF_PATH).read()
 
 deck = json.load(open(DOSSIER + "/deck-cards.json"))
 basics = {"Forest", "Island", "Swamp", "Mountain", "Plains", "Wastes"}
 anchors = sorted({c["name"] for c in deck["cards"] if c["name"] not in basics})
 
 try:
-    primer = open(FA + "/forge-arena/docs/primers/selvala-heart-of-the-wilds-deckcheck.md").read()
+    primer = open(PRIMER_PATH).read()
 except Exception:
     primer = "(primer unavailable)"
 try:
-    rules = open(FA + "/forge-arena/docs/research/mtg-rules-digest-conversion.md").read()
+    rules = open(RULES_PATH).read()
 except Exception:
     rules = "(rules digest unavailable)"
 

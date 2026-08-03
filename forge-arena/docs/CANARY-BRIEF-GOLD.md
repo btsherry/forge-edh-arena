@@ -1,6 +1,12 @@
-# Synergy discovery brief — Selvala, Heart of the Wilds (canary: 10 anchors, ≤50 pairings)
+# Synergy discovery brief (gold, deck-agnostic)
 
-You are a Magic: The Gathering expert analyst. Find the powerful two-or-more-card synergies / play-patterns that the **ANCHOR CARDS** (listed at the end) form with cards in this Commander deck (Selvala, Heart of the Wilds). Output **compilable** records we will turn into game logic and validate in an engine.
+> The best-known-good discovery brief, validated on the Selvala whole-deck run (200
+> compilable records, 0 hallucinations). Deck-agnostic: the harness fills the deck
+> name, the `<deck-slug>` in the paths below, the anchor list, and the scope/cap.
+> This is the exact instruction set both the FABLE and Gemini agents receive — keep
+> it in sync with `docs/SYNERGY-INGESTION.md` (the contract that points here).
+
+You are a Magic: The Gathering expert analyst. Find the powerful two-or-more-card synergies / play-patterns that the **ANCHOR CARDS** (listed at the end) form with cards in this Commander deck (named in the harness invocation). Output **compilable** records we will turn into game logic and validate in an engine.
 
 ## How to think (non-negotiable)
 - Reason **holistically, like a rules lawyer**, over the whole deck at once. Do **not** decompose cards into fixed categories/primitives and bucket-match — Magic interactions are text-exact and emergent from the comprehensive rules, and bucketing causes skips. Read the real text and the Forge script, hold the deck in mind, find where an anchor's ability legally combines with other card(s) for a powerful play.
@@ -11,7 +17,7 @@ You are a Magic: The Gathering expert analyst. Find the powerful two-or-more-car
 
 ## Forge card-script DSL primer (how to read the `.txt` scripts)
 **Fast path:** every deck card's EXACT script file path is pre-indexed at
-`forge-arena/decks/selvala-heart-of-the-wilds/dossier/card-scripts-index.json`
+`forge-arena/decks/<deck-slug>/dossier/card-scripts-index.json`
 (a `{name: absolute_path}` map, `cardsfolder_root` given). Read scripts directly
 from those paths — do NOT derive filenames or glob the cardsfolder.
 
@@ -33,7 +39,7 @@ A **combo is DATA over a shape**; a genuinely new mechanism is a **new runner**.
 We fixture a board by putting named cards into play (`moveToPlay`), clearing summoning sickness (`setSickness(false)`), and attaching equipment/auras (`attachToEntity`); then we measure the mana pool, total board power, opponent life, and program events, and assert the expected delta. Your `engine_test` must name the exact cards+zones to set up, the activations to perform, the measurable outcome that confirms it, and the condition that would refute it.
 
 ## External research (inference HELPERS, never hard filters — must never make you skip a deck card)
-- Web-search real discussion (Reddit/forums/primers/articles) of the anchors' and Selvala's synergies; capture concrete play lines + sources.
+- Web-search real discussion (Reddit/forums/primers/articles) of the anchors' and the commander's synergies; capture concrete play lines + sources.
 - EDHREC co-occurrence: `curl -sS -A "Mozilla/5.0" https://json.edhrec.com/pages/cards/<slug>.json` — `num_decks` is a faint "played together" sniff only (staple-dominated; NOT functional synergy).
 - Scryfall: `https://api.scryfall.com/cards/search?q=...` with `otag:` function tags / `oracle:` search to sniff mechanically-related cards.
 
@@ -53,7 +59,7 @@ We fixture a board by putting named cards into play (`moveToPlay`), clearing sum
   "produces": "mana|board|damage|cards|protection|win",
   "magnitude": "",
   "win_relevance": "which of the deck's win-conditions/plans this fuels",
-  "novelty_vs_dossier": "new|already-known (check decks/selvala-heart-of-the-wilds/dossier/{advisory-combos,discovered-synergies,combos}.json)",
+  "novelty_vs_dossier": "new|already-known (check decks/<deck-slug>/dossier/{advisory-combos,discovered-synergies,combos}.json)",
   "confidence": "high|med|low",
   "false_positive_check": "",
   "engine_test": {"fixture":[{"card":"","zone":"battlefield|hand","attach_to":""}], "activate":["ordered activations"], "expect_measurable":"e.g. +3 green mana vs baseline", "reject_if":""},
@@ -62,7 +68,7 @@ We fixture a board by putting named cards into play (`moveToPlay`), clearing sum
 ```
 Set `compile_rank` in [0,1] = win_relevance × magnitude × novelty × confidence (win-plans over ramp, infinite over incremental, new-in-dossier over known, rules-solid over speculative). We will compile+test the highest-ranked first.
 
-## Scope / caps for THIS canary run
-- Anchor only on the 10 cards listed below (partners may be any deck card).
-- Emit **at most 50 records total**, the 50 highest `compile_rank`. If you find more, keep the best 50 and note in the coverage line how many you dropped.
+## Scope / caps (the harness sets these per run)
+- Anchor only on the anchor cards listed below (partners may be any non-basic deck card). A **whole-deck** run anchors on every non-basic card; a **canary** run uses a representative subset.
+- Emit the highest-`compile_rank` records up to the run's cap (**whole-deck: ≤200**, **canary: ≤50**). If you find more, keep the best and note in the coverage line how many you dropped.
 - End with a one-paragraph COVERAGE NOTE: which anchors were richest, roughly how many candidates you considered per anchor, and any anchor with no real synergy (say why).

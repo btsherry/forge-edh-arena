@@ -1,6 +1,6 @@
 export const meta = {
-  name: 'selvala-wholedeck-ingestion',
-  description: 'Whole-deck synergy discovery for Selvala (85 anchors): Phase I wide (sharded, canary depth) -> evaluate richest anchors -> Phase II deep -> adversarial verify -> validate/dedup -> cap 200 compilable records. DISCOVERY ONLY, no compile/no code.',
+  name: 'wholedeck-ingestion',
+  description: 'Whole-deck synergy discovery (deck-agnostic; pass args={deck,anchors}): Phase I wide (sharded) -> evaluate richest anchors -> Phase II deep -> adversarial verify -> validate/dedup -> cap 200 compilable records. DISCOVERY ONLY, no compile/no code. Argless defaults reproduce the Selvala gold run.',
   phases: [
     { title: 'PhaseI-Wide', detail: '10 Fable shards over all 85 anchors' },
     { title: 'PhaseII-Deep', detail: 'deeper re-run of the richest ~12 anchors' },
@@ -8,9 +8,13 @@ export const meta = {
   ],
 }
 
-const DOSSIER = 'forge-arena/decks/selvala-heart-of-the-wilds/dossier'
-// 85 non-basic anchors, hardcoded (args did not reach the script as an object).
-const anchors = ['Allosaurus Shepherd','Ancient Tomb','Arbor Elf','Archdruid\'s Charm','Asceticism','Bala Ged Recovery','Beast Within','Boseiju, Who Endures','Bridgeworks Battle','Castle Garenbrig','Collective Resistance','Concordant Crossroads','Craterhoof Behemoth','Defiler of Vigor','Delighted Halfling','Deserted Temple','Destiny Spinner','Disciple of Freyalise','Dosan the Falling Leaf','Earthcraft','Emerald Medallion','Eternal Witness','Fanatic of Rhonas','Fertile Ground','Finale of Devastation','Frenzied Baloth','Gaea\'s Cradle','Garruk Wildspeaker','Gemstone Caverns','Genesis Hydra','Genesis Wave','Goldvein Hydra','Greater Good','Green Sun\'s Zenith','Heroic Intervention','Hunter\'s Insight','Invasion of Ikoria','Inventors\' Fair','Keen-Eyed Curator','Kenrith\'s Transformation','Khalni Ambush','Kogla, the Titan Ape','Lair of the Hydra','Life\'s Legacy','Lightning Greaves','Lotus Field','Magus of the Candelabra','Managorger Hydra','Momentous Fall','Nature\'s Rhythm','Nykthos, Shrine to Nyx','Nylea, Keen-Eyed','Ojer Kaslem, Deepest Growth','Omnath, Locus of Mana','Overgrowth','Phyrexian Dreadnought','Polukranos, World Eater','Portent Tracker','Reclamation Sage','Return of the Wildspeaker','Rhonas the Indomitable','Sanctum Weaver','Saryth, the Viper\'s Fang','Seedborn Muse','Selvala, Heart of the Wilds','Sheltering Ancient','Shifting Woodland','Silverback Elder','Smuggler\'s Surprise','Sol Ring','Song of the Dryads','Staff of Domination','Surrak and Goreclaw','Swiftfoot Boots','Sylvan Library','Temur Sabertooth','The Great Henge','Turntimber Symbiosis','Umbral Mantle','Utopia Sprawl','Voyaging Satyr','Wild Growth','Wirewood Lodge','Wolfwillow Haven','Yavimaya, Cradle of Growth']
+// Deck-agnostic: pass args = { deck: '<slug>', anchors: [...non-basic card names...] }.
+// The Selvala defaults below reproduce the gold run when called with no args.
+const DECK = (typeof args === 'object' && args && args.deck) || 'selvala-heart-of-the-wilds'
+const DOSSIER = `forge-arena/decks/${DECK}/dossier`
+const SELVALA_ANCHORS = ['Allosaurus Shepherd','Ancient Tomb','Arbor Elf','Archdruid\'s Charm','Asceticism','Bala Ged Recovery','Beast Within','Boseiju, Who Endures','Bridgeworks Battle','Castle Garenbrig','Collective Resistance','Concordant Crossroads','Craterhoof Behemoth','Defiler of Vigor','Delighted Halfling','Deserted Temple','Destiny Spinner','Disciple of Freyalise','Dosan the Falling Leaf','Earthcraft','Emerald Medallion','Eternal Witness','Fanatic of Rhonas','Fertile Ground','Finale of Devastation','Frenzied Baloth','Gaea\'s Cradle','Garruk Wildspeaker','Gemstone Caverns','Genesis Hydra','Genesis Wave','Goldvein Hydra','Greater Good','Green Sun\'s Zenith','Heroic Intervention','Hunter\'s Insight','Invasion of Ikoria','Inventors\' Fair','Keen-Eyed Curator','Kenrith\'s Transformation','Khalni Ambush','Kogla, the Titan Ape','Lair of the Hydra','Life\'s Legacy','Lightning Greaves','Lotus Field','Magus of the Candelabra','Managorger Hydra','Momentous Fall','Nature\'s Rhythm','Nykthos, Shrine to Nyx','Nylea, Keen-Eyed','Ojer Kaslem, Deepest Growth','Omnath, Locus of Mana','Overgrowth','Phyrexian Dreadnought','Polukranos, World Eater','Portent Tracker','Reclamation Sage','Return of the Wildspeaker','Rhonas the Indomitable','Sanctum Weaver','Saryth, the Viper\'s Fang','Seedborn Muse','Selvala, Heart of the Wilds','Sheltering Ancient','Shifting Woodland','Silverback Elder','Smuggler\'s Surprise','Sol Ring','Song of the Dryads','Staff of Domination','Surrak and Goreclaw','Swiftfoot Boots','Sylvan Library','Temur Sabertooth','The Great Henge','Turntimber Symbiosis','Umbral Mantle','Utopia Sprawl','Voyaging Satyr','Wild Growth','Wirewood Lodge','Wolfwillow Haven','Yavimaya, Cradle of Growth']
+const anchors = (typeof args === 'object' && args && Array.isArray(args.anchors) && args.anchors.length)
+  ? args.anchors : SELVALA_ANCHORS
 
 // The FABLE agents are tool-using: they READ the shared brief + all resources
 // themselves. This block names every path (kept in sync with SYNERGY-INGESTION.md).
@@ -34,7 +38,7 @@ INPUTS — read these yourself before reasoning (you are a tool-using agent):
 
 const METHOD = `
 You are a Magic: The Gathering rules-lawyer analyst doing WHOLE-DECK synergy discovery for the
-Commander deck "Selvala, Heart of the Wilds". This is the real run behind a validated canary
+Commander deck ${DECK} (its full card list is in deck-cards.json). This matches a validated canary
 (the canary found 42 rules-cited, engine-testable synergies with ZERO hallucinations). Match that bar.
 
 NON-NEGOTIABLE METHOD (same as the canary brief you will read in SYNERGY-INGESTION.md):
