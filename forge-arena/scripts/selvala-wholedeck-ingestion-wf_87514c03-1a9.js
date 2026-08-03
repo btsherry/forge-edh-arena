@@ -15,6 +15,9 @@ const anchors = (typeof args === 'object' && args && Array.isArray(args.anchors)
   ? args.anchors : SELVALA_ANCHORS
 const NUM_SHARDS = (typeof args === 'object' && args && args.shards) || 3
 const CAP = (typeof args === 'object' && args && args.cap) || 200
+// Fable is the standing default (the strongest tool-using reasoner); override per
+// run via args.model (e.g. 'opus' when Fable quota is spent, 'sonnet' to economize).
+const AGENT_MODEL = (typeof args === 'object' && args && args.model) || 'fable'
 
 // The FABLE agents are tool-using: they READ the shared brief + all resources
 // themselves. This block names every path (kept in sync with SYNERGY-INGESTION.md).
@@ -150,7 +153,7 @@ const results = await parallel(SHARDS.map((batch, i) => () =>
     + ` how we verify it downstream, so make it exact. Return ALL records (wide + deep) in one array:`
     + ` your best ~${perShardCap}, highest compile_rank, quality over quantity, no filler. End with the`
     + ` coverage_note.`,
-    { label: `discover:shard${i + 1}`, phase: 'Discover', model: 'fable', effort: 'high',
+    { label: `discover:shard${i + 1}`, phase: 'Discover', model: AGENT_MODEL, effort: 'high',
       agentType: 'general-purpose', schema: RECORD_SCHEMA })
 )).then(rs => rs.filter(Boolean))
 
