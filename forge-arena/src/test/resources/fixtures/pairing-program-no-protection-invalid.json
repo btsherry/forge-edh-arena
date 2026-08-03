@@ -1,0 +1,12 @@
+{
+  "schema": "arena.pairing-program/1",
+  "pairing_id": "pp-test-no-protection",
+  "name": "Test pairing missing shield",
+  "compiled_from": { "note": "a wipe with no self-shield is not a one-sided pairing — protection is required." },
+  "wipe": { "card": "Doomskar", "mechanism": "destroy", "scope": "CREATURES" },
+  "sequencing": { "mode": "respond_on_stack", "steps": ["cast wipe"] },
+  "fire_policy": { "type": "threat_gated" },
+  "verify": {},
+  "on_interruption": "fresh_evaluation",
+  "self_consumption": {}
+}

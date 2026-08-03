@@ -1,0 +1,17 @@
+{
+  "schema": "arena.engine-program/1",
+  "engine_id": "ep-test-land-tax-rack",
+  "name": "Test engine",
+  "compiled_from": { "oracle_cross_check": "Scroll Rack carries AI:RemoveDeck:All — stock never plays it." },
+  "pieces": [
+    { "card": "Land Tax", "role": "engine", "cost": "{W}" },
+    { "card": "Scroll Rack", "role": "engine", "cost": "{2}" }
+  ],
+  "setup": [ { "action": "cast", "card": "Land Tax", "frequency": "once", "priority": "early" } ],
+  "cycle": {
+    "frequency": "per_turn",
+    "gates": ["both pieces on the battlefield", "shuffle_available"],
+    "action": { "activate": "Scroll Rack", "cost": "{1}" }
+  },
+  "on_interruption": "idle_and_retry"
+}

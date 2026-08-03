@@ -1,0 +1,9 @@
+{
+  "schema": "arena.combo-program/1",
+  "program_class": "selvala_manaloop",
+  "combo_id": "test-bad-class",
+  "name": "Test — program_class typo",
+  "compiled_from": {
+    "note": "'selvala_manaloop' is NOT in the whitelist — at runtime this is the program_class_unsupported abort; the enum must reject it at author time."
+  }
+}

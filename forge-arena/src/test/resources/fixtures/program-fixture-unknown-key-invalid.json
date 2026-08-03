@@ -1,0 +1,10 @@
+{
+  "schema": "arena.program-fixture/1",
+  "combo_id": "test",
+  "derived_from": "combo-program-test.json",
+  "apply_turn": 4,
+  "battlefield": [],
+  "hand": ["Phyrexian Dreadnought"],
+  "lands": { "Forest": 10 },
+  "graveyard": ["Bogus"]
+}

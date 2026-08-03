@@ -51,6 +51,11 @@ public class SchemaValidationTest {
                 { "arena.tutor-priorities.1.schema.json", "tutor-priorities-valid.json" },
                 { "arena.route-library.1.schema.json", "route-library-valid.json" },
                 { "arena.autopsy-proposals.1.schema.json", "autopsy-proposals-valid.json" },
+                // §8.2: the hand-authored program family
+                { "arena.combo-program.1.schema.json", "combo-program-valid.json" },
+                { "arena.engine-program.1.schema.json", "engine-program-valid.json" },
+                { "arena.pairing-program.1.schema.json", "pairing-program-valid.json" },
+                { "arena.program-fixture.1.schema.json", "program-fixture-valid.json" },
         };
     }
 
@@ -71,6 +76,14 @@ public class SchemaValidationTest {
                 { "arena.route-coverage.2.schema.json", "route-coverage-missing-deck-invalid.json" },
                 // the route set is CLOSED — a classification cannot invent a route
                 { "arena.route-library.1.schema.json", "route-library-invented-route-invalid.json" },
+                // §8.2: program_class typo == the runtime program_class_unsupported abort
+                { "arena.combo-program.1.schema.json", "combo-program-bad-class-invalid.json" },
+                // an engine with no per-turn cycle is inert
+                { "arena.engine-program.1.schema.json", "engine-program-no-cycle-invalid.json" },
+                // a wipe with no self-shield is not a one-sided pairing
+                { "arena.pairing-program.1.schema.json", "pairing-program-no-protection-invalid.json" },
+                // the fixture shape is closed — an unknown zone key is a typo
+                { "arena.program-fixture.1.schema.json", "program-fixture-unknown-key-invalid.json" },
         };
     }
 

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:engine-program:1",
+  "title": "Compiled engine program (plan §8.2; atlas docs/atlas/engine-program.md)",
+  "description": "Hand-authored background card-advantage engine — two pieces on the battlefield, one gated cycle per turn, NO exit state. Consumed by EngineProgramRunner. Reverse-engineered from the working set (widen to reality, plan §6); the load-bearing fields are the setup casts and the per-turn cycle.",
+  "type": "object",
+  "required": ["schema", "engine_id", "name", "compiled_from", "pieces", "cycle"],
+  "properties": {
+    "schema": { "const": "arena.engine-program/1" },
+    "engine_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "MUST equal the filename id (engine-program-<id>.json), typically ep-*."
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "compiled_from": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Provenance — script_hashes + an oracle_cross_check that states WHY stock fails to run the engine, plus the load_bearing_interaction. Free-form."
+    },
+    "pieces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["card"],
+        "properties": {
+          "card": { "type": "string", "minLength": 1 },
+          "role": { "type": "string" },
+          "cost": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "setup": {
+      "type": "array",
+      "description": "Which pieces to cast and when ({action:'cast', card, frequency, priority})."
+    },
+    "cycle": {
+      "type": "object",
+      "description": "The per-turn activation: frequency + gates[] (all must hold, incl. the load-bearing live condition) + action{activate,cost}.",
+      "required": ["gates", "action"],
+      "properties": {
+        "frequency": { "type": "string" },
+        "gates": { "type": "array", "items": { "type": "string" } },
+        "action": { "type": "object" }
+      }
+    },
+    "verify": { "type": "object" },
+    "on_interruption": { "type": "string", "description": "An engine has no exit state — typically idle_and_retry." },
+    "self_consumption": { "type": "object" },
+    "success_metric": { "type": "string" },
+    "schema_notes": {}
+  },
+  "additionalProperties": false
+}

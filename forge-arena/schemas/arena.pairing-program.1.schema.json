@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:pairing-program:1",
+  "title": "Compiled pairing program (plan §8.2; atlas docs/atlas/pairing-program.md)",
+  "description": "Hand-authored wipe + self-shield, respond-on-stack, once per pair per game. Consumed by PairingRunner. Reverse-engineered from 18 working files — all share the same closed shape (widen to reality, plan §6).",
+  "type": "object",
+  "required": [
+    "schema", "pairing_id", "name", "compiled_from",
+    "wipe", "protection", "sequencing", "fire_policy",
+    "verify", "on_interruption", "self_consumption"
+  ],
+  "properties": {
+    "schema": { "const": "arena.pairing-program/1" },
+    "pairing_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "MUST equal the filename id (pairing-program-<id>.json), pp-*, and match a paired-plays.json entry."
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "compiled_from": { "type": "object", "minProperties": 1 },
+    "wipe": {
+      "type": "object",
+      "description": "The mass-removal half.",
+      "required": ["card", "mechanism", "scope"],
+      "properties": {
+        "card": { "type": "string", "minLength": 1 },
+        "mechanism": { "type": "string" },
+        "scope": { "type": "string" },
+        "timing": { "type": "string" },
+        "cost": { "type": "string" }
+      }
+    },
+    "protection": {
+      "type": "object",
+      "description": "The self-shield half; its coverage must cover the wipe's scope on your side (audit-gated, not schema-checkable).",
+      "required": ["card", "mechanism", "coverage"],
+      "properties": {
+        "card": { "type": "string", "minLength": 1 },
+        "mechanism": { "type": "string" },
+        "coverage": { "type": "string" },
+        "duration": { "type": "string" },
+        "timing": { "type": "string" },
+        "cost": { "type": "string" }
+      }
+    },
+    "sequencing": {
+      "type": "object",
+      "required": ["mode", "steps"],
+      "properties": {
+        "mode": { "type": "string", "description": "respond_on_stack" },
+        "steps": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "fire_policy": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string" },
+        "min_combined_opponent_creature_power": { "type": "integer" },
+        "note": { "type": "string" }
+      }
+    },
+    "verify": { "type": "object" },
+    "on_interruption": { "type": "string" },
+    "self_consumption": { "type": "object" },
+    "schema_notes": {}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,9 @@
+{
+  "schema": "arena.program-fixture/1",
+  "combo_id": "test-dreadnought-momentous-fall",
+  "derived_from": "combo-program-test-dreadnought-momentous-fall.json",
+  "apply_turn": 4,
+  "battlefield": [],
+  "hand": ["Phyrexian Dreadnought", "Momentous Fall"],
+  "lands": { "Forest": 10 }
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "arena.combo-program/1",
+  "program_class": "selvala_mana_loop",
+  "combo_id": "test-weaver-mantle",
+  "name": "Test — Weaver + Mantle",
+  "compiled_from": {
+    "script_cross_check": "Sanctum Weaver {T} yields enchantment count; Umbral Mantle grants {3},{Q} untap."
+  },
+  "pieces": [
+    { "card": "Sanctum Weaver", "role": "producer", "requires": "BATTLEFIELD" },
+    { "card": "Umbral Mantle", "role": "untapper", "requires": "BATTLEFIELD (attached to Sanctum Weaver)" }
+  ],
+  "preconditions": [ { "check": "on_battlefield", "card": "Sanctum Weaver" } ],
+  "loop": { "yield_model": "ENCHANTMENT_COUNT", "cycle_cost": 3, "min_net": 1 },
+  "sink": { "kind": "outlet_selection", "primary_outlet": "Genesis Wave" },
+  "on_interruption": "fresh_evaluation"
+}

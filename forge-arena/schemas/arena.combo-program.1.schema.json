@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:combo-program:1",
+  "title": "Compiled combo program (plan §8.2; atlas docs/atlas/combo-program.md)",
+  "description": "Hand-authored per-combo execution plan, polymorphic on program_class. v1 enforces the ENVELOPE (schema tag, the program_class whitelist, the id/name/provenance, piece shape) and CLOSES the top-level key set so a typo'd body key fails at author-time instead of the runtime program_class_unsupported / empty-block abort. The class-specific body blocks (loop/sink/window/engine/...) are validated for presence only in v1; per-class deep validation is a v2 refinement keyed on program_class. Reverse-engineered from 52 working files across 5 decks — widen to reality, never break a working program (plan §6).",
+  "type": "object",
+  "required": ["schema", "combo_id", "name", "compiled_from"],
+  "properties": {
+    "schema": { "const": "arena.combo-program/1" },
+    "program_class": {
+      "description": "Selects the runner in ComboAwareLobbyPlayer. OPTIONAL: an absent value defaults to ping_loop (ProgramRunner). When present it MUST be one of the authored classes below — 'unreadable' is a runtime parse-failure sentinel and is never authored. An out-of-set value is exactly the program_class_unsupported abort this enum prevents.",
+      "enum": [
+        "ping_loop",
+        "mana_loop",
+        "cast_bounce",
+        "cast_recur",
+        "bounce_recur",
+        "selvala_mana_loop",
+        "dreadnought_window",
+        "seedborn_engine"
+      ]
+    },
+    "combo_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "MUST equal the filename id (combo-program-<id>.json) AND a registered combo id in combos.json / discovered-combos.json (the three-way match). Cross-file check is a validator-v2 / register-time job, not expressible in this schema."
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "compiled_from": {
+      "type": "object",
+      "description": "Free-form provenance — the author's cross-check (script_cross_check / script_hashes / oracle_cross_check / *_rationale / regression_note / feasibility ...). Kept open on purpose: the discipline is that it quotes real script costs, not that it has fixed keys.",
+      "minProperties": 1
+    },
+    "pieces": {
+      "type": "array",
+      "description": "The combo's pieces. OPTIONAL (2 working files declare pieces implicitly via compiled_from). Each entry is EITHER a named piece (card) OR a template piece (template, resolved at runtime from resolve_from) — the runtime analogue of Spellbook template_requirements. Requiring one identity or the other still catches a piece with no identity at all.",
+      "items": {
+        "type": "object",
+        "anyOf": [
+          { "required": ["card"] },
+          { "required": ["template"] }
+        ],
+        "properties": {
+          "card": { "type": "string", "minLength": 1 },
+          "template": { "type": "string", "minLength": 1, "description": "A generic slot (e.g. 'zero_cost_artifact')." },
+          "resolve_from": { "type": "array", "items": { "type": "string" }, "description": "Candidate cards the runner fills the template slot from." },
+          "resolve_note": { "type": "string" },
+          "role": { "type": "string" },
+          "requires": { "type": "string", "description": "Zone the piece must be in (HAND / BATTLEFIELD, plus attachment prose). Read by the piece-attachment gate." }
+        }
+      }
+    },
+    "setup": { "type": "array" },
+    "preconditions": { "type": "array" },
+    "on_interruption": { "type": "string" },
+    "runner": { "type": "string", "description": "Prose naming the runner + line (documentation, not parsed)." },
+
+    "loop": { "type": "object", "description": "Body: tap/untap or recursion loop (mana_loop / selvala_mana_loop / bounce_recur / cast_recur / cast_bounce)." },
+    "sink": { "type": "object", "description": "Body: outlet selection (mana loops)." },
+    "window": { "type": "object", "description": "Body: respond-on-stack exploit window (dreadnought_window)." },
+    "engine": { "type": "object", "description": "Body: accumulation engine (seedborn_engine)." },
+    "outlet": {},
+    "close": {},
+    "payoff": {},
+    "roles": {},
+    "exit_states": {},
+    "self_consumption": {},
+    "known_failure_modes_encoded": {},
+    "schema_notes": {},
+    "sub_shape": {}
+  },
+  "additionalProperties": false
+}

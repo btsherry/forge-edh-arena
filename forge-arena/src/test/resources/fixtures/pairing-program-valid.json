@@ -1,0 +1,13 @@
+{
+  "schema": "arena.pairing-program/1",
+  "pairing_id": "pp-test-doomskar-teferi",
+  "name": "Test pairing",
+  "compiled_from": { "mechanism_validity": "VALID: phasing vs destroy, coverage all_own_permanents vs scope CREATURES." },
+  "wipe": { "card": "Doomskar", "mechanism": "destroy", "scope": "CREATURES", "timing": "sorcery", "cost": "{3}{W}{W}" },
+  "protection": { "card": "Teferi's Protection", "mechanism": "phasing", "coverage": "all_own_permanents", "duration": "until_your_next_turn", "timing": "instant", "cost": "{2}{W}" },
+  "sequencing": { "mode": "respond_on_stack", "steps": ["cast wipe", "cast protection in response", "yield until the stack empties"] },
+  "fire_policy": { "type": "threat_gated", "min_combined_opponent_creature_power": 6 },
+  "verify": { "measure_at": "next_untap" },
+  "on_interruption": "fresh_evaluation",
+  "self_consumption": { "resource": "none" }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:program-fixture:1",
+  "title": "Goldfish fixture (plan §8.2; atlas docs/atlas/fixtures.md)",
+  "description": "Minimal board/hand/land state that positions a program's pieces so ProgramGate can play the line headless. Derived deterministically from a combo-program (honoring each piece's requires zone). All 20 working files share this exact closed shape.",
+  "type": "object",
+  "required": ["schema", "combo_id", "derived_from", "apply_turn", "battlefield", "hand", "lands"],
+  "properties": {
+    "schema": { "const": "arena.program-fixture/1" },
+    "combo_id": { "type": "string", "minLength": 1, "description": "The program this fixture is for." },
+    "derived_from": { "type": "string", "minLength": 1, "description": "The source combo-program filename." },
+    "apply_turn": { "type": "integer", "minimum": 1, "description": "Turn to inject the state." },
+    "battlefield": { "type": "array", "items": { "type": "string" }, "description": "Cards to place in play." },
+    "hand": { "type": "array", "items": { "type": "string" }, "description": "Cards to place in hand (the requires:HAND pieces, e.g. a window body)." },
+    "lands": {
+      "type": "object",
+      "description": "BasicName -> count; funds the line in the pieces' colors.",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    }
+  },
+  "additionalProperties": false
+}

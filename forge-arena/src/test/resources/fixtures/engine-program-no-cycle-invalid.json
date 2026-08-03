@@ -1,0 +1,7 @@
+{
+  "schema": "arena.engine-program/1",
+  "engine_id": "ep-test-no-cycle",
+  "name": "Test engine missing cycle",
+  "compiled_from": { "note": "an engine with no per-turn cycle is inert — cycle is required." },
+  "pieces": [ { "card": "Land Tax", "role": "engine" } ]
+}
