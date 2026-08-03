@@ -102,6 +102,20 @@ public final class SelvalaManaLoopRunner {
     private int permanentsAtOutlet = -1;
     private String outletCard;
     private int outletX;
+    /**
+     * PR (#96, deck-aware outlet): the DECK's own outlets, read from the
+     * program's {@code sink.outlets} ([{card, kind, min_x}]). Empty => the
+     * built-in default ladder (Genesis Wave/Finale/Craterhoof/Goldvein). This
+     * is what lets a dropped-in deck convert its infinite mana through the
+     * X-outlets and overruns IT actually runs, instead of a hardcoded four —
+     * the A/B on a Genesis-Wave-less list is exactly what exposed the gap.
+     * Kinds: mass_flip (X=library-reserve), fetch_swing (X-spell fetching a
+     * creature, X=pool-2), fetch_fixed (no-X creature fetch), x_body
+     * (lone X/X trampler, X=pool-1), overrun (team pump, no X).
+     */
+    private final List<OutletSpec> declaredOutlets = new ArrayList<>();
+
+    private record OutletSpec(String card, String kind, int minX) { }
     /** GOD WIN-PLAN phase: -1 idle, 0 dig (Nylea), 1 cast, 2 pump (Rhonas), 3 done. */
     private int winPlanPhase = -1;
     private int winPlanDigs;
@@ -140,6 +154,15 @@ public final class SelvalaManaLoopRunner {
         // nontoken creature via The Great Henge (mandatory), so a small reserve
         // decks us out mid-win (measured). Programs may still override.
         this.libraryReserve = p != null ? p.path("sink").path("library_reserve").asInt(35) : 35;
+        if (p != null) {
+            for (JsonNode o : p.path("sink").path("outlets")) {
+                String card = o.path("card").asText("");
+                if (!card.isEmpty()) {
+                    declaredOutlets.add(new OutletSpec(card,
+                            o.path("kind").asText("fetch_swing"), o.path("min_x").asInt(10)));
+                }
+            }
+        }
         if (producerCard == null || untapSequence.isEmpty()) {
             finished = true;
             pilot.observe(ArenaEvent.of("program_abort", game.getPhaseHandler().getTurn(), seat)
@@ -797,6 +820,19 @@ public final class SelvalaManaLoopRunner {
     private SpellAbility chooseOutlet() {
         int library = player.getCardsIn(ZoneType.Library).size();
         int pool = player.getManaPool().totalMana();
+        // DECK-AWARE (#96): if the program declares this deck's outlets, try
+        // them in order — each deck brings its own X-outlets / overruns.
+        // resolveCast gates deck-presence, so an outlet the deck lacks is
+        // skipped and the next is tried. Undeclared => the default ladder below.
+        if (!declaredOutlets.isEmpty()) {
+            for (OutletSpec spec : declaredOutlets) {
+                SpellAbility sa = tryOutlet(spec, pool, library);
+                if (sa != null) {
+                    return sa;
+                }
+            }
+            return null;
+        }
         // 1) Genesis Wave — flip the deck onto the board (leave the reserve).
         // Only when the flip is MEANINGFUL (>=10 cards) and the pool can pay
         // {X}{G}{G}{G}; a 1-card flip near the reserve boundary is not a win.
@@ -859,6 +895,65 @@ public final class SelvalaManaLoopRunner {
                 outletX = goldX;
                 return gold;
             }
+        }
+        return null;
+    }
+
+    /** Try one declared outlet by its kind; null if its gate fails or the card
+     * is not castable (absent from hand). Verification stays in {@link #sink}
+     * (every kind adds >=1 permanent). */
+    private SpellAbility tryOutlet(OutletSpec spec, int pool, int library) {
+        switch (spec.kind()) {
+            case "mass_flip": {
+                int x = library - libraryReserve;
+                return x >= spec.minX() && pool >= x + GENESIS_WAVE_TAIL
+                        ? castX(spec.card(), x) : null;
+            }
+            case "x_body": {
+                int x = pool - 1; // {X}{G}: reserve the coloured pip
+                return x >= spec.minX() ? castX(spec.card(), x) : null;
+            }
+            case "overrun": {
+                long creatures = player.getCardsIn(ZoneType.Battlefield).stream()
+                        .filter(Card::isCreature).count();
+                if (creatures < 4) {
+                    return null;
+                }
+                SpellAbility sa = AbilityResolver.resolveCast(player, spec.card());
+                if (sa != null) {
+                    outletCard = spec.card();
+                    outletX = 0;
+                }
+                return sa;
+            }
+            case "fetch_fixed": {
+                // a no-X creature fetch (Tooth and Nail, Turntimber, Chord):
+                // grab a fatty onto the board, hand to combat
+                SpellAbility sa = AbilityResolver.resolveCast(player, spec.card());
+                if (sa != null) {
+                    outletCard = spec.card();
+                    outletX = 0;
+                }
+                return sa;
+            }
+            case "fetch_swing":
+            default: {
+                int x = pool - 2; // {X}{G}{G}-class fetch-and-pump
+                return x >= spec.minX() ? castX(spec.card(), x) : null;
+            }
+        }
+    }
+
+    /** Force-cast an X-outlet at the given X (resolveCast bypasses the AI's
+     * NeedsToPlayVar land gate — Selvala's mana is creature-based). Null if the
+     * card is absent or carries no X. */
+    private SpellAbility castX(String card, int x) {
+        SpellAbility sa = AbilityResolver.resolveCast(player, card);
+        if (sa != null && sa.getPayCosts() != null && sa.getPayCosts().hasXInAnyCostPart()) {
+            sa.setXManaCostPaid(x);
+            outletCard = card;
+            outletX = x;
+            return sa;
         }
         return null;
     }
