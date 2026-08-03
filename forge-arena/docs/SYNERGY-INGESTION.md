@@ -20,9 +20,12 @@ model tier. Gemini is the independent cross-check.
    `scripts/selvala-wholedeck-ingestion-wf_87514c03-1a9.js` (a Claude Code
    Workflow-tool script) with `args = { deck: "<deck-slug>", anchors: [...] }`
    (anchors = `python3 scripts/anchors.py <deck-slug>`, the non-basic cards from
-   `deck-cards.json`). It shards the anchors →
-   Phase I wide → richest-anchor Phase II deep → adversarial verify → caps at 200.
-   Agents read this doc + `CANARY-BRIEF-GOLD.md` + the dossier themselves.
+   `deck-cards.json`). **Lean by design: ~3 Fable shards** (default; override with
+   `args.shards`) over all anchors → dedup (zero-hallucination bar) → cap 200. **No
+   Phase-II and no separate verify phase** — verification is deferred to the
+   compile/goldfish gate (step 5), which runs each record's `engine_test` in the real
+   engine: a stronger check than an LLM verifier, and ~3 agents instead of 62. Agents
+   read this doc + `CANARY-BRIEF-GOLD.md` + the dossier themselves.
 3. **Gemini cross-check** (independent, token-free on Claude):
    `python3 scripts/gemini_wholedeck.py <deck-slug>` — embeds the brief + primer +
    rules + decklist + all non-basic Forge scripts, Search grounding on, writes
