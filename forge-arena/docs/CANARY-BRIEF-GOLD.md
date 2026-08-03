@@ -35,6 +35,16 @@ Combos/synergies are executed by **runners** interpreting **compiled program JSO
 - (there is no runner yet for a *pump-loop → power-payoff*, or several other shapes — if a synergy needs a mechanism no existing shape covers, set `shape_is_new: true` and describe the shape.)
 A **combo is DATA over a shape**; a genuinely new mechanism is a **new runner**. Tag every record with the shape it compiles to.
 
+## Role & win-conversion (classify every record)
+Not every valuable synergy wins on the spot — and you must NOT discard the ones that don't. Classify each record's ROLE, and apply the "so how do you actually win" requirement ONLY where it belongs:
+
+- **Ramp / tempo / advantage** — a finite play that improves your position (e.g. Arbor Elf + Wild Growth for four mana on turn two). COMPLETE on its own merit: the value is the advantage it buys toward assembling a win on a later turn. Use `program_class: ramp_sequence`; state the size in `magnitude` ("+2 mana, a turn early"). **No win condition required — do NOT down-rank it for lacking one.**
+- **Value engine** — recurring per-turn card/mana advantage. COMPLETE as recurring advantage. `program_class: engine`. **No win required.**
+- **Unbounded resource loop** — produces an *open-ended* amount of a resource (infinite mana / draws / ETB). This is only HALF a play: a pile of mana wins nothing by itself. It is **INCOMPLETE** unless you name the OUTLET and trace it to a discrete win in `win_plan_steps` (e.g. "infinite green → Finale of Devastation X=huge fetch Craterhoof → +N/+N trample → combat lethal"). `program_class` = the loop shape (`mana_loop` / `bounce_recur` / …).
+- **Win plan** — already terminates in a discrete win. `program_class: win_plan`, full `win_plan_steps`.
+
+**Forge's discrete win conditions** — the closed set a win MUST land on (how Forge actually ends a game, not "and then I win"): combat damage reducing an opponent to 0 life; direct damage / life-drain to 0; 21 commander damage; mill / deck-out (an opponent must draw from an empty library); or a specific alternate-win card in the deck (name it). Every `win_plan` and every unbounded-resource outlet MUST land on one of these.
+
 ## Test-harness format (so your proposed test is runnable)
 We fixture a board by putting named cards into play (`moveToPlay`), clearing summoning sickness (`setSickness(false)`), and attaching equipment/auras (`attachToEntity`); then we measure the mana pool, total board power, opponent life, and program events, and assert the expected delta. Your `engine_test` must name the exact cards+zones to set up, the activations to perform, the measurable outcome that confirms it, and the condition that would refute it.
 
@@ -66,7 +76,7 @@ We fixture a board by putting named cards into play (`moveToPlay`), clearing sum
   "compile_rank": 0.0
 }
 ```
-Set `compile_rank` in [0,1] = win_relevance × magnitude × novelty × confidence (win-plans over ramp, infinite over incremental, new-in-dossier over known, rules-solid over speculative). We will compile+test the highest-ranked first.
+Set `compile_rank` in [0,1] by the virtue that matters for the record's ROLE (see the role classifier above): for **unbounded-resource / win** records, how cleanly it CONVERTS to a discrete win (a loop that names its outlet + kill beats one that stops at "infinite mana"); for **ramp / advantage / engine** records, the MAGNITUDE of tempo/board it buys (four mana on turn two ranks high — a reliable 2-3-card advantage is worth MORE to a pilot than a hard-to-assemble 5-card line). Then × novelty (new-in-dossier over known) × confidence (rules-solid over speculative). We will compile+test the highest-ranked first.
 
 ## Scope / caps (the harness sets these per run)
 - Anchor only on the anchor cards listed below (partners may be any non-basic deck card). A **whole-deck** run anchors on every non-basic card; a **canary** run uses a representative subset.
