@@ -196,21 +196,26 @@ REQUIRES building the `shape_is_new` runners (GOG brostorm #98, etc.).
   runner-cat + schemas, how to write correct/efficient/elegant runners + compile
   programs, the validate→goldfish→A/B gate.
 
-### 8.5 `ingest-deck` skill EXTENSION (extend, don't replace)
-- Add the acquisition layer (EDHREC co-occurrence + web research, Scryfall
-  EDHREC-rank, Spellbook full combo list as a work list), the **completeness bar**
-  (§4), the **caps** (§5), **Gemini parity**, and the phased Fable structure +
-  the exceptional-results approaches from the curated-Selvala run. Reference the
-  two research briefs (§8.6) + the validator gate.
+### 8.5 `ingest-deck` skill EXTENSION — ✅ SUPERSEDED (2026-08-03)
+- The `ingest-deck` skill was **deleted** during the state truing-up; there is no
+  skill to extend. The canonical discovery layer is the **gold pipeline**:
+  `docs/SYNERGY-INGESTION.md` + `docs/CANARY-BRIEF-GOLD.md` (contract + brief) run via
+  `scripts/gemini_wholedeck.py` and `scripts/selvala-wholedeck-ingestion-*.js`. Any
+  future acquisition-layer work (EDHREC co-occurrence, Scryfall EDHREC-rank,
+  Spellbook full combo list; completeness bar §4; caps §5) folds into those
+  artifacts, not a skill.
 
-### 8.6 Research-subagent briefs (parity)
-- `.claude/skills/ingest-deck/references/combo-discovery-fable.md` and
-  `combo-discovery-gemini.md` — identical inputs, identical output schema (§2.2).
-  Gemini brief driven by the shell-script runner.
+### 8.6 Research-subagent briefs (parity) — ✅ ALREADY EXIST (2026-08-03)
+- Not to be written anew — the Fable+Gemini parity briefs already exist and are the
+  best-known-good: `docs/SYNERGY-INGESTION.md` (the shared Fable+Gemini contract +
+  compilable record schema + Gemini invocation) and `docs/CANARY-BRIEF-GOLD.md` (the
+  source rules-lawyer brief). Preserved from the 200-record run.
 
-### 8.7 Per-card brief verdict
-- Verify consumers of `capability-inventory.json`; keep T0 mechanical extraction,
-  cut the T3 model per-card analysis if unused. Evidence-based keep/cut.
+### 8.7 Per-card brief verdict — ✅ RESOLVED BY DELETION (2026-08-03)
+- The T3 per-card brief (`subagent-brief.md`) was **deleted** with the `ingest-deck`
+  skill, so `capability-inventory.json` now has **no producer and no consumer** — a
+  clean cut (see `docs/atlas/capability-inventory.md`). The consumed T0 card facts
+  live in `deck-cards.json`.
 
 ### 8.8 IMPLEMENTATION-PLAN.md update + prune
 - Surgical, additive references for every new/touched doc + skill; then a pass to
@@ -272,8 +277,8 @@ EngineProgramRunner, ProgramRunner. (all in `forge-arena/src/main/java/forge/are
 
 **START: §8.1 the artifact atlas** — structure/template + `combo-program` family
 entries first, reviewed for format. Then §8.2 schema/validator (derived from the
-atlas) → §8.3 `runner-cat.md` → §8.4 coding skill → §8.5 ingest-deck extension +
-§8.6 research briefs → §8.7 per-card verdict → §8.8 impl-plan update + prune.
+atlas) → §8.3 `runner-cat.md` → §8.4 coding skill → §8.5–§8.7 (superseded /
+resolved by the 2026-08-03 discovery-state cleanup) → §8.8 impl-plan update + prune.
 Then execute the curated-Selvala completeness pass *through* these rails (which
 includes building #98 and any other `shape_is_new` runners, and pruning tutor
 weights to 30–40).

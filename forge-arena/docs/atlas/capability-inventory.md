@@ -1,10 +1,10 @@
-# capability-inventory  ⚠️ SUSPECT
+# capability-inventory  ⚠️ DEPRECATED (orphaned)
 
 **Schema tag:** `arena.capability-inventory/2`
 **Filename:** `capability-inventory.json` (in `<deck>/dossier/`)
-**Generator:** T0 mechanical extraction + **T3 model per-card analysis** (ingest-deck per-card brief)
-**Consumer:** **NONE found** — no `.java` / `.py` / `.sh` reads it (grep, whole repo)
-**Status:** ⚠️ suspect — pending the §8.7 keep/cut verdict (task #105)
+**Generator:** ~~T0 mechanical extraction + T3 model per-card analysis (ingest-deck per-card brief)~~ — **producer removed** (the `ingest-deck` skill + its per-card brief were deleted 2026-08-03)
+**Consumer:** **NONE** — no `.java` / `.py` / `.sh` reads it (grep, whole repo)
+**Status:** ⚠️ **DEPRECATED / orphaned** — no producer and no consumer; §8.7 resolved by deletion
 
 ## What it is
 
@@ -24,18 +24,20 @@ documentation mentions** (PR-LOG, IMPLEMENTATION-PLAN, working-plan, research) �
 per card) is expensive and, on this evidence, produces nothing anything downstream
 uses.
 
-The §8.7 verdict (task #105) is to **keep the T0 mechanical extraction** where it
-is actually consumed (note: the T0 *card facts* the pipeline uses live in
-[deck-cards](deck-cards.md), which IS consumed — this file's own `t0` tag list is a
-separate, unconsumed vocabulary) and **cut the T3 per-card model analysis** unless a
-consumer surfaces. This page is the evidence for that decision; the cut itself is
-task #105, not made here.
+**§8.7 is now resolved — by deletion.** On 2026-08-03 the `ingest-deck` skill and
+its per-card brief (`subagent-brief.md`) were removed, so the T3 per-card model
+analysis no longer runs and this file has **no producer**. The T0 *card facts* the
+pipeline actually uses live in [deck-cards](deck-cards.md) (which IS consumed) —
+this file's own `t0` tag list was a separate, unconsumed vocabulary. Any
+`capability-inventory.json` still sitting in a dossier is a stale output of a
+retired step, not load-bearing.
 
 ## Who generates it, and when
 
-The `ingest-deck` skill's **per-card brief** (`references/subagent-brief.md`):
-`provenance.t0 = "forge card script"` (deterministic), `provenance.t3 = "claude
-subagent, script-evidence enforced"` (a model per card). Schema is at **v2**.
+Historically, the `ingest-deck` skill's **per-card brief** (`subagent-brief.md`,
+**now removed**): `provenance.t0 = "forge card script"` (deterministic),
+`provenance.t3 = "claude subagent, script-evidence enforced"` (a model per card).
+Schema is at **v2**. Nothing generates this file anymore.
 
 ## Schema
 
@@ -80,13 +82,13 @@ subagent, script-evidence enforced"` (a model per card). Schema is at **v2**.
 
 **No consumer.** Nothing in `src/` (or scripts) loads this file — verified by
 repo-wide grep (only doc references). There are therefore no runtime invariants to
-uphold; the only "invariant" is the open question of whether it should exist at all.
-If task #105 confirms the cut, this page becomes the record of a deprecated
-artifact.
+uphold. With both producer and consumer gone, this page is the **record of a
+deprecated artifact** — kept so a future reader knows the file in older dossiers is
+inert, not load-bearing.
 
 ## Related
 
 - The consumed T0 card facts (keep): [deck-cards](deck-cards.md)
 - The superseding process: [discovered-synergies-wholedeck](discovered-synergies-wholedeck.md)
-- Producer brief under review: `.claude/skills/ingest-deck/references/subagent-brief.md`
-- Verdict task: working-plan-Aug-3 §8.7 (task #105)
+- Producer brief (REMOVED 2026-08-03): was `.claude/skills/ingest-deck/references/subagent-brief.md`
+- Verdict: working-plan-Aug-3 §8.7 (task #105) — resolved by deletion
