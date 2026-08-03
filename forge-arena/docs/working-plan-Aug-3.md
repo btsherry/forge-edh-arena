@@ -7,8 +7,10 @@ deliverables with exact file paths + naming. Nothing here has been executed yet
 except this doc. The agreed **first work item** is the **artifact atlas** (see §8).
 
 Related durable context: memory `feedback_subagent_discover_compile.md`;
-`docs/PR-LOG.md` (the arc); `.claude/skills/ingest-deck/SKILL.md` +
-`docs/INGESTION-SPEC.md` (the existing pipeline).
+`docs/PR-LOG.md` (the arc); the gold discovery pipeline —
+`docs/SYNERGY-INGESTION.md` + `docs/CANARY-BRIEF-GOLD.md` (contract + brief), with
+`scripts/gemini_wholedeck.py` / `scripts/selvala-wholedeck-ingestion-*.js` (the
+harnesses); and `.claude/skills/arena-dev/SKILL.md` (the compile skill).
 
 ---
 
