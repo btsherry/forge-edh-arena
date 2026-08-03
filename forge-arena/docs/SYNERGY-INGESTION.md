@@ -19,15 +19,19 @@ model tier. Gemini is the independent cross-check.
 2. **FABLE discovery** (primary, tool-using): run the workflow
    `scripts/selvala-wholedeck-ingestion-wf_87514c03-1a9.js` (a Claude Code
    Workflow-tool script) with `args = { deck: "<deck-slug>", anchors: [...] }`
-   (anchors = every non-basic card from `deck-cards.json`). It shards the anchors →
+   (anchors = `python3 scripts/anchors.py <deck-slug>`, the non-basic cards from
+   `deck-cards.json`). It shards the anchors →
    Phase I wide → richest-anchor Phase II deep → adversarial verify → caps at 200.
    Agents read this doc + `CANARY-BRIEF-GOLD.md` + the dossier themselves.
 3. **Gemini cross-check** (independent, token-free on Claude):
    `python3 scripts/gemini_wholedeck.py <deck-slug>` — embeds the brief + primer +
    rules + decklist + all non-basic Forge scripts, Search grounding on, writes
    `decks/<deck-slug>/dossier/discovered-synergies-gemini.json`.
-4. **Merge** FABLE + Gemini (dedup by anchor+sorted-partners, keep higher
-   `compile_rank`) → `decks/<deck-slug>/dossier/discovered-synergies-wholedeck.json`.
+4. **Merge** with `python3 scripts/merge_discovery.py <deck-slug>` (dedup by
+   anchor+sorted-partners, keep higher `compile_rank`) →
+   `decks/<deck-slug>/dossier/discovered-synergies-wholedeck.json`. It reads
+   `discovered-synergies-fable.json` (write the FABLE workflow's catalog there) and
+   `discovered-synergies-gemini.json`.
 5. **Compile** each record into a runner program — see the `arena-dev` skill and
    [`runner-cat.md`](runner-cat.md); gate with schema → `ProgramGate` → seed-paired A/B.
 

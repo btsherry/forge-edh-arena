@@ -748,5 +748,7 @@ The Selvala whole-deck run behind the 200 compilable synergy records (0 hallucin
 - `forge-arena/scripts/build-ingestion-packages.py` — Assemble ingestion packages (per-card oracle+script, whole-deck package for Gemini).
 - `forge-arena/scripts/capability-prototype.py` — PROTOTYPE: extract capabilities from Forge card scripts, measure blind-spot closure vs. oracle-text alone.
 - `forge-arena/scripts/observe-play.py` — Scan a batch run dir for game-states where a seat could have won sooner.
+- `forge-arena/scripts/anchors.py` — Print a deck's non-basic anchor card names (JSON) to pass as the FABLE workflow's `args.anchors`.
+- `forge-arena/scripts/merge_discovery.py` — Merge FABLE + Gemini discovery outputs into `discovered-synergies-wholedeck.json` (dedup, cap, counts).
 - `forge-arena/scripts/gemini_wholedeck.py` — Gemini-side gold discovery harness (full description under **Discovery pipeline (gold)** above).
 - `forge-arena/scripts/selvala-wholedeck-ingestion-wf_87514c03-1a9.js` — Fable-side gold discovery harness, a Claude Code Workflow-tool script (full description under **Discovery pipeline (gold)** above).
