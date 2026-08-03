@@ -683,7 +683,7 @@ The Win Routes spec (route definitions + classification rules) is a documentatio
 
 ### Deck dossier artifacts
 
-**Dossiers present:** `giada-font-of-hope`, `purphoros-god-of-the-forge`, `purphoros-god-of-the-forge2`, `selvala-heart-of-the-wilds`, `urza-lord-high-artificer`
+**Dossiers present:** `giada-font-of-hope`, `purphoros-god-of-the-forge`, `selvala-heart-of-the-wilds`, `urza-lord-high-artificer`
 
 **Dossier file types** (each deck's `dossier/` subdirectory contains):
 - `dossier.json` — arena.dossier/1: deck metadata, schema versions, artifact checksums, versioned library references.
