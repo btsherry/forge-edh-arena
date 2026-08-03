@@ -109,28 +109,62 @@ which dispatches each to its runner.
 
 ## Index (all artifacts)
 
-Program family (done):
+Grouped by generator class (§ [generator taxonomy](#generator-taxonomy)). The
+**Consumer** column says whether the runtime pilot reads it (R), only prep reads it
+(P), or nothing reads it (—).
 
-- [combo-program](combo-program.md) — hand-authored per-combo execution plan
-- [engine-program](engine-program.md) — hand-authored background value cycle
-- [pairing-program](pairing-program.md) — hand-authored wipe + shield pair
+**Hand-authored — the program family** (Compile step):
 
-Remaining artifacts (§8.1 expansion, to be written after format review):
+| Page | Schema | Consumer | Role |
+|---|---|---|---|
+| [combo-program](combo-program.md) | `arena.combo-program/1` | R | per-combo execution plan (polymorphic on `program_class`) |
+| [engine-program](engine-program.md) | `arena.engine-program/1` | R | background no-exit-state value cycle |
+| [pairing-program](pairing-program.md) | `arena.pairing-program/1` | R | respond-on-stack wipe + shield |
 
-- `deck-cards.json` — T0 per-card oracle/type/cost/script cross-check
-- `combos.json` — Spellbook attested combos (numeric ids) + readiness pieces
-- `advisory-combos.json` — Spellbook combos not (yet) compiled, advisory
-- `discovered-combos.json` — curated discovery combos (`syn-`/`ben-` ids), `arena.discovered-combos/1`
-- `discovered-synergies-wholedeck.json` — the ~200-record whole-deck discovery corpus
-- `tutor-priorities.json` — derived tutor weights (cap 30–40, §5)
-- `protection-priorities.json` — reactive protection covers
-- `paired-plays.json` — wipe+shield pairs (feeds pairing dispatch)
-- `route-coverage.json` — assembly/payoff route layers
-- `fixtures/fixture-<id>.json` — goldfish fixtures for ProgramGate
-- `dossier.json` — sha256 index of the dossier
-- `program-backlog.json` — `shape_is_new` work items (mandatory, §4)
-- `build-manifest.json` — what was compiled/registered this build
-- `capability-inventory.json` — SUSPECT, pending §8.7 verdict
+**Discovery / combo inputs:**
+
+| Page | Schema | Generator | Consumer |
+|---|---|---|---|
+| [deck-cards](deck-cards.md) | `arena.deck-cards/1` | prep (T0) | P |
+| [combos](combos.md) | `arena.combos/1` | prep (Spellbook) | R + P |
+| [advisory-combos](advisory-combos.md) | `arena.advisory-combos/1` | prep | — (advice) |
+| [discovered-combos](discovered-combos.md) | `arena.discovered-combos/1` | hand/subagent | R + P |
+| [discovered-synergies-wholedeck](discovered-synergies-wholedeck.md) | `arena.discovered-synergies-wholedeck/1` | subagent (Fable+Gemini) | P + compile |
+
+**Derived weights / pairs:**
+
+| Page | Schema | Generator | Consumer |
+|---|---|---|---|
+| [tutor-priorities](tutor-priorities.md) | `arena.tutor-priorities/1` | derived fold | R |
+| [protection-priorities](protection-priorities.md) | `arena.protection-priorities/1` | prep | R |
+| [paired-plays](paired-plays.md) | `arena.paired-plays/1` | prep | R |
+| [route-coverage](route-coverage.md) | `arena.route-coverage/2` | prep (win-routes) | R + P |
+
+**Prep / goldfish / index:**
+
+| Page | Schema | Generator | Consumer |
+|---|---|---|---|
+| [fixtures](fixtures.md) | `arena.program-fixture/1` | prep (ProgramGate) | P (goldfish) |
+| [dossier](dossier.md) | `arena.dossier/1` | prep (PrepMain) | P (integrity) |
+| [program-backlog](program-backlog.md) | `arena.program-backlog/1` | prep (ProgramGate) | P + compile |
+| [build-manifest](build-manifest.md) | `arena.build-manifest/1` | compile (triage) | — (record) |
+| [capability-inventory](capability-inventory.md) ⚠️ | `arena.capability-inventory/2` | T3 per-card brief | — (⚠️ §8.7) |
+
+### Also in the dossier — not yet paged
+
+These prep intermediates and human reports exist in a dossier but don't yet have
+atlas pages (listed so nothing is silently absent; add pages if a consumer or
+question arises):
+
+- `deck-meta.yaml` — deck identity (commander, id) — T0 prep
+- `card-scripts-index.json` — per-card Forge-script path + hash index — T0 prep
+- `spellbook-raw.json` / `spellbook-raw.meta.json` — raw Spellbook API dump (input to `combos.json`)
+- `lint-report.json` — Gate 1 legality/lint result — prep
+- `implementability-report.json` — Gate 2/3 implementability — prep
+- `unimplemented-cards.txt` — cards with no Forge script — prep
+- `discovered-synergies-fable.json` / `discovered-synergies.json` — earlier/partial discovery variants (the whole-deck file supersedes)
+- `discovered-synergies-wholedeck-REPORT.md` — human-readable discovery report
+- `.dck` — the Forge deck file (top-level copy is what the batch loads, §11)
 
 ---
 
