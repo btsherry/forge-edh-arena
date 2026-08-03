@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:program-backlog:1",
+  "title": "Compile work backlog (atlas docs/atlas/program-backlog.md)",
+  "description": "Registered combos with no compiled program yet + the goldfish status of the ones that do. A non-empty no_program set means ingestion is not done (completeness bar §4). Produced/read by ProgramGate. Uniform across all decks.",
+  "type": "object",
+  "required": ["schema", "seed", "sustain_bar", "programs"],
+  "properties": {
+    "schema": { "const": "arena.program-backlog/1" },
+    "seed": { "type": "integer", "description": "Goldfish seed (reproducibility)." },
+    "sustain_bar": { "type": "integer", "minimum": 0, "description": "Iterations a loop must sustain to count executable." },
+    "programs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["combo_id", "status", "reason", "iterations", "win"],
+        "properties": {
+          "combo_id": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "description": "no_program / goldfish outcome." },
+          "reason": { "type": "string" },
+          "iterations": { "type": "integer", "minimum": 0 },
+          "win": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

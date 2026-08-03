@@ -170,11 +170,26 @@ question arises):
 
 ## Validation status
 
-None of these have a machine-checkable JSON Schema **yet** — that is the next
-deliverable (§8.2), and the atlas contracts are its input. Today the program
-family is validated by: `mvn test` regression (270/270), the `ProgramGate`
-goldfish (derives a fixture, plays a headless game, asserts the program's own exit
-event fires), and seed-paired A/B batches by deck name. The validator will add an
-author/register-time schema check so a malformed program is caught before it
-reaches a batch (a program that fails to parse dispatches as `unreadable` and
-aborts — silent today, loud after §8.2).
+**§8.2 is done for the artifacts that need it.** Machine-checkable JSON Schemas
+now live in `schemas/` (draft-2020-12, `arena.<name>.<ver>.schema.json`):
+
+- **Authored via §8.2:** the program family (`combo-program`, `engine-program`,
+  `pairing-program`, `program-fixture`) plus `protection-priorities`,
+  `paired-plays`, `discovered-combos`, `advisory-combos`, `program-backlog`,
+  `build-manifest`, `discovered-synergies-wholedeck`.
+- **Pre-existing:** `combos`, `deck-cards`, `dossier`, `route-coverage` (1 & 2),
+  `tutor-priorities` (+ non-dossier `events`, `game-record`, `run-manifest`,
+  `route-library`, `executor-bindings`, `autopsy-proposals`).
+- **Intentionally unschema'd:** `capability-inventory` — the §8.7 cut candidate
+  (no consumer); no sense schema-ing a deprecated artifact.
+
+Validated two ways: `SchemaValidationTest` (curated valid/invalid fixtures — the
+invalids are the real failure modes, e.g. a typo'd `program_class` that would be
+the runtime `program_class_unsupported` abort) and `ProgramSchemaValidationTest`
+(sweeps every on-disk dossier program + artifact file, ~180 real files across 6
+decks; skips cleanly on a clean checkout so it doubles as a local author-time
+gate). Runtime enforcement remains descriptive-first: a malformed program still
+dispatches as `unreadable` and aborts at runtime — wiring the schema check into
+program *load* (fail-loud instead of silent-abort) is the reserved "enforcing"
+follow-on. The program family is additionally validated by the `ProgramGate`
+goldfish and seed-paired A/B batches.

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:build-manifest:1",
+  "title": "Compile triage ledger (atlas docs/atlas/build-manifest.md)",
+  "description": "The programs-vs-non_programs split of a discovery run — a record, not an input (no code consumer). Item schemas are permissive (derived from a single sample); widen freely.",
+  "type": "object",
+  "required": ["schema", "deck", "total", "programs", "non_programs"],
+  "properties": {
+    "schema": { "const": "arena.build-manifest/1" },
+    "deck": { "type": "string", "minLength": 1 },
+    "total": { "type": "integer", "minimum": 0 },
+    "programs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["idx", "disp", "class"],
+        "properties": {
+          "idx": { "type": "integer" },
+          "disp": { "type": "string" },
+          "runner": { "type": "string" },
+          "needs_code": { "type": "boolean", "description": "true = a shape_is_new runner had to be built (§4)." },
+          "class": { "type": "string" },
+          "anchor": { "type": "string" },
+          "partners": { "type": "array", "items": { "type": "string" } },
+          "compile_rank": { "type": "number" },
+          "confidence": { "type": "string" }
+        }
+      }
+    },
+    "non_programs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["idx", "disp", "class"],
+        "properties": {
+          "idx": { "type": "integer" },
+          "disp": { "type": "string" },
+          "class": { "type": "string" },
+          "anchor": { "type": "string" },
+          "partners": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

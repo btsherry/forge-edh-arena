@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:discovered-combos:1",
+  "title": "Curated discovery combos (atlas docs/atlas/discovered-combos.md)",
+  "description": "Combos Spellbook omits (open payoff slot) or a model found from card text — kept separate from prep-generated combos.json but consumed identically by ComboDef.loadWithDiscovered. Ids are syn-/ben- prefixed.",
+  "type": "object",
+  "required": ["schema", "source", "combos"],
+  "properties": {
+    "schema": { "const": "arena.discovered-combos/1" },
+    "source": { "type": "string", "minLength": 1, "description": "Provenance prose." },
+    "combos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "cards"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "description": "syn-/ben- id; a legal combo-program key." },
+          "cards": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "properties": { "name": { "type": "string", "minLength": 1 } },
+              "additionalProperties": false
+            }
+          },
+          "note": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "design_rationale": { "type": "string" }
+  },
+  "additionalProperties": false
+}

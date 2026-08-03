@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:discovered-synergies-wholedeck:1",
+  "title": "Whole-deck discovery corpus (atlas docs/atlas/discovered-synergies-wholedeck.md)",
+  "description": "The ~200-record Fable+Gemini discovery output — prep/compile INPUT, not runtime. The catalog records carry ~20 varying fields, so v1 validates the ENVELOPE and the shape_is_new_backlog work items (the completeness-gating part), leaving catalog record internals permissive (widen to reality, plan §6).",
+  "type": "object",
+  "required": ["schema", "deck", "counts", "fable_catalog"],
+  "properties": {
+    "schema": { "const": "arena.discovered-synergies-wholedeck/1" },
+    "deck": { "type": "string", "minLength": 1 },
+    "note": { "type": "string" },
+    "counts": {
+      "type": "object",
+      "description": "The discovery funnel. hallucinated_dropped MUST be 0 (the zero-hallucination bar) — asserted by the compile step, not this schema.",
+      "additionalProperties": { "type": "integer" }
+    },
+    "top_anchors": { "type": "array", "items": { "type": "string" } },
+    "shape_is_new_backlog": {
+      "type": "array",
+      "description": "Mandatory runner work (§4). Each is a gating work item, never a permanent flag.",
+      "items": {
+        "type": "object",
+        "required": ["key", "program_class", "mechanism"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "program_class": { "type": "string" },
+          "mechanism": { "type": "string" }
+        }
+      }
+    },
+    "fable_catalog": {
+      "type": "array",
+      "description": "Verified primary records (~200). Item internals intentionally open in v1.",
+      "items": { "type": "object" }
+    },
+    "gemini_only_candidates": {
+      "type": "array",
+      "description": "Gemini's non-overlapping cross-check finds.",
+      "items": { "type": "object" }
+    }
+  },
+  "additionalProperties": false
+}

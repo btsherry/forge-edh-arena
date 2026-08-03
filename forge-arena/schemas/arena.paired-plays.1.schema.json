@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:paired-plays:1",
+  "title": "Wipe + shield candidate pairs (atlas docs/atlas/paired-plays.md)",
+  "description": "Deterministic wipe x protection candidate set, ordered by combined cost. Loaded at runtime via ExecutorBindings.withPairedPlays; the compiled pairing-program files reference these by id. Uniform across all decks.",
+  "type": "object",
+  "required": ["schema", "deck_hash", "pairs"],
+  "properties": {
+    "schema": { "const": "arena.paired-plays/1" },
+    "deck_hash": { "type": "string", "pattern": "^[0-9a-f]{8,64}$" },
+    "pairs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "trigger_card", "protection_card", "wipe_scope", "combined_mana_value"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "description": "pp-<wipe>-<shield>; the pairing-program filename key when compiled." },
+          "trigger_card": { "type": "string", "minLength": 1, "description": "The wipe." },
+          "protection_card": { "type": "string", "minLength": 1, "description": "The shield." },
+          "wipe_scope": { "type": "string", "description": "CREATURES / LANDS / NONLAND_PERMANENTS / ALL_PERMANENTS." },
+          "combined_mana_value": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

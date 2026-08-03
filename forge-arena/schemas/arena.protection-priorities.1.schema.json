@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:protection-priorities:1",
+  "title": "Reactive protection covers (atlas docs/atlas/protection-priorities.md)",
+  "description": "The deck's instant-speed protection cards, ranked by cost. Consumed at runtime by EngineFacade.loadProtection -> ComboPilot.ProtectionSpec. Uniform across all decks; a deck may hold none (empty covers).",
+  "type": "object",
+  "required": ["schema", "deck_hash", "covers"],
+  "properties": {
+    "schema": { "const": "arena.protection-priorities/1" },
+    "deck_hash": { "type": "string", "pattern": "^[0-9a-f]{8,64}$" },
+    "covers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["card", "scope", "mana_value"],
+        "properties": {
+          "card": { "type": "string", "minLength": 1 },
+          "scope": { "type": "string", "description": "A ProtectionFinder.Scope enum name (CREATURES / ALL_PERMANENTS / ...). Loader does Scope.valueOf — an unknown value throws at load; kept as string here rather than a partial enum." },
+          "mana_value": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

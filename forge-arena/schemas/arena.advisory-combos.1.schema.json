@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:advisory-combos:1",
+  "title": "Almost-included combos (atlas docs/atlas/advisory-combos.md)",
+  "description": "Spellbook combos where at least one piece is NOT in the 99 — deckbuilding advice ONLY, never runtime tutor/tracking data (Gate 3 semantic rule). No runtime consumer. Note the plain-string cards array (contrast combos.json, which uses {name,zone_req}).",
+  "type": "object",
+  "required": ["schema", "note", "combos"],
+  "properties": {
+    "schema": { "const": "arena.advisory-combos/1" },
+    "note": { "type": "string", "minLength": 1, "description": "The guardrail: advice only, never runtime data." },
+    "combos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "cards", "produces"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "cards": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "produces": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

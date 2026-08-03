@@ -102,4 +102,54 @@ public class ProgramSchemaValidationTest {
                     .collect(Collectors.toList());
         }
     }
+
+    /**
+     * The single-file-per-dossier artifacts whose schemas §8.2 adds (the ones the
+     * existing integration tests don't already validate). Same skip-when-absent
+     * contract as the program sweep.
+     */
+    @DataProvider(name = "dossierArtifacts")
+    public Object[][] dossierArtifacts() {
+        return new Object[][] {
+                { "advisory-combos.json",                "arena.advisory-combos.1.schema.json" },
+                { "discovered-combos.json",              "arena.discovered-combos.1.schema.json" },
+                { "protection-priorities.json",          "arena.protection-priorities.1.schema.json" },
+                { "paired-plays.json",                   "arena.paired-plays.1.schema.json" },
+                { "program-backlog.json",                "arena.program-backlog.1.schema.json" },
+                { "build-manifest.json",                 "arena.build-manifest.1.schema.json" },
+                { "discovered-synergies-wholedeck.json", "arena.discovered-synergies-wholedeck.1.schema.json" },
+        };
+    }
+
+    @Test(dataProvider = "dossierArtifacts")
+    public void everyDossierArtifactValidates(String filename, String schemaFile) throws Exception {
+        if (DECKS_DIR == null) {
+            return; // clean checkout — no dossiers to validate
+        }
+        List<Path> files = dossierFiles(filename);
+        JsonSchema schema = schema(schemaFile);
+        List<String> failures = new ArrayList<>();
+        for (Path f : files) {
+            Set<ValidationMessage> errors = schema.validate(MAPPER.readTree(f.toFile()));
+            if (!errors.isEmpty()) {
+                failures.add(DECKS_DIR.relativize(f) + " -> " + errors);
+            }
+        }
+        assertTrue(filename + ": " + failures.size() + "/" + files.size() + " failed:\n"
+                + String.join("\n", failures), failures.isEmpty());
+    }
+
+    /** Every decks/<deck>/dossier/<filename> across every deck (exact filename). */
+    private List<Path> dossierFiles(String filename) throws Exception {
+        try (Stream<Path> walk = Files.walk(DECKS_DIR)) {
+            return walk
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().equals(filename))
+                    .filter(p -> {
+                        Path parent = p.getParent();
+                        return parent != null && parent.getFileName().toString().equals("dossier");
+                    })
+                    .collect(Collectors.toList());
+        }
+    }
 }
