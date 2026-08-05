@@ -668,30 +668,13 @@ External DeckCheck.co analyses, one per deck — an input the discovery harnesse
 
 - `forge-arena/docs/IMPLEMENTATION-PLAN.md` — Master specification (v3.3), canonical design document covering mission, acceptance bars, architecture, schemas, execution flow, and roadmap.
 - `forge-arena/docs/PR-LOG.md` — Running PR log mapping each PR to artifacts introduced (Foundation PRs 1–14 and beyond).
-- `forge-arena/docs/PHASE-6-PLAN.md` — Plan for conversion, coverage, and speed: any deck plays Magic well with early combo assembly, firing, and win conversion.
-- `forge-arena/docs/PHASE-7-PLAN.md` — Plan to replace hand-written predicates with exact rules-engine queries (real prediction lines).
-- `forge-arena/docs/PHASE-8-PLAN.md` — Planning record: prove execution (deterministic per combo), measuring steps between fire and win.
-- `forge-arena/docs/PHASE-9-PLAN.md` — Planning record: teach prep to read decks (respond to 60–83% blindness discovered in ingestion-findings.md).
-- `forge-arena/docs/PHASE-9-FINDINGS.md` — 341 cards, 7 subagents, four decks; 0 out-of-vocabulary capabilities, 0 hallucinations, 49 cross-agent proposals promoted.
-- `forge-arena/docs/PHASE-10-PLAN.md` — Grounded plan to fix deck behaviour using card scripts, strategy primers, and 341-card ingestion pass.
-- `forge-arena/docs/PHASE-10-RESULTS.md` — Deterministic 30-game results (Selvala 0→1 win, Giada 9→12), three decks moved right, one mechanism confirmed.
 - `forge-arena/docs/PHASE-11-PLAN.md` — Ben-approved plan: one execution path per combo, no fallback tier, full oracle text as compiler input alongside scripts.
-- `forge-arena/docs/COMBO-ACCOUNTING.md` — Two-level audit of 42 detected combos (42 across all four decks, binding status + validation in batch).
-- `forge-arena/docs/COMBO-AUDIT-RESULTS.md` — 30-game combo-audit batch results (flat, all within noise of prior Phase 10 runs).
-- `forge-arena/docs/GIADA-COMBO-RESULT.md` — First end-to-end combo execution result (Giada 30-game: 2 combos fired, 1 fired and won that game).
 - `forge-arena/docs/WIN-ROUTES.md` — Win Routes spec (v1): closed set of conversion routes, per-deck feature classification rules (cache-first, library-driven).
 - `forge-arena/docs/PROJECT-BRIEF.md` — Canonical project brief (one sentence): drop in ANY deck, prep detects combos, pilot assembles and converts to wins with no hardcoded logic.
 - `forge-arena/docs/T0-VERIFICATION.md` — Forge internals verification (complete) against Plan v3.1 §1: all assumptions confirmed except 4 corrections.
-- `forge-arena/docs/CAST-RECUR-PLAN.md` — cast_recur runner research + plan (Purphoros anchor, 2026-07-30).
-- `forge-arena/docs/CASTRECUR100-RESULTS.md` — castrecur100 full scored results (2026-07-30).
-- `forge-arena/docs/CONCERT-SCALING.md` — Concert scaling / interference report (concert60 batch, 2026-07-31).
 - `forge-arena/docs/PAIRING-AUDIT-GIADA.md` — Giada pairing audit: two-auditor card-text reconfirmation of the wipe+shield pairs (2026-07-23).
-- `forge-arena/docs/PLAY-OBSERVATIONS.md` — Play observations: batch game-states where a win was available sooner.
 - `forge-arena/docs/SELVALA-ARC.md` — Selvala mana-loop arc, a living plan (started 2026-07-30).
 - `forge-arena/docs/SELVALA-BUILD-MANIFEST.md` — Selvala win-rate build manifest: synthesis of five surveys.
-- `forge-arena/docs/SELVALA-SYNERGY-TARGETS.md` — Selvala synergy build targets (from the Phase-2b census shortlist).
-- `forge-arena/docs/SHAPE-CENSUS.md` — Shape census: does the build cycle converge? (2026-07-30).
-- `forge-arena/docs/THIRDS-REVIEW.md` — Thirds review: role redundancy across the nine compiled combo programs.
 
 ### Documentation rails (Aug-2026 ingestion initiative)
 
@@ -719,6 +702,7 @@ The Selvala whole-deck run behind the 200 compilable synergy records (0 hallucin
 - `dossier.json` — arena.dossier/1: deck metadata, schema versions, artifact checksums, versioned library references.
 - `deck-cards.json` — arena.deck-cards/1: normalized deck card list.
 - `deck-meta.yaml` — Deck name, source, URL, archetype tags.
+- `card-scripts-index.json` — arena.card-scripts-index/1: card name → absolute Forge script path for every non-basic; built by `scripts/build_card_scripts_index.py`.
 - `combos.json` — arena.combos/1: combos detected by Spellbook (id, url, pieces, mana, prerequisites, step text).
 - `advisory-combos.json` — Almost-included combos (at least one piece missing), deckbuilding advice only.
 - `spellbook-raw.json` — Raw Commander Spellbook API response for deck (unmodified snapshot).
@@ -749,6 +733,7 @@ The Selvala whole-deck run behind the 200 compilable synergy records (0 hallucin
 - `forge-arena/scripts/capability-prototype.py` — PROTOTYPE: extract capabilities from Forge card scripts, measure blind-spot closure vs. oracle-text alone.
 - `forge-arena/scripts/observe-play.py` — Scan a batch run dir for game-states where a seat could have won sooner.
 - `forge-arena/scripts/anchors.py` — Print a deck's non-basic anchor card names (JSON) to pass as the FABLE workflow's `args.anchors`.
+- `forge-arena/scripts/build_card_scripts_index.py` — Build the dossier's `card-scripts-index.json` (card name → absolute Forge script path) for a deck's non-basics — the T0 fast path discovery shards and the arena-dev compile step resolve scripts through. Deterministic and idempotent (skips a healthy index); tries the snake_case slug first, falls back to one full `Name:`-line scan for lossy filenames/DFCs; run after `prep.sh` (SYNERGY-INGESTION step 1); exit 1 lists unresolved cards.
 - `forge-arena/scripts/merge_discovery.py` — Merge FABLE + Gemini discovery outputs into `discovered-synergies-wholedeck.json` (dedup, cap, counts).
 - `forge-arena/scripts/gemini_wholedeck.py` — Gemini-side gold discovery harness (full description under **Discovery pipeline (gold)** above).
 - `forge-arena/scripts/selvala-wholedeck-ingestion-wf_87514c03-1a9.js` — Fable-side gold discovery harness, a Claude Code Workflow-tool script (full description under **Discovery pipeline (gold)** above).

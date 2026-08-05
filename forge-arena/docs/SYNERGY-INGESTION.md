@@ -14,8 +14,10 @@ model tier. Gemini is the independent cross-check.
 ## The run procedure (repeatable, per deck)
 
 1. **Prep the dossier** (deterministic): `scripts/prep.sh <list> --id <deck-slug>`
-   → `decks/<deck-slug>/dossier/` with `deck-cards.json`, `card-scripts-index.json`,
-   `combos.json`, etc.
+   → `decks/<deck-slug>/dossier/` with `deck-cards.json`, `combos.json`, etc.
+   Then `python3 scripts/build_card_scripts_index.py <deck-slug>` →
+   `card-scripts-index.json` (idempotent — skips when the existing index already
+   resolves every non-basic card; exit 1 lists any unresolved cards).
 2. **FABLE discovery** (primary, tool-using): run the workflow
    `scripts/selvala-wholedeck-ingestion-wf_87514c03-1a9.js` (a Claude Code
    Workflow-tool script) with `args = { deck: "<deck-slug>", anchors: [...] }`
