@@ -1777,6 +1777,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private java.util.Map<Integer, List<forge.game.card.Card>> lethalPartition;
         private int lethalPartitionTurn = -1;
 
+        /** Commander damage OPP has already taken from the given commander
+         * (CR 903.10a accumulates per commander, per victim, for the game). */
+        private int commanderDamageTo(Player opp, forge.game.card.Card commander) {
+            for (java.util.Map.Entry<forge.game.card.Card, Integer> e
+                    : opp.getCommanderDamage()) {
+                if (e.getKey() == commander) {
+                    return e.getValue();
+                }
+            }
+            return 0;
+        }
+
         private ComboPilot.CombatOrder lethalAlphaOrder(int turn) {
             lethalPartition = null;
             List<forge.game.card.Card> ready = new java.util.ArrayList<>();
@@ -1823,7 +1835,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         // them is guaranteed through
                         allocatedBeyondAbsorbers += Math.max(0, c.getNetPower());
                         int guaranteed = amplified(allocatedBeyondAbsorbers);
-                        if (guaranteed >= opp.getLife() && guaranteed > 0) {
+                        boolean lifeKill = guaranteed >= opp.getLife() && guaranteed > 0;
+                        // v1.1 round-3 (CR 903.10a): when a guaranteed-through
+                        // attacker is OUR COMMANDER, 21 total commander damage
+                        // kills through ANY life total — a parallel, usually
+                        // lower threshold. Same caveats as life-lethal (Fog
+                        // prevents both; prevented damage is never dealt and
+                        // never counts) — a lower bar, not a stronger claim.
+                        // Only counted beyond the absorbers: a blocked,
+                        // trampleless commander connects for nothing.
+                        boolean cmdKill = c.isCommander() && c.getController() == player
+                                && c.getNetPower() >= 21 - commanderDamageTo(opp, c);
+                        if (lifeKill || cmdKill) {
                             lethal = true;
                             break;
                         }

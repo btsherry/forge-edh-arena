@@ -406,8 +406,11 @@ public class SelvalaManaLoopTest {
         int before = ((Number) f.get("permanents_before")).intValue();
         int after = ((Number) f.get("permanents_after")).intValue();
         int libAfter = ((Number) f.get("library_after")).intValue();
-        assertTrue("Genesis Wave must flip the MAJORITY of the library (before="
-                + before + " after=" + after + ")", after - before >= 20);
+        // round-3 contract: the flip is POOL-SIZED (X = pool - tail, floor 25,
+        // reserve-capped) rather than force-maxed — a DECENT flip converts
+        // 4+ cycles earlier. ~half of a 25-card flip lands as permanents.
+        assertTrue("Genesis Wave must flip a DECENT board (before="
+                + before + " after=" + after + ")", after - before >= 10);
         assertTrue("must LEAVE the reserve, not deck out (library_after="
                 + libAfter + ")", libAfter >= 5);
     }

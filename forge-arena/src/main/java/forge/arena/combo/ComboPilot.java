@@ -982,6 +982,10 @@ public final class ComboPilot {
             seenTurn = view.turn();
             attemptedThisTurn.clear();
             attemptedDeploys.clear();
+            // the SMASH is a this-turn conversion (until-EOT pumps): a stale
+            // armed route must not keep steering combat on later turns over
+            // the conversion planner's own decisions
+            smashRoute = null;
         }
 
         if (lineActive()) {

@@ -127,6 +127,8 @@ public final class SelvalaManaLoopRunner {
     /** refresh mode: true when the in-flight bounce+recast follows a measured
      * tap (arm the per-cycle measure at recast); false during normalization. */
     private boolean refreshArmed;
+    /** round 3: one Crossroads-before-the-flip attempt per sink engagement. */
+    private boolean hasteDeployed;
     /** greatest power at THIS cycle's tap — the X Selvala actually produced. */
     private int xAtCycleTap = -1;
 
@@ -446,7 +448,7 @@ public final class SelvalaManaLoopRunner {
         // X~12, four cycles earlier and far less interactable. The sink's dig
         // rung then finds an outlet; only if digs run dry does stage 1 resume
         // banking toward the full flip.
-        int waveTarget = Math.max(cycleCost, (library - libraryReserve) + GENESIS_WAVE_TAIL);
+        int waveTarget = flipTarget(library);
         int fetchTarget = Math.max(cycleCost, 16);
         target = Math.min(waveTarget, fetchTarget);
         pilot.observe(ArenaEvent.of("governor_plan", turn, seat)
@@ -853,6 +855,26 @@ public final class SelvalaManaLoopRunner {
             return godWinPlan(turn);
         }
 
+        // HASTE FOR THE FLIP (round 3): a resolved Genesis Wave is a NEXT-turn
+        // win on a summoning-sick board — the flip's creatures can't attack.
+        // Concordant Crossroads (1 mana, world enchantment: all creatures have
+        // haste) in hand converts the flip to THIS turn; one attempt, and only
+        // when a meaningful flip is actually on the table.
+        if (!hasteDeployed
+                && AbilityResolver.findBattlefield(player, "Concordant Crossroads") == null) {
+            int libH = player.getCardsIn(ZoneType.Library).size();
+            int poolH = player.getManaPool().totalMana();
+            if (libH - effectiveReserve() >= 10 && poolH >= 12) {
+                SpellAbility cross = AbilityResolver.resolveCast(player, "Concordant Crossroads");
+                if (cross != null) {
+                    hasteDeployed = true;
+                    pilot.observe(ArenaEvent.of("line_step", turn, seat)
+                            .with("stage", "HASTE_FOR_FLIP").with("combo", comboId));
+                    return List.of(cross);
+                }
+            }
+            hasteDeployed = true; // not in hand — don't re-check every window
+        }
         SpellAbility outlet = chooseOutlet();
         if (outlet == null) {
             // DIG rung (v1.1 batch finding — 7/7 banked loops fizzled here):
@@ -875,7 +897,7 @@ public final class SelvalaManaLoopRunner {
             // (stage 1) instead of stranding the bank — the loop is still
             // online and the target only ever escalates once.
             int lib = player.getCardsIn(ZoneType.Library).size();
-            int waveTarget = Math.max(cycleCost, (lib - libraryReserve) + GENESIS_WAVE_TAIL);
+            int waveTarget = flipTarget(lib);
             int poolNow = player.getManaPool().totalMana();
             if (bankStage == 0 && poolNow < waveTarget) {
                 bankStage = 1;
@@ -968,6 +990,24 @@ public final class SelvalaManaLoopRunner {
             }
         }
         return null;
+    }
+
+    /** Round-3 reserve tune: the 35-card reserve exists to absorb The Great
+     * Henge's MANDATORY per-creature flip draws — but only when Henge is on
+     * OUR battlefield (the pilot excludes it from the flip itself, and
+     * Selvala's own may-draws are declined via confirmAction). Without Henge
+     * a 15-card reserve suffices, making the Wave X twenty cards bigger. */
+    private int effectiveReserve() {
+        return AbilityResolver.findBattlefield(player, "The Great Henge") != null
+                ? libraryReserve : Math.min(libraryReserve, 15);
+    }
+
+    /** Bank needed for a DECENT flip (X=25, or the whole reserve-capped
+     * library when smaller) — not the maximum flip; X scales with whatever
+     * the pool actually holds at cast time. */
+    private int flipTarget(int library) {
+        return Math.max(cycleCost,
+                Math.min(library - effectiveReserve(), 25) + GENESIS_WAVE_TAIL);
     }
 
     private int sumOwnPower() {
@@ -1202,8 +1242,11 @@ public final class SelvalaManaLoopRunner {
         // 1) Genesis Wave — flip the deck onto the board (leave the reserve).
         // Only when the flip is MEANINGFUL (>=10 cards) and the pool can pay
         // {X}{G}{G}{G}; a 1-card flip near the reserve boundary is not a win.
-        int gwX = library - libraryReserve;
-        if (gwX >= 10 && pool >= gwX + GENESIS_WAVE_TAIL) {
+        // round 3: the reserve is a CAP on the flip, not a requirement — cast
+        // at what the pool affords (X = pool - tail), floored at a 25-card
+        // flip for quality, never digging past the reserve.
+        int gwX = Math.min(library - effectiveReserve(), pool - GENESIS_WAVE_TAIL);
+        if (gwX >= 25) {
             SpellAbility gw = AbilityResolver.resolveCast(player, "Genesis Wave");
             if (gw != null && gw.getPayCosts() != null
                     && gw.getPayCosts().hasXInAnyCostPart()) {
@@ -1271,9 +1314,9 @@ public final class SelvalaManaLoopRunner {
     private SpellAbility tryOutlet(OutletSpec spec, int pool, int library) {
         switch (spec.kind()) {
             case "mass_flip": {
-                int x = library - libraryReserve;
-                return x >= spec.minX() && pool >= x + GENESIS_WAVE_TAIL
-                        ? castX(spec.card(), x) : null;
+                // reserve caps the flip; the pool sizes it (round 3)
+                int x = Math.min(library - effectiveReserve(), pool - GENESIS_WAVE_TAIL);
+                return x >= spec.minX() ? castX(spec.card(), x) : null;
             }
             case "x_body": {
                 int x = pool - 1; // {X}{G}: reserve the coloured pip
