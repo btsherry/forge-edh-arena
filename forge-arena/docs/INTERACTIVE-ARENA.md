@@ -42,15 +42,18 @@ arena uses.
 The mailbox controller intercepts the seat's **own main phases** (MAIN1 /
 MAIN2, empty stack), **mulligan**, **combat declaration**, and a set of
 **high-value sub-choices** the seat makes while resolving its own effects (copy
-choice, choose-a-permanent, modal/charm modes, tutor/fetch selection). **Every
-other priority window — opponents' turns and instant-speed responses — falls
-through to stock `PlayerControllerAi`.**
+choice, choose-a-permanent, modal/charm modes, tutor/fetch selection). It also
+intercepts **reactive (instant-speed) windows**: when an OPPONENT has a
+spell/ability on the stack and the seat holds a castable instant-speed response,
+the seat is consulted (`REACT`). Windows not worth the brain's time — empty-stack
+instant priority, the seat's own spell merely resolving, forced passes — still
+fall through to stock `PlayerControllerAi`.
 
 Consequences:
-- The agent plays **sorcery-speed strategy**; **stock AI plays all reactive /
-  instant-speed windows** (including casting a held-up counterspell on an
-  opponent's turn). So "hold up interaction" is a real option — executed at
-  *stock* quality, not agent quality.
+- The agent plays **sorcery-speed strategy AND its own instant-speed responses**
+  to opponents' spells (counter, protect, removal-in-response), at agent quality.
+  Still on stock (bounded out to avoid flooding): proactively flashing into an
+  empty stack, and responding to interaction *during the agent's own turn*.
 - **Sub-choices now the agent's:** which creature to copy / choose (Glasspool
   Mimic, Clone, "choose target creature" resolution effects → `CHOOSE_ENTITY` /
   `CHOOSE_ENTITIES`), which mode of a charm/modal spell (`CHOOSE_MODE`), and
@@ -84,7 +87,7 @@ stock AI. The engine deletes both files once the response is read.
 ```json
 {
   "seq": 12, "seat": 3, "turn": 22, "phase": "MAIN1",
-  "decisionType": "CAST_SPELL | MULLIGAN | DECLARE_ATTACKERS | DECLARE_BLOCKERS | CHOOSE_ENTITY | CHOOSE_ENTITIES | CHOOSE_MODE | CHOOSE_CARD",
+  "decisionType": "CAST_SPELL | REACT | MULLIGAN | DECLARE_ATTACKERS | DECLARE_BLOCKERS | CHOOSE_ENTITY | CHOOSE_ENTITIES | CHOOSE_MODE | CHOOSE_CARD",
   "prompt": "…",
   "state": {
     "seat","turn","phase","life","manaPool","untappedManaSources",
@@ -138,7 +141,7 @@ fair). Opponents' hands are **never** serialized — only counts, via `handSize`
 and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists.
 
 **Response** (`resp-<n>.json`), by `decisionType`:
-- `CAST_SPELL` → `{"chosenId": <option id>}` (id `0` = pass)
+- `CAST_SPELL` / `REACT` → `{"chosenId": <option id>}` (id `0` = pass; `REACT` is an instant-speed window to respond to an opponent's stack object)
 - `MULLIGAN` → `{"keep": true|false}`
 - `DECLARE_ATTACKERS` → `{"attackers":[{"attacker":<cardId>,"defender":<entityId>}, …]}` (`[]` = no attack)
 - `DECLARE_BLOCKERS` → `{"blocks":[{"blocker":<cardId>,"attacker":<cardId>}, …]}` (`[]` = no blocks)
@@ -180,9 +183,10 @@ request to the right agent, which writes the response file.
 
 ## Known limitations (v1)
 
-1. **No instant-speed windows for the agent.** Reactive plays (counters, tricks,
-   response-blocks) are made by *stock* AI, not the agent — interaction happens,
-   but at stock quality.
+1. **Reactive play is partial.** The agent now makes its own instant-speed
+   responses when an opponent has a spell/ability on the stack (`REACT`), but
+   proactively flashing into an empty stack, and responding during the agent's
+   own turn, are still stock (bounded out to avoid flooding own-turn windows).
 2. **Some sub-choices go to stock.** The agent now makes copy/choose, modal, and
    tutor-fetch sub-choices (`CHOOSE_ENTITY`/`CHOOSE_ENTITIES`/`CHOOSE_MODE`/
    `CHOOSE_CARD`), but **normal spell targeting is still stock** (`chooseTargetsFor`
@@ -190,8 +194,9 @@ request to the right agent, which writes the response file.
    hybrid model.
 3. **Narration is unreliable.** Agents sometimes report plays that didn't happen;
    trust the board (`arena-status.py` / the request state), not the agent's prose.
-4. **No state feed during the human's turn** (the dashboard reads a pending
-   *opponent* request; there is none while the human acts).
+4. **Observer snapshot is coarse.** The dashboard now stays live during the
+   human's turn via the public event-bus `observer-state.json`, but it's a
+   ~200ms-debounced public snapshot (no hands/libraries), not a per-priority feed.
 5. **Latency.** Each consulted decision costs an agent resume + think (seconds to
    minutes on a large model). A per-decision poll from the orchestrator batches a
    whole turn per wake to reduce this.
@@ -200,15 +205,15 @@ request to the right agent, which writes the response file.
 
 **Track 1 — loop tightening & action speed**
 - ✅ Lever 2: trivial-subphase gate (empty windows auto-pass to stock).
-- Terser brain protocol: `{chosenId}` + one-line reason (less think-time, less confabulation).
+- ✅ Terser brain protocol: `{chosenId}` + one-line reason (see `brain-brief-template.md`).
 - Whole-turn drain (batch a turn per wake) + a file monitor as the cross-phase backstop.
 
 **Track 2 — observability & correctness (highest play-quality value)**
 - ✅ Richer serialization: per-card P/T, counters, tapped/sick, attached auras, and
   activated abilities with their mana output (own battlefield). Fixed the former
   name-only blind spots.
-- Persistent `game-state.json` snapshot each decision (and during the human's
-  turn) so the dashboard/observer is never blind.
+- ✅ Persistent public observer snapshot (`observer-state.json`, event-bus driven)
+  so the dashboard/observer is never blind, including during the human's turn.
 - Anti-confabulation: feed the resulting state back; agents re-derive from the
   request each time.
 
@@ -216,8 +221,9 @@ request to the right agent, which writes the response file.
 - ✅ Sub-choice mailboxing (copy/choose, modes, tutor fetch → `CHOOSE_ENTITY`/
   `CHOOSE_ENTITIES`/`CHOOSE_MODE`/`CHOOSE_CARD`). Remaining: normal spell
   targeting (`chooseTargetsFor`).
-- v2 reactive windows: mailbox instant-speed priority so agents make counters/
-  tricks/response-blocks at agent quality.
+- ✅ v2 reactive windows (`REACT`): agent responds at instant speed to opponents'
+  stack objects. Remaining: proactive empty-stack flash, own-turn responses,
+  and normal spell targeting (`chooseTargetsFor`).
 - Teacher→student: feed caught misplays into both the agent briefs and the
   deterministic runner.
 

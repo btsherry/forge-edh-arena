@@ -91,14 +91,33 @@ public final class MailboxController extends PlayerControllerAi {
     public List<SpellAbility> chooseSpellAbilityToPlay() {
         Game game = getGame();
         Player me = getPlayer();
-        // GATE to meaningful windows: our main phase, empty stack, and at least
-        // one non-mana playable ability. Everything else (combat tricks, forced
-        // priority passes, others' turns) stays with stock so we do not spam the
-        // brain with trivial windows.
-        boolean mainWindow = (game.getPhaseHandler().is(PhaseType.MAIN1, me)
+        // GATE. Two window kinds are worth the brain's time:
+        //  - ownMainEmpty: our own main phase with an empty stack (sorcery-speed
+        //    development), and
+        //  - reactive: an OPPONENT has a spell/ability on the stack that we could
+        //    respond to at instant speed (counter, protect, removal-in-response).
+        // Everything else stays with stock so we don't flood the brain: empty-
+        // stack instant windows, our own spell merely resolving, forced passes.
+        // Note: at a reactive window canPlay() naturally admits only instant-
+        // speed responses, and if we hold none the playable list is empty and we
+        // fall through to stock below — so a reactive window only actually
+        // mailboxes when there is both an opponent object to answer AND a legal
+        // response in hand.
+        boolean ownMainEmpty = (game.getPhaseHandler().is(PhaseType.MAIN1, me)
                 || game.getPhaseHandler().is(PhaseType.MAIN2, me))
                 && game.getStack().isEmpty();
-        if (!mainWindow) {
+        boolean reactive = false;
+        if (!ownMainEmpty && !game.getStack().isEmpty()) {
+            for (forge.game.spellability.SpellAbilityStackInstance si : game.getStack()) {
+                SpellAbility onStack = si.getSpellAbility();
+                Player ap = onStack != null ? onStack.getActivatingPlayer() : null;
+                if (ap != null && ap != me) {
+                    reactive = true; // an opponent's object is on the stack to answer
+                    break;
+                }
+            }
+        }
+        if (!ownMainEmpty && !reactive) {
             return super.chooseSpellAbilityToPlay();
         }
 
@@ -128,9 +147,12 @@ public final class MailboxController extends PlayerControllerAi {
         }
 
         // Stable id per option this decision; 0 is reserved for "pass".
+        String decisionType = ownMainEmpty ? "CAST_SPELL" : "REACT";
+        String prompt = ownMainEmpty
+                ? "Choose a spell/ability to play, or pass."
+                : "Instant-speed window — respond to what's on the stack, or pass.";
         MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CAST_SPELL",
-                "Choose a spell/ability to play, or pass.")
+                seatIndex, turn, phaseName(game), decisionType, prompt)
                 .state(buildState(turn))
                 .option(0, "Pass (do nothing)", null, "PASS");
         Map<Integer, SpellAbility> byId = new LinkedHashMap<>();
