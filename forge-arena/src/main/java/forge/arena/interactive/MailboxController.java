@@ -2,9 +2,11 @@ package forge.arena.interactive;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Multiset;
@@ -17,15 +19,19 @@ import forge.arena.engine.SeatViews;
 import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.card.Card;
+import forge.game.card.CardCollection;
 import forge.game.card.CounterType;
 import forge.game.combat.Combat;
 import forge.game.combat.CombatUtil;
 import forge.game.cost.Cost;
 import forge.game.cost.CostTap;
 import forge.game.phase.PhaseType;
+import forge.game.player.DelayedReveal;
 import forge.game.player.Player;
+import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
+import forge.util.collect.FCollectionView;
 
 /**
  * A "mailbox" seat controller: on a small set of meaningful decisions it writes
@@ -44,9 +50,29 @@ import forge.game.zone.ZoneType;
  * this seat's visible zones and PUBLIC board/life/stack of others. Opponents'
  * hands and library order are never serialized.
  *
- * <p>v1 scope: only top-level decisions are mailboxed. Targets and sub-choices
- * are intentionally left to stock (the targeting hooks are NOT overridden), so a
- * chosen spell's targets are filled by {@code super}'s normal flow.
+ * <p>Scope: top-level decisions ({@code CAST_SPELL}, {@code MULLIGAN},
+ * {@code DECLARE_ATTACKERS}, {@code DECLARE_BLOCKERS}) PLUS a set of high-value
+ * SUB-CHOICES the acting seat makes while resolving its own effects:
+ * <ul>
+ *   <li>{@code CHOOSE_ENTITY} — a single "choose a creature/permanent" effect
+ *       (e.g. Glasspool Mimic's "copy which creature", Clone effects) via
+ *       {@link #chooseSingleEntityForEffect}.</li>
+ *   <li>{@code CHOOSE_ENTITIES} — a bounded (min..max) multi-entity selection via
+ *       {@link #chooseEntitiesForEffect}.</li>
+ *   <li>{@code CHOOSE_MODE} — modal/charm mode selection via
+ *       {@link #chooseModeForAbility}.</li>
+ *   <li>{@code CHOOSE_CARD} — tutor/search-and-move card selection via
+ *       {@link #chooseSingleCardForZoneChange}.</li>
+ * </ul>
+ * These sub-choice hooks are gated NARROWLY: they only mailbox a genuine choice
+ * (more than one legal option, or an optional single option) and, for the entity
+ * hooks, only when every option is a {@link Card} (so ids never collide with
+ * player ids). Everything else — normal spell targeting ({@code chooseTargetsFor},
+ * deliberately left on stock because it mutates the SpellAbility in place),
+ * {@code confirmAction}, trigger ordering, mana-color, numbers, yes/no — stays on
+ * {@code super}. As with the top-level hooks, EVERY sub-choice override falls back
+ * to {@code super} on timeout / null / malformed / illegal / wrong-count, so a
+ * silent brain never hangs the game.
  */
 public final class MailboxController extends PlayerControllerAi {
 
@@ -307,6 +333,253 @@ public final class MailboxController extends PlayerControllerAi {
         }
     }
 
+    // ---- sub-choice hooks (agent makes its own significant sub-decisions) ---
+
+    /**
+     * Single "choose a creature/permanent" effect — this is the hook that
+     * carries Glasspool Mimic's "copy which creature" choice and generic Clone /
+     * choose-a-permanent effects (see {@code CloneEffect} et al., which call the
+     * convenience overloads that funnel here). We mailbox it ONLY when it is a
+     * genuine choice among {@link Card} entities (so option ids are unambiguous
+     * card ids); every other case — a forced single option, an empty list, or a
+     * non-card option such as "choose a player" — falls straight through to
+     * stock. On timeout / null / malformed / illegal id we also fall to stock.
+     */
+    @Override
+    public <T extends GameEntity> T chooseSingleEntityForEffect(
+            FCollectionView<T> optionList, DelayedReveal delayedReveal, SpellAbility sa,
+            String title, boolean isOptional, Player relatedPlayer, Map<String, Object> params) {
+        List<T> opts = optionList == null ? Collections.<T>emptyList() : new ArrayList<>(optionList);
+        // Gate to a genuine, card-only choice. A lone forced option or a
+        // non-card entity (e.g. a player) is not worth mailboxing.
+        boolean meaningful = opts.size() > 1 || (isOptional && opts.size() == 1);
+        if (!meaningful || !allCards(opts)) {
+            return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, relatedPlayer, params);
+        }
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", isOptional ? 0 : 1);
+        state.put("max", 1);
+        MailboxProtocol.Request req = new MailboxProtocol.Request(
+                seatIndex, turn, phaseName(game), "CHOOSE_ENTITY",
+                (title != null && !title.isEmpty() ? title : "Choose one")
+                        + (isOptional ? " (or none)" : ""))
+                .state(state);
+        if (isOptional) {
+            req.option(0, "Choose none", null, "NONE"); // id 0 reserved for "none"
+        }
+        Map<Integer, T> byId = new LinkedHashMap<>();
+        for (T e : opts) {
+            int oid = e.getId();
+            if (oid <= 0 || byId.containsKey(oid)) {
+                // 0 is reserved for "none"; a collision means an ambiguous id
+                // space we can't safely round-trip — let stock decide.
+                return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, relatedPlayer, params);
+            }
+            req.option(oid, entityLabel(e), null, entityType(e));
+            byId.put(oid, e);
+        }
+        JsonNode resp = bus.exchange(req);
+        if (resp == null) {
+            return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, relatedPlayer, params);
+        }
+        JsonNode chosen = resp.get("chosenId");
+        if (chosen == null || !chosen.isInt()) {
+            return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, relatedPlayer, params);
+        }
+        int cid = chosen.asInt();
+        if (cid == 0) {
+            return isOptional ? null
+                    : super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, relatedPlayer, params);
+        }
+        T pick = byId.get(cid);
+        return pick != null ? pick
+                : super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, relatedPlayer, params);
+    }
+
+    /**
+     * Bounded multi-entity selection (min..max). Same discipline as
+     * {@link #chooseSingleEntityForEffect}: mailbox only a genuine, card-only
+     * choice (skip empty lists, forced "take all", or non-card options). The
+     * brain must return a subset satisfying min/max with no duplicates; anything
+     * else (or a timeout) falls back to stock. Note that if this override falls
+     * back to {@code super}, the stock loop itself calls
+     * {@code chooseSingleEntityForEffect} — so single picks may still be
+     * mailboxed one at a time; that is a safe degradation, not a hang.
+     */
+    @Override
+    public <T extends GameEntity> List<T> chooseEntitiesForEffect(
+            FCollectionView<T> optionList, int min, int max, DelayedReveal delayedReveal,
+            SpellAbility sa, String title, Player relatedPlayer, Map<String, Object> params) {
+        List<T> opts = optionList == null ? Collections.<T>emptyList() : new ArrayList<>(optionList);
+        int lo = Math.max(0, min);
+        // Nothing to decide when empty, max<=0, forced "take all" (lo>=size), or
+        // any option is not a Card.
+        if (opts.isEmpty() || max <= 0 || lo >= opts.size() || !allCards(opts)) {
+            return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
+        }
+        int hi = Math.min(max, opts.size());
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", lo);
+        state.put("max", hi);
+        MailboxProtocol.Request req = new MailboxProtocol.Request(
+                seatIndex, turn, phaseName(game), "CHOOSE_ENTITIES",
+                (title != null && !title.isEmpty() ? title : "Choose")
+                        + " (" + lo + "-" + hi + ")")
+                .state(state);
+        Map<Integer, T> byId = new LinkedHashMap<>();
+        for (T e : opts) {
+            int oid = e.getId();
+            if (oid <= 0 || byId.containsKey(oid)) {
+                return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
+            }
+            req.option(oid, entityLabel(e), null, entityType(e));
+            byId.put(oid, e);
+        }
+        JsonNode resp = bus.exchange(req);
+        if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+            return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
+        }
+        List<T> picks = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        for (JsonNode idn : resp.get("chosen")) {
+            if (idn == null || !idn.isInt()) {
+                return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
+            }
+            int cid = idn.asInt();
+            if (!byId.containsKey(cid) || !seen.add(cid)) { // illegal id or duplicate
+                return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
+            }
+            picks.add(byId.get(cid));
+        }
+        if (picks.size() < lo || picks.size() > hi) { // wrong count — never partially apply
+            return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
+        }
+        return picks;
+    }
+
+    /**
+     * Modal / charm mode selection ({@code CharmEffect} calls this). Options are
+     * the mode texts; the id is the INDEX into {@code possible}. The brain
+     * returns a list of chosen indices (respecting {@code allowRepeat} and the
+     * min..num count). Mailboxed only when there is more than one mode; otherwise
+     * (or on any malformed / out-of-range / wrong-count response) → stock.
+     */
+    @Override
+    public List<AbilitySub> chooseModeForAbility(SpellAbility sa, List<AbilitySub> possible,
+            int min, int num, boolean allowRepeat) {
+        if (possible == null || possible.size() <= 1) {
+            return super.chooseModeForAbility(sa, possible, min, num, allowRepeat);
+        }
+        int lo = Math.max(0, min);
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", lo);
+        state.put("max", num);
+        state.put("allowRepeat", allowRepeat);
+        Card host = sa != null ? sa.getHostCard() : null;
+        MailboxProtocol.Request req = new MailboxProtocol.Request(
+                seatIndex, turn, phaseName(game), "CHOOSE_MODE",
+                "Choose mode(s) for " + (host != null ? host.getName() : "ability")
+                        + " (" + lo + "-" + num + (allowRepeat ? ", may repeat" : "") + ")")
+                .state(state);
+        for (int i = 0; i < possible.size(); i++) {
+            AbilitySub sub = possible.get(i);
+            String desc = sub != null ? sub.getDescription() : null;
+            if (desc == null || desc.isEmpty()) {
+                desc = sub != null ? sub.getStackDescription() : null;
+            }
+            req.option(i, desc != null && !desc.isEmpty() ? desc : ("mode " + i), null, "MODE");
+        }
+        JsonNode resp = bus.exchange(req);
+        if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+            return super.chooseModeForAbility(sa, possible, min, num, allowRepeat);
+        }
+        List<AbilitySub> chosen = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        for (JsonNode idn : resp.get("chosen")) {
+            if (idn == null || !idn.isInt()) {
+                return super.chooseModeForAbility(sa, possible, min, num, allowRepeat);
+            }
+            int idx = idn.asInt();
+            if (idx < 0 || idx >= possible.size()) {
+                return super.chooseModeForAbility(sa, possible, min, num, allowRepeat);
+            }
+            if (!allowRepeat && !seen.add(idx)) { // repeat not permitted
+                return super.chooseModeForAbility(sa, possible, min, num, allowRepeat);
+            }
+            chosen.add(possible.get(idx));
+        }
+        if (chosen.size() < lo || chosen.size() > num) { // wrong count
+            return super.chooseModeForAbility(sa, possible, min, num, allowRepeat);
+        }
+        return chosen;
+    }
+
+    /**
+     * Tutor / search-and-move card selection (fetch effects go through here). The
+     * engine hands us {@code fetchList} — the cards this seat is legally allowed
+     * to pick from (searching your own library reveals them to YOU), so exposing
+     * their names to this seat's brain is hidden-info-safe. Mailboxed only for a
+     * genuine choice; forced single / empty, or any malformed / illegal response,
+     * → stock. We do NOT override the plural {@code chooseCardsForZoneChange}
+     * (stock returns null / "this isn't used").
+     */
+    @Override
+    public Card chooseSingleCardForZoneChange(ZoneType destination, List<ZoneType> origin,
+            SpellAbility sa, CardCollection fetchList, DelayedReveal delayedReveal,
+            String selectPrompt, boolean isOptional, Player decider) {
+        List<Card> opts = fetchList == null ? Collections.<Card>emptyList() : new ArrayList<>(fetchList);
+        boolean meaningful = opts.size() > 1 || (isOptional && opts.size() == 1);
+        if (!meaningful) {
+            return super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList, delayedReveal, selectPrompt, isOptional, decider);
+        }
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", isOptional ? 0 : 1);
+        state.put("max", 1);
+        state.put("destination", destination != null ? destination.name() : null);
+        MailboxProtocol.Request req = new MailboxProtocol.Request(
+                seatIndex, turn, phaseName(game), "CHOOSE_CARD",
+                (selectPrompt != null && !selectPrompt.isEmpty() ? selectPrompt : "Choose a card")
+                        + (destination != null ? " -> " + destination.name() : ""))
+                .state(state);
+        if (isOptional) {
+            req.option(0, "Choose none", null, "NONE");
+        }
+        Map<Integer, Card> byId = new LinkedHashMap<>();
+        for (Card c : opts) {
+            int oid = c.getId();
+            if (oid <= 0 || byId.containsKey(oid)) {
+                return super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList, delayedReveal, selectPrompt, isOptional, decider);
+            }
+            req.option(oid, cardChoiceLabel(c),
+                    c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
+            byId.put(oid, c);
+        }
+        JsonNode resp = bus.exchange(req);
+        if (resp == null) {
+            return super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList, delayedReveal, selectPrompt, isOptional, decider);
+        }
+        JsonNode chosen = resp.get("chosenId");
+        if (chosen == null || !chosen.isInt()) {
+            return super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList, delayedReveal, selectPrompt, isOptional, decider);
+        }
+        int cid = chosen.asInt();
+        if (cid == 0) {
+            return isOptional ? null
+                    : super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList, delayedReveal, selectPrompt, isOptional, decider);
+        }
+        Card pick = byId.get(cid);
+        return pick != null ? pick
+                : super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList, delayedReveal, selectPrompt, isOptional, decider);
+    }
+
     // ---- state projection (hidden-info-safe) -------------------------------
 
     private Map<String, Object> buildState(int turn) {
@@ -538,5 +811,41 @@ public final class MailboxController extends PlayerControllerAi {
 
     private static String creatureLabel(Card c) {
         return c.getName() + " (" + c.getNetPower() + "/" + c.getNetToughness() + ")";
+    }
+
+    /** True iff every entity in {@code opts} is a {@link Card} (id space = card ids). */
+    private static boolean allCards(List<? extends GameEntity> opts) {
+        for (GameEntity e : opts) {
+            if (!(e instanceof Card)) {
+                return false;
+            }
+        }
+        return !opts.isEmpty();
+    }
+
+    /** A decision label for an entity option (card gets name + P/T + types). */
+    private static String entityLabel(GameEntity e) {
+        return e instanceof Card ? cardChoiceLabel((Card) e) : e.getName();
+    }
+
+    /** The option {@code type} hint for an entity (card type line, or PLAYER). */
+    private static String entityType(GameEntity e) {
+        if (e instanceof Card) {
+            return typeHint((Card) e);
+        }
+        return e instanceof Player ? "PLAYER" : "ENTITY";
+    }
+
+    /** Rich card label for a choose/tutor option: name, P/T if a creature, and type line. */
+    private static String cardChoiceLabel(Card c) {
+        StringBuilder sb = new StringBuilder(c.getName());
+        if (c.isCreature()) {
+            sb.append(" (").append(c.getNetPower()).append('/').append(c.getNetToughness()).append(')');
+        }
+        String t = c.getType() != null ? c.getType().toString() : null;
+        if (t != null && !t.isEmpty()) {
+            sb.append(" [").append(t).append(']');
+        }
+        return sb.toString();
     }
 }

@@ -33,25 +33,35 @@ arena uses.
 | File | Role |
 |---|---|
 | `MailboxProtocol.java` | The file bus. Per-seat `inbox/`+`outbox/`; atomic writes (temp+rename); poll for the response; timeout → `null` (caller falls back to stock). Request/response wire records. No Forge imports — pure transport. |
-| `MailboxController.java` | `extends forge.ai.PlayerControllerAi`. Overrides `chooseSpellAbilityToPlay`, `mulliganKeepHand`, `declareAttackers`, `declareBlockers`. Serializes a hidden-info-safe state and exchanges it over the bus. **Every override times out to `super` (stock AI)** so a silent/slow brain never hangs the game. |
+| `MailboxController.java` | `extends forge.ai.PlayerControllerAi`. Overrides the top-level decisions (`chooseSpellAbilityToPlay`, `mulliganKeepHand`, `declareAttackers`, `declareBlockers`) **plus high-value sub-choices** (`chooseSingleEntityForEffect`, `chooseEntitiesForEffect`, `chooseModeForAbility`, `chooseSingleCardForZoneChange`). Serializes a hidden-info-safe state and exchanges it over the bus. **Every override times out to `super` (stock AI)** so a silent/slow brain never hangs the game. |
 | `MailboxLobbyPlayer.java` | `extends forge.ai.LobbyPlayerAi`. Injects the controller via `IGameEntitiesFactory.createIngamePlayer` (the seam both headless and GUI paths converge on — `Game.java`), so a mailbox seat is honored in a GUI game with no engine/GUI patch. |
 | `GuiPilotMatch.java` | `main(...)` launcher: bootstraps the desktop GUI, seats a human at seat 0 and `MailboxLobbyPlayer`s at seats 1–3 over the four decks, and starts the match so the human's `IGuiGame` renders it. |
 
 ### The hybrid control model (important)
 
-The mailbox controller only intercepts the seat's **own main phases** (MAIN1 /
-MAIN2, empty stack) plus **mulligan** and **combat declaration**. **Every other
-priority window — opponents' turns, instant-speed responses, sub-choices
-(targets, modes, copy choices) — falls through to stock `PlayerControllerAi`.**
+The mailbox controller intercepts the seat's **own main phases** (MAIN1 /
+MAIN2, empty stack), **mulligan**, **combat declaration**, and a set of
+**high-value sub-choices** the seat makes while resolving its own effects (copy
+choice, choose-a-permanent, modal/charm modes, tutor/fetch selection). **Every
+other priority window — opponents' turns and instant-speed responses — falls
+through to stock `PlayerControllerAi`.**
 
 Consequences:
 - The agent plays **sorcery-speed strategy**; **stock AI plays all reactive /
   instant-speed windows** (including casting a held-up counterspell on an
   opponent's turn). So "hold up interaction" is a real option — executed at
   *stock* quality, not agent quality.
-- Sub-choices for a chosen spell (which creature to copy, which mode, targets)
-  are made by **stock**, so an agent can't yet execute a line whose value hinges
-  on a sub-choice (e.g. Glasspool Mimic's copy target).
+- **Sub-choices now the agent's:** which creature to copy / choose (Glasspool
+  Mimic, Clone, "choose target creature" resolution effects → `CHOOSE_ENTITY` /
+  `CHOOSE_ENTITIES`), which mode of a charm/modal spell (`CHOOSE_MODE`), and
+  which card a tutor/search fetches (`CHOOSE_CARD`). These are gated narrowly to
+  *genuine* choices (>1 legal option, or an optional single) and, for the entity
+  hooks, to card/permanent options only.
+- **Sub-choices still stock:** normal **spell targeting** (`chooseTargetsFor`
+  mutates the SpellAbility in place — deliberately left on stock), plus all the
+  trivial/forced hooks (`confirmAction`, trigger ordering, mana-color, numbers,
+  yes/no). So a line whose value hinges on a *spell target* (as opposed to an
+  effect's choose/copy/mode/fetch) is still stock's.
 
 ### Fairness
 
@@ -74,7 +84,7 @@ stock AI. The engine deletes both files once the response is read.
 ```json
 {
   "seq": 12, "seat": 3, "turn": 22, "phase": "MAIN1",
-  "decisionType": "CAST_SPELL | MULLIGAN | DECLARE_ATTACKERS | DECLARE_BLOCKERS",
+  "decisionType": "CAST_SPELL | MULLIGAN | DECLARE_ATTACKERS | DECLARE_BLOCKERS | CHOOSE_ENTITY | CHOOSE_ENTITIES | CHOOSE_MODE | CHOOSE_CARD",
   "prompt": "…",
   "state": {
     "seat","turn","phase","life","manaPool","untappedManaSources",
@@ -86,6 +96,8 @@ stock AI. The engine deletes both files once the response is read.
     "opponents":[{"seat","life","poison","creaturePower","battlefield":[ …per-card objects… ]}],
     /* + "defenders":[{id,label,type}] for DECLARE_ATTACKERS */
     /* + "attackers":[{id,label}]       for DECLARE_BLOCKERS  */
+    /* + "min","max" for CHOOSE_ENTITY/CHOOSE_ENTITIES/CHOOSE_MODE/CHOOSE_CARD */
+    /* + "allowRepeat":bool for CHOOSE_MODE; "destination":<zone> for CHOOSE_CARD */
   },
   "options": [ {"id":0,"label":"Pass (do nothing)","cost":null,"type":"PASS"}, … ]
 }
@@ -130,10 +142,21 @@ and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists
 - `MULLIGAN` → `{"keep": true|false}`
 - `DECLARE_ATTACKERS` → `{"attackers":[{"attacker":<cardId>,"defender":<entityId>}, …]}` (`[]` = no attack)
 - `DECLARE_BLOCKERS` → `{"blocks":[{"blocker":<cardId>,"attacker":<cardId>}, …]}` (`[]` = no blocks)
+- `CHOOSE_ENTITY` → `{"chosenId": <cardId>}` — the copy/choose target. When the
+  choice is optional an extra `{"id":0,"label":"Choose none","type":"NONE"}`
+  option is offered; `{"chosenId":0}` = choose none.
+- `CHOOSE_ENTITIES` → `{"chosen":[<cardId>, …]}` — a subset satisfying the
+  request's `min`/`max`, no duplicates.
+- `CHOOSE_MODE` → `{"chosen":[<modeIndex>, …]}` — mode option ids are **indices**
+  into `options`; must satisfy `min`/`max`; may repeat an index only when
+  `allowRepeat` is true.
+- `CHOOSE_CARD` → `{"chosenId": <cardId>}` — the tutored/searched card (id `0` =
+  choose none, offered only when optional).
 
-Malformed / unknown ids fall back to stock. Trivial windows (no castable
-ability / no eligible attacker / no eligible blocker) are **not** sent — they
-auto-pass to stock ("Lever 2", already implemented in the controller gates).
+Malformed / unknown ids / wrong-count / illegal choices fall back to stock
+(never partially applied). Trivial windows (no castable ability / no eligible
+attacker or blocker; a forced single sub-choice; a non-card entity option) are
+**not** sent — they auto-pass to stock ("Lever 2", the controller gates).
 
 ## Running it
 
@@ -160,7 +183,11 @@ request to the right agent, which writes the response file.
 1. **No instant-speed windows for the agent.** Reactive plays (counters, tricks,
    response-blocks) are made by *stock* AI, not the agent — interaction happens,
    but at stock quality.
-2. **Sub-choices go to stock** (copy targets, modes, targeting) — see hybrid model.
+2. **Some sub-choices go to stock.** The agent now makes copy/choose, modal, and
+   tutor-fetch sub-choices (`CHOOSE_ENTITY`/`CHOOSE_ENTITIES`/`CHOOSE_MODE`/
+   `CHOOSE_CARD`), but **normal spell targeting is still stock** (`chooseTargetsFor`
+   mutates the SpellAbility in place and is deliberately not intercepted) — see
+   hybrid model.
 3. **Narration is unreliable.** Agents sometimes report plays that didn't happen;
    trust the board (`arena-status.py` / the request state), not the agent's prose.
 4. **No state feed during the human's turn** (the dashboard reads a pending
@@ -186,7 +213,9 @@ request to the right agent, which writes the response file.
   request each time.
 
 **Track 3 — deeper capability**
-- Sub-choice mailboxing (targets, modes, copy choices).
+- ✅ Sub-choice mailboxing (copy/choose, modes, tutor fetch → `CHOOSE_ENTITY`/
+  `CHOOSE_ENTITIES`/`CHOOSE_MODE`/`CHOOSE_CARD`). Remaining: normal spell
+  targeting (`chooseTargetsFor`).
 - v2 reactive windows: mailbox instant-speed priority so agents make counters/
   tricks/response-blocks at agent quality.
 - Teacher→student: feed caught misplays into both the agent briefs and the
