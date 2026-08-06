@@ -65,6 +65,9 @@ public final class SelvalaManaLoopRunner {
     private final Game game;
     private final Player player;
     private final ComboPilot pilot;
+    /** Steering hook for the bounce_recast refresh mode (may be null when the
+     * program declares no refresh — legacy untap-sequence loops never need it). */
+    private final ComboAwareLobbyPlayer.ComboAwareController controller;
     private final int seat;
     private final String comboId;
     private final JsonNode program;
@@ -77,7 +80,32 @@ public final class SelvalaManaLoopRunner {
     private final int yieldConstant;
     private final int cycleCost;
     private final int minNet;
+    /** POWER_THRESHOLD: yield_constant only while greatest own power >= this
+     * (a conditional tap like Fanatic of Rhonas's Ferocious 4-yield); 0 = unused. */
+    private final int powerThreshold;
+    /** Flat per-tap surplus a static enabler adds on top of the model's read
+     * (Overgrowth on Cradle: +{G}{G} per tap-for-mana). Guarded by the
+     * program's own attached-precondition; 0 = unused. */
+    private final int yieldBonus;
+    /** pre-float enabler (e.g. Omnath, Locus of Mana): while this card is on the
+     * battlefield and the POWER-scaling entry yield is below the bar, float green
+     * from external sources first — the floated pool grows the enabler's power,
+     * which IS the next yield read. Null = no pre-float. */
+    private final String preFloatEnabler;
     private final List<JsonNode> untapSequence = new ArrayList<>();
+    /** bounce_recast refresh (loop.refresh): the producer is re-readied by an
+     * activated bounce (Temur Sabertooth {1}{G}, steered to the producer) plus a
+     * recast from hand — the deck's loop when no untapper equipment is online.
+     * Needs a haste enabler among the program's preconditions (the recast body
+     * re-enters sick otherwise). Null bounce card = classic untap mode. */
+    private final String refreshBounceCard;
+    private final String refreshBounceCost;
+    /** loop.prelude: abilities activated ONCE before the entry-yield read —
+     * Destiny Spinner animating Gaea's Cradle for Staff's creature-only untap,
+     * Shifting Woodland copying a graveyard Dreadnought before Selvala's X read.
+     * Unpayable/unresolvable prelude = quiet defer (the state isn't there yet). */
+    private final List<JsonNode> preludeSteps = new ArrayList<>();
+    private int preludeIdx;
 
     private final int libraryReserve;
 
@@ -94,14 +122,30 @@ public final class SelvalaManaLoopRunner {
     private int settleWait;
     /** untap-fixpoint windows spent readying a board stock pre-tapped. */
     private int normalizeAttempts;
+    /** pre-float windows spent growing the enabler before entry (bounded). */
+    private int preFloatAttempts;
+    /** refresh mode: true when the in-flight bounce+recast follows a measured
+     * tap (arm the per-cycle measure at recast); false during normalization. */
+    private boolean refreshArmed;
     /** greatest power at THIS cycle's tap — the X Selvala actually produced. */
     private int xAtCycleTap = -1;
 
     // sink
     private boolean pendingOutlet;
     private int permanentsAtOutlet = -1;
+    private int powerAtOutlet = -1;
     private String outletCard;
+    private String outletKind;
     private int outletX;
+    /** DIG rung: windows spent converting banked pool into CARDS when no
+     * outlet is castable (RotW draw-X off the pumped producer, Staff {5} draw,
+     * Nylea's {2}{G} dig) — then the ladder is retried the same turn. Bounded. */
+    private int digAttempts;
+    /** Two-stage bank: 0 = fetch-sized target (an X-fetch converts at ~X=12),
+     * 1 = Wave-sized (library-reserve). Stage 0 fails through dig first; only
+     * when digs are dry and the pool is still sub-Wave does the loop resume
+     * banking toward the flip. */
+    private int bankStage;
     /**
      * PR (#96, deck-aware outlet): the DECK's own outlets, read from the
      * program's {@code sink.outlets} ([{card, kind, min_x}]). Empty => the
@@ -122,9 +166,15 @@ public final class SelvalaManaLoopRunner {
     private int winPlanPumps;
 
     SelvalaManaLoopRunner(Game game, Player player, ComboPilot pilot, int seat, String programPath) {
+        this(game, player, pilot, null, seat, programPath);
+    }
+
+    SelvalaManaLoopRunner(Game game, Player player, ComboPilot pilot,
+            ComboAwareLobbyPlayer.ComboAwareController controller, int seat, String programPath) {
         this.game = game;
         this.player = player;
         this.pilot = pilot;
+        this.controller = controller;
         this.seat = seat;
         JsonNode p;
         try {
@@ -145,9 +195,22 @@ public final class SelvalaManaLoopRunner {
         this.yieldConstant = loop != null ? loop.path("yield_constant").asInt(0) : 0;
         this.cycleCost = loop != null ? loop.path("cycle_cost").asInt(5) : 5;
         this.minNet = loop != null ? loop.path("min_net").asInt(1) : 1;
+        this.powerThreshold = loop != null ? loop.path("power_threshold").asInt(0) : 0;
+        this.yieldBonus = loop != null ? loop.path("yield_bonus").asInt(0) : 0;
+        String pfe = loop != null ? loop.path("pre_float").path("enabler").asText("") : "";
+        this.preFloatEnabler = pfe.isEmpty() ? null : pfe;
+        JsonNode refresh = loop != null ? loop.path("refresh") : null;
+        String rbc = refresh != null && "bounce_recast".equals(refresh.path("mode").asText(""))
+                ? refresh.path("bounce_outlet").path("card").asText("") : "";
+        this.refreshBounceCard = rbc.isEmpty() ? null : rbc;
+        this.refreshBounceCost = refresh != null
+                ? refresh.path("bounce_outlet").path("cost").asText("{1}{G}") : "{1}{G}";
         if (loop != null) {
             for (JsonNode step : loop.path("untap_sequence")) {
                 untapSequence.add(step);
+            }
+            for (JsonNode step : loop.path("prelude")) {
+                preludeSteps.add(step);
             }
         }
         // default 35, not 10: the Genesis Wave flip forces ~one draw per
@@ -163,7 +226,9 @@ public final class SelvalaManaLoopRunner {
                 }
             }
         }
-        if (producerCard == null || untapSequence.isEmpty()) {
+        // a refresh-mode program (bounce_recast) legitimately has NO untap
+        // sequence — the bounce+recast IS the re-ready
+        if (producerCard == null || (untapSequence.isEmpty() && refreshBounceCard == null)) {
             finished = true;
             pilot.observe(ArenaEvent.of("program_abort", game.getPhaseHandler().getTurn(), seat)
                     .with("combo", comboId).with("reason", "program_unreadable: " + programPath));
@@ -255,11 +320,65 @@ public final class SelvalaManaLoopRunner {
                 }
             }
         }
+        // PRELUDE — activate the declared abilities once each before the entry
+        // read (Spinner animates Cradle; Woodland copies the graveyard
+        // Dreadnought). One SA per window; an unresolvable/unpayable step means
+        // the state isn't there yet — defer quietly, nothing spent.
+        while (preludeIdx < preludeSteps.size()) {
+            JsonNode pstep = preludeSteps.get(preludeIdx);
+            String pcard = pstep.path("card").asText();
+            String pcost = pstep.path("cost").asText();
+            String ptgt = pstep.path("target").asText(null);
+            SpellAbility act = AbilityResolver.resolve(player, pcard, pcost,
+                    ptgt != null ? List.of(ptgt) : List.of());
+            if (act == null || !forge.ai.ComputerUtilCost.canPayCost(act, player, false)) {
+                if (pstep.path("optional").asBoolean(false)) {
+                    // opportunistic prelude (Woodland copying a graveyard
+                    // Dreadnought): absent state just skips the step — the loop
+                    // is whole without it, only slower to diverge.
+                    preludeIdx++;
+                    continue;
+                }
+                pilot.observe(ArenaEvent.of("program_deferred", turn, seat)
+                        .with("combo", comboId).with("reason", "prelude_unresolvable")
+                        .with("card", pcard).with("resolvable", act != null));
+                finished = true;
+                pilot.programDeferred(comboId);
+                return null;
+            }
+            preludeIdx++;
+            pilot.observe(ArenaEvent.of("line_step", turn, seat)
+                    .with("stage", "PRELUDE").with("combo", comboId)
+                    .with("card", pcard).with("step", preludeIdx));
+            return List.of(act);
+        }
         // entry decision + governor plan
         int x0 = computeYield();
         boolean ramping = "POWER_RAMPING".equals(yieldModel);
         boolean powerScaling = yieldModel.startsWith("POWER");
         int entryNet = x0 - cycleCost;
+        // PRE-FLOAT (#108, Omnath entry): while the declared enabler is on the
+        // battlefield and the entry is short — a non-ramping model below its
+        // bar, or a ramping model facing priming (entryNet <= 0) — float green
+        // from EXTERNAL sources first: the pool grows the enabler
+        // (power = green in pool) and that power IS the next yield read. One
+        // mana ability per window (they resolve instantly, no stack risk);
+        // bounded; falls through to the model's own honest defer when sources
+        // run out before the bar clears.
+        boolean entryShort = ramping ? entryNet <= 0 : entryNet < minNet;
+        if (powerScaling && entryShort && preFloatEnabler != null && preFloatAttempts < 8
+                && AbilityResolver.findBattlefield(player, preFloatEnabler) != null) {
+            SpellAbility floatSa = nextPreFloatSa();
+            if (floatSa != null) {
+                preFloatAttempts++;
+                pilot.observe(ArenaEvent.of("line_step", turn, seat)
+                        .with("stage", "PRE_FLOAT").with("combo", comboId)
+                        .with("enabler", preFloatEnabler)
+                        .with("attempt", preFloatAttempts)
+                        .with("entry_yield", x0));
+                return List.of(floatSa);
+            }
+        }
         if (!ramping && entryNet < minNet) {
             // PR-xi (loop-dispatch timing): a POWER_CONSTANT loop's yield IS the
             // greatest creature power, so a low yield is a WAIT, not a failure —
@@ -321,8 +440,15 @@ public final class SelvalaManaLoopRunner {
             }
         }
         int library = player.getCardsIn(ZoneType.Library).size();
-        // bank enough to force-cast Genesis Wave at X = library - reserve
-        target = Math.max(cycleCost, (library - libraryReserve) + GENESIS_WAVE_TAIL);
+        // TWO-STAGE bank (v1.1 batch finding: 7/7 loops banked toward the
+        // Wave-sized ~49 and fizzled no_outlet_castable): stage 0 banks the
+        // FETCH-sized target — an X-fetch (Finale/GSZ/Invasion) converts at
+        // X~12, four cycles earlier and far less interactable. The sink's dig
+        // rung then finds an outlet; only if digs run dry does stage 1 resume
+        // banking toward the full flip.
+        int waveTarget = Math.max(cycleCost, (library - libraryReserve) + GENESIS_WAVE_TAIL);
+        int fetchTarget = Math.max(cycleCost, 16);
+        target = Math.min(waveTarget, fetchTarget);
         pilot.observe(ArenaEvent.of("governor_plan", turn, seat)
                 .with("combo", comboId)
                 .with("exit_state", ramping ? "power_ramps_diverges" : "pool_banked_then_outlet")
@@ -409,12 +535,99 @@ public final class SelvalaManaLoopRunner {
         return n;
     }
 
+    /** Activate the refresh bounce (steered to the producer). Returns null when
+     * unresolvable/unpayable — callers defer. Sets cyclePhase = 2. */
+    private SpellAbility refreshBounce(int turn, boolean armedCycle) {
+        SpellAbility act = AbilityResolver.resolve(
+                player, refreshBounceCard, refreshBounceCost, List.of());
+        if (act == null || !forge.ai.ComputerUtilCost.canPayCost(act, player, false)) {
+            return null;
+        }
+        if (controller != null) {
+            controller.setPendingRecurBounce(producerCard); // steer the hidden choice
+        }
+        refreshArmed = armedCycle;
+        cyclePhase = 2;
+        return act;
+    }
+
+    /** Recast the bounced producer from hand (no commander tax — it went to
+     * HAND, not the command zone). Arms the per-cycle measure only after a
+     * real tap (refreshArmed); a normalization recast is unmeasured priming. */
+    private List<SpellAbility> refreshRecast(int turn) {
+        SpellAbility cast = AbilityResolver.resolveCast(player, producerCard);
+        if (cast == null) {
+            String zone = "GONE";
+            for (ZoneType zt : List.of(ZoneType.Hand, ZoneType.Command,
+                    ZoneType.Battlefield, ZoneType.Graveyard, ZoneType.Library, ZoneType.Exile)) {
+                for (Card c : player.getCardsIn(zt)) {
+                    if (producerCard.equals(c.getName())) {
+                        zone = zt.name();
+                        break;
+                    }
+                }
+                if (!"GONE".equals(zone)) {
+                    break;
+                }
+            }
+            pilot.observe(ArenaEvent.of("program_deferred", turn, seat)
+                    .with("combo", comboId).with("iterations", iterations)
+                    .with("producer_zone", zone)
+                    .with("reason", "refresh_recast_unresolvable"));
+            finished = true;
+            pilot.programDeferred(comboId);
+            return null;
+        }
+        cyclePhase = 0;
+        if (refreshArmed) {
+            pendingMeasure = true;
+            refreshArmed = false;
+        }
+        return List.of(cast);
+    }
+
+    /** The next GREEN mana ability to pre-float from: an untapped external
+     * source (same filter as {@link #externalUntappedSources}) whose ability
+     * produces G — only green grows the enabler (Omnath's UnspentMana static is
+     * ManaType$ Green) and only green survives the phase under it. Null when
+     * no such source remains. */
+    private SpellAbility nextPreFloatSa() {
+        Card producer = AbilityResolver.findBattlefield(player, producerCard);
+        for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+            if (c == producer || c.isTapped() || c.getManaAbilities().isEmpty()
+                    || (c.isCreature() && c.hasSickness())
+                    || (preFloatEnabler != null && preFloatEnabler.equals(c.getName()))) {
+                continue;
+            }
+            for (SpellAbility ma : c.getManaAbilities()) {
+                if (ma.hasParam("RestrictValid")) {
+                    continue;
+                }
+                String produced = ma.getParamOrDefault("Produced", "");
+                if (!produced.contains("G") && !produced.contains("Any")
+                        && !produced.contains("Combo")) {
+                    continue;
+                }
+                ma.setActivatingPlayer(player);
+                if (forge.ai.ComputerUtilCost.canPayCost(ma, player, false)) {
+                    return ma;
+                }
+            }
+        }
+        return null;
+    }
+
     // --- LOOP ------------------------------------------------------------
 
     private List<SpellAbility> loop(int turn) {
         int pool = player.getManaPool().totalMana();
         Card producer = AbilityResolver.findBattlefield(player, producerCard);
         if (producer == null) {
+            // refresh mode legitimately has the producer IN HAND between the
+            // bounce and the recast (cyclePhase 2) — everywhere else, gone = lost
+            if (refreshBounceCard != null && cyclePhase == 2) {
+                return refreshRecast(turn);
+            }
             return abort(turn, "piece_lost: '" + producerCard + "' mid-loop");
         }
 
@@ -447,7 +660,11 @@ public final class SelvalaManaLoopRunner {
                     .with("own_life", player.getLife()));
         }
 
-        if (pool >= target) {
+        // SINK only at a cycle BOUNDARY: with the fetch-sized target the pool
+        // routinely crosses target MID-cycle (right after the tap), and a sink
+        // engagement there (a Staff dig, an outlet) spends the very pool the
+        // open cycle's measure expects — a false cycle_incomplete.
+        if (cyclePhase == 0 && !pendingMeasure && pool >= target) {
             state = State.SINK;
             return sink(turn);
         }
@@ -468,10 +685,24 @@ public final class SelvalaManaLoopRunner {
             // OTHER mana (lands) — the producer is tapped, so the pool is empty
             // until the first normal tap.
             if (!loopReady(producer)) {
-                if (normalizeAttempts >= untapSequence.size() * 2 + 3) {
+                int normalizeCap = refreshBounceCard != null ? 6 : untapSequence.size() * 2 + 3;
+                if (normalizeAttempts >= normalizeCap) {
                     return abort(turn, "producer_stuck_tapped: board not ready after "
                             + normalizeAttempts + " untap attempts (producer "
                             + (producer.isTapped() ? "TAPPED" : "untapped") + ")");
+                }
+                if (refreshBounceCard != null) {
+                    // refresh normalization: no untappers exist — the bounce+recast
+                    // itself is the only re-ready. Unmeasured priming (the tap never
+                    // happened), paid from external mana, bounded by the cap.
+                    SpellAbility b = refreshBounce(turn, false);
+                    if (b == null) {
+                        finished = true;
+                        pilot.programDeferred(comboId);
+                        return null;
+                    }
+                    normalizeAttempts++;
+                    return List.of(b);
                 }
                 SpellAbility untap = firstReadyingUntap();
                 if (untap == null) {
@@ -531,6 +762,23 @@ public final class SelvalaManaLoopRunner {
             return abort(turn, "producer_tap_failed: '" + producerCard
                     + "' not tapped after its activation (blocked?)");
         }
+        // refresh mode: phase 1 = bounce (steered to the producer), phase 2 =
+        // recast — replaces the untap sequence entirely.
+        if (refreshBounceCard != null) {
+            if (cyclePhase == 1) {
+                SpellAbility b = refreshBounce(turn, true);
+                if (b == null) {
+                    pilot.observe(ArenaEvent.of("program_deferred", turn, seat)
+                            .with("combo", comboId).with("iterations", iterations)
+                            .with("pool", pool).with("reason", "refresh_bounce_unpayable"));
+                    finished = true;
+                    pilot.programDeferred(comboId);
+                    return null;
+                }
+                return List.of(b);
+            }
+            return refreshRecast(turn);
+        }
         JsonNode step = untapSequence.get(cyclePhase - 1);
         String stepCard = step.path("card").asText();
         String cost = step.path("cost").asText();
@@ -556,18 +804,27 @@ public final class SelvalaManaLoopRunner {
 
     private List<SpellAbility> sink(int turn) {
         if (pendingOutlet) {
-            // MEASURED outlet: the board flipped (permanents jumped) and the
-            // library dropped to about the reserve — Genesis Wave resolved as
-            // designed. The game is won downstream by the flooded board.
+            // MEASURED outlet, kind-aware: permanent-class outlets (Wave,
+            // fetches, X-bodies) must JUMP the permanent count; POWER-class
+            // outlets (x_land: Lair becomes an X/X; monstrosity: X counters)
+            // add no permanent — they must jump our total creature power by a
+            // meaningful share of the announced X.
             int permanentsNow = player.getCardsIn(ZoneType.Battlefield).size();
             int libraryNow = player.getCardsIn(ZoneType.Library).size();
-            if (permanentsNow > permanentsAtOutlet) {
+            boolean powerClass = "x_land".equals(outletKind) || "monstrosity".equals(outletKind);
+            int powerNow = sumOwnPower();
+            boolean landed = powerClass
+                    ? powerNow >= powerAtOutlet + Math.max(1, outletX / 2)
+                    : permanentsNow > permanentsAtOutlet;
+            if (landed) {
                 finished = true;
                 pilot.observe(ArenaEvent.of("outlet_fired", turn, seat)
                         .with("combo", comboId).with("outlet", outletCard)
                         .with("x", outletX)
+                        .with("kind", outletKind == null ? "hand_cast" : outletKind)
                         .with("permanents_before", permanentsAtOutlet)
                         .with("permanents_after", permanentsNow)
+                        .with("power_after", powerNow)
                         .with("library_after", libraryNow));
                 pilot.observe(ArenaEvent.of("program_complete", turn, seat)
                         .with("combo", comboId).with("iterations", iterations)
@@ -598,21 +855,129 @@ public final class SelvalaManaLoopRunner {
 
         SpellAbility outlet = chooseOutlet();
         if (outlet == null) {
-            // banked but no outlet reachable — hand back rather than stall;
-            // the pool is spent by stock's own windows the same phase
+            // DIG rung (v1.1 batch finding — 7/7 banked loops fizzled here):
+            // the bank is up but no outlet is in hand. Convert surplus pool
+            // into CARDS (RotW reads the pumped producer's power; Staff/Nylea
+            // dig from the board) and retry the ladder THIS turn. Bounded;
+            // every dig keeps an outlet-sized floor in the pool.
+            if (digAttempts < 12) {
+                SpellAbility dig = nextDigSa();
+                if (dig != null) {
+                    digAttempts++;
+                    pilot.observe(ArenaEvent.of("line_step", turn, seat)
+                            .with("stage", "OUTLET_DIG").with("combo", comboId)
+                            .with("attempt", digAttempts)
+                            .with("pool", player.getManaPool().totalMana()));
+                    return List.of(dig);
+                }
+            }
+            // digs dry and still sub-Wave: RESUME BANKING toward the flip
+            // (stage 1) instead of stranding the bank — the loop is still
+            // online and the target only ever escalates once.
+            int lib = player.getCardsIn(ZoneType.Library).size();
+            int waveTarget = Math.max(cycleCost, (lib - libraryReserve) + GENESIS_WAVE_TAIL);
+            int poolNow = player.getManaPool().totalMana();
+            if (bankStage == 0 && poolNow < waveTarget) {
+                bankStage = 1;
+                target = waveTarget;
+                state = State.LOOP;
+                pilot.observe(ArenaEvent.of("line_step", turn, seat)
+                        .with("stage", "BANK_STAGE2").with("combo", comboId)
+                        .with("pool", poolNow).with("need", waveTarget));
+                // CONTINUE IN THIS WINDOW: a null return here passes priority
+                // with an empty stack — all players pass, the PHASE ends, and
+                // the banked pool EMPTIES (CR 500.5; the digest's checklist
+                // item 2). The tail-call keeps an action in flight.
+                return loop(turn);
+            }
+            // SMASH: the loop's pumps (until end of turn) may have built a
+            // combat-lethal body — the BIGGEST of our creatures, not just this
+            // loop's producer (a prior loop's 100+ power Fanatic counts). A
+            // 21+ commander kills via CR 903.10a; ANY body at or past the
+            // lowest opponent life kills by ordinary damage. Arm the matching
+            // combat route before handing back.
+            Card best = null;
+            for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+                if (c.isCreature() && (best == null || c.getNetPower() > best.getNetPower())) {
+                    best = c;
+                }
+            }
+            int minOppLife = Integer.MAX_VALUE;
+            for (forge.game.player.Player other : game.getPlayers()) {
+                if (other != player && !other.hasLost()) {
+                    minOppLife = Math.min(minOppLife, other.getLife());
+                }
+            }
+            if (best != null && minOppLife != Integer.MAX_VALUE) {
+                boolean cmdKill = best.isCommander() && best.getNetPower() >= 21;
+                boolean lifeKill = best.getNetPower() >= minOppLife;
+                if (cmdKill || lifeKill) {
+                    pilot.armSmash(cmdKill ? "COMMANDER_DMG_SEQUENCE" : "SPREAD_COMBAT");
+                    pilot.observe(ArenaEvent.of("line_step", turn, seat)
+                            .with("stage", "COMMANDER_SMASH").with("combo", comboId)
+                            .with("body", best.getName())
+                            .with("power", best.getNetPower())
+                            .with("min_opp_life", minOppLife)
+                            .with("route", cmdKill ? "COMMANDER_DMG_SEQUENCE" : "SPREAD_COMBAT"));
+                }
+            }
             pilot.observe(ArenaEvent.of("program_deferred", turn, seat)
-                    .with("combo", comboId).with("reason", "no_outlet_castable"));
+                    .with("combo", comboId).with("reason", "no_outlet_castable")
+                    .with("digs", digAttempts).with("pool", poolNow));
             finished = true;
             pilot.programDeferred(comboId);
             return null;
         }
         permanentsAtOutlet = player.getCardsIn(ZoneType.Battlefield).size();
+        powerAtOutlet = sumOwnPower();
         settleWait = 0;
         pendingOutlet = true;
         pilot.observe(ArenaEvent.of("outlet_cast", turn, seat)
                 .with("combo", comboId).with("outlet", outletCard).with("x", outletX)
+                .with("kind", outletKind == null ? "hand_cast" : outletKind)
                 .with("permanents_before", permanentsAtOutlet));
         return List.of(outlet);
+    }
+
+    /** The next dig action, ladder order: Return of the Wildspeaker from hand
+     * (draw X = greatest non-Human power — the loop's pumped producer), then
+     * Staff of Domination {5},{T} draw, then Nylea, Keen-Eyed's {2}{G}
+     * reveal-dig (both board-resident). Each keeps an outlet floor of ~12 in
+     * the pool; null when nothing is payable (a tapped Staff prices out via
+     * canPayCost and falls through to Nylea). */
+    private SpellAbility nextDigSa() {
+        int pool = player.getManaPool().totalMana();
+        if (pool >= 3 + 12) {
+            SpellAbility rotw = AbilityResolver.resolveCast(player, "Return of the Wildspeaker");
+            if (rotw != null) {
+                return rotw;
+            }
+        }
+        if (pool >= 5 + 12) {
+            SpellAbility staff = AbilityResolver.resolve(
+                    player, "Staff of Domination", "{5}", List.of());
+            if (staff != null && forge.ai.ComputerUtilCost.canPayCost(staff, player, false)) {
+                return staff;
+            }
+        }
+        if (pool >= 3 + 12) {
+            SpellAbility nylea = AbilityResolver.resolve(
+                    player, "Nylea, Keen-Eyed", "{2}{G}", List.of());
+            if (nylea != null && forge.ai.ComputerUtilCost.canPayCost(nylea, player, false)) {
+                return nylea;
+            }
+        }
+        return null;
+    }
+
+    private int sumOwnPower() {
+        int sum = 0;
+        for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+            if (c.isCreature()) {
+                sum += Math.max(0, c.getNetPower());
+            }
+        }
+        return sum;
     }
 
     // --- GOD WIN-PLAN (Rhonas/Nylea flood-pump) -------------------------
@@ -820,6 +1185,7 @@ public final class SelvalaManaLoopRunner {
     private SpellAbility chooseOutlet() {
         int library = player.getCardsIn(ZoneType.Library).size();
         int pool = player.getManaPool().totalMana();
+        outletKind = null; // permanent-class unless a kind-setting rung says otherwise
         // DECK-AWARE (#96): if the program declares this deck's outlets, try
         // them in order — each deck brings its own X-outlets / overruns.
         // resolveCast gates deck-presence, so an outlet the deck lacks is
@@ -936,6 +1302,49 @@ public final class SelvalaManaLoopRunner {
                 }
                 return sa;
             }
+            case "x_land": {
+                // battlefield-resident X-outlet (Lair of the Hydra {X}{G}):
+                // an activated ability on OUR land — no card in hand needed.
+                int x = pool - 1;
+                if (x < spec.minX()) {
+                    return null;
+                }
+                SpellAbility sa = AbilityResolver.resolve(player, spec.card(), "{X}", List.of());
+                if (sa == null || sa.getPayCosts() == null
+                        || !sa.getPayCosts().hasXInAnyCostPart()) {
+                    return null;
+                }
+                sa.setXManaCostPaid(x);
+                if (!forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                    return null;
+                }
+                outletCard = spec.card();
+                outletX = x;
+                outletKind = spec.kind();
+                return sa;
+            }
+            case "monstrosity": {
+                // Polukranos-class {X}{X}{G} monstrosity: X counters on the
+                // body + X fight damage divided among opponent creatures — a
+                // board-resident sink that is also a sweep.
+                int x = (pool - 1) / 2;
+                if (x < spec.minX()) {
+                    return null;
+                }
+                SpellAbility sa = AbilityResolver.resolve(player, spec.card(), "{X}{X}", List.of());
+                if (sa == null || sa.getPayCosts() == null
+                        || !sa.getPayCosts().hasXInAnyCostPart()) {
+                    return null;
+                }
+                sa.setXManaCostPaid(x);
+                if (!forge.ai.ComputerUtilCost.canPayCost(sa, player, false)) {
+                    return null;
+                }
+                outletCard = spec.card();
+                outletX = x;
+                outletKind = spec.kind();
+                return sa;
+            }
             case "fetch_swing":
             default: {
                 int x = pool - 2; // {X}{G}{G}-class fetch-and-pump
@@ -961,6 +1370,10 @@ public final class SelvalaManaLoopRunner {
     // --- yield models ----------------------------------------------------
 
     private int computeYield() {
+        return modelYield() + yieldBonus;
+    }
+
+    private int modelYield() {
         switch (yieldModel) {
             case "CONSTANT":
                 return yieldConstant;
@@ -968,10 +1381,22 @@ public final class SelvalaManaLoopRunner {
                 return count(Card::isEnchantment);
             case "CREATURE_COUNT":
                 return count(Card::isCreature);
+            case "DEVOTION_GREEN":
+                // Nykthos: devotion to green = green mana symbols among our
+                // permanents' costs. Shard count is a conservative floor
+                // (pure-hybrid symbols undercounted -> never over-promises).
+                return devotionGreen();
             case "ELF_COUNT":
                 // Wirewood Channeler / Priest of Titania: {T} add mana = Elves.
                 // Count OUR Elves (conservative vs the script's all-Elves count).
                 return count(c -> c.getType().hasCreatureType("Elf"));
+            case "POWER_THRESHOLD":
+                // Conditional constant (Fanatic of Rhonas Ferocious): the full
+                // yield exists only while a creature with power >= threshold is
+                // on our board — Forge's IsPresent gate offers the big tap only
+                // then. Below threshold the yield reads 0, which the POWER-model
+                // wait path turns into a low_power DEFER, never a burned cycle.
+                return greatestPower() >= powerThreshold ? yieldConstant : 0;
             case "POWER_CONSTANT":
             case "POWER_RAMPING":
             default:
@@ -987,6 +1412,21 @@ public final class SelvalaManaLoopRunner {
             }
         }
         return max;
+    }
+
+    private int devotionGreen() {
+        int n = 0;
+        for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+            forge.card.mana.ManaCost mc = c.getManaCost();
+            if (mc != null) {
+                for (forge.card.mana.ManaCostShard shard : mc) {
+                    if (shard.isColor(forge.card.MagicColor.GREEN)) {
+                        n++;
+                    }
+                }
+            }
+        }
+        return n;
     }
 
     private int count(java.util.function.Predicate<Card> is) {

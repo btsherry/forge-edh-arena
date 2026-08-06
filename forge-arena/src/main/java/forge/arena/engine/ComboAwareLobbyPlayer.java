@@ -83,6 +83,15 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         }
 
         private DrillOrder activeDrill;
+        /** v1.1: a steering AiController wrapper served through getAi() — the
+         * COST-payment path (AiCostDecision.visit(CostSacrifice)) resolves its
+         * sacrifice via getAi().chooseSacrificeType, which never consults
+         * choosePermanentsToSacrifice. Stock preference is WORST-creature,
+         * which ate the commander instead of the declared body (the mis-sack
+         * class of bug this pass surfaced). While a runner has armed
+         * pendingSacChoice, the wrapper steers the cost sacrifice to the
+         * declared card; everything else passes through. */
+        private forge.ai.AiController steeringAi;
         /** Phase 11: the running compiled-program interpreter, if any. */
         private ProgramRunner activeProgram;
         /** PR-lambda: the mana-loop interpreter (program_class: mana_loop). */
@@ -100,6 +109,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         private DreadnoughtWindowRunner activeDreadnought;
         /** PR (seedborn_engine): the multi-turn Seedborn mana engine (new shape). */
         private SeedbornEngineRunner activeSeedbornEngine;
+        private TransformSacEngineRunner activeTransformSac;
         /** the creature the active bounce_recur runner wants Sabertooth/Kogla to
          * return this window — steers the hidden ChangeZone choice. */
         private String pendingRecurBounce;
@@ -827,6 +837,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return null;
                 }
             }
+            if (activeTransformSac != null) {
+                List<SpellAbility> step = activeTransformSac.next(turn);
+                if (activeTransformSac.finished()) {
+                    activeTransformSac = null;
+                }
+                if (step != null) {
+                    return step;
+                }
+                if (activeTransformSac != null) {
+                    return null;
+                }
+            }
             if (activeSelvalaLoop != null) {
                 List<SpellAbility> step = activeSelvalaLoop.next(turn);
                 if (activeSelvalaLoop.finished()) {
@@ -938,6 +960,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         && !"selvala_mana_loop".equals(programClass)
                         && !"dreadnought_window".equals(programClass)
                         && !"seedborn_engine".equals(programClass)
+                        && !"transform_sac_engine".equals(programClass)
                         && !"unreadable".equals(programClass)) {
                     // a compiled program whose runner is not built yet ships
                     // FLAGGED: abort loudly, never misroute to ProgramRunner
@@ -985,6 +1008,17 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     }
                     return first;
                 }
+                if ("transform_sac_engine".equals(programClass)) {
+                    // PR (v1.1): the lossless transform-return sac engine
+                    // (Greater Good + Ojer Kaslem — new shape this pass)
+                    activeTransformSac = new TransformSacEngineRunner(getGame(), player, pilot,
+                            this, seatIndex, action.program().programPath());
+                    List<SpellAbility> first = activeTransformSac.next(turn);
+                    if (activeTransformSac.finished()) {
+                        activeTransformSac = null;
+                    }
+                    return first;
+                }
                 if ("cast_bounce".equals(programClass)) {
                     // PR-chi: the Tidespout family's interpreter
                     activeCastBounce = new CastBounceRunner(getGame(), player, pilot,
@@ -1005,9 +1039,11 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                     return first;
                 }
                 if ("selvala_mana_loop".equals(programClass)) {
-                    // PR: the forked variable-yield loop (producer != untapper)
+                    // PR: the forked variable-yield loop (producer != untapper);
+                    // the controller ref serves the bounce_recast refresh mode's
+                    // steered bounce (same hook as bounce_recur).
                     activeSelvalaLoop = new SelvalaManaLoopRunner(getGame(), player, pilot,
-                            seatIndex, action.program().programPath());
+                            this, seatIndex, action.program().programPath());
                     List<SpellAbility> first = activeSelvalaLoop.next(turn);
                     if (activeSelvalaLoop.finished()) {
                         activeSelvalaLoop = null;
@@ -1977,6 +2013,54 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         }
 
         @Override
+        public forge.ai.AiController getAi() {
+            if (steeringAi == null) {
+                steeringAi = new forge.ai.AiController(getPlayer(), getGame()) {
+                    @Override
+                    public forge.game.card.CardCollectionView chooseSacrificeType(
+                            String type, SpellAbility ability, boolean effect, int amount,
+                            forge.game.card.CardCollectionView exclude) {
+                        if (pendingSacChoice != null && amount == 1
+                                && (activeDreadnought != null || activeTransformSac != null)) {
+                            for (forge.game.card.Card c
+                                    : getPlayer().getCardsIn(forge.game.zone.ZoneType.Battlefield)) {
+                                if (c.getName().equals(pendingSacChoice)
+                                        && c.isValid(type.split(";"), getPlayer(),
+                                                ability.getHostCard(), ability)) {
+                                    pendingSacChoice = null; // one-shot
+                                    return new forge.game.card.CardCollection(c);
+                                }
+                            }
+                            pilot.observe(forge.arena.report.ArenaEvent.of("line_step",
+                                    getGame().getPhaseHandler().getTurn(), seatIndex)
+                                    .with("stage", "SAC_STEER_MISS")
+                                    .with("wanted", pendingSacChoice)
+                                    .with("path", "cost"));
+                        }
+                        return super.chooseSacrificeType(type, ability, effect, amount, exclude);
+                    }
+                };
+            }
+            return steeringAi;
+        }
+
+        /** CR 903.9b: while the bounce_recast refresh loop is live on its
+         * commander, DECLINE the "put it into the command zone instead"
+         * replacement — the loop's whole economy is the tax-free HAND recast.
+         * Scoped to the loop's own pieces; every other commander choice stays
+         * stock. */
+        @Override
+        public boolean confirmReplacementEffect(
+                forge.game.replacement.ReplacementEffect replacementEffect,
+                SpellAbility effectSA, forge.game.GameEntity affected, String question) {
+            if (activeSelvalaLoop != null && affected instanceof forge.game.card.Card
+                    && activeSelvalaLoop.isPiece(((forge.game.card.Card) affected).getName())
+                    && question != null && question.toLowerCase().contains("command")) {
+                return false;
+            }
+            return super.confirmReplacementEffect(replacementEffect, effectSA, affected, question);
+        }
+
         public boolean confirmAction(SpellAbility sa,
                 forge.game.player.PlayerActionConfirmMode mode, String message,
                 List<String> options, forge.game.card.Card cardToShow,
@@ -2015,6 +2099,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             // what actually absorbs the forced Henge draws.
             if (activeSelvalaLoop != null && sa != null
                     && sa.getApi() == forge.game.ability.ApiType.Draw) {
+                return false;
+            }
+            // bounce_recast refresh (v1.1): the loop bounces its own COMMANDER
+            // to HAND and recasts her tax-free. CR 903.9b offers the command
+            // zone instead — taking it strands the loop (the hand recast finds
+            // nothing and the next command-zone cast pays tax). While the
+            // refresh loop is live, DECLINE the alt-destination for its
+            // producer; every other commander keeps stock's choice.
+            if (activeSelvalaLoop != null
+                    && mode == forge.game.player.PlayerActionConfirmMode.ChangeZoneToAltDestination
+                    && cardToShow != null
+                    && activeSelvalaLoop.isPiece(cardToShow.getName())) {
                 return false;
             }
             return super.confirmAction(sa, mode, message, options, cardToShow, params);
@@ -2139,7 +2235,8 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
         public forge.game.card.CardCollectionView choosePermanentsToSacrifice(
                 SpellAbility sa, int min, int max,
                 forge.game.card.CardCollectionView validTargets, String message) {
-            if (activeDreadnought != null && pendingSacChoice != null && validTargets != null
+            if ((activeDreadnought != null || activeTransformSac != null)
+                    && pendingSacChoice != null && validTargets != null
                     && max >= 1) {
                 for (forge.game.card.Card c : validTargets) {
                     if (c.getName().equals(pendingSacChoice)) {
@@ -2147,6 +2244,18 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         return new forge.game.card.CardCollection(c);
                     }
                 }
+                // steering MISS: the declared card is not a legal sacrifice
+                // here — record it loudly (the mis-sack class of bug) and let
+                // stock choose rather than pretending we steered.
+                java.util.List<String> names = new java.util.ArrayList<>();
+                for (forge.game.card.Card c : validTargets) {
+                    names.add(c.getName());
+                }
+                pilot.observe(forge.arena.report.ArenaEvent.of("line_step",
+                        getGame().getPhaseHandler().getTurn(), seatIndex)
+                        .with("stage", "SAC_STEER_MISS")
+                        .with("wanted", pendingSacChoice)
+                        .with("valid", String.join("|", names)));
             }
             return super.choosePermanentsToSacrifice(sa, min, max, validTargets, message);
         }
@@ -2162,7 +2271,10 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
             // Witness). The bounce is a choice, not a target, so the AI would
             // otherwise pick whatever it values — the runner sets
             // pendingRecurBounce for exactly one activation; consume it here.
-            if (activeBounceRecur != null && pendingRecurBounce != null && fetchList != null) {
+            // (v1.1: the selvala loop's bounce_recast refresh arms the same
+            // hook — its bounce steers to the loop PRODUCER.)
+            if ((activeBounceRecur != null || activeSelvalaLoop != null)
+                    && pendingRecurBounce != null && fetchList != null) {
                 for (forge.game.card.Card c : fetchList) {
                     if (c.getName().equals(pendingRecurBounce)) {
                         pendingRecurBounce = null; // one-shot

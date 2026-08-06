@@ -215,6 +215,12 @@ public final class ComboPilot {
      */
     private Map<String, Set<String>> programOnBattlefield = Map.of();
     private Map<String, List<String[]>> programAttach = Map.of();
+    /** programs whose loop is entry-gated (loop.power_threshold > 0): they WAIT
+     * for board state and must never outrank an ungated line for shared pieces. */
+    private Set<String> programGated = Set.of();
+    /** programs containing the commander (pieces[].commander) — preferred on
+     * deploy ties: the commander line is always re-castable and never dead. */
+    private Set<String> programCommander = Set.of();
     private Set<String> programHasSetup = Set.of();
     /**
      * PR-nu (power lever): producers of a POWER-scaling mana_loop — a creature
@@ -244,15 +250,25 @@ public final class ComboPilot {
         Map<String, Set<String>> onBattlefield = new HashMap<>();
         Map<String, List<String[]>> attach = new HashMap<>();
         Set<String> hasSetup = new HashSet<>();
+        Set<String> gated = new HashSet<>();
+        Set<String> withCommander = new HashSet<>();
         for (String path : this.programPaths.values()) {
             try {
                 com.fasterxml.jackson.databind.JsonNode program =
                         new com.fasterxml.jackson.databind.ObjectMapper()
                                 .readTree(new java.io.File(path));
+                String gid = program.path("combo_id").asText("");
+                if (program.path("loop").path("power_threshold").asInt(0) > 0
+                        && !gid.isEmpty()) {
+                    gated.add(gid);
+                }
                 for (com.fasterxml.jackson.databind.JsonNode piece : program.path("pieces")) {
                     String card = piece.path("card").asText();
                     if (!card.isEmpty()) {
                         pieces.add(card);
+                    }
+                    if (piece.path("commander").asBoolean(false) && !gid.isEmpty()) {
+                        withCommander.add(gid);
                     }
                 }
                 // assembly preconditions: which pieces must be in play and how
@@ -310,6 +326,29 @@ public final class ComboPilot {
                         outlets.add(outlet);
                     }
                 }
+                // v1.1 iterate-1: the selvala-loop sinks declare their outlets
+                // as primary_outlet/fallback_outlets and (now) the sink.outlets
+                // ladder — the PR-aa tutor boost was blind to all three, so the
+                // pilot never tutored toward Wave/Finale/GSZ while a loop was
+                // deployed (the batch's 7/7 no_outlet_castable fizzle).
+                String primary = program.path("sink").path("primary_outlet").asText("");
+                if (!primary.isEmpty()) {
+                    outlets.add(primary);
+                }
+                for (com.fasterxml.jackson.databind.JsonNode fb
+                        : program.path("sink").path("fallback_outlets")) {
+                    String card = fb.asText("");
+                    if (!card.isEmpty()) {
+                        outlets.add(card);
+                    }
+                }
+                for (com.fasterxml.jackson.databind.JsonNode o
+                        : program.path("sink").path("outlets")) {
+                    String card = o.path("card").asText("");
+                    if (!card.isEmpty()) {
+                        outlets.add(card);
+                    }
+                }
             } catch (Exception unreadable) {
                 // the runner aborts loudly on use; nothing to do here
             }
@@ -321,6 +360,8 @@ public final class ComboPilot {
         this.programOnBattlefield = Map.copyOf(onBattlefield);
         this.programAttach = Map.copyOf(attach);
         this.programHasSetup = Set.copyOf(hasSetup);
+        this.programGated = Set.copyOf(gated);
+        this.programCommander = Set.copyOf(withCommander);
     }
 
     /**
@@ -1265,7 +1306,7 @@ public final class ComboPilot {
         // (status.ready()) but not yet assembled, fewest casts remaining
         ComboTracker.ComboStatus best = null;
         ComboTracker.ComboStatus committed = null;
-        int bestOffBoard = Integer.MAX_VALUE;
+        long bestScore = Long.MAX_VALUE;
         for (ComboTracker.ComboStatus status : snap.statuses()) {
             if (!programPaths.containsKey(status.id())
                     || firedShortcuts.contains(status.id())
@@ -1278,8 +1319,15 @@ public final class ComboPilot {
             }
             int offBoard = (int) programOnBattlefield.getOrDefault(status.id(), Set.of())
                     .stream().filter(p -> !"BATTLEFIELD".equals(status.where().get(p))).count();
-            if (offBoard < bestOffBoard) {
-                bestOffBoard = offBoard;
+            // Rank: (1) entry-gated programs LAST — a threshold loop that can
+            // only WAIT must never steal shared equipment from a live line (the
+            // Fanatic/Mantle regression); (2) fewest pieces off-board; (3) the
+            // commander program on ties — always re-castable, never a dead line.
+            long score = (programGated.contains(status.id()) ? 1_000_000L : 0L)
+                    + offBoard * 2L
+                    + (programCommander.contains(status.id()) ? 0L : 1L);
+            if (score < bestScore) {
+                bestScore = score;
                 best = status;
             }
         }
@@ -1846,11 +1894,21 @@ public final class ComboPilot {
      * FORCED_ATTACK line_step each combat it steers.
      */
     public Optional<CombatOrder> combatOrder(SeatView view) {
-        if (firedShortcuts.isEmpty() || currentRoute == null
-                || !("SPREAD_COMBAT".equals(currentRoute)
-                        || "COMMANDER_DMG_SEQUENCE".equals(currentRoute))) {
+        String route = currentRoute;
+        boolean steer = !firedShortcuts.isEmpty() && route != null
+                && ("SPREAD_COMBAT".equals(route) || "COMMANDER_DMG_SEQUENCE".equals(route));
+        // COMMANDER SMASH (v1.1 iterate-1): a mana loop that fizzled outlet-
+        // less but pumped its commander past 21 power arms this directly —
+        // one connected swing is a kill via CR 903.10a regardless of life
+        // totals, and the pumps last until end of turn. No shortcut needed.
+        if (!steer && smashRoute != null) {
+            steer = true;
+            route = smashRoute;
+        }
+        if (!steer) {
             return Optional.empty();
         }
+        final String steeredRoute = route;
         List<Integer> killOrder = view.opponents().stream()
                 .sorted(java.util.Comparator.comparingInt(SeatView.OpponentView::life))
                 .map(SeatView.OpponentView::seatIndex)
@@ -1860,8 +1918,19 @@ public final class ComboPilot {
         }
         events.accept(ArenaEvent.of("line_step", view.turn(), seat)
                 .with("stage", "FORCED_ATTACK")
+                .with("route", steeredRoute)
                 .with("iteration", 0));
-        return Optional.of(new CombatOrder(currentRoute, killOrder));
+        return Optional.of(new CombatOrder(steeredRoute, killOrder));
+    }
+
+    /** v1.1 iterate-1: armed by a runner that fizzled outlet-less while its
+     * pumps built a combat-lethal body — combat IS the conversion this turn.
+     * COMMANDER_DMG_SEQUENCE for a 21+ commander (CR 903.10a);
+     * SPREAD_COMBAT for any body big enough to kill through a life total. */
+    private String smashRoute;
+
+    public void armSmash(String route) {
+        smashRoute = route;
     }
 
     /**

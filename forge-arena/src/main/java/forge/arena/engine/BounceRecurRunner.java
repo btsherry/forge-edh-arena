@@ -224,6 +224,10 @@ public final class BounceRecurRunner {
             case "opp_creatures":
                 // fewer opponent creatures = MORE progress; negate so it "grows"
                 return -opponentCreatureCount();
+            case "opp_artifacts_enchantments":
+                // Reclamation Sage class: each recast destroys an opposing
+                // artifact/enchantment; fewer = more progress, so negate.
+                return -opponentArtifactEnchantmentCount();
             case "board_counters":
             default:
                 return boardCounters();
@@ -246,6 +250,20 @@ public final class BounceRecurRunner {
             if (other != player && !other.hasLost()) {
                 for (Card c : other.getCardsIn(ZoneType.Battlefield)) {
                     if (c.isCreature()) {
+                        n++;
+                    }
+                }
+            }
+        }
+        return n;
+    }
+
+    private int opponentArtifactEnchantmentCount() {
+        int n = 0;
+        for (Player other : game.getPlayers()) {
+            if (other != player && !other.hasLost()) {
+                for (Card c : other.getCardsIn(ZoneType.Battlefield)) {
+                    if (c.isArtifact() || c.isEnchantment()) {
                         n++;
                     }
                 }
@@ -282,6 +300,8 @@ public final class BounceRecurRunner {
                 return player.getCardsIn(ZoneType.Library).size() <= LIBRARY_FLOOR;
             case "opp_creatures":
                 return opponentCreatureCount() == 0;
+            case "opp_artifacts_enchantments":
+                return opponentArtifactEnchantmentCount() == 0;
             case "board_counters":
             default:
                 return boardIsLethal();
@@ -294,6 +314,8 @@ public final class BounceRecurRunner {
                 return "library_floor";
             case "opp_creatures":
                 return "opponents_cleared";
+            case "opp_artifacts_enchantments":
+                return "opp_artifacts_cleared";
             case "board_counters":
             default:
                 return "board_lethal";

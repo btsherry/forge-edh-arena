@@ -160,6 +160,15 @@ const results = await parallel(SHARDS.map((batch, i) => () =>
       agentType: 'general-purpose', schema: RECORD_SCHEMA })
 )).then(rs => rs.filter(Boolean))
 
+// No silent partials: a dead shard (API error/skip) becomes null and is filtered
+// above — say so LOUDLY and surface it in counts so a partial catalog can never
+// masquerade as a complete run. Recovery = resume with resumeFromRunId (finished
+// shards replay from cache; only dead shards re-run).
+const shardsFailed = SHARDS.length - results.length
+if (shardsFailed > 0) {
+  log(`WARNING: only ${results.length}/${SHARDS.length} shards returned — ${shardsFailed} shard(s) died. PARTIAL catalog; do NOT ship this as the Fable side — resume the run.`)
+}
+
 const c = collect(results)
 const ranked = c.records.slice().sort((a, b) => (b.compile_rank || 0) - (a.compile_rank || 0))
 const capped = ranked.slice(0, CAP)
@@ -181,6 +190,7 @@ return {
     final_capped: capped.length,
     dropped_over_cap,
     shards: SHARDS.length,
+    shards_failed: shardsFailed,
   },
   top_anchors: topAnchors,
   shape_is_new_backlog: shapeIsNew,
