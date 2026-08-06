@@ -14,10 +14,65 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else \
     "/Users/toor/Claude/personal/forge-edh-arena/forge-arena/mailbox"
 DECKS = {0: "Selvala (YOU/human)", 1: "Purphoros", 2: "Giada", 3: "Urza"}
 
+def print_observer_snapshot(path):
+    """Print a dashboard from the continuously-updated public observer snapshot.
+
+    This is written by ObserverSnapshot.java on every game event, so it stays
+    fresh even during the HUMAN's turn (when no mailbox request is pending).
+    It is PUBLIC info only: per-seat life/poison/board + hand COUNT (never
+    contents, for anyone) and the public stack.
+    """
+    try:
+        d = json.load(open(path))
+    except Exception as e:
+        print(f"No pending decision, and observer snapshot unreadable: {e}")
+        return
+    active = d.get("activeSeat")
+    over = " [GAME OVER]" if d.get("gameOver") else ""
+    win = f"  winner: {d['winner']}" if d.get("winner") else ""
+    print("== TABLE  (from observer snapshot) ==")
+    print(f"  turn {d.get('turn')}  |  {d.get('phase','')}  |  "
+          f"active seat {active} [{DECKS.get(active,'?')}]{over}{win}")
+    print()
+    for s in d.get("seats", []):
+        seat = s.get("seat")
+        tag = "  <-- active turn" if seat == active else ""
+        poison = f"  poison {s['poison']}" if s.get("poison") else ""
+        print(f"  seat {seat} [{DECKS.get(seat,'?')}]  life {s.get('life')}  "
+              f"hand {s.get('handSize')} (count)  lib {s.get('librarySize')}"
+              f"{poison}{tag}")
+        board = s.get("battlefield", [])
+        if board:
+            for c in board:
+                pt = ""
+                if "power" in c:
+                    sick = " sick" if c.get("sick") else ""
+                    pt = f" {c['power']}/{c['toughness']}{sick}"
+                flags = " (tapped)" if c.get("tapped") else ""
+                extra = ""
+                if c.get("counters"):
+                    extra += f" counters={c['counters']}"
+                if c.get("auras"):
+                    extra += f" auras={c['auras']}"
+                print(f"       - {c.get('name')}{pt}{flags}{extra}")
+        else:
+            print("       board: (empty)")
+    stack = d.get("stack", [])
+    print()
+    print(f"== STACK ==  {stack if stack else '(empty)'}")
+
+
 reqs = sorted(glob.glob(os.path.join(BASE, "seat-*", "inbox", "req-*.json")))
 if not reqs:
+    obs = os.path.join(BASE, "observer-state.json")
+    if os.path.exists(obs):
+        print("No pending decision in the mailbox (likely the human's turn).")
+        print()
+        print_observer_snapshot(obs)
+        sys.exit(0)
     print("No pending decision in the mailbox.")
     print("=> It's the human's turn (act in the GUI), or the game is between windows.")
+    print("   (No observer-state.json yet — start an interactive mailbox match to populate it.)")
     sys.exit(0)
 
 # Summarize every pending decision; keep the first as the state source.

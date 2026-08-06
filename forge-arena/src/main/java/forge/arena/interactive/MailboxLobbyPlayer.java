@@ -37,6 +37,11 @@ public final class MailboxLobbyPlayer extends LobbyPlayerAi {
     }
 
     private MailboxController controllerFor(Player p) {
+        // Attach the continuously-updated public observer snapshot ONCE per game.
+        // ObserverSnapshot.ensureRegistered is idempotent (guarded by Game
+        // identity), so calling it for every mailbox seat's controller is safe:
+        // only the first call for a given Game actually subscribes.
+        ObserverSnapshot.ensureRegistered(p.getGame(), baseDir);
         return new MailboxController(p.getGame(), p, this,
                 MailboxProtocol.forSeat(baseDir, p.getId()));
     }
