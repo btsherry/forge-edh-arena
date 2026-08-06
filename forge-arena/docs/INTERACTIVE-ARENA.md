@@ -79,15 +79,51 @@ stock AI. The engine deletes both files once the response is read.
   "state": {
     "seat","turn","phase","life","manaPool","untappedManaSources",
     "handSize","handLands","librarySize","ownBoardPower",
-    "battlefield":[…names…],"hand":[…names…],"command":[…],"graveyard":[…],"exile":[…],
+    "battlefield":[ …per-card objects… ],
+    "hand":[ …per-card objects… ],
+    "command":[…names…],"graveyard":[…names…],"exile":[…names…],
     "stack":[…],
-    "opponents":[{"seat","life","poison","creaturePower","battlefield":[…names…]}],
+    "opponents":[{"seat","life","poison","creaturePower","battlefield":[ …per-card objects… ]}],
     /* + "defenders":[{id,label,type}] for DECLARE_ATTACKERS */
     /* + "attackers":[{id,label}]       for DECLARE_BLOCKERS  */
   },
   "options": [ {"id":0,"label":"Pass (do nothing)","cost":null,"type":"PASS"}, … ]
 }
 ```
+
+**Per-card serialization.** `battlefield` (own seat and every opponent) is a list
+of one object *per card* (never deduped by name — two Constructs are two entries),
+built by reading the real (public) `Card` objects. Each entry:
+```json
+{
+  "id": 217, "name": "Grinning Ignus",
+  "power": 2, "toughness": 2, "sick": false,   /* P/T + summoning-sick: creatures only */
+  "types": "Creature Elemental",
+  "tapped": false,
+  "counters": { "P1P1": 2 },                    /* omitted when the card has none */
+  "auras": ["Kenrith's Transformation"],        /* Auras/Equipment attached TO this card; omitted when none */
+  "abilities": [                                  /* OWN battlefield cards only (see below) */
+    { "cost": "R Return this to hand", "desc": "Add {C}{C}{R}.", "producesMana": true }
+  ]
+}
+```
+- `power`/`toughness` use `getNetPower()`/`getNetToughness()`; `sick` is
+  `isSick()`. All present only for creatures.
+- `counters` is a map of counter kind → count (from the card's `Multiset<CounterType>`);
+  the key is omitted entirely when the card has no counters.
+- `auras` lists the names of Auras/Equipment/Fortifications currently attached to
+  the card (its `getAttachedCards()`); omitted when nothing is attached. This is
+  what makes an aura like Kenrith's Transformation visible on the creature it
+  modifies.
+- `abilities` is present **only on the acting seat's own** battlefield cards
+  (opponents' entries omit it to keep the payload lean). It lists that card's
+  **activated** abilities — *including mana abilities* — each as
+  `{cost, desc (≤100 chars), producesMana}`, so a creature's activated mana
+  ability (Grinning Ignus), a ritual, or a counter-gated fetch is visible.
+
+**Own `hand`** is a list of `{name, manaCost, types}` objects (private-to-owner,
+fair). Opponents' hands are **never** serialized — only counts, via `handSize`
+and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists.
 
 **Response** (`resp-<n>.json`), by `decisionType`:
 - `CAST_SPELL` → `{"chosenId": <option id>}` (id `0` = pass)
@@ -124,18 +160,12 @@ request to the right agent, which writes the response file.
 1. **No instant-speed windows for the agent.** Reactive plays (counters, tricks,
    response-blocks) are made by *stock* AI, not the agent — interaction happens,
    but at stock quality.
-2. **Serialization is name-only.** State lists card *names*, not current P/T,
-   counters, tapped/summoning-sick status, attached auras, or activated
-   abilities. Agents are therefore blind to auras/modifications (e.g. a
-   commander turned off by Kenrith's Transformation) and miss non-obvious lines
-   (a creature's activated ability as a mana source — Grinning Ignus; a fetch
-   gated by a spent counter — Scholar of New Horizons).
-3. **Sub-choices go to stock** (copy targets, modes, targeting) — see hybrid model.
-4. **Narration is unreliable.** Agents sometimes report plays that didn't happen;
+2. **Sub-choices go to stock** (copy targets, modes, targeting) — see hybrid model.
+3. **Narration is unreliable.** Agents sometimes report plays that didn't happen;
    trust the board (`arena-status.py` / the request state), not the agent's prose.
-5. **No state feed during the human's turn** (the dashboard reads a pending
+4. **No state feed during the human's turn** (the dashboard reads a pending
    *opponent* request; there is none while the human acts).
-6. **Latency.** Each consulted decision costs an agent resume + think (seconds to
+5. **Latency.** Each consulted decision costs an agent resume + think (seconds to
    minutes on a large model). A per-decision poll from the orchestrator batches a
    whole turn per wake to reduce this.
 
@@ -147,9 +177,9 @@ request to the right agent, which writes the response file.
 - Whole-turn drain (batch a turn per wake) + a file monitor as the cross-phase backstop.
 
 **Track 2 — observability & correctness (highest play-quality value)**
-- Richer serialization: per-card P/T, counters, tapped/sick, attached auras, and
-  activated abilities with their mana output. Directly fixes the blind spots in
-  limitation #2.
+- ✅ Richer serialization: per-card P/T, counters, tapped/sick, attached auras, and
+  activated abilities with their mana output (own battlefield). Fixed the former
+  name-only blind spots.
 - Persistent `game-state.json` snapshot each decision (and during the human's
   turn) so the dashboard/observer is never blind.
 - Anti-confabulation: feed the resulting state back; agents re-derive from the

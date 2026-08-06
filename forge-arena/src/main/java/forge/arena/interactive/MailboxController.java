@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.collect.Multiset;
 
 import forge.LobbyPlayer;
 import forge.ai.ComputerUtilAbility;
@@ -16,8 +17,11 @@ import forge.arena.engine.SeatViews;
 import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.card.Card;
+import forge.game.card.CounterType;
 import forge.game.combat.Combat;
 import forge.game.combat.CombatUtil;
+import forge.game.cost.Cost;
+import forge.game.cost.CostTap;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -76,7 +80,12 @@ public final class MailboxController extends PlayerControllerAi {
         List<SpellAbility> playable = new ArrayList<>();
         for (SpellAbility sa : ComputerUtilAbility.getSpellAbilities(
                 ComputerUtilAbility.getAvailableCards(game, me), me)) {
-            if (sa == null || sa.isManaAbility()) {
+            Card host = sa != null ? sa.getHostCard() : null;
+            // Drop trivial land mana (a plain {T}: add mana) to avoid flooding
+            // options, but KEEP non-trivial mana abilities (nonland sources, or
+            // costs beyond a bare tap — e.g. Grinning Ignus's {R}, Return: add
+            // {C}{C}{R}) so they are selectable strategic lines.
+            if (sa == null || (sa.isManaAbility() && isTrivialLandMana(sa, host))) {
                 continue;
             }
             sa.setActivatingPlayer(me);
@@ -313,8 +322,26 @@ public final class MailboxController extends PlayerControllerAi {
         state.put("handLands", view.handLands());
         state.put("librarySize", view.librarySize());
         state.put("ownBoardPower", view.ownBoardPower());
-        state.put("battlefield", new ArrayList<>(view.cardsIn(SeatView.Zone.BATTLEFIELD)));
-        state.put("hand", new ArrayList<>(view.cardsIn(SeatView.Zone.HAND)));
+        // Rich, per-card serialization. The battlefield is fully public, so we
+        // read the ACTUAL Card objects (not the SeatView name Set) for the
+        // acting seat AND each opponent — one entry per card (no dedupe by name).
+        // Own battlefield cards carry their activated abilities (incl. mana
+        // abilities); opponents' entries stay lean (public mechanical fields).
+        List<Map<String, Object>> ownBattlefield = new ArrayList<>();
+        for (Card c : getPlayer().getCardsIn(ZoneType.Battlefield)) {
+            ownBattlefield.add(cardState(c, true));
+        }
+        state.put("battlefield", ownBattlefield);
+        // Own hand is private-to-owner (fair): per-card name/manaCost/types.
+        List<Map<String, Object>> ownHand = new ArrayList<>();
+        for (Card c : getPlayer().getCardsIn(ZoneType.Hand)) {
+            Map<String, Object> hm = new LinkedHashMap<>();
+            hm.put("name", c.getName());
+            hm.put("manaCost", c.getManaCost() != null ? c.getManaCost().toString() : "");
+            hm.put("types", c.getType() != null ? c.getType().toString() : "");
+            ownHand.add(hm);
+        }
+        state.put("hand", ownHand);
         state.put("command", new ArrayList<>(view.cardsIn(SeatView.Zone.COMMAND)));
         state.put("graveyard", new ArrayList<>(view.cardsIn(SeatView.Zone.GRAVEYARD)));
         state.put("exile", new ArrayList<>(view.cardsIn(SeatView.Zone.EXILE)));
@@ -325,7 +352,16 @@ public final class MailboxController extends PlayerControllerAi {
             o.put("life", ov.life());
             o.put("poison", ov.poison());
             o.put("creaturePower", ov.creaturePower());
-            o.put("battlefield", new ArrayList<>(ov.battlefield()));
+            // Opponent battlefields are PUBLIC — read the real Card objects, but
+            // WITHOUT the verbose per-card abilities list (kept lean).
+            List<Map<String, Object>> oppBattlefield = new ArrayList<>();
+            Player oppPlayer = playerById(ov.seatIndex());
+            if (oppPlayer != null) {
+                for (Card c : oppPlayer.getCardsIn(ZoneType.Battlefield)) {
+                    oppBattlefield.add(cardState(c, false));
+                }
+            }
+            o.put("battlefield", oppBattlefield);
             opps.add(o);
         }
         state.put("opponents", opps);
@@ -346,6 +382,95 @@ public final class MailboxController extends PlayerControllerAi {
             names.add(c.getName());
         }
         return names;
+    }
+
+    /** The game's Player whose id matches {@code id}, or null. */
+    private Player playerById(int id) {
+        for (Player p : getGame().getPlayers()) {
+            if (p.getId() == id) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Per-card mechanical projection of a PUBLIC battlefield card. Fields are
+     * all public information (P/T, type line, tapped/summoning-sick, counters,
+     * and the names of Auras/Equipment attached TO this card). When
+     * {@code includeAbilities} is set (acting seat's OWN cards only), the card's
+     * ACTIVATED abilities are listed too — including mana abilities, so lines
+     * like Grinning Ignus's mana ability are visible.
+     */
+    private static Map<String, Object> cardState(Card c, boolean includeAbilities) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", c.getId());
+        m.put("name", c.getName());
+        if (c.isCreature()) {
+            m.put("power", c.getNetPower());
+            m.put("toughness", c.getNetToughness());
+            m.put("sick", c.isSick());
+        }
+        m.put("types", c.getType() != null ? c.getType().toString() : "");
+        m.put("tapped", c.isTapped());
+        Multiset<CounterType> counters = c.getCounters();
+        if (counters != null && !counters.isEmpty()) {
+            Map<String, Integer> cm = new LinkedHashMap<>();
+            for (Multiset.Entry<CounterType> e : counters.entrySet()) {
+                cm.put(e.getElement().getName(), e.getCount());
+            }
+            m.put("counters", cm);
+        }
+        // Auras/Equipment/Fortifications attached TO this card (what makes an
+        // aura like Kenrith's Transformation visible on the creature it modifies).
+        List<String> attached = new ArrayList<>();
+        for (Card at : c.getAttachedCards()) {
+            attached.add(at.getName());
+        }
+        if (!attached.isEmpty()) {
+            m.put("auras", attached);
+        }
+        if (includeAbilities) {
+            List<Map<String, Object>> abilities = new ArrayList<>();
+            for (SpellAbility sa : c.getSpellAbilities()) {
+                if (sa == null || !sa.isActivatedAbility()) {
+                    continue; // activated abilities only — not spells or triggers
+                }
+                Map<String, Object> am = new LinkedHashMap<>();
+                Cost cost = sa.getPayCosts();
+                am.put("cost", cost != null ? cost.toSimpleString() : "");
+                String desc = sa.getDescription();
+                if (desc == null || desc.isEmpty()) {
+                    desc = sa.getStackDescription();
+                }
+                if (desc == null) {
+                    desc = "";
+                }
+                am.put("desc", desc.length() > 100 ? desc.substring(0, 100) : desc);
+                am.put("producesMana", sa.isManaAbility());
+                abilities.add(am);
+            }
+            m.put("abilities", abilities);
+        }
+        return m;
+    }
+
+    /**
+     * True when {@code sa} is a bare land mana ability — the host is a land AND
+     * the only payment is a tap of that land (e.g. a plain {@code {T}: Add {C}}
+     * Forest). Such trivial land taps are filtered out of the options to avoid
+     * flooding; every other mana ability (nonland source, or a cost that
+     * returns/sacrifices/removes-a-counter) is kept as a selectable option.
+     */
+    private static boolean isTrivialLandMana(SpellAbility sa, Card host) {
+        if (host == null || !host.isLand()) {
+            return false;
+        }
+        Cost cost = sa.getPayCosts();
+        if (cost == null) {
+            return true; // a free land mana source is trivial too
+        }
+        return cost.hasTapCost() && cost.hasOnlySpecificCostType(CostTap.class);
     }
 
     private static List<Map<String, Object>> defenderList(List<GameEntity> defenders) {
