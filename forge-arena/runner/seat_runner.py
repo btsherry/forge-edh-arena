@@ -59,7 +59,7 @@ def main() -> None:
     ap.add_argument("--base", default=str(Path(__file__).resolve().parent.parent / "mailbox"))
     ap.add_argument("--timeout", type=float,
                     default=float(os.environ.get("ARENA_MAILBOX_TIMEOUT", "90")))
-    ap.add_argument("--autopass", default="Giver of Runes,Academy Ruins",
+    ap.add_argument("--autopass", default="Giver of Runes,Mother of Runes,Academy Ruins",
                     help="comma-separated ability-name prefixes auto-passed in REACT")
     ap.add_argument("--echo", action="store_true",
                     help="answer every window with the legal safe default (no model)")

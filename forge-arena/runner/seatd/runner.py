@@ -23,7 +23,7 @@ from . import rules
 from .brain import SeatBrain
 from .protocol import SeatMailbox
 
-DEFAULT_AUTOPASS = ("Giver of Runes", "Academy Ruins")
+DEFAULT_AUTOPASS = ("Giver of Runes", "Mother of Runes", "Academy Ruins")
 
 
 class SeatRunner:
