@@ -118,8 +118,27 @@ public final class MailboxController extends PlayerControllerAi {
                 }
             }
         }
-        if (!ownMainEmpty && !reactive) {
-            return super.chooseSpellAbilityToPlay();
+        // v3 (field note 13): TACTICAL windows — combat steps and end steps,
+        // any player's turn, empty stack. This is where fogs, combat tricks,
+        // saves, and end-step flash live; v2 sent them to stock, which withheld
+        // a game-saving Flare of Fortitude (game 2) and burned a held Silence
+        // at dead timing (game 3). Fires only when a real, affordable, non-mana
+        // action survives the filter below, so instant-less seats never wake.
+        PhaseType ph = game.getPhaseHandler().getPhase();
+        boolean tactical = !ownMainEmpty && !reactive && game.getStack().isEmpty()
+                && (ph == PhaseType.COMBAT_BEGIN
+                    || ph == PhaseType.COMBAT_DECLARE_ATTACKERS
+                    || ph == PhaseType.COMBAT_DECLARE_BLOCKERS
+                    || ph == PhaseType.COMBAT_FIRST_STRIKE_DAMAGE
+                    || ph == PhaseType.COMBAT_DAMAGE
+                    || ph == PhaseType.COMBAT_END
+                    || ph == PhaseType.END_OF_TURN);
+        if (!ownMainEmpty && !reactive && !tactical) {
+            // v3: stock NEVER casts for a mailbox seat anymore. Windows not
+            // worth the brain's time are a clean pass — the brain owns this
+            // hand. (Stock still takes over wholesale on brain timeout, via
+            // the exchange() fallback — that degradation path is unchanged.)
+            return null;
         }
 
         int turn = game.getPhaseHandler().getTurn();
@@ -135,11 +154,11 @@ public final class MailboxController extends PlayerControllerAi {
                 // mana) to avoid flooding options, but KEEP non-trivial mana
                 // abilities (nonland sources, or costs beyond a bare tap — e.g.
                 // Grinning Ignus's {R}, Return: add {C}{C}{R}) as strategic lines.
-                // In a REACTIVE window a mana ability is never a meaningful response
-                // on its own (tapping Sol Ring does not answer a spell), so drop ALL
-                // of them there — this stopped rock/land mana abilities opening empty
-                // "respond?" windows for every seat on ramp spells.
-                if (reactive || isTrivialLandMana(sa, host)) {
+                // In a REACTIVE or TACTICAL window a mana ability is never a
+                // meaningful action on its own (tapping Sol Ring answers nothing),
+                // so drop ALL of them there — this stopped rock/land mana abilities
+                // opening empty "respond?" windows for every seat on ramp spells.
+                if (reactive || tactical || isTrivialLandMana(sa, host)) {
                     continue;
                 }
             }
@@ -151,7 +170,7 @@ public final class MailboxController extends PlayerControllerAi {
                 // affordability for reactive responses so the window only fires when
                 // the seat can truly act. Main-phase keeps canPlay() alone, since a
                 // mana line in the option list may itself enable the cost.
-                boolean affordable = !reactive
+                boolean affordable = !(reactive || tactical)
                         || ComputerUtilCost.canPayCost(sa, me, false);
                 if (sa.canPlay() && affordable) {
                     playable.add(sa);
@@ -161,14 +180,25 @@ public final class MailboxController extends PlayerControllerAi {
             }
         }
         if (playable.isEmpty()) {
-            return super.chooseSpellAbilityToPlay();
+            // Instant windows with nothing real to do are a clean pass (never
+            // stock); an empty own-main keeps the v1 stock fallthrough.
+            return (reactive || tactical) ? null : super.chooseSpellAbilityToPlay();
         }
 
         // Stable id per option this decision; 0 is reserved for "pass".
         String decisionType = ownMainEmpty ? "CAST_SPELL" : "REACT";
-        String prompt = ownMainEmpty
-                ? "Choose a spell/ability to play, or pass."
-                : "Instant-speed window — respond to what's on the stack, or pass.";
+        String prompt;
+        if (ownMainEmpty) {
+            prompt = "Choose a spell/ability to play, or pass.";
+        } else if (tactical) {
+            prompt = (ph == PhaseType.END_OF_TURN)
+                    ? "End-step instant window — act at instant speed, or pass."
+                    : "Combat instant window (" + phaseName(game) + ") — fogs, "
+                      + "tricks, and saves live here; see state.combat for "
+                      + "attackers/blocks. Act at instant speed, or pass.";
+        } else {
+            prompt = "Instant-speed window — respond to what's on the stack, or pass.";
+        }
         MailboxProtocol.Request req = new MailboxProtocol.Request(
                 seatIndex, turn, phaseName(game), decisionType, prompt)
                 .state(buildState(turn))
@@ -678,6 +708,35 @@ public final class MailboxController extends PlayerControllerAi {
             opps.add(o);
         }
         state.put("opponents", opps);
+        // PUBLIC combat context (field note 13): who attacks whom and current
+        // blocks — an instant-speed combat decision (fog, trick, save) is
+        // unjudgeable without the incoming-damage picture.
+        forge.game.combat.Combat combat = getGame().getPhaseHandler().getCombat();
+        if (combat != null && !combat.getAttackers().isEmpty()) {
+            List<Map<String, Object>> combatList = new ArrayList<>();
+            for (Card a : combat.getAttackers()) {
+                Map<String, Object> am = new LinkedHashMap<>();
+                am.put("id", a.getId());
+                am.put("name", a.getName());
+                am.put("power", a.getNetPower());
+                am.put("toughness", a.getNetToughness());
+                forge.game.GameEntity def = combat.getDefenderByAttacker(a);
+                am.put("defender", def != null ? def.getName() : null);
+                List<String> blockedBy = new ArrayList<>();
+                forge.game.card.CardCollection bs = combat.getBlockers(a);
+                if (bs != null) {
+                    for (Card b : bs) {
+                        blockedBy.add(b.getName() + " (" + b.getNetPower() + "/"
+                                + b.getNetToughness() + ")");
+                    }
+                }
+                if (!blockedBy.isEmpty()) {
+                    am.put("blockedBy", blockedBy);
+                }
+                combatList.add(am);
+            }
+            state.put("combat", combatList);
+        }
         // PUBLIC stack contents (source names only), for interaction context
         List<String> stack = new ArrayList<>();
         for (forge.game.spellability.SpellAbilityStackInstance si : getGame().getStack()) {

@@ -52,9 +52,14 @@ MAIN2, empty stack), **mulligan**, **combat declaration**, and a set of
 choice, choose-a-permanent, modal/charm modes, tutor/fetch selection). It also
 intercepts **reactive (instant-speed) windows**: when an OPPONENT has a
 spell/ability on the stack and the seat holds a castable instant-speed response,
-the seat is consulted (`REACT`). Windows not worth the brain's time — empty-stack
-instant priority, the seat's own spell merely resolving, forced passes — still
-fall through to stock `PlayerControllerAi`.
+the seat is consulted (`REACT`) — and, **v3 (fix #13)**: at TACTICAL windows too —
+every combat step and the end step, any player's turn, empty stack — whenever a
+real, affordable, non-mana action exists (fogs, combat tricks, saves, end-step
+flash; the request carries a `state.combat` block with attackers/defenders/
+blocks). **Stock never casts for a mailbox seat anymore**: windows not worth the
+brain's time are clean passes, not stock free-play (stock had withheld a
+game-saving fog and burned a held Silence at dead timing). Stock still takes the
+seat over wholesale on brain timeout — that degradation path is unchanged.
 
 Consequences:
 - The agent plays **sorcery-speed strategy AND its own instant-speed responses**
@@ -421,7 +426,10 @@ Hard-won from two live sessions; read before optimizing anything.
     fog/protection/flash decks play far below strength. Fix: open a mailbox window at
     combat-step priority (at least declare-attackers and declare-blockers/pre-damage)
     when the seat holds a castable instant — same affordability gate as REACT.
-    **This is now the #1 engine-side fix.**
+    **FIXED in v3 (2026-08-07):** tactical windows (all combat steps + end step,
+    any turn, empty stack) now mailbox as `REACT` with a `state.combat` block
+    (attackers/defenders/blocks), and stock's authority to cast for a mailbox
+    seat is fully revoked — un-mailboxed windows return a clean pass.
 14. **Equip/attach targeting fizzles from the mailbox path.** Game 2: Urza's brain
     chose Lightning Greaves' equip {0} three times; no target prompt ever surfaced
     (targeting is `chooseTargetsFor` = stock) and the ability silently fizzled each
