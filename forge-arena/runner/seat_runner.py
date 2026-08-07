@@ -54,20 +54,27 @@ def run_echo(mb: SeatMailbox) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--seat", type=int, required=True)
+    ap.add_argument("--deck", help="deck folder name (required for brain mode)")
+    ap.add_argument("--model", default="sonnet")
     ap.add_argument("--base", default=str(Path(__file__).resolve().parent.parent / "mailbox"))
     ap.add_argument("--timeout", type=float,
                     default=float(os.environ.get("ARENA_MAILBOX_TIMEOUT", "90")))
+    ap.add_argument("--autopass", default="Giver of Runes,Academy Ruins",
+                    help="comma-separated ability-name prefixes auto-passed in REACT")
     ap.add_argument("--echo", action="store_true",
                     help="answer every window with the legal safe default (no model)")
     args = ap.parse_args()
 
-    mb = SeatMailbox(args.seat, args.base, timeout_s=args.timeout)
     if args.echo:
-        run_echo(mb)
-    else:
-        print("brain mode arrives in H3-H4; use --echo for the transport proof",
-              file=sys.stderr)
+        run_echo(SeatMailbox(args.seat, args.base, timeout_s=args.timeout))
+        return
+    if not args.deck:
+        print("--deck is required for brain mode (or use --echo)", file=sys.stderr)
         sys.exit(2)
+    from seatd.runner import SeatRunner
+    autopass = tuple(s.strip() for s in args.autopass.split(",") if s.strip())
+    SeatRunner(args.seat, args.deck, args.base, model=args.model,
+               timeout_s=args.timeout, autopass=autopass).run()
 
 
 if __name__ == "__main__":
