@@ -97,7 +97,7 @@ forge-arena/runner/
                        #   deadline abort, cache-hit assertion, react_autopass fastpath
     runner.py          # loop, turn-plan cache, memoized REACT signatures,
                        #   costs JSONL, heartbeat file
-    edh-rules-card.md
+    seat-brief.md           # role brief; rules corpus loads from docs/research/ (CR-validated pair)
   tests/{fixtures/, test_protocol.py, test_rules.py}
   logs/                # GITIGNORED — contains that seat's private hand
 ```
