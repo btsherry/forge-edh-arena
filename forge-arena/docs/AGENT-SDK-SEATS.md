@@ -10,6 +10,48 @@ judge panel (pragmatist / maintainer / economist). **seatd won 2 of 3 lenses
 other two. Engine side needs **zero changes** — the mailbox contract
 (INTERACTIVE-ARENA.md) is the frozen seam.
 
+## TRANSPORT MANDATE (2026-08-07) — subscription, not API
+
+**Decision (user mandate): seats run on the existing Claude Max (20×) subscription.
+No Anthropic API billing.** This replaces the raw-Messages-API transport below with
+Claude Code's own runtime authenticated via the user's `claude` login:
+
+- `brain.py` speaks to the model through **headless `claude -p` as a subprocess**
+  (NOT the Python `claude-agent-sdk` package — verified 2026-08-07: the SDK
+  package requires `ANTHROPIC_API_KEY`; its subscription restriction targets
+  third-party products offering claude.ai login to their users. Personal
+  programmatic use of one's own login via the CLI's documented headless mode is
+  the same usage class as running Claude Code interactively). Pattern: first
+  call sends the dossier and captures `session_id` from `--output-format json`;
+  each decision is `claude -p <prompt> --resume <session_id> --output-format
+  json --model <seat model>`, tools disabled — the model is a pure
+  text-in/text-out reasoner. The runner still performs every file read/write
+  itself, preserving mechanical fairness (the model can never touch a mailbox
+  path). Release story: each user runs it against their own local `claude`
+  login on their own machine.
+- **Residency** = one persistent session per seat (dossier loaded as the first
+  message; per-decision prompts ride the same session). Claude Code manages
+  prompt caching internally — we lose explicit `cache_control` and the
+  `cache_read > 0` assertion; the observable becomes per-decision latency.
+- **No grammar-enforced JSON** (`output_config` schemas don't exist on this path),
+  so `rules.py` validation + always-legal safe defaults go from belt-and-suspenders
+  to **load-bearing**. H3/H4 checkpoints change accordingly: parse-success rate and
+  latency replace cache/token assertions; `count_tokens` is replaced by the
+  already-measured file sizes.
+- **Cost model**: zero marginal $ per game; the budget is the shared Max rate
+  window (all 3 seats + any concurrent dev session draw from it, 5-hour rolling +
+  weekly caps). Seats default to **Sonnet** to protect the window; Opus boss seat
+  optional. If the window runs dry mid-game, seats degrade to stock via the
+  engine timeout — the game never breaks.
+- **Release upside**: Track 4's audience is subscription holders, not API-key
+  holders. "Point it at your `claude` login" is the more shareable story. The raw
+  Messages-API transport documented below is **retained as an optional config**
+  for future/API users — the module boundary (`brain.py`) is the only file that
+  differs.
+
+Everything else in this plan — architecture, file layout, contract encoding,
+fastpaths, deadline discipline, fairness, build order — stands as written.
+
 ## The verdict in one paragraph
 
 One synchronous Python loop per seat (~700 LOC total across 4 modules). **Raw

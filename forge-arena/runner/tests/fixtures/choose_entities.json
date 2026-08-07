@@ -1,0 +1,160 @@
+{
+ "seq": 16,
+ "seat": 2,
+ "turn": 7,
+ "phase": "MAIN1",
+ "decisionType": "CHOOSE_ENTITIES",
+ "prompt": "Choose up to 2 creatures.",
+ "state": {
+  "seat": 2,
+  "turn": 7,
+  "phase": "MAIN1",
+  "life": 38,
+  "manaPool": "",
+  "untappedManaSources": 3,
+  "handSize": 5,
+  "handLands": 2,
+  "librarySize": 88,
+  "ownBoardPower": 4,
+  "battlefield": [
+   {
+    "id": 291,
+    "name": "Gemstone Caverns",
+    "types": "Legendary Land",
+    "tapped": false,
+    "counters": {
+     "Luck": 1
+    },
+    "abilities": [
+     {
+      "cost": "{T}",
+      "desc": "{T}: Add {C}. If CARDNAME has a luck counter on it, instead add one mana of any color.",
+      "producesMana": true
+     }
+    ]
+   },
+   {
+    "id": 262,
+    "name": "Plains",
+    "types": "Basic Land - Plains",
+    "tapped": false,
+    "abilities": [
+     {
+      "cost": "{T}",
+      "desc": "{T}: Add {W}.",
+      "producesMana": true
+     }
+    ]
+   },
+   {
+    "id": 302,
+    "name": "Giada, Font of Hope",
+    "power": 2,
+    "toughness": 2,
+    "sick": false,
+    "types": "Legendary Creature - Angel",
+    "tapped": false,
+    "abilities": [
+     {
+      "cost": "{T}",
+      "desc": "{T}: Add {W}. Spend this mana only to cast an Angel spell.",
+      "producesMana": true
+     }
+    ]
+   }
+  ],
+  "hand": [
+   {
+    "name": "Lyra Dawnbringer",
+    "manaCost": "{3}{W}{W}",
+    "types": "Legendary Creature - Angel"
+   },
+   {
+    "name": "Generous Gift",
+    "manaCost": "{2}{W}",
+    "types": "Instant"
+   },
+   {
+    "name": "Plains",
+    "manaCost": "",
+    "types": "Basic Land - Plains"
+   }
+  ],
+  "command": [
+   "Commander Effect"
+  ],
+  "graveyard": [],
+  "exile": [
+   "Akroma's Will"
+  ],
+  "stack": [],
+  "opponents": [
+   {
+    "seat": 0,
+    "life": 35,
+    "poison": 0,
+    "creaturePower": 9,
+    "battlefield": [
+     {
+      "id": 78,
+      "name": "Managorger Hydra",
+      "power": 4,
+      "toughness": 4,
+      "sick": false,
+      "types": "Creature - Hydra",
+      "tapped": false,
+      "counters": {
+       "+1/+1": 3
+      }
+     }
+    ]
+   },
+   {
+    "seat": 1,
+    "life": 38,
+    "poison": 0,
+    "creaturePower": 2,
+    "battlefield": [
+     {
+      "id": 161,
+      "name": "Inti, Seneschal of the Sun",
+      "power": 2,
+      "toughness": 2,
+      "sick": true,
+      "types": "Legendary Creature - Human Knight",
+      "tapped": false
+     }
+    ]
+   },
+   {
+    "seat": 3,
+    "life": 40,
+    "poison": 0,
+    "creaturePower": 0,
+    "battlefield": []
+   }
+  ],
+  "min": 0,
+  "max": 2
+ },
+ "options": [
+  {
+   "id": 78,
+   "label": "Managorger Hydra 4/4",
+   "cost": null,
+   "type": "CARD"
+  },
+  {
+   "id": 302,
+   "label": "Giada, Font of Hope 2/2",
+   "cost": null,
+   "type": "CARD"
+  },
+  {
+   "id": 161,
+   "label": "Inti, Seneschal of the Sun 2/2",
+   "cost": null,
+   "type": "CARD"
+  }
+ ]
+}
