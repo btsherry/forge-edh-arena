@@ -21,37 +21,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from seatd.protocol import SeatMailbox  # noqa: E402
+from seatd.rules import safe_default  # noqa: E402
 
 POLL_S = 0.5
 
-
-def echo_default(req: dict) -> dict:
-    """The legal pass / minimal-legal answer for every decisionType.
-
-    H1 stub — formalized as rules.safe_default() in H2. Every branch mirrors
-    the contract's safe-default table (per-type LEGAL, engine never rejects)."""
-    dtype = req.get("decisionType")
-    options = req.get("options", [])
-    ids = [o.get("id") for o in options]
-    if dtype == "MULLIGAN":
-        return {"keep": True}
-    if dtype == "DECLARE_ATTACKERS":
-        return {"attackers": []}
-    if dtype == "DECLARE_BLOCKERS":
-        return {"blocks": []}
-    if dtype == "CHOOSE_MODE":
-        lo = int(req.get("state", {}).get("min", req.get("min", 1)) or 0)
-        return {"chosen": list(range(lo))}  # first `min` mode INDICES (0 is real)
-    if dtype == "CHOOSE_ENTITIES":
-        lo = int(req.get("state", {}).get("min", req.get("min", 0)) or 0)
-        return {"chosen": [i for i in ids if i != 0][:lo]}
-    if dtype in ("CHOOSE_ENTITY", "CHOOSE_CARD"):
-        if 0 in ids:
-            return {"chosenId": 0}          # optional: choose none
-        non_pass = [i for i in ids if i != 0]
-        return {"chosenId": non_pass[0] if non_pass else 0}  # mandatory: first legal
-    # CAST_SPELL / REACT / anything unknown with a pass option
-    return {"chosenId": 0}
+# Echo mode answers every window with the always-legal safe default.
+echo_default = safe_default
 
 
 def run_echo(mb: SeatMailbox) -> None:
