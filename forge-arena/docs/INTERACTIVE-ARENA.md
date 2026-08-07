@@ -381,3 +381,27 @@ Hard-won from two live sessions; read before optimizing anything.
     the game from the current request state). Secondary time sinks to trim next run:
     the end-of-turn idle drain (a seat polls an empty inbox ~45–90s before reporting
     idle — dead time) and over-heavy whole-turn planning at max effort.
+11. **Observability = a Monitor-tool PUSH, not a Bash loop; read state on demand.**
+    The orchestrator ("main") must arm the **Monitor tool** on the mailbox — a
+    `while`-loop that prints one line per new `req-*.json`, `persistent: true` — so it
+    **pushes a one-line notification per decision**. A plain backgrounded **Bash**
+    `while true` loop does NOT work for this: a background Bash task only notifies on
+    *exit*, so it logs to its output file silently and main goes blind. This exact
+    mistake happened at the game-2 relaunch (main replaced the working Monitor with a
+    raw Bash loop and then relied on the human to flag every window). For full state,
+    read `arena-status.py` / `observer-state.json` **on demand** — and **never infer
+    whose turn it is from a brain's "idle" report** (that is confabulation-by-proxy;
+    a seat idles out while its own turn continues). **Cost truth:** monitor pings and
+    dashboard reads are tiny; the only real token spend is **brain wakes** (one per
+    decision), and an idle seat's task has *completed* — it burns nothing while
+    waiting. Nothing runs up tokens "regularly" in the background; scale cost with
+    decisions, not wall-clock.
+12. **Auto-pass no-op protection REACTs (stopgap for a real over-trigger).** A free
+    always-available protective tap (Giver of Runes: `{T}`: protection) makes the
+    hardened reactive gate open a *legitimate* `REACT` on **every** opponent spell
+    (the ability is real + affordable) even when nothing threatens the seat — game 2
+    saw one per human spell. Real, not phantom, so the affordability filter (§3)
+    doesn't catch it. Stopgap: the orchestrator verifies the stack and, when the sole
+    non-pass option is such a protection ability with no threatened target, writes the
+    pass directly (no brain wake). Durable fix: extend the gate to suppress
+    "protect/prevent with no valid or threatened target" responses.
