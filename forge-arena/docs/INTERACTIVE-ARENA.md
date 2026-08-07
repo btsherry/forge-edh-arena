@@ -254,7 +254,7 @@ request to the right agent, which writes the response file.
 - GPL-3.0, non-commercial fan-content compliance; no card images needed for the
   mailbox path.
 
-**Track 5 — autonomous Agent-SDK seats (THE NEXT STEP)**
+**Track 5 — autonomous per-seat brains (THE NEXT STEP — build plan: [AGENT-SDK-SEATS.md](AGENT-SDK-SEATS.md))**
 - Replace sleep/wake subagents with one **persistent Agent-SDK process per seat**
   (see *Next architecture*). Each seat runs an always-alive loop, **pre-plans on the
   public snapshot while opponents play**, and services its mailbox directly — no
