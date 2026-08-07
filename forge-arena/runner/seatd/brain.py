@@ -72,12 +72,15 @@ class SeatBrain:
         root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[3]
         self.root = root  # session storage is cwd-scoped: keep every call here
         here = Path(__file__).parent
+        docs = root / "forge-arena" / "docs"
         dossier_p = root / "forge-arena" / "decks" / deck / "dossier" / "deck-cards.json"
-        primer_p = (root / "forge-arena" / "docs" / "primers"
-                    / f"{deck}-deckcheck.md")
+        primer_p = docs / "primers" / f"{deck}-deckcheck.md"
         parts = [
             (here / "seat-brief.md").read_text(),
-            (here / "edh-rules-card.md").read_text(),
+            # The project's real rules corpus (CR-cited), not a summary of a
+            # summary: the game-pilot digest + the win-execution digest.
+            (docs / "research" / "mtg-rules-summary.md").read_text(),
+            (docs / "research" / "mtg-rules-digest-conversion.md").read_text(),
             f"\n## You are SEAT {self.seat}, playing the deck: {deck}\n",
             "## DECK DOSSIER (full oracle text — never summarized)\n",
             dossier_p.read_text(),  # fat context is REQUIRED (field note 1)
