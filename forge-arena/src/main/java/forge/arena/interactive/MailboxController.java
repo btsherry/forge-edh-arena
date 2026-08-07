@@ -13,6 +13,7 @@ import com.google.common.collect.Multiset;
 
 import forge.LobbyPlayer;
 import forge.ai.ComputerUtilAbility;
+import forge.ai.ComputerUtilCost;
 import forge.ai.PlayerControllerAi;
 import forge.arena.engine.SeatView;
 import forge.arena.engine.SeatViews;
@@ -126,16 +127,33 @@ public final class MailboxController extends PlayerControllerAi {
         for (SpellAbility sa : ComputerUtilAbility.getSpellAbilities(
                 ComputerUtilAbility.getAvailableCards(game, me), me)) {
             Card host = sa != null ? sa.getHostCard() : null;
-            // Drop trivial land mana (a plain {T}: add mana) to avoid flooding
-            // options, but KEEP non-trivial mana abilities (nonland sources, or
-            // costs beyond a bare tap — e.g. Grinning Ignus's {R}, Return: add
-            // {C}{C}{R}) so they are selectable strategic lines.
-            if (sa == null || (sa.isManaAbility() && isTrivialLandMana(sa, host))) {
+            if (sa == null) {
                 continue;
+            }
+            if (sa.isManaAbility()) {
+                // Main-phase development: drop trivial land mana (a plain {T}: add
+                // mana) to avoid flooding options, but KEEP non-trivial mana
+                // abilities (nonland sources, or costs beyond a bare tap — e.g.
+                // Grinning Ignus's {R}, Return: add {C}{C}{R}) as strategic lines.
+                // In a REACTIVE window a mana ability is never a meaningful response
+                // on its own (tapping Sol Ring does not answer a spell), so drop ALL
+                // of them there — this stopped rock/land mana abilities opening empty
+                // "respond?" windows for every seat on ramp spells.
+                if (reactive || isTrivialLandMana(sa, host)) {
+                    continue;
+                }
             }
             sa.setActivatingPlayer(me);
             try {
-                if (sa.canPlay()) {
+                // canPlay() admits some spells the seat cannot actually pay for at a
+                // reactive window (e.g. Mana Drain {U}{U} with a single untapped
+                // Island), which opened phantom counter windows. Require real
+                // affordability for reactive responses so the window only fires when
+                // the seat can truly act. Main-phase keeps canPlay() alone, since a
+                // mana line in the option list may itself enable the cost.
+                boolean affordable = !reactive
+                        || ComputerUtilCost.canPayCost(sa, me, false);
+                if (sa.canPlay() && affordable) {
                     playable.add(sa);
                 }
             } catch (RuntimeException canPlayThrew) {

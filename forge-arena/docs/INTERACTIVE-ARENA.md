@@ -11,6 +11,13 @@ First proven end-to-end 2026-08-06: a human piloting Selvala vs three
 Claude-Opus-piloted opponents (Purphoros / Giada / Urza), a full 24-turn game
 won by the human via a Selvala + Umbral Mantle + Craterhoof combo turn.
 
+Second session 2026-08-06 (v2, "fast loop"): validated `REACT`, `CHOOSE_CARD`,
+and deck-aware casting live; **hardened the reactive gate**; and cut end-to-end
+latency (75ms outbox poll, 0.5s monitor, ~2s brain drain, brains self-serving
+their own inboxes). The distilled learnings from both sessions and the next
+architectural step live under **Operational learnings** and **Next architecture**
+below — read those first if you are picking this up.
+
 > Status: research prototype ("v1"). Built on Card-Forge/forge (GPL-3.0);
 > non-commercial fan content under WotC's Fan Content Policy. Any distribution
 > is source-available under GPL-3.0.
@@ -206,7 +213,16 @@ request to the right agent, which writes the response file.
 **Track 1 — loop tightening & action speed**
 - ✅ Lever 2: trivial-subphase gate (empty windows auto-pass to stock).
 - ✅ Terser brain protocol: `{chosenId}` + one-line reason (see `brain-brief-template.md`).
-- Whole-turn drain (batch a turn per wake) + a file monitor as the cross-phase backstop.
+- ✅ Whole-turn drain (batch a turn per wake) + a file monitor as the cross-phase backstop.
+- ✅ **Reactive-gate hardening (v2):** only open a `REACT` window when a *real,
+  affordable* response exists — drop all mana abilities and any spell the seat
+  can't pay for. Killed the phantom "respond to a fetchland / to a spell you can't
+  afford" windows that flooded the brain and stalled game 2 (see Operational
+  learnings §3).
+- ✅ **Speed knobs (v2):** outbox pickup `pollMillis` 200→75ms; file monitor
+  2s→0.5s; brain drain poll ~10s→~2s; brains **self-serve their inbox** (drain
+  autonomously) so the orchestrator is off the critical path for same-turn windows.
+- Next: **pre-plan wakes** (→ Track 5) so a seat's turn is planned *before* it starts.
 
 **Track 2 — observability & correctness (highest play-quality value)**
 - ✅ Richer serialization: per-card P/T, counters, tapped/sick, attached auras, and
@@ -214,8 +230,13 @@ request to the right agent, which writes the response file.
   name-only blind spots.
 - ✅ Persistent public observer snapshot (`observer-state.json`, event-bus driven)
   so the dashboard/observer is never blind, including during the human's turn.
-- Anti-confabulation: feed the resulting state back; agents re-derive from the
-  request each time.
+- ✅ Anti-confabulation (brief-enforced): agents re-derive every decision from the
+  request state; never claim a play they can't see in it; and **never infer "turn
+  complete" from an empty inbox** (the game may be blocked on another seat while
+  the agent's own spell is still on the stack) — they report "idle, awaiting next
+  window". **Fat oracle context is REQUIRED**: summarizing card text spikes
+  hallucination (agents invent abilities from card names) — keep the full per-card
+  dossier (Operational learnings §1).
 
 **Track 3 — deeper capability**
 - ✅ Sub-choice mailboxing (copy/choose, modes, tutor fetch → `CHOOSE_ENTITY`/
@@ -232,3 +253,119 @@ request to the right agent, which writes the response file.
 - Self-contained module (seat + launcher + scripts + dashboard).
 - GPL-3.0, non-commercial fan-content compliance; no card images needed for the
   mailbox path.
+
+**Track 5 — autonomous Agent-SDK seats (THE NEXT STEP)**
+- Replace sleep/wake subagents with one **persistent Agent-SDK process per seat**
+  (see *Next architecture*). Each seat runs an always-alive loop, **pre-plans on the
+  public snapshot while opponents play**, and services its mailbox directly — no
+  human/mainline orchestrator in the routing path. This is the path to a true
+  "four autonomous seats" experience and the shape the shareable release should take.
+
+## Next architecture — autonomous Agent-SDK seats
+
+**Why change anything.** Today each "brain" is a *subagent of one interactive
+(mainline) session*. Subagents are **sleep/wake**: they run, idle out, and stop.
+Two consequences fall out of that and gate everything else:
+1. Between its turns a seat isn't watching, so it **can't plan ahead** — all
+   thinking happens at the moment it's consulted ("thinking hard in main 1").
+2. The **orchestrator (a human-driven session) is in the critical path** — it must
+   notice each pending request and wake the right seat, adding latency and coupling
+   game speed to a human's attention.
+
+Buying more Claude accounts does **not** fix this — the limit isn't quota, it's the
+subagent lifecycle. The fix is architectural.
+
+**Target.** One long-lived **Agent-SDK process per seat**. Each process:
+- Loads its **deck dossier + primer once** at startup and stays resident, so its
+  context — and its prompt cache — stay **warm** across decisions.
+- **Continuously tails the public `observer-state.json`** for situational awareness,
+  and **pre-plans its upcoming turn** from that public board while opponents act,
+  revising as the board changes and (at its turn) for its actual draw.
+- Watches its own `inbox/`, handles each `req-<n>.json`, writes `outbox/resp-<n>.json`
+  — the **same mailbox contract**. The Java engine side (`MailboxController` /
+  `MailboxLobbyPlayer` / `GuiPilotMatch`) needs **no changes**; only the brain side
+  moves from "subagent resumed per decision" to "resident process."
+- Emits its reasoning to a **per-seat transcript/log** the human can watch and
+  interrogate live — the "streaming like mainline" feel, per seat.
+
+**Keys / accounts.** Four continuously-reasoning agents is heavy *sustained*
+throughput; one **API key per seat** gives rate-limit headroom and clean per-seat
+billing. Accounts spread the rate *ceiling*, **not** the token *bill*.
+
+**Cost dial (decide this deliberately).** Always-on (thinking through every
+opponent turn) is *dramatically* more expensive than sleep/wake. The sweet spot is
+**pre-plan-on-demand**: when a seat is *on deck* (the previous seat is active), wake
+it once to draft its turn from the public snapshot; it then executes fast when its
+turn lands. Captures most of the "ready before the turn" benefit at a fraction of
+always-on cost. Fully-resident always-on is the premium tier.
+
+**Fairness is unchanged and must stay so.** Each process reads only its **own inbox
+(its own hand)** + the **public** observer snapshot — never another seat's inbox,
+never a human coaching a seat. Keep the SeatView guarantees (W8).
+
+**Warm-cache economics.** A resident process keeps the ~35–40k fixed dossier
+prompt-cached across decisions, so the marginal per-decision cost stays small. This
+is strictly better than sleep/wake, where human-paced gaps expire the cache TTL and
+re-pay the dossier (Operational learnings §2).
+
+**Suggested components.**
+- `seat-runner` (Agent-SDK program): args = seat id, dossier path, mailbox base.
+  Loop: load context → subscribe to `observer-state.json` → on inbox req: decide +
+  write resp; on on-deck: pre-plan; else idle-watch/refine plan.
+- A thin **supervisor** to launch/health-check the runners and restart on crash
+  (safe: the engine re-sends on timeout, so a restarted seat just picks up the next
+  request; nothing is lost mid-decision because writes are atomic).
+- Per-seat log for observability + teacher→student capture (Track 3).
+
+## Operational learnings & field notes (2026-08-06)
+
+Hard-won from two live sessions; read before optimizing anything.
+
+1. **Fat context is non-negotiable.** *Two* separate attempts to summarize / skimp
+   on oracle text produced a hallucination spike — agents invent what a card does
+   from its name. Keep the **full per-card dossier**. This is a hard constraint on
+   any cost optimization; don't trade it for speed or tokens.
+2. **Token economics of persistent brains.** The per-agent usage number is
+   *cumulative*; each wake adds a **small marginal delta**, but the total is
+   dominated by the one-time dossier (~35–40k) carried in every wake. Prompt caching
+   makes that carried context cheap **only when wakes are close together**;
+   human-paced gaps blow the TTL and re-pay it. ⇒ a **resident (Track 5) process
+   that stays warm is materially cheaper per decision** than sleep/wake. Multiple
+   accounts spread the rate ceiling, not the bill.
+3. **The reactive gate must be strict** (`MailboxController.chooseSpellAbilityToPlay`).
+   `canPlay()` admits spells the seat can't actually pay for at instant speed (e.g.
+   Mana Drain `{U}{U}` with one untapped Island), and non-trivial mana abilities
+   (Sol Ring) look like "responses." Both opened **phantom `REACT` windows** for
+   every seat on fetchlands and ramp spells — pure latency + token waste, and the
+   reason game 2 felt slower than game 1. **Fix (v2):** in a reactive window, drop
+   ALL mana abilities and require `ComputerUtilCost.canPayCost(sa, me, false)`; if
+   nothing meaningful survives, fall through to stock (no window, no wake).
+   Main-phase (`CAST_SPELL`) intentionally keeps `canPlay()` alone, since a mana line
+   in the option list may itself enable the cost.
+4. **Latency budget.** Real knobs + v2 values: outbox `pollMillis` 75ms; file
+   monitor 0.5s; brain drain ~2s; brains self-serve. The **irreducible floor is
+   model think-time** (fat context, ~15–90s/decision) — attack it by *planning whole
+   turns at once* and *pre-planning during downtime* (§5), not by trimming context.
+5. **Turn planning like a human.** Best play comes from **planning the whole turn at
+   its first window** and executing subsequent same-turn windows as steps of that
+   plan, revising only for the draw and opponents' actions. Humans plan *before* the
+   turn starts; the Track 5 pre-plan wake replicates that. (In v2 this is enforced in
+   the brain brief: "plan your entire turn upfront, then execute each step.")
+6. **Anti-confabulation rules that actually mattered:** (a) never report a play you
+   can't see in the state; (b) **never infer "turn complete" from an empty inbox** —
+   report "idle, awaiting next window" (the game may be blocked on another seat while
+   your own spell is still on the stack); (c) trust the board / `observer-state.json`
+   over any agent's prose.
+7. **Orchestrator-as-filter (stopgap).** For a demonstrably-uninteractive window
+   (e.g. a phantom counter the seat can't pay), writing the pass directly *without* a
+   brain wake unblocks the game cheaply — but the durable fix is the engine-side gate
+   (§3), not manual filtering.
+8. **Fairness held both directions.** Brains reason only from their own hand + the
+   public snapshot; the human does **not** coach opponents' brains, even when a
+   better line is visible. The agents finding lines themselves is the entire point.
+9. **Validated live (v2):** `REACT` (trivial pass on a fetchland / uncastable
+   counters *and* a real evaluation of a turn-2 Serra Ascendant), `CHOOSE_CARD`
+   (color-aware fetch — "hand is all white → fetch Plains"), deck-aware `CAST_SPELL`
+   (turn-2 Serra Ascendant played as a 6/6 flyer at 40 life), whole-turn drain, rich
+   per-card state, the observer snapshot, and a clean mid-game max→medium brain
+   cutover with no double-routing.

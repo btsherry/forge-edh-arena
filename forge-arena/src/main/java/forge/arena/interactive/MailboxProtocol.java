@@ -53,7 +53,10 @@ public final class MailboxProtocol {
     private final Path inbox;
     private final Path outbox;
     private final long timeoutMillis;
-    private final long pollMillis = 200L;
+    // Outbox pickup latency: how soon the engine notices the brain's written
+    // response and unblocks. 75ms keeps the game feeling responsive without
+    // meaningful CPU cost (the poll is a single file stat on a tiny dir).
+    private final long pollMillis = 75L;
     private final AtomicLong seq = new AtomicLong();
 
     private MailboxProtocol(Path seatDir, long timeoutMillis) {
