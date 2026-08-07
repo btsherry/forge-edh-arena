@@ -176,6 +176,7 @@ public final class ObserverSnapshot {
             Map<String, Object> s = new LinkedHashMap<>();
             s.put("seat", p.getId());
             s.put("name", p.getName());
+            s.put("eliminated", p.hasLost());   // field note 16: push eliminations
             s.put("life", p.getLife());
             s.put("poison", p.getPoisonCounters());
             s.put("handSize", p.getCardsIn(ZoneType.Hand).size());

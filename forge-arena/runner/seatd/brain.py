@@ -58,10 +58,12 @@ class SeatBrain:
     """One resident model session for one seat."""
 
     def __init__(self, seat: int, deck: str, model: str = "sonnet",
-                 repo_root: str | Path | None = None, log=print):
+                 effort: str = "low", repo_root: str | Path | None = None,
+                 log=print):
         self.seat = int(seat)
         self.deck = deck
         self.model = model
+        self.effort = effort  # pinned — never inherit the user's saved default
         self.log = log
         self.session_id: str | None = None
         self.calls = 0
@@ -96,7 +98,8 @@ class SeatBrain:
         """One headless call. Returns the parsed --output-format json envelope
         (NOT the answer), or None on failure/timeout."""
         cmd = ["claude", "-p", "-", "--output-format", "json",
-               "--model", self.model, "--disallowedTools", "*"]
+               "--model", self.model, "--effort", self.effort,
+               "--disallowedTools", "*"]
         if resume and self.session_id:
             cmd += ["--resume", self.session_id]
         try:

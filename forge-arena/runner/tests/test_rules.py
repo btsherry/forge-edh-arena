@@ -78,6 +78,10 @@ class TableDrivenContract(unittest.TestCase):
         ("choose_card",
          [{"chosenId": 0}, {"chosenId": 258}, {"chosenId": 259}],
          [{"chosenId": 260}, {"chosenId": None}]),
+        ("choose_number",
+         [{"chosen": 0}, {"chosen": 2}, {"chosen": 4}],
+         [{"chosen": 5}, {"chosen": -1}, {"chosen": "4"}, {"chosen": 4.0},
+          {"chosen": True}, {"chosenId": 4}, {}]),
     ]
 
     def test_good_accepted_and_cleaned(self):

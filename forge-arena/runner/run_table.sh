@@ -6,18 +6,19 @@
 #
 # Usage:  forge-arena/runner/run_table.sh [mailbox-base]
 # Env:    ARENA_MAILBOX_TIMEOUT (must match the engine's; default 90)
-#         SEAT_MODEL (default sonnet)
+#         SEAT_MODEL (default sonnet)   SEAT_EFFORT (default low; pinned per seat)
 # Watch:  tail -f forge-arena/runner/logs/seat-*.log
 set -u
 DIR=$(cd "$(dirname "$0")" && pwd)
 BASE="${1:-$DIR/../mailbox}"
 MODEL="${SEAT_MODEL:-sonnet}"
+EFFORT="${SEAT_EFFORT:-low}"
 export ARENA_MAILBOX_TIMEOUT="${ARENA_MAILBOX_TIMEOUT:-90}"
 
 seat() { # seat_no deck
   while true; do
     python3 "$DIR/seat_runner.py" --seat "$1" --deck "$2" \
-      --model "$MODEL" --base "$BASE"
+      --model "$MODEL" --effort "$EFFORT" --base "$BASE"
     echo "[seat $1] runner exited ($?) — restarting in 2s" >&2
     sleep 2
   done

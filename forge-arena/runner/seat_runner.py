@@ -56,6 +56,8 @@ def main() -> None:
     ap.add_argument("--seat", type=int, required=True)
     ap.add_argument("--deck", help="deck folder name (required for brain mode)")
     ap.add_argument("--model", default="sonnet")
+    ap.add_argument("--effort", default="low",
+                    help="pinned reasoning effort for the seat session")
     ap.add_argument("--base", default=str(Path(__file__).resolve().parent.parent / "mailbox"))
     ap.add_argument("--timeout", type=float,
                     default=float(os.environ.get("ARENA_MAILBOX_TIMEOUT", "90")))
@@ -74,7 +76,8 @@ def main() -> None:
     from seatd.runner import SeatRunner
     autopass = tuple(s.strip() for s in args.autopass.split(",") if s.strip())
     SeatRunner(args.seat, args.deck, args.base, model=args.model,
-               timeout_s=args.timeout, autopass=autopass).run()
+               effort=args.effort, timeout_s=args.timeout,
+               autopass=autopass).run()
 
 
 if __name__ == "__main__":

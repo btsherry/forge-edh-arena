@@ -28,10 +28,11 @@ DEFAULT_AUTOPASS = ("Giver of Runes", "Mother of Runes", "Academy Ruins")
 
 class SeatRunner:
     def __init__(self, seat: int, deck: str, base, model: str = "sonnet",
-                 timeout_s: float = 90.0, log_dir=None,
+                 effort: str = "low", timeout_s: float = 90.0, log_dir=None,
                  autopass: tuple[str, ...] = DEFAULT_AUTOPASS):
         self.mb = SeatMailbox(seat, base, timeout_s=timeout_s)
-        self.brain = SeatBrain(seat, deck, model=model, log=self._say)
+        self.brain = SeatBrain(seat, deck, model=model, effort=effort,
+                               log=self._say)
         self.seat, self.deck = seat, deck
         self.timeout_s = timeout_s
         self.autopass = tuple(autopass)
@@ -59,6 +60,10 @@ class SeatRunner:
                "turn": req.get("turn"), "phase": req.get("phase"),
                "type": req.get("decisionType"), "source": source,
                "answer": answer}
+        if req.get("decisionType") == "MULLIGAN":
+            st = req.get("state", {}) or {}
+            rec["hand"] = st.get("hand")            # audit mulligan judgment
+            rec["cardsToReturn"] = st.get("cardsToReturn")
         if meta:
             rec["latency_s"] = meta.get("latency_s")
             rec["usage"] = meta.get("usage")

@@ -14,6 +14,7 @@ import com.google.common.collect.Multiset;
 import forge.LobbyPlayer;
 import forge.ai.ComputerUtilAbility;
 import forge.ai.ComputerUtilCost;
+import forge.ai.ComputerUtilMana;
 import forge.ai.PlayerControllerAi;
 import forge.arena.engine.SeatView;
 import forge.arena.engine.SeatViews;
@@ -233,6 +234,61 @@ public final class MailboxController extends PlayerControllerAi {
             return super.chooseSpellAbilityToPlay();
         }
         return Collections.singletonList(pick);
+    }
+
+    /**
+     * Value announcements — X costs above all (field note 15b). The mailbox
+     * cast path bypasses the stock AI's decision pipeline where X normally
+     * gets set, and stock's own announceRequirements returns null for plain
+     * X-cost spells — which is how a brain-chosen Walking Ballista resolved
+     * at X=0 and died on the spot. The brain now announces its own values.
+     */
+    @Override
+    public Integer announceRequirements(SpellAbility ability, int min, int max,
+                                        String announce) {
+        Game game = getGame();
+        // Affordability ceiling for mana-X announcements (same math stock uses);
+        // an unpayable X would rewind the whole cast and burn the window.
+        int hi = max;
+        if ("X".equals(announce) || "Y".equals(announce)) {
+            try {
+                int afford = ComputerUtilMana.determineLeftoverMana(
+                        ability, getPlayer(), false);
+                if (afford >= 0) {
+                    hi = Math.min(hi, afford);
+                }
+            } catch (RuntimeException ignored) {
+                // affordability estimate is best-effort; max stands
+            }
+        }
+        if (hi < min) {
+            hi = min;
+        }
+        if (hi == min) {
+            return min; // forced value — no decision to make
+        }
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", min);
+        state.put("max", hi);
+        Card host = ability.getHostCard();
+        String what = host != null ? host.getName() : String.valueOf(ability);
+        MailboxProtocol.Request req = new MailboxProtocol.Request(
+                seatIndex, turn, phaseName(game), "CHOOSE_NUMBER",
+                "Announce '" + announce + "' for " + what + " — pick a number in ["
+                        + min + ", " + hi + "] (max is your affordable ceiling).")
+                .state(state);
+        JsonNode resp = bus.exchange(req);
+        if (resp != null) {
+            JsonNode chosen = resp.get("chosen");
+            if (chosen != null && chosen.isInt()) {
+                int n = chosen.asInt();
+                if (n >= min && n <= hi) {
+                    return n;
+                }
+            }
+        }
+        return super.announceRequirements(ability, min, max, announce);
     }
 
     @Override

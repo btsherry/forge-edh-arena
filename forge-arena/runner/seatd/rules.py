@@ -38,6 +38,9 @@ ANSWER_CONTRACT = {
                     'state.min..state.max; repeats only if state.allowRepeat.'),
     "CHOOSE_CARD": ('Answer: {"chosenId": <option id>} — 0 (choose none) only if '
                     'offered in options.'),
+    "CHOOSE_NUMBER": ('Answer: {"chosen": <integer>} within state.min..state.max '
+                      '— typically an X value; max is your affordable ceiling, '
+                      'so bigger is usually (not always) better.'),
 }
 
 
@@ -147,6 +150,13 @@ def validate(req: dict, out) -> dict | None:
             return None  # mode ids ARE the option indices; 0 is a real mode
         return {"chosen": list(arr)}
 
+    if dtype == "CHOOSE_NUMBER":
+        n = out.get("chosen")
+        lo, hi = _bounds(req, 0, 0)
+        if not _is_int(n) or not (lo <= n <= hi):
+            return None
+        return {"chosen": n}
+
     return None  # unknown decisionType: never guess
 
 
@@ -172,6 +182,10 @@ def safe_default(req: dict) -> dict:
             return {"chosenId": 0}               # optional: choose none
         pool = [i for i in ids if i != 0]
         return {"chosenId": pool[0] if pool else 0}  # mandatory: first legal
+    if dtype == "CHOOSE_NUMBER":
+        lo, hi = _bounds(req, 0, 0)
+        return {"chosen": hi}  # punt HIGH: for X costs, min would re-create the
+                               # Ballista-at-0 death; max is affordability-capped
     return {"chosenId": 0}                        # CAST_SPELL / REACT / unknown
 
 
