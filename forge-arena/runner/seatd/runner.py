@@ -62,11 +62,24 @@ class SeatRunner:
         if meta:
             rec["latency_s"] = meta.get("latency_s")
             rec["usage"] = meta.get("usage")
+        rec["cum"] = dict(self.brain.totals)  # burn since instantiation
         try:
             with self._jsonl_path.open("a") as f:
                 f.write(json.dumps(rec) + "\n")
+            # Always-current snapshot: THE final readout is whatever this
+            # holds when the game closes (survives kill/crash).
+            (self._jsonl_path.parent / f"seat-{self.seat}.usage.json").write_text(
+                json.dumps(rec["cum"], indent=1))
         except OSError:
             pass
+
+    def _usage_readout(self, label: str) -> None:
+        t = self.brain.totals
+        self._say(f"[seat {self.seat}] USAGE {label}: {t['calls']} calls, "
+                  f"in={t['input_tokens']} out={t['output_tokens']} "
+                  f"cache_read={t['cache_read_input_tokens']} "
+                  f"cache_write={t['cache_creation_input_tokens']} "
+                  f"(≈${t['cost_usd']:.2f} API-equivalent; subscription-covered)")
 
     # ---- fastpaths --------------------------------------------------------
 
@@ -104,6 +117,7 @@ class SeatRunner:
 
     def handle(self, req: dict) -> None:
         if self.mb.game_reset:
+            self._usage_readout("game close")  # final readout for the ended game
             self._say(f"[seat {self.seat}] NEW GAME detected — session + memory reset")
             self.mb.game_reset = False
             self.brain.reset()

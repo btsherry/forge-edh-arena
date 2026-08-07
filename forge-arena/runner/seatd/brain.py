@@ -65,6 +65,10 @@ class SeatBrain:
         self.log = log
         self.session_id: str | None = None
         self.calls = 0
+        # Cumulative burn since instantiation (includes the dossier init call).
+        self.totals = {"calls": 0, "input_tokens": 0, "output_tokens": 0,
+                       "cache_read_input_tokens": 0,
+                       "cache_creation_input_tokens": 0, "cost_usd": 0.0}
         root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[3]
         self.root = root  # session storage is cwd-scoped: keep every call here
         here = Path(__file__).parent
@@ -118,6 +122,18 @@ class SeatBrain:
             return None
         return env
 
+    def _accumulate(self, env: dict) -> None:
+        u = env.get("usage") or {}
+        self.totals["calls"] += 1
+        for k in ("input_tokens", "output_tokens", "cache_read_input_tokens",
+                  "cache_creation_input_tokens"):
+            v = u.get(k)
+            if isinstance(v, (int, float)):
+                self.totals[k] += int(v)
+        c = env.get("total_cost_usd")
+        if isinstance(c, (int, float)):
+            self.totals["cost_usd"] = round(self.totals["cost_usd"] + c, 6)
+
     # ---- lifecycle -------------------------------------------------------------
 
     def ensure_session(self, timeout_s: float = 300.0) -> bool:
@@ -130,15 +146,18 @@ class SeatBrain:
             return False
         self.session_id = env["session_id"]
         self.calls += 1
+        self._accumulate(env)  # the dossier load is the biggest single burn
         self.log(f"[seat {self.seat}] session up ({self.model}) in "
                  f"{time.time() - t0:.1f}s — {self.deck} dossier loaded, "
                  f"session {self.session_id[:8]}")
         return True
 
     def reset(self) -> None:
-        """New game (seq regression): drop the session; next decide() reloads."""
+        """New game (seq regression): drop the session; next decide() reloads.
+        Totals restart too — each game's readout counts its own burn."""
         self.session_id = None
         self.calls = 0
+        self.totals = {k: (0.0 if k == "cost_usd" else 0) for k in self.totals}
 
     # ---- decisions ----------------------------------------------------------------
 
@@ -153,6 +172,7 @@ class SeatBrain:
         if env is None:
             return None, meta
         self.calls += 1
+        self._accumulate(env)
         usage = env.get("usage") or {}
         meta["usage"] = {k: usage.get(k) for k in
                          ("input_tokens", "output_tokens",
