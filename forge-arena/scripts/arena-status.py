@@ -14,6 +14,29 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else \
     "/Users/toor/Claude/personal/forge-edh-arena/forge-arena/mailbox"
 DECKS = {0: "Selvala (YOU/human)", 1: "Purphoros", 2: "Giada", 3: "Urza"}
 
+
+def print_seatd_narrative(tail_n=6):
+    """Recent brain decisions + logged decision logic from the shared
+    game.jsonl (written by the seatd runners; full view: runner/status.py)."""
+    game = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "runner", "logs", "game.jsonl")
+    if not os.path.exists(game):
+        return
+    try:
+        lines = open(game).read().splitlines()[-tail_n:]
+    except OSError:
+        return
+    print()
+    print(f"== RECENT SEAT DECISIONS (game.jsonl; runner/status.py for full) ==")
+    for line in lines:
+        try:
+            r = json.loads(line)
+        except Exception:
+            continue
+        why = f' — "{r.get("why")}"' if r.get("why") else ""
+        print(f"  [t{r.get('turn')} {r.get('phase','')} seat {r.get('seat')} "
+              f"{r.get('type')}] {json.dumps(r.get('answer'))}{why}")
+
 def print_observer_snapshot(path):
     """Print a dashboard from the continuously-updated public observer snapshot.
 
@@ -69,6 +92,7 @@ if not reqs:
         print("No pending decision in the mailbox (likely the human's turn).")
         print()
         print_observer_snapshot(obs)
+        print_seatd_narrative()
         sys.exit(0)
     print("No pending decision in the mailbox.")
     print("=> It's the human's turn (act in the GUI), or the game is between windows.")
@@ -118,3 +142,5 @@ print()
 print(f"== OPTIONS for seat {me} ({state_src.get('decisionType')}) ==")
 for o in state_src.get("options", []):
     print(f"  [{o.get('id')}] {o.get('label','')}")
+
+print_seatd_narrative()

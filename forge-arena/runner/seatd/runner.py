@@ -43,6 +43,9 @@ class SeatRunner:
         log_dir.mkdir(parents=True, exist_ok=True)
         self._log_path = log_dir / f"seat-{seat}.log"
         self._jsonl_path = log_dir / f"seat-{seat}.jsonl"
+        # Shared table narrative: every seat APPENDS one line per decision
+        # (never reads it) — an interleaved, board-stamped play-pattern record.
+        self._game_log = log_dir / "game.jsonl"
 
     # ---- logging ---------------------------------------------------------
 
@@ -55,11 +58,38 @@ class SeatRunner:
         except OSError:
             pass
 
-    def _record(self, req: dict, answer: dict, source: str, meta=None) -> None:
+    @staticmethod
+    def board_stamp(req: dict) -> dict:
+        """Compact PUBLIC board digest computed script-side (zero tokens):
+        life by seat, stack, own board size/power, combat picture if any."""
+        st = req.get("state", {}) or {}
+        lives = {str(st.get("seat")): st.get("life")}
+        for o in st.get("opponents", []) or []:
+            lives[str(o.get("seat"))] = o.get("life")
+        stamp = {"lives": lives,
+                 "stack": st.get("stack") or [],
+                 "ownPow": st.get("ownBoardPower"),
+                 "ownPerms": len(st.get("battlefield") or [])}
+        combat = st.get("combat")
+        if combat:
+            stamp["combat"] = [f"{a.get('name')} {a.get('power')}/"
+                               f"{a.get('toughness')} -> {a.get('defender')}"
+                               + (f" [blocked: {', '.join(a['blockedBy'])}]"
+                                  if a.get("blockedBy") else "")
+                               for a in combat][:6]
+        return stamp
+
+    def _record(self, req: dict, answer: dict, source: str, meta=None,
+                why: str | None = None, consumed: bool = True) -> None:
+        stamp = self.board_stamp(req)
         rec = {"ts": time.time(), "seat": self.seat, "seq": req.get("seq"),
                "turn": req.get("turn"), "phase": req.get("phase"),
                "type": req.get("decisionType"), "source": source,
-               "answer": answer}
+               "answer": answer, "why": why, "consumed": consumed,
+               "board": stamp}
+        if source == "model":
+            rec["options"] = [str(o.get("label", ""))[:60]
+                              for o in req.get("options", [])[:9]]
         if req.get("decisionType") == "MULLIGAN":
             st = req.get("state", {}) or {}
             rec["hand"] = st.get("hand")            # audit mulligan judgment
@@ -75,6 +105,15 @@ class SeatRunner:
             # holds when the game closes (survives kill/crash).
             (self._jsonl_path.parent / f"seat-{self.seat}.usage.json").write_text(
                 json.dumps(rec["cum"], indent=1))
+            # Shared narrative line (append-only; single-line writes are atomic
+            # enough on a local fs; no seat ever reads this file).
+            with self._game_log.open("a") as f:
+                f.write(json.dumps({
+                    "ts": rec["ts"], "seat": self.seat, "deck": self.deck,
+                    "turn": rec["turn"], "phase": rec["phase"],
+                    "type": rec["type"], "seq": rec["seq"], "source": source,
+                    "answer": answer, "why": why,
+                    "latency_s": rec.get("latency_s"), "board": stamp}) + "\n")
         except OSError:
             pass
 
@@ -137,10 +176,12 @@ class SeatRunner:
         fast = self._fastpath(req)
         if fast:
             answer, source = fast
+            why = ("all options on the no-op allowlist" if source == "autopass"
+                   else "identical window already passed this turn")
             ok = self.mb.respond(req, answer)
             self._say(f"[seat {self.seat}] seq={seq} {dtype} -> {json.dumps(answer)} "
                       f"[{source}]{'' if ok else ' WINDOW LOST'}")
-            self._record(req, answer, source)
+            self._record(req, answer, source, why=why, consumed=ok)
             return
 
         # Deadline: answer must land before the engine gives up on us.
@@ -150,7 +191,7 @@ class SeatRunner:
             mtime = time.time()
         deadline = mtime + 0.8 * self.timeout_s
         budget = deadline - time.time()
-        answer, source, meta = None, "punt", None
+        answer, source, meta, why = None, "punt", None, None
         if budget > 5.0:
             plan_text = self.plan[1] if (self.plan and
                                          self.plan[0] == req.get("turn")) else None
@@ -158,6 +199,8 @@ class SeatRunner:
                                              observer=self.mb.read_observer())
             out, meta = self.brain.decide(prompt, timeout_s=min(budget, 120.0))
             clean = rules.validate(req, out) if out is not None else None
+            if isinstance(out, dict) and isinstance(out.get("why"), str):
+                why = out["why"][:200]
             if clean is not None:
                 answer, source = clean, "model"
                 if (isinstance(out, dict) and out.get("turn_plan")
@@ -167,9 +210,13 @@ class SeatRunner:
             elif out is not None:
                 self._say(f"[seat {self.seat}] seq={seq} INVALID model answer "
                           f"{str(meta.get('raw'))[:120]!r} -> safe default")
+                why = f"punt: invalid model answer ({(why or '-')[:80]})"
+            else:
+                why = "punt: model failure/timeout"
         else:
             self._say(f"[seat {self.seat}] seq={seq} only {budget:.0f}s left "
                       f"-> safe default without model call")
+            why = "punt: deadline nearly expired"
         if answer is None:
             answer = rules.safe_default(req)
 
@@ -180,5 +227,6 @@ class SeatRunner:
         lat = f" {meta['latency_s']}s" if meta and meta.get("latency_s") else ""
         self._say(f"[seat {self.seat}] seq={seq} {dtype} turn={req.get('turn')} "
                   f"{req.get('phase', '')} -> {json.dumps(answer)} [{source}{lat}]"
+                  f"{('  # ' + why) if why else ''}"
                   f"{'' if ok else ' WINDOW LOST'}")
-        self._record(req, answer, source, meta)
+        self._record(req, answer, source, meta, why=why, consumed=ok)

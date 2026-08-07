@@ -212,6 +212,8 @@ def build_user_prompt(req: dict, plan: str | None = None,
     parts.append(json.dumps(req, separators=(",", ":")))
     parts.append(
         "Reply with ONLY the JSON answer object on one line — no prose, no "
-        "code fences. You may add an optional \"turn_plan\" key (<=150 words) "
-        "when this is the first main-phase decision of YOUR turn.")
+        "code fences. REQUIRED: include a \"why\" key — your decision logic in "
+        "<=20 words (it is logged, never shown to opponents). You may add an "
+        "optional \"turn_plan\" key (<=150 words) when this is the first "
+        "main-phase decision of YOUR turn.")
     return "\n".join(parts)
