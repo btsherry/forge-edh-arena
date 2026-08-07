@@ -33,9 +33,11 @@ def print_seatd_narrative(tail_n=6):
             r = json.loads(line)
         except Exception:
             continue
-        why = f' — "{r.get("why")}"' if r.get("why") else ""
+        # FAIRNESS: decision logic ("why") is sealed during live play — it can
+        # reveal hidden holdings/plans to the human opponent. Post-game review:
+        # runner/status.py or game.jsonl directly.
         print(f"  [t{r.get('turn')} {r.get('phase','')} seat {r.get('seat')} "
-              f"{r.get('type')}] {json.dumps(r.get('answer'))}{why}")
+              f"{r.get('type')}] {json.dumps(r.get('answer'))}")
 
 def print_observer_snapshot(path):
     """Print a dashboard from the continuously-updated public observer snapshot.
