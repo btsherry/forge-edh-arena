@@ -404,4 +404,37 @@ Hard-won from two live sessions; read before optimizing anything.
     doesn't catch it. Stopgap: the orchestrator verifies the stack and, when the sole
     non-pass option is such a protection ability with no threatened target, writes the
     pass directly (no brain wake). Durable fix: extend the gate to suppress
-    "protect/prevent with no valid or threatened target" responses.
+    "protect/prevent with no valid or threatened target" responses. **Shipped stopgap:**
+    `scripts/react-autopass.py` — a standalone daemon that watches all inboxes and
+    instantly (~200ms) passes any REACT whose non-pass options are all on a no-op
+    allowlist. Cut those windows from 5-10s (orchestrator round-trip) to engine speed;
+    game-2's 20-spell human turn generated 40+ such windows, all absorbed at zero
+    token cost. Retire it when the engine gate lands.
+13. **GAME-DECIDING GAP — the pre-damage combat instant window is not mailboxed.**
+    Game 2, turn 21: Giada's brain planned blocks around **Flare of Fortitude** (free
+    total fog: sac a white creature, prevent ALL damage) explicitly expecting a
+    post-blockers window — which never came, because empty-stack instant priority
+    (combat steps included) is still stock, and stock declined to cast it. She died
+    with the save in hand to a 142-power alpha she'd have taken ZERO from. Beyond the
+    lost game: until this window is mailboxed, **no AI seat can punish an
+    overextension**, alpha strikes are systematically safer than real Magic, and
+    fog/protection/flash decks play far below strength. Fix: open a mailbox window at
+    combat-step priority (at least declare-attackers and declare-blockers/pre-damage)
+    when the seat holds a castable instant — same affordability gate as REACT.
+    **This is now the #1 engine-side fix.**
+14. **Equip/attach targeting fizzles from the mailbox path.** Game 2: Urza's brain
+    chose Lightning Greaves' equip {0} three times; no target prompt ever surfaced
+    (targeting is `chooseTargetsFor` = stock) and the ability silently fizzled each
+    time — the equipment never attached. Until attach targeting is handled (mailbox
+    it, or make stock complete it for mailbox-originated SAs), equip abilities are
+    effectively dead to the brains.
+15. **Auto-tap mana payment strands colored sources.** Forge's payment auto-tap chose
+    a generic land over a colorless one for The One Ring's {4}, stranding the seat's
+    only blue source and locking two castable spells out of the turn. Mana-payment
+    tapping is a stock path the brain can't see or veto; either expose payment choice
+    or bias auto-tap to preserve colored sources.
+16. **Eliminations aren't pushed to brains (only discoverable via state).** After the
+    turn-21 double elimination, brains re-derived "Purphoros and Giada are gone" from
+    the request state correctly — but only when next consulted. The observer snapshot
+    should carry an explicit eliminated/turn-order field so pre-planning (Track 5)
+    can trigger on the *actual* next-seat transition.
