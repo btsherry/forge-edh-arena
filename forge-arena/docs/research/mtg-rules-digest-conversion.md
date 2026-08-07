@@ -152,11 +152,11 @@
 ## 9. Mulligans in Multiplayer Commander (CR 103.5, 903)
 
 **What the rules say.**
-- Commander is a multiplayer game (`100.1b`) with **starting hand size 7** and **starting life 40** (`103.4c`). The mulligan is the **London mulligan** (`103.5`): to mulligan, shuffle hand into library, draw a new 7, then **put on the bottom of the library a number of cards equal to the number of mulligans taken so far**. Declarations are made in turn order, then all mulligans happen simultaneously; you may mulligan down to a 0-card hand (`103.5`).
+- A Commander **pod of 3+ players** is a multiplayer game (`100.1b` — a game that *begins* with more than two players; 1v1 Commander is NOT multiplayer). Starting hand size is 7 (`103.5`/`903.7`) and starting life 40 (`103.4c`). The mulligan is the **London mulligan** (`103.5`): to mulligan, shuffle hand into library, draw a new 7, then **put on the bottom of the library a number of cards equal to the number of mulligans taken so far**. Declarations are made in turn order, then all mulligans happen simultaneously; you may mulligan down to a 0-card hand (`103.5`).
 - **In a multiplayer game (including Commander), the *first* mulligan is free** — it doesn't count toward the number of cards bottomed or the number of mulligans taken; subsequent mulligans count normally (`103.5c`). (Brawl: same free-first rule, `903.12g`.)
 
 **What the conversion module (pilot mulligan logic) must therefore do.**
-- Use the exact bottoming arithmetic: after keeping following *m* total mulligans in Commander, **cards to bottom = max(0, m − 1)** because the first mulligan is free (`103.5c`). So: keep after 0 mulls → bottom 0; after 1 → bottom 0 (free); after 2 → bottom 1; after 3 → bottom 2; etc. Final hand size is always 7 minus cards bottomed.
+- Use the exact bottoming arithmetic — **in a 3+ player pod**: after keeping following *m* total mulligans, **cards to bottom = max(0, m − 1)** because the first mulligan is free (`103.5c`). So: keep after 0 mulls → bottom 0; after 1 → bottom 0 (free); after 2 → bottom 1; etc. **In 1v1 Commander there is no free mulligan: cards to bottom = m.** Final hand size is always 7 minus cards bottomed.
 - Draw 7 each iteration regardless (`103.5`); the free-first adjustment applies only to the *bottoming/count*, not the draw.
 - The pilot may keep aggressively (it can mulligan to 0), but the free first mulligan means a single mulligan to find combo pieces is costless — factor that into keep/mull heuristics.
 
@@ -196,4 +196,4 @@
 15. **Injected copies/tokens must mirror copiable-value and existence rules.** Copies of spells live only on the stack (else cease to exist); tokens off the battlefield cease to exist and can't return; don't fabricate characteristics the creating effect didn't grant. (`707.2`, `707.10a`/`704.5e`, `111.3`/`111.5`, `111.7`/`111.8`/`704.5d`)
 16. **Illegal actions are fully reversed by the engine — validate before committing.** An unpayable/illegal cast rewinds to before it began; design the module to pre-check legality (targets, cost payability) rather than rely on rollback. (`733.1`, `608.2b`)
 17. **SBAs are the checkpoints:** checked each time a player would get priority (and once at cleanup start), to a fixed point, before triggers and before priority. Losses (life-0, empty-draw, poison, 21 commander damage) register there, delayed to the next priority. (`704.3`, `117.5`, `104.3b–d`, `104.3j`/`903.10a`)
-18. **Commander mulligan arithmetic:** draw 7 each mulligan; cards bottomed = max(0, total mulligans − 1) because the first multiplayer mulligan is free; may mulligan to 0. (`103.5`, `103.5c`)
+18. **Commander mulligan arithmetic:** draw 7 each mulligan; in a 3+ player pod, cards bottomed = max(0, total mulligans − 1) (first multiplayer mulligan free); in 1v1, cards bottomed = total mulligans; may mulligan to 0. (`103.5`, `103.5c`)
