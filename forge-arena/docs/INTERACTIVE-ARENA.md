@@ -433,16 +433,26 @@ Hard-won from two live sessions; read before optimizing anything.
 14. **Equip/attach targeting fizzles from the mailbox path.** Game 2: Urza's brain
     chose Lightning Greaves' equip {0} three times; no target prompt ever surfaced
     (targeting is `chooseTargetsFor` = stock) and the ability silently fizzled each
-    time — the equipment never attached. Until attach targeting is handled (mailbox
-    it, or make stock complete it for mailbox-originated SAs), equip abilities are
-    effectively dead to the brains.
+    time. Root cause: stock's `chooseTargetsFor` re-runs the api-specific AI
+    heuristics (`doTrigger`) the mailbox path bypassed, and those can DECLINE.
+    **FIXED in v3 (2026-08-07):** `chooseTargetsFor` override mailboxes
+    single-target choices as `CHOOSE_ENTITY` (candidates from
+    `getAllCandidates`, optional decline when min=0); multi-target and unusual
+    cases still fall to stock — never worse than the status quo.
 15. **Auto-tap mana payment strands colored sources.** Forge's payment auto-tap chose
     a generic land over a colorless one for The One Ring's {4}, stranding the seat's
-    only blue source and locking two castable spells out of the turn. Mana-payment
-    tapping is a stock path the brain can't see or veto; either expose payment choice
-    or bias auto-tap to preserve colored sources.
-16. **Eliminations aren't pushed to brains (only discoverable via state).** After the
-    turn-21 double elimination, brains re-derived "Purphoros and Giada are gone" from
-    the request state correctly — but only when next consulted. The observer snapshot
-    should carry an explicit eliminated/turn-order field so pre-planning (Track 5)
-    can trigger on the *actual* next-seat transition.
+    only blue source and locking two castable spells out of the turn.
+    **DEFERRED, documented:** a real fix means reimplementing
+    `ComputerUtilMana`'s source selection — the deepest, riskiest change on the
+    list for the lowest observed harm. Revisit only if it recurs at game-losing
+    stakes. **15b (X values) FIXED in v3:** the mailbox cast path bypasses the
+    AI pipeline where X is normally set, and stock's `announceRequirements`
+    returns null for plain X costs — a brain-chosen Walking Ballista therefore
+    resolved at X=0 and died. `announceRequirements` is now overridden: X/value
+    announcements mailbox as `CHOOSE_NUMBER` (state.min/max, max clamped to the
+    stock affordability estimate so an unpayable X can never rewind the cast);
+    forced values never wake the brain.
+16. **Eliminations aren't pushed to brains (only discoverable via state).**
+    **FIXED in v3:** the observer snapshot now carries a per-seat `eliminated`
+    flag (`Player.hasLost()`), so runners/pre-planning can react to the actual
+    turn-order change.

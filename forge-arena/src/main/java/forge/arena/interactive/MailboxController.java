@@ -291,6 +291,88 @@ public final class MailboxController extends PlayerControllerAi {
         return super.announceRequirements(ability, min, max, announce);
     }
 
+    /**
+     * Targeting for mailbox-originated plays (field note 14). Stock's
+     * chooseTargetsFor re-runs the api-specific AI heuristics the mailbox
+     * path deliberately bypassed — and those heuristics can DECLINE
+     * (return false), silently fizzling the brain's chosen play (observed:
+     * Lightning Greaves' equip fizzled three times in one game). For
+     * single-target abilities the brain now picks the target itself;
+     * multi-target and anything unusual falls back to stock, which is never
+     * worse than the status quo.
+     */
+    @Override
+    public boolean chooseTargetsFor(SpellAbility currentAbility) {
+        try {
+            forge.game.spellability.TargetRestrictions tgt =
+                    currentAbility.getTargetRestrictions();
+            Card host = currentAbility.getHostCard();
+            if (tgt == null || host == null) {
+                return super.chooseTargetsFor(currentAbility);
+            }
+            int minT = tgt.getMinTargets(host, currentAbility);
+            int maxT = tgt.getMaxTargets(host, currentAbility);
+            if (maxT != 1) {
+                return super.chooseTargetsFor(currentAbility); // multi-target: stock
+            }
+            List<forge.game.GameEntity> candidates =
+                    tgt.getAllCandidates(currentAbility);
+            if (candidates == null || candidates.isEmpty()) {
+                return super.chooseTargetsFor(currentAbility);
+            }
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", minT);
+            state.put("max", 1);
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "CHOOSE_ENTITY",
+                    "Choose the TARGET for " + host.getName() + " ("
+                            + currentAbility + ").")
+                    .state(state);
+            if (minT == 0) {
+                req.option(0, "No target (decline)", null, "NONE");
+            }
+            Map<Integer, forge.game.GameEntity> byId = new LinkedHashMap<>();
+            int id = 1;
+            for (forge.game.GameEntity e : candidates) {
+                String label;
+                if (e instanceof Card) {
+                    Card c = (Card) e;
+                    label = c.getName()
+                            + (c.isCreature() ? " " + c.getNetPower() + "/"
+                                + c.getNetToughness() : "")
+                            + " [" + c.getController().getName() + "]";
+                } else {
+                    label = e.getName();
+                }
+                req.option(id, label, null, e instanceof Card ? "CARD" : "PLAYER");
+                byId.put(id, e);
+                id++;
+            }
+            JsonNode resp = bus.exchange(req);
+            if (resp != null) {
+                JsonNode chosen = resp.get("chosenId");
+                if (chosen != null && chosen.isInt()) {
+                    int cid = chosen.asInt();
+                    if (cid == 0 && minT == 0) {
+                        return true; // legal decline; ability proceeds untargeted
+                    }
+                    forge.game.GameEntity pick = byId.get(cid);
+                    if (pick != null) {
+                        currentAbility.resetTargets();
+                        if (currentAbility.getTargets().add(pick)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } catch (RuntimeException anything) {
+            // targeting must never crash the seat — stock is the floor
+        }
+        return super.chooseTargetsFor(currentAbility);
+    }
+
     @Override
     public boolean mulliganKeepHand(Player firstPlayer, int cardsToReturn) {
         Game game = getGame();
