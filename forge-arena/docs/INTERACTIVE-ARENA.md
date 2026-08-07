@@ -369,3 +369,15 @@ Hard-won from two live sessions; read before optimizing anything.
    (turn-2 Serra Ascendant played as a 6/6 flyer at 40 life), whole-turn drain, rich
    per-card state, the observer snapshot, and a clean mid-game max→medium brain
    cutover with no double-routing.
+10. **Set brain effort EXPLICITLY when spawning a seat (biggest speed lever).**
+    Spawn each seat brain at **`effort: low`** (keep `model` on the capable tier).
+    A seat spawned *without* an effort override **inherits the session effort** — and
+    a session left at **max** turns every fat-context, whole-turn-planning turn into
+    a ~5-minute crawl (the "molasses" in the second half of game 2; observed turns of
+    ~4.8 min each). Play quality barely moves because **the request state is ground
+    truth** (the seat re-derives each decision from it regardless of effort), but wall
+    time collapses. Effort is fixed at spawn, so it **cannot be lowered on a running
+    agent** — you must re-spawn to change it (cheap, since a fresh brain reconstructs
+    the game from the current request state). Secondary time sinks to trim next run:
+    the end-of-turn idle drain (a seat polls an empty inbox ~45–90s before reporting
+    idle — dead time) and over-heavy whole-turn planning at max effort.
