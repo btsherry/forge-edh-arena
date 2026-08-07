@@ -797,6 +797,16 @@ public final class MailboxController extends PlayerControllerAi {
         state.put("turn", turn);
         state.put("phase", view.phase());
         state.put("life", getPlayer().getLife());
+        state.put("poison", getPlayer().getPoisonCounters());
+        Map<String, Integer> ownCmdDmg = new LinkedHashMap<>();
+        for (java.util.Map.Entry<Card, Integer> e : getPlayer().getCommanderDamage()) {
+            if (e.getValue() != null && e.getValue() > 0) {
+                ownCmdDmg.put(e.getKey().getName(), e.getValue());
+            }
+        }
+        if (!ownCmdDmg.isEmpty()) {
+            state.put("commanderDamageTaken", ownCmdDmg);
+        }
         state.put("manaPool", view.manaPool());
         state.put("untappedManaSources", view.untappedManaSources());
         state.put("handSize", view.handSize());
@@ -843,6 +853,38 @@ public final class MailboxController extends PlayerControllerAi {
                 }
             }
             o.put("battlefield", oppBattlefield);
+            if (oppPlayer != null) {
+                // Remaining PUBLIC information (audit 2026-08-07): hand/library
+                // counts, graveyard + face-up exile contents, command zone, and
+                // commander damage taken. All open information at a real table;
+                // brains were doing threat assessment without it.
+                o.put("handSize", oppPlayer.getCardsIn(ZoneType.Hand).size());
+                o.put("librarySize", oppPlayer.getCardsIn(ZoneType.Library).size());
+                List<String> oppGy = new ArrayList<>();
+                for (Card c : oppPlayer.getCardsIn(ZoneType.Graveyard)) {
+                    oppGy.add(c.getName());
+                }
+                o.put("graveyard", oppGy);
+                List<String> oppExile = new ArrayList<>();
+                for (Card c : oppPlayer.getCardsIn(ZoneType.Exile)) {
+                    oppExile.add(c.isFaceDown() ? "(face-down card)" : c.getName());
+                }
+                o.put("exile", oppExile);
+                List<String> oppCmd = new ArrayList<>();
+                for (Card c : oppPlayer.getCardsIn(ZoneType.Command)) {
+                    oppCmd.add(c.getName());
+                }
+                o.put("commandZone", oppCmd);
+                Map<String, Integer> cmdDmg = new LinkedHashMap<>();
+                for (java.util.Map.Entry<Card, Integer> e : oppPlayer.getCommanderDamage()) {
+                    if (e.getValue() != null && e.getValue() > 0) {
+                        cmdDmg.put(e.getKey().getName(), e.getValue());
+                    }
+                }
+                if (!cmdDmg.isEmpty()) {
+                    o.put("commanderDamageTaken", cmdDmg);
+                }
+            }
             opps.add(o);
         }
         state.put("opponents", opps);

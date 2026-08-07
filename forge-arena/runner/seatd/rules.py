@@ -202,7 +202,10 @@ def build_user_prompt(req: dict, plan: str | None = None,
     if observer:
         seats = observer.get("seats", [])
         lifeline = ", ".join(
-            f"seat {s.get('seat')}: {s.get('life')} life" for s in seats)
+            f"seat {s.get('seat')}: {s.get('life')} life, "
+            f"{s.get('handSize')} cards"
+            + (" [ELIMINATED]" if s.get("eliminated") else "")
+            for s in seats)
         if lifeline:
             parts.append(f"PUBLIC TABLE: {lifeline} | stack: {observer.get('stack')}")
     if plan:
