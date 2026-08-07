@@ -83,6 +83,12 @@ public final class GuiPilotMatch {
 
     public static void main(String[] args) {
         String humanDeck = args.length > 0 ? args[0] : DECKS[0];
+        // --all-ai: EVERY seat (incl. 0) is a mailbox seat; the GUI attaches as
+        // a pure spectator via HostedMatch's humanCount==0 watch path.
+        final boolean allAi = "--all-ai".equals(humanDeck);
+        if (allAi) {
+            humanDeck = DECKS[0];
+        }
         if (args.length > 1) {
             System.setProperty(MailboxProtocol.DIR_PROPERTY, args[1]);
         }
@@ -97,9 +103,10 @@ public final class GuiPilotMatch {
         Singletons.getControl().initialize();
 
         // --- assemble + start the match on the EDT --------------------------
+        final String humanDeckFinal = humanDeck;
         FThreads.invokeInEdtNowOrLater(() -> {
             try {
-                startCommanderMatch(decksDir, humanDeck);
+                startCommanderMatch(decksDir, humanDeckFinal, allAi);
             } catch (RuntimeException e) {
                 System.err.println("GuiPilotMatch: failed to start match: " + e);
                 e.printStackTrace();
@@ -107,7 +114,8 @@ public final class GuiPilotMatch {
         });
     }
 
-    private static void startCommanderMatch(File decksDir, String humanDeckFile) {
+    private static void startCommanderMatch(File decksDir, String humanDeckFile,
+            boolean allAi) {
         // Order the seats: human deck first, then the remaining three as mailbox
         // seats (preserving the fixed DECKS order).
         List<String> ordered = new ArrayList<>();
@@ -128,12 +136,13 @@ public final class GuiPilotMatch {
                         "not a loadable Commander deck: " + deckFile.getAbsolutePath());
             }
             RegisteredPlayer rp = RegisteredPlayer.forCommander(deck);
-            if (seat == 0) {
+            if (seat == 0 && !allAi) {
                 // seat 0 = HUMAN via the GUI player; its IGuiGame renders the game.
                 rp.setPlayer(GamePlayerUtil.getGuiPlayer());
                 guis.put(rp, GuiBase.getInterface().getNewGuiGame());
             } else {
-                // seats 1-3 = file-driven mailbox seats.
+                // mailbox seats (all four of them under --all-ai; the GUI then
+                // rides along as HostedMatch's humanCount==0 spectator).
                 rp.setPlayer(new MailboxLobbyPlayer("mailbox-seat" + seat + "-" + deck.getName()));
             }
             players.add(rp);
