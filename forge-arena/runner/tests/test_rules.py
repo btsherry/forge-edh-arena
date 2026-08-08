@@ -112,6 +112,20 @@ class TableDrivenContract(unittest.TestCase):
         self.assertEqual(d, {"chosenId": 78})
         self.assertIsNotNone(rules.validate(req, d))
 
+    def test_combat_tolerates_leaked_why_noise(self):
+        # Observed live: model leaked a stray "why" string into the blocks array
+        # alongside a valid block. Salvage the valid pair, drop the noise.
+        req = load("declare_blockers")
+        clean = rules.validate(req, {"blocks": [{"blocker": 302, "attacker": 78}, "why"],
+                                     "why": "kills it for free"})
+        self.assertEqual(clean, {"blocks": [{"blocker": 302, "attacker": 78}]})
+        # attackers array likewise
+        reqa = load("declare_attackers")
+        cleana = rules.validate(reqa, {"attackers": ["why", {"attacker": 302, "defender": 0}]})
+        self.assertEqual(cleana, {"attackers": [{"attacker": 302, "defender": 0}]})
+        # pure-noise array degrades to the safe empty declaration, still legal
+        self.assertEqual(rules.validate(req, {"blocks": ["why"]}), {"blocks": []})
+
     def test_choose_mode_allow_repeat(self):
         req = copy.deepcopy(load("choose_mode"))
         req["state"]["min"], req["state"]["max"] = 2, 2

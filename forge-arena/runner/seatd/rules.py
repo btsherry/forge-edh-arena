@@ -93,7 +93,7 @@ def validate(req: dict, out) -> dict | None:
         seen, clean = set(), []
         for e in arr:
             if not isinstance(e, dict):
-                return None
+                continue  # tolerate stray non-object noise (e.g. a leaked "why")
             a, d = e.get("attacker"), e.get("defender")
             if not _is_int(a) or a not in attacker_ids or a in seen:
                 return None
@@ -113,7 +113,7 @@ def validate(req: dict, out) -> dict | None:
         seen, clean = set(), []
         for e in arr:
             if not isinstance(e, dict):
-                return None
+                continue  # tolerate stray non-object noise (e.g. a leaked "why")
             b, a = e.get("blocker"), e.get("attacker")
             if not _is_int(b) or b not in blocker_ids or b in seen:
                 return None  # a creature blocks once; unknown blocker poisons all
