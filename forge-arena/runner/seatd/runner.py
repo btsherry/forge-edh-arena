@@ -46,6 +46,52 @@ class SeatRunner:
         # Shared table narrative: every seat APPENDS one line per decision
         # (never reads it) — an interleaved, board-stamped play-pattern record.
         self._game_log = log_dir / "game.jsonl"
+        # Live control file: desired {model, effort} for this seat. The runner
+        # is the reconciler — it publishes its launch values if the file is
+        # absent, honors the file if present (UI/CLI writes win), and applies
+        # changes at the next decision boundary (sessions survive: model and
+        # effort are per-call flags on a transcript-based session).
+        self._control_path = log_dir / "control" / f"seat-{seat}.json"
+        self._control_mtime = 0.0
+        self._init_control()
+
+    def _init_control(self) -> None:
+        try:
+            self._control_path.parent.mkdir(parents=True, exist_ok=True)
+            if self._control_path.exists():
+                self._apply_control(startup=True)
+            else:
+                self._control_path.write_text(json.dumps(
+                    {"model": self.brain.model, "effort": self.brain.effort}))
+                self._control_mtime = self._control_path.stat().st_mtime
+        except OSError:
+            pass
+
+    def _apply_control(self, startup: bool = False) -> None:
+        """Poll the control file; apply model/effort changes to the brain."""
+        try:
+            mtime = self._control_path.stat().st_mtime
+        except OSError:
+            return
+        if mtime == self._control_mtime:
+            return
+        self._control_mtime = mtime
+        try:
+            desired = json.loads(self._control_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return  # partial write — picked up on the next poll
+        model = desired.get("model")
+        effort = desired.get("effort")
+        changes = []
+        if isinstance(model, str) and model and model != self.brain.model:
+            changes.append(f"model {self.brain.model}->{model}")
+            self.brain.model = model
+        if isinstance(effort, str) and effort and effort != self.brain.effort:
+            changes.append(f"effort {self.brain.effort}->{effort}")
+            self.brain.effort = effort
+        if changes:
+            self._say(f"[seat {self.seat}] CONTROL applied: " + ", ".join(changes)
+                      + (" (startup)" if startup else ""))
 
     # ---- logging ---------------------------------------------------------
 
@@ -153,6 +199,7 @@ class SeatRunner:
                   + (f" (swept {swept} stale)" if swept else ""))
         self.brain.ensure_session()  # pre-warm: dossier loads before turn 0
         while True:
+            self._apply_control()
             req = self.mb.pending_request()
             if req is None:
                 time.sleep(poll_s)
