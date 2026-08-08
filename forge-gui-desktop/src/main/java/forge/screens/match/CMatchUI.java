@@ -98,6 +98,7 @@ import forge.model.FModel;
 import forge.player.PlayerZoneUpdate;
 import forge.player.PlayerZoneUpdates;
 import forge.screens.match.controllers.CCombat;
+import forge.screens.match.controllers.CAiControl;
 import forge.screens.match.controllers.CDependencies;
 import forge.screens.match.controllers.CDetailPicture;
 import forge.screens.match.controllers.CDev;
@@ -168,6 +169,7 @@ public final class CMatchUI
 
     private final CCombat cCombat = new CCombat();
     private final CDependencies cDependencies = new CDependencies(this);
+    private final CAiControl cAiControl = new CAiControl(this);
     private final CDetailPicture cDetailPicture = new CDetailPicture(this);
     private final CDev cDev = new CDev(this);
     private final CDock cDock = new CDock(this);
@@ -188,6 +190,7 @@ public final class CMatchUI
         this.myDocs.put(EDocID.REPORT_COMBAT, cCombat.getView());
         this.myDocs.put(EDocID.REPORT_DEPENDENCIES, cDependencies.getView());
         this.myDocs.put(EDocID.REPORT_LOG, cLog.getView());
+        this.myDocs.put(EDocID.REPORT_AI, cAiControl.getView());
         this.myDocs.put(EDocID.DEV_MODE, getCDev().getView());
         this.myDocs.put(EDocID.BUTTON_DOCK, getCDock().getView());
     }

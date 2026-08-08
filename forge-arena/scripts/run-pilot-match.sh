@@ -75,5 +75,6 @@ exec "$JAVA" $MAND $OPENS \
   -Darena.decks.dir="$DECKS_DIR" \
   -Darena.mailbox.dir="$MAILBOX_DIR" \
   -Darena.mailbox.timeout.sec="$TIMEOUT" \
+  -Darena.runner.logs.dir="$REPO_ROOT/forge-arena/runner/logs" \
   -cp "$ARENA_CLASSES:$JAR:$(cat "$ARENA_CP_TXT")" \
   forge.arena.interactive.GuiPilotMatch "$@"
