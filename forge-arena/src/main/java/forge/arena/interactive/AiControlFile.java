@@ -91,6 +91,64 @@ public final class AiControlFile {
         return u.exists() ? System.currentTimeMillis() - u.lastModified() : Long.MAX_VALUE;
     }
 
+    // ---- token/cost telemetry (from seat-N.usage.json) ---------------------
+
+    private static long usageLong(final String body, final String key) {
+        final Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*(-?\\d+)").matcher(body);
+        return m.find() ? Long.parseLong(m.group(1)) : 0L;
+    }
+
+    private static double usageDouble(final String body, final String key) {
+        final Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*(-?[\\d.]+)").matcher(body);
+        return m.find() ? Double.parseDouble(m.group(1)) : 0.0;
+    }
+
+    /** Compact per-seat usage line, or {@code null} if no snapshot yet. */
+    public static String usageSummary(final int seat) {
+        final File u = usageFile(seat);
+        final String body;
+        try {
+            body = new String(Files.readAllBytes(u.toPath()), StandardCharsets.UTF_8);
+        } catch (final IOException e) {
+            return null;
+        }
+        final long calls = usageLong(body, "calls");
+        final long out = usageLong(body, "output_tokens");
+        final long read = usageLong(body, "cache_read_input_tokens");
+        final long write = usageLong(body, "cache_creation_input_tokens");
+        final double cost = usageDouble(body, "cost_usd");
+        final long cacheDenom = read + write;
+        final String cacheStr = cacheDenom > 0
+                ? Math.round(100.0 * read / cacheDenom) + "% cache" : "—";
+        return String.format("%d calls · %s out · %s · ≈$%.2f API-equiv",
+                calls, human(out), cacheStr, cost);
+    }
+
+    /** Table-wide totals across all four seats, or {@code null} if none live. */
+    public static String tableTotals() {
+        long calls = 0, out = 0;
+        double cost = 0;
+        boolean any = false;
+        for (int n = 0; n < 4; n++) {
+            final File u = usageFile(n);
+            try {
+                final String body = new String(Files.readAllBytes(u.toPath()), StandardCharsets.UTF_8);
+                calls += usageLong(body, "calls");
+                out += usageLong(body, "output_tokens");
+                cost += usageDouble(body, "cost_usd");
+                any = true;
+            } catch (final IOException ignored) {
+                // seat offline — skip
+            }
+        }
+        return any ? String.format("TABLE: %d calls · %s out · ≈$%.2f API-equiv (subscription — $0 actual)",
+                calls, human(out), cost) : null;
+    }
+
+    private static String human(final long n) {
+        return n >= 1000 ? String.format("%.1fk", n / 1000.0) : String.valueOf(n);
+    }
+
     private static String find(final File f, final Pattern p, final String dflt) {
         try {
             final String s = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);

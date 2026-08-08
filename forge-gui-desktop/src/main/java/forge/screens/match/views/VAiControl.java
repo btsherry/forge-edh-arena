@@ -42,6 +42,8 @@ public class VAiControl implements IVDoc<CAiControl> {
     private final JLabel[] status = new JLabel[SEATS];
     private final JLabel[] modelLbl = new JLabel[SEATS];
     private final JLabel[] effortLbl = new JLabel[SEATS];
+    private final JLabel[] usageLbl = new JLabel[SEATS];
+    private final JLabel totalLbl = new JLabel(" ");
     private final Timer refresh;
 
     public VAiControl(final CAiControl controller) {
@@ -71,8 +73,13 @@ public class VAiControl implements IVDoc<CAiControl> {
             eBtns.setOpaque(false);
             eBtns.add(stepBtn("−", () -> step(n, false, -1)));
             eBtns.add(stepBtn("+", () -> step(n, false, +1)));
-            body.add(eBtns);
+            body.add(eBtns, "wrap");
+            // per-seat usage line, spanning the full row under the controls
+            usageLbl[n] = dim("—");
+            body.add(usageLbl[n], "span 7, gapleft 20, gaptop 0, gapbottom 4, wrap");
         }
+        totalLbl.setForeground(java.awt.Color.LIGHT_GRAY);
+        body.add(totalLbl, "span 7, gaptop 6");
         refresh = new Timer(2000, e -> refreshFromFiles());
         refresh.setRepeats(true);
     }
@@ -86,6 +93,13 @@ public class VAiControl implements IVDoc<CAiControl> {
     private static JLabel value(final String s) {
         final JLabel l = new JLabel(s);
         l.setForeground(java.awt.Color.WHITE);
+        return l;
+    }
+
+    private static JLabel dim(final String s) {
+        final JLabel l = new JLabel(s);
+        l.setForeground(java.awt.Color.GRAY);
+        l.setFont(l.getFont().deriveFont(l.getFont().getSize2D() - 1f));
         return l;
     }
 
@@ -113,7 +127,11 @@ public class VAiControl implements IVDoc<CAiControl> {
             status[n].setForeground(age < 60_000 ? new java.awt.Color(0x3D, 0xC8, 0x5C)
                     : age < 300_000 ? new java.awt.Color(0xD8, 0xB4, 0x2A)
                     : java.awt.Color.DARK_GRAY);
+            final String usage = AiControlFile.usageSummary(n);
+            usageLbl[n].setText(usage != null ? usage : "— no decisions yet");
         }
+        final String totals = AiControlFile.tableTotals();
+        totalLbl.setText(totals != null ? totals : " ");
     }
 
     //========== IVDoc
