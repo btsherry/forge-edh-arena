@@ -48,8 +48,6 @@ class TableDrivenContract(unittest.TestCase):
          [{"attackers": [{"attacker": 302}]},                     # defender omitted
           {"attackers": [{"attacker": 999, "defender": 0}]},      # unknown attacker
           {"attackers": [{"attacker": 302, "defender": 2}]},      # unknown defender
-          {"attackers": [{"attacker": 302, "defender": 0},
-                         {"attacker": 302, "defender": 1}]},      # attacker dupe
           {"attackers": [{"attacker": 0, "defender": 0}]},        # pass id as attacker
           {"blocks": []}]),
         ("declare_blockers",
@@ -58,8 +56,6 @@ class TableDrivenContract(unittest.TestCase):
           {"blocks": [{"blocker": 302, "attacker": 161}]}],
          [{"blocks": [{"blocker": 302, "attacker": 999}]},        # unknown attacker
           {"blocks": [{"blocker": 999, "attacker": 78}]},         # unknown blocker
-          {"blocks": [{"blocker": 302, "attacker": 78},
-                      {"blocker": 302, "attacker": 161}]},        # blocker twice
           {"attackers": []}]),
         ("choose_entity",
          [{"chosenId": 0}, {"chosenId": 78}, {"chosenId": 302}],
@@ -125,6 +121,23 @@ class TableDrivenContract(unittest.TestCase):
         self.assertEqual(cleana, {"attackers": [{"attacker": 302, "defender": 0}]})
         # pure-noise array degrades to the safe empty declaration, still legal
         self.assertEqual(rules.validate(req, {"blocks": ["why"]}), {"blocks": []})
+
+    def test_combat_salvages_duplicate_entries(self):
+        # Observed live: model listed the same attacker twice (+ "why":"Placeholder").
+        # A creature attacks once; keep the first pairing, drop the repeat.
+        reqa = load("declare_attackers")
+        self.assertEqual(
+            rules.validate(reqa, {"attackers": [{"attacker": 302, "defender": 3},
+                                                {"attacker": 302, "defender": 3}]}),
+            {"attackers": [{"attacker": 302, "defender": 3}]})
+        # blockers likewise: first block for a creature wins, dupe dropped
+        reqb = load("declare_blockers")
+        self.assertEqual(
+            rules.validate(reqb, {"blocks": [{"blocker": 302, "attacker": 78},
+                                             {"blocker": 302, "attacker": 161}]}),
+            {"blocks": [{"blocker": 302, "attacker": 78}]})
+        # a still-unknown id in the array remains a hard reject (not mere noise)
+        self.assertIsNone(rules.validate(reqa, {"attackers": [{"attacker": 999, "defender": 3}]}))
 
     def test_choose_mode_allow_repeat(self):
         req = copy.deepcopy(load("choose_mode"))

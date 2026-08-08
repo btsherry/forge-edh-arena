@@ -95,8 +95,10 @@ def validate(req: dict, out) -> dict | None:
             if not isinstance(e, dict):
                 continue  # tolerate stray non-object noise (e.g. a leaked "why")
             a, d = e.get("attacker"), e.get("defender")
-            if not _is_int(a) or a not in attacker_ids or a in seen:
+            if not _is_int(a) or a not in attacker_ids:
                 return None
+            if a in seen:
+                continue  # a creature attacks once; a repeat entry is noise, keep first
             if not _is_int(d) or (defender_ids and d not in defender_ids):
                 return None  # defender ALWAYS explicit and known
             seen.add(a)
@@ -115,8 +117,10 @@ def validate(req: dict, out) -> dict | None:
             if not isinstance(e, dict):
                 continue  # tolerate stray non-object noise (e.g. a leaked "why")
             b, a = e.get("blocker"), e.get("attacker")
-            if not _is_int(b) or b not in blocker_ids or b in seen:
-                return None  # a creature blocks once; unknown blocker poisons all
+            if not _is_int(b) or b not in blocker_ids:
+                return None  # unknown blocker id
+            if b in seen:
+                continue  # a creature blocks once; a repeat entry is noise, keep first
             if not _is_int(a) or (attacker_ids and a not in attacker_ids):
                 return None
             seen.add(b)
