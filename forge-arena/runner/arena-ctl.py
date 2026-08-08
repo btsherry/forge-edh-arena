@@ -6,7 +6,7 @@ The runners reconcile: changes apply at each seat's next decision boundary
 the same files; this is the terminal path.
 
 Usage:
-  arena-ctl.py <seat|all> [--model haiku|sonnet|opus|fable] [--effort low|medium|high]
+  arena-ctl.py <seat|all> [--model haiku|sonnet|opus|fable] [--effort low|medium|high|xhigh|max]
   arena-ctl.py status            # show current control files
 
 Examples:

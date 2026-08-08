@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
 public final class AiControlFile {
 
     public static final String[] MODELS = {"haiku", "sonnet", "opus", "fable"};
-    public static final String[] EFFORTS = {"low", "medium", "high"};
+    public static final String[] EFFORTS = {"low", "medium", "high", "xhigh", "max"};
 
     private static final Pattern MODEL_RE = Pattern.compile("\"model\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern EFFORT_RE = Pattern.compile("\"effort\"\\s*:\\s*\"([^\"]+)\"");
