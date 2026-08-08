@@ -225,3 +225,16 @@ in INTERACTIVE-ARENA field notes): suppress no-op protection REACTs (§12), rich
 REACT stack context (targets, not just names), optional-trigger windows
 (confirmAction still stock). The runner deliberately does NOT duplicate the
 engine-side REACT gate beyond its config fastpath — one owner per filter.
+
+## Backlog (low priority)
+
+- **AI-tab "Turbo/Restore" toggle** — the spectator 10x speed button only shrinks
+  cosmetic phase delays, which are noise next to 6–9s brain think-time in all-AI
+  games. Leave that native button alone (it earns its keep in human-seated games
+  for watchability); instead add a Turbo toggle to the AI tab that snapshots
+  current per-seat settings and drops all seats to `haiku`/`low` (~3–4s
+  decisions), with Restore to revert. Lives entirely in forge-arena (writes the
+  same control files), no parent-module edit. Stretch version: "highlight reel"
+  auto-pacing — turbo by default, auto-revert to normal speed + higher effort
+  when game.jsonl shows something interesting (big life swing, lethal combat,
+  combo turn), driven by the watcher feeding the control plane.
