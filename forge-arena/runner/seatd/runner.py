@@ -145,7 +145,10 @@ class SeatRunner:
                "model": self.brain.model, "effort": self.brain.effort,
                "answer": answer, "why": why, "consumed": consumed,
                "board": stamp}
-        if source == "model":
+        # Log options for model AND plan/hold decisions so a binding/auto-pass
+        # can be audited post-hoc (was model-only; the local fastpaths need it
+        # most for the correctness review).
+        if source in ("model", "plan", "hold"):
             rec["options"] = [str(o.get("label", ""))[:60]
                               for o in req.get("options", [])[:9]]
         if req.get("decisionType") == "MULLIGAN":
