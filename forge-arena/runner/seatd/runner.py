@@ -29,14 +29,19 @@ DEFAULT_AUTOPASS = ("Giver of Runes", "Mother of Runes", "Academy Ruins")
 class SeatRunner:
     def __init__(self, seat: int, deck: str, base, model: str = "sonnet",
                  effort: str = "low", timeout_s: float = 90.0, log_dir=None,
-                 autopass: tuple[str, ...] = DEFAULT_AUTOPASS):
+                 autopass: tuple[str, ...] = DEFAULT_AUTOPASS,
+                 speculative: bool = False):
         self.mb = SeatMailbox(seat, base, timeout_s=timeout_s)
         self.brain = SeatBrain(seat, deck, model=model, effort=effort,
                                log=self._say)
         self.seat, self.deck = seat, deck
         self.timeout_s = timeout_s
         self.autopass = tuple(autopass)
-        self.plan: tuple[int, str] | None = None      # (turn, text)
+        self.speculative = speculative
+        # Executable turn plan (SPEC-executable-turn-plans.md): dict or None.
+        #   {"turn": int, "steps": [{"card","why"}], "idx": int}
+        # Consumed locally under the four-part guard; discarded on any divergence.
+        self.plan: dict | None = None
         self.react_seen: set[tuple] = set()
         self._last_turn: int | None = None
         log_dir = Path(log_dir) if log_dir else Path(__file__).parents[1] / "logs"
@@ -131,6 +136,7 @@ class SeatRunner:
         rec = {"ts": time.time(), "seat": self.seat, "seq": req.get("seq"),
                "turn": req.get("turn"), "phase": req.get("phase"),
                "type": req.get("decisionType"), "source": source,
+               "model": self.brain.model, "effort": self.brain.effort,
                "answer": answer, "why": why, "consumed": consumed,
                "board": stamp}
         if source == "model":
@@ -158,6 +164,7 @@ class SeatRunner:
                     "ts": rec["ts"], "seat": self.seat, "deck": self.deck,
                     "turn": rec["turn"], "phase": rec["phase"],
                     "type": rec["type"], "seq": rec["seq"], "source": source,
+                    "model": self.brain.model, "effort": self.brain.effort,
                     "answer": answer, "why": why,
                     "latency_s": rec.get("latency_s"), "board": stamp}) + "\n")
         except OSError:
@@ -178,6 +185,23 @@ class SeatRunner:
         opts = tuple(sorted(str(o.get("label", "")).split("  ")[0]
                             for o in req.get("options", []) if o.get("id") != 0))
         return (req.get("turn"), stack, opts)
+
+    # ---- executable plan (four-part guard) --------------------------------
+
+    def _plan_guard(self, req: dict, step: dict) -> int | None:
+        """Guards #1-3 + the double-validate for one plan step vs the live req.
+        (#1 TYPE and #4 NO-INTERACTION are checked by the caller.) Returns the
+        bound option id if the step may execute locally, else None (divergence)."""
+        if req.get("phase") not in ("MAIN1", "MAIN2"):          # #2a timing
+            return None
+        if (req.get("state") or {}).get("stack"):               # #2b empty stack
+            return None
+        oid = rules.bind_plan_step(step, req)                   # #3 option present
+        if oid is None:
+            return None
+        if rules.validate(req, {"chosenId": oid}) is None:      # double guard: legal
+            return None
+        return oid
 
     def _fastpath(self, req: dict) -> tuple[dict, str] | None:
         if req.get("decisionType") != "REACT":
@@ -220,6 +244,14 @@ class SeatRunner:
 
         seq, dtype = req.get("seq"), req.get("decisionType")
 
+        # Guard #4: any opponent instant-speed action during our own turn shows
+        # up as a REACT req — it invalidates the executable plan wholesale (the
+        # remainder is strategically stale). Checked BEFORE fastpath so even an
+        # autopassed react still kills the plan.
+        if self.plan and dtype == "REACT" and self.plan.get("turn") == req.get("turn"):
+            self._say(f"[seat {self.seat}] plan invalidated (opponent interaction)")
+            self.plan = None
+
         fast = self._fastpath(req)
         if fast:
             answer, source = fast
@@ -231,6 +263,28 @@ class SeatRunner:
             self._record(req, answer, source, why=why, consumed=ok)
             return
 
+        # Guards #1-3: consume an executable plan step for a CAST_SPELL window,
+        # locally, no model call. Any failed consumption is a divergence -> drop
+        # the whole plan and fall through to the model for this req.
+        if (self.speculative and self.plan and dtype == "CAST_SPELL"
+                and self.plan.get("turn") == req.get("turn")
+                and self.plan["idx"] < len(self.plan["steps"])):
+            step = self.plan["steps"][self.plan["idx"]]
+            oid = self._plan_guard(req, step)
+            if oid is not None:
+                answer = {"chosenId": oid}
+                self.plan["idx"] += 1
+                ok = self.mb.respond(req, answer)
+                self._say(f"[seat {self.seat}] seq={seq} {dtype} -> "
+                          f"{json.dumps(answer)} [plan {self.plan['idx']}/"
+                          f"{len(self.plan['steps'])}: {step.get('card')}]"
+                          f"{'' if ok else ' WINDOW LOST'}")
+                self._record(req, answer, "plan",
+                             why=step.get("why"), consumed=ok)
+                return
+            self._say(f"[seat {self.seat}] plan invalidated (divergence at seq {seq})")
+            self.plan = None
+
         # Deadline: answer must land before the engine gives up on us.
         try:
             mtime = (self.mb.inbox / f"req-{seq}.json").stat().st_mtime
@@ -240,8 +294,12 @@ class SeatRunner:
         budget = deadline - time.time()
         answer, source, meta, why = None, "punt", None, None
         if budget > 5.0:
-            plan_text = self.plan[1] if (self.plan and
-                                         self.plan[0] == req.get("turn")) else None
+            # Advisory: remaining planned cards (if a plan survives) fed as text.
+            plan_text = None
+            if self.plan and self.plan.get("turn") == req.get("turn"):
+                rem = [s.get("card") for s in self.plan["steps"][self.plan["idx"]:]]
+                if rem:
+                    plan_text = "remaining planned casts: " + ", ".join(rem)
             prompt = rules.build_user_prompt(req, plan=plan_text,
                                              observer=self.mb.read_observer())
             out, meta = self.brain.decide(prompt, timeout_s=min(budget, 120.0))
@@ -250,10 +308,18 @@ class SeatRunner:
                 why = out["why"][:200]
             if clean is not None:
                 answer, source = clean, "model"
-                if (isinstance(out, dict) and out.get("turn_plan")
-                        and dtype == "CAST_SPELL"
+                # Install an executable plan from the model's first own-turn main
+                # decision (once per turn). Steps name cards; consumed under guard.
+                if (self.speculative and self.plan is None
+                        and isinstance(out, dict) and dtype == "CAST_SPELL"
                         and req.get("phase") in ("MAIN1", "MAIN2")):
-                    self.plan = (req.get("turn"), str(out["turn_plan"])[:1200])
+                    steps = [s for s in (out.get("plan") or [])
+                             if isinstance(s, dict) and s.get("card")]
+                    if steps:
+                        self.plan = {"turn": req.get("turn"),
+                                     "steps": steps[:12], "idx": 0}
+                        self._say(f"[seat {self.seat}] plan installed: "
+                                  + ", ".join(s["card"] for s in self.plan["steps"]))
             elif out is not None:
                 self._say(f"[seat {self.seat}] seq={seq} INVALID model answer "
                           f"{str(meta.get('raw'))[:120]!r} -> safe default")

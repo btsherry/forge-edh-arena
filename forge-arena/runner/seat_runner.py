@@ -63,6 +63,9 @@ def main() -> None:
                     default=float(os.environ.get("ARENA_MAILBOX_TIMEOUT", "90")))
     ap.add_argument("--autopass", default="Giver of Runes,Mother of Runes,Academy Ruins",
                     help="comma-separated ability-name prefixes auto-passed in REACT")
+    ap.add_argument("--speculative", action="store_true",
+                    help="execute brain-authored CAST plans locally under the "
+                         "four-part guard (fewer round-trips on uncontested turns)")
     ap.add_argument("--echo", action="store_true",
                     help="answer every window with the legal safe default (no model)")
     args = ap.parse_args()
@@ -77,7 +80,7 @@ def main() -> None:
     autopass = tuple(s.strip() for s in args.autopass.split(",") if s.strip())
     SeatRunner(args.seat, args.deck, args.base, model=args.model,
                effort=args.effort, timeout_s=args.timeout,
-               autopass=autopass).run()
+               autopass=autopass, speculative=args.speculative).run()
 
 
 if __name__ == "__main__":

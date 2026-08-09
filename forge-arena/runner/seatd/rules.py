@@ -193,6 +193,25 @@ def safe_default(req: dict) -> dict:
     return {"chosenId": 0}                        # CAST_SPELL / REACT / unknown
 
 
+def bind_plan_step(step: dict, req: dict) -> int | None:
+    """Resolve an executable-plan step (references a card by NAME) to the current
+    req's option id. Option ids are per-req, so plans can't carry ids across the
+    sequential reqs a turn produces — they name the card and we re-resolve here.
+    Returns the id of the first non-pass option whose label contains the card
+    name (case-insensitive), or None (guard #3: intended play absent)."""
+    if not isinstance(step, dict):
+        return None
+    card = str(step.get("card", "")).strip().lower()
+    if not card:
+        return None
+    for o in req.get("options", []):
+        if not _is_int(o.get("id")) or o.get("id") == 0:
+            continue
+        if card in str(o.get("label", "")).lower():
+            return o.get("id")
+    return None
+
+
 def build_user_prompt(req: dict, plan: str | None = None,
                       observer: dict | None = None) -> str:
     """Per-decision prompt for the seat's model session (dossier already lives
@@ -220,7 +239,14 @@ def build_user_prompt(req: dict, plan: str | None = None,
     parts.append(
         "Reply with ONLY the JSON answer object on one line — no prose, no "
         "code fences. REQUIRED: include a \"why\" key — your decision logic in "
-        "<=20 words (it is logged, never shown to opponents). You may add an "
-        "optional \"turn_plan\" key (<=150 words) when this is the first "
-        "main-phase decision of YOUR turn.")
+        "<=20 words (it is logged, never shown to opponents).\n"
+        "OPTIONAL, only on the FIRST main-phase decision of YOUR own turn: a "
+        "\"plan\" key — an ordered array of the REMAINING sorcery-speed CAST "
+        "plays you intend THIS turn, each {\"card\": \"<exact card name>\", "
+        "\"why\": \"<=12 words\"}, in cast order, EXCLUDING the play you are "
+        "making right now and EXCLUDING lands and combat. The runner will "
+        "execute these locally to save time, but re-checks each against the "
+        "live board and hands control back to you the instant anything diverges "
+        "(an opponent responds, a piece is gone, the board changed). Only list "
+        "plays you are confident you'll want regardless of small changes.")
     return "\n".join(parts)

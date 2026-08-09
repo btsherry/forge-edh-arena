@@ -14,11 +14,14 @@ BASE="${1:-$DIR/../mailbox}"
 MODEL="${SEAT_MODEL:-sonnet}"
 EFFORT="${SEAT_EFFORT:-low}"
 export ARENA_MAILBOX_TIMEOUT="${ARENA_MAILBOX_TIMEOUT:-90}"
+# SEAT_SPECULATIVE=1 enables executable turn plans (fewer round-trips).
+SPEC_FLAG=""
+[ "${SEAT_SPECULATIVE:-0}" = "1" ] && SPEC_FLAG="--speculative"
 
 seat() { # seat_no deck
   while true; do
     python3 "$DIR/seat_runner.py" --seat "$1" --deck "$2" \
-      --model "$MODEL" --effort "$EFFORT" --base "$BASE"
+      --model "$MODEL" --effort "$EFFORT" --base "$BASE" $SPEC_FLAG
     echo "[seat $1] runner exited ($?) — restarting in 2s" >&2
     sleep 2
   done
@@ -26,7 +29,7 @@ seat() { # seat_no deck
 
 trap 'kill 0' INT TERM
 if [ "${ALL_SEATS:-0}" = "1" ]; then
-  seat 0 selvala-competitive &   # all-AI mode: 4th brain takes seat 0
+  seat 0 selvala-heart-of-the-wilds &   # all-AI mode: 4th brain takes seat 0
 fi
 seat 1 purphoros-god-of-the-forge &
 seat 2 giada-font-of-hope &
