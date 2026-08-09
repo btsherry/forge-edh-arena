@@ -322,7 +322,9 @@ class SeatRunner:
                     plan_text = "remaining planned casts: " + ", ".join(rem)
             prompt = rules.build_user_prompt(req, plan=plan_text,
                                              observer=self.mb.read_observer())
-            out, meta = self.brain.decide(prompt, timeout_s=min(budget, 120.0))
+            # Cap at the deadline (raised to 240 so fable/high effort isn't
+            # truncated on long-timeout games; normal 90s games stay budget-bound).
+            out, meta = self.brain.decide(prompt, timeout_s=min(budget, 240.0))
             clean = rules.validate(req, out) if out is not None else None
             if isinstance(out, dict) and isinstance(out.get("why"), str):
                 why = out["why"][:200]
