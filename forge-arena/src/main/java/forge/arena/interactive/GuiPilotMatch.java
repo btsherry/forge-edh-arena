@@ -11,6 +11,7 @@ import forge.GuiDesktop;
 import forge.Singletons;
 import forge.deck.Deck;
 import forge.deck.io.DeckSerializer;
+import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.player.RegisteredPlayer;
 import forge.gamemodes.match.HostedMatch;
@@ -72,7 +73,7 @@ public final class GuiPilotMatch {
 
     /** The four Commander decks; index 0 is the default human seat. */
     private static final String[] DECKS = {
-            "selvala-heart-of-the-wilds.dck",
+            "selvala-competitive.dck",
             "purphoros-god-of-the-forge.dck",
             "giada-font-of-hope.dck",
             "urza-lord-high-artificer.dck",
@@ -151,6 +152,14 @@ public final class GuiPilotMatch {
         // A human seat means humanCount >= 1, which avoids the humanCount == 0
         // spectator IndexOutOfBounds path in HostedMatch.startGame.
         HostedMatch hm = GuiBase.getInterface().hostMatch();
-        hm.startMatch(GameType.Commander, EnumSet.of(GameType.Commander), players, guis);
+        // ONE game per launch — Forge treats a Match as best-of-3 by default
+        // (GameRules.gamesPerMatch=3 / UI_MATCHES_PER_GAME), which is what
+        // auto-started games 2 and 3 ("auto-chaining"). Not a bug — a Match is
+        // multi-game — but the arena wants a single game per launch, so build
+        // explicit rules with gamesPerMatch=1 and use the rules overload. Pure
+        // arena-side change; no Forge patch.
+        GameRules rules = new GameRules(GameType.Commander);
+        rules.setGamesPerMatch(1);
+        hm.startMatch(rules, EnumSet.of(GameType.Commander), players, guis, null);
     }
 }

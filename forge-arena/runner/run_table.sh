@@ -26,7 +26,7 @@ seat() { # seat_no deck
 
 trap 'kill 0' INT TERM
 if [ "${ALL_SEATS:-0}" = "1" ]; then
-  seat 0 selvala-heart-of-the-wilds &   # all-AI mode: 4th brain takes seat 0
+  seat 0 selvala-competitive &   # all-AI mode: 4th brain takes seat 0
 fi
 seat 1 purphoros-god-of-the-forge &
 seat 2 giada-font-of-hope &
