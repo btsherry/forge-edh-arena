@@ -30,7 +30,7 @@ class SeatRunner:
     def __init__(self, seat: int, deck: str, base, model: str = "sonnet",
                  effort: str = "low", timeout_s: float = 90.0, log_dir=None,
                  autopass: tuple[str, ...] = DEFAULT_AUTOPASS,
-                 speculative: bool = False):
+                 speculative: bool = False, react_hold: bool = False):
         self.mb = SeatMailbox(seat, base, timeout_s=timeout_s)
         self.brain = SeatBrain(seat, deck, model=model, effort=effort,
                                log=self._say)
@@ -38,6 +38,12 @@ class SeatRunner:
         self.timeout_s = timeout_s
         self.autopass = tuple(autopass)
         self.speculative = speculative
+        self.react_hold = react_hold
+        # Reactive hold posture (#2): brain-armed, same-turn REACT batching.
+        #   {"turn": int, "seen": set(stack-object names already passed)}
+        # Auto-passes later reacts whose stack objects are ALL already-seen and
+        # non-empty; ANY new object or an empty-stack window escalates.
+        self.hold: dict | None = None
         # Executable turn plan (SPEC-executable-turn-plans.md): dict or None.
         #   {"turn": int, "steps": [{"card","why"}], "idx": int}
         # Consumed locally under the four-part guard; discarded on any divergence.
@@ -203,6 +209,10 @@ class SeatRunner:
             return None
         return oid
 
+    @staticmethod
+    def _stack_names(req: dict) -> list[str]:
+        return [str(x) for x in (req.get("state", {}) or {}).get("stack", [])]
+
     def _fastpath(self, req: dict) -> tuple[dict, str] | None:
         if req.get("decisionType") != "REACT":
             return None
@@ -212,6 +222,14 @@ class SeatRunner:
             return {"chosenId": 0}, "autopass"
         if self._react_signature(req) in self.react_seen:
             return {"chosenId": 0}, "memo"
+        # #2 reactive hold: brain armed a same-turn hold; auto-pass only when the
+        # stack is non-empty AND every object was already shown-and-passed this
+        # turn. A new object or an empty-stack (tactical) window escalates.
+        if (self.react_hold and self.hold
+                and self.hold.get("turn") == req.get("turn")):
+            names = self._stack_names(req)
+            if names and all(n in self.hold["seen"] for n in names):
+                return {"chosenId": 0}, "hold"
         return None
 
     # ---- the loop ------------------------------------------------------------
@@ -237,10 +255,12 @@ class SeatRunner:
             self.mb.game_reset = False
             self.brain.reset()
             self.plan = None
+            self.hold = None
             self.react_seen.clear()
         if self._last_turn != req.get("turn"):
             self._last_turn = req.get("turn")
             self.react_seen.clear()
+            self.hold = None  # hold posture is single-turn
 
         seq, dtype = req.get("seq"), req.get("decisionType")
 
@@ -320,6 +340,16 @@ class SeatRunner:
                                      "steps": steps[:12], "idx": 0}
                         self._say(f"[seat {self.seat}] plan installed: "
                                   + ", ".join(s["card"] for s in self.plan["steps"]))
+                # #2 hold posture: arm/refresh on a REACT-pass with hold_turn set;
+                # any non-pass react (the seat is interacting) clears it.
+                if self.react_hold and dtype == "REACT":
+                    if answer == {"chosenId": 0} and isinstance(out, dict) \
+                            and out.get("hold_turn") is True:
+                        if not self.hold or self.hold.get("turn") != req.get("turn"):
+                            self.hold = {"turn": req.get("turn"), "seen": set()}
+                        self.hold["seen"].update(self._stack_names(req))
+                    elif answer != {"chosenId": 0}:
+                        self.hold = None
             elif out is not None:
                 self._say(f"[seat {self.seat}] seq={seq} INVALID model answer "
                           f"{str(meta.get('raw'))[:120]!r} -> safe default")

@@ -43,6 +43,17 @@ ANSWER_CONTRACT = {
                       'so bigger is usually (not always) better.'),
 }
 
+# Optional key a REACT-pass may add to batch its own subsequent same-turn reacts.
+REACT_HOLD_HINT = (
+    'OPTIONAL on a REACT you are PASSING (chosenId 0): add "hold_turn": true if '
+    'you intend to hold ALL your interaction for the rest of THIS turn. The '
+    'runner will then auto-pass your later same-turn react windows to save time '
+    '— but it ALWAYS hands control back to you the instant a genuinely NEW '
+    'spell or ability appears on the stack, or at any empty-stack combat window. '
+    'Set it only when you truly will not act again this turn barring a new '
+    'threat; if you are holding a counter to fire when a specific object is on '
+    'top of the stack, do NOT set it.')
+
 
 def _is_int(v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
@@ -242,6 +253,8 @@ def build_user_prompt(req: dict, plan: str | None = None,
                      f"if they disagree): {plan}")
     parts.append("REQUEST (ground truth — re-derive your decision from this):")
     parts.append(json.dumps(req, separators=(",", ":")))
+    if dtype == "REACT":
+        parts.append(REACT_HOLD_HINT)
     parts.append(
         "Reply with ONLY the JSON answer object on one line — no prose, no "
         "code fences. REQUIRED: include a \"why\" key — your decision logic in "

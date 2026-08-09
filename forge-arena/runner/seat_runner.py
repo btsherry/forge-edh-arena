@@ -66,6 +66,9 @@ def main() -> None:
     ap.add_argument("--speculative", action="store_true",
                     help="execute brain-authored CAST plans locally under the "
                          "four-part guard (fewer round-trips on uncontested turns)")
+    ap.add_argument("--react-hold", action="store_true",
+                    help="honor brain-armed same-turn REACT hold posture "
+                         "(auto-pass reacts on already-seen stack objects)")
     ap.add_argument("--echo", action="store_true",
                     help="answer every window with the legal safe default (no model)")
     args = ap.parse_args()
@@ -80,7 +83,8 @@ def main() -> None:
     autopass = tuple(s.strip() for s in args.autopass.split(",") if s.strip())
     SeatRunner(args.seat, args.deck, args.base, model=args.model,
                effort=args.effort, timeout_s=args.timeout,
-               autopass=autopass, speculative=args.speculative).run()
+               autopass=autopass, speculative=args.speculative,
+               react_hold=args.react_hold).run()
 
 
 if __name__ == "__main__":

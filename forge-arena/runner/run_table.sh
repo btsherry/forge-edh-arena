@@ -14,14 +14,17 @@ BASE="${1:-$DIR/../mailbox}"
 MODEL="${SEAT_MODEL:-sonnet}"
 EFFORT="${SEAT_EFFORT:-low}"
 export ARENA_MAILBOX_TIMEOUT="${ARENA_MAILBOX_TIMEOUT:-90}"
-# SEAT_SPECULATIVE=1 enables executable turn plans (fewer round-trips).
+# SEAT_SPECULATIVE=1 enables executable turn plans; SEAT_REACT_HOLD=1 enables
+# the same-turn reactive hold posture. Both default off.
 SPEC_FLAG=""
 [ "${SEAT_SPECULATIVE:-0}" = "1" ] && SPEC_FLAG="--speculative"
+HOLD_FLAG=""
+[ "${SEAT_REACT_HOLD:-0}" = "1" ] && HOLD_FLAG="--react-hold"
 
 seat() { # seat_no deck
   while true; do
     python3 "$DIR/seat_runner.py" --seat "$1" --deck "$2" \
-      --model "$MODEL" --effort "$EFFORT" --base "$BASE" $SPEC_FLAG
+      --model "$MODEL" --effort "$EFFORT" --base "$BASE" $SPEC_FLAG $HOLD_FLAG
     echo "[seat $1] runner exited ($?) — restarting in 2s" >&2
     sleep 2
   done
