@@ -93,12 +93,15 @@ def validate(req: dict, out) -> dict | None:
         seen, clean = set(), []
         for e in arr:
             if not isinstance(e, dict):
-                continue  # tolerate stray non-object noise (e.g. a leaked "why")
-            a, d = e.get("attacker"), e.get("defender")
-            if not _is_int(a) or a not in attacker_ids:
-                return None
+                continue  # bare-string noise (e.g. a leaked "why") — skip
+            a = e.get("attacker")
+            if not _is_int(a):
+                continue  # dict noise with no attacker id (e.g. {"why": "x"}) — skip
+            if a not in attacker_ids:
+                return None  # a real-but-illegal attacker id → hard reject
             if a in seen:
                 continue  # a creature attacks once; a repeat entry is noise, keep first
+            d = e.get("defender")
             if not _is_int(d) or (defender_ids and d not in defender_ids):
                 return None  # defender ALWAYS explicit and known
             seen.add(a)
@@ -115,12 +118,15 @@ def validate(req: dict, out) -> dict | None:
         seen, clean = set(), []
         for e in arr:
             if not isinstance(e, dict):
-                continue  # tolerate stray non-object noise (e.g. a leaked "why")
-            b, a = e.get("blocker"), e.get("attacker")
-            if not _is_int(b) or b not in blocker_ids:
-                return None  # unknown blocker id
+                continue  # bare-string noise (e.g. a leaked "why") — skip
+            b = e.get("blocker")
+            if not _is_int(b):
+                continue  # dict noise with no blocker id (e.g. {"why": "x"}) — skip
+            if b not in blocker_ids:
+                return None  # a real-but-illegal blocker id → hard reject
             if b in seen:
                 continue  # a creature blocks once; a repeat entry is noise, keep first
+            a = e.get("attacker")
             if not _is_int(a) or (attacker_ids and a not in attacker_ids):
                 return None
             seen.add(b)

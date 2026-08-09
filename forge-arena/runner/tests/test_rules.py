@@ -121,6 +121,18 @@ class TableDrivenContract(unittest.TestCase):
         self.assertEqual(cleana, {"attackers": [{"attacker": 302, "defender": 0}]})
         # pure-noise array degrades to the safe empty declaration, still legal
         self.assertEqual(rules.validate(req, {"blocks": ["why"]}), {"blocks": []})
+        # DICT-shaped noise ({"why":...}) alongside a valid block — salvage the block
+        self.assertEqual(
+            rules.validate(req, {"blocks": [{"blocker": 302, "attacker": 78},
+                                            {"why": "x"}], "why": "placeholder"}),
+            {"blocks": [{"blocker": 302, "attacker": 78}]})
+        reqa = load("declare_attackers")
+        self.assertEqual(
+            rules.validate(reqa, {"attackers": [{"attacker": 302, "defender": 0},
+                                                {"why": "noise"}]}),
+            {"attackers": [{"attacker": 302, "defender": 0}]})
+        # a real-but-illegal id still hard-rejects (not noise)
+        self.assertIsNone(rules.validate(req, {"blocks": [{"blocker": 999, "attacker": 78}]}))
 
     def test_combat_salvages_duplicate_entries(self):
         # Observed live: model listed the same attacker twice (+ "why":"Placeholder").
