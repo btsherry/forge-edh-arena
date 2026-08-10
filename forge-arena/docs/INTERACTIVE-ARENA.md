@@ -462,6 +462,19 @@ Hard-won from two live sessions; read before optimizing anything.
     priority (117.3c) and re-plans instead of losing the card. Lesson
     (again): a hook that fires on the human path is NOT automatically on the
     AI cast path — verify against `handlePlayingSpellAbility`.
+    **14c — MODAL (Charm) spells were STILL losing the card (2026-08-10,
+    caught by the broad soak watch): Collective Resistance cast to destroy
+    Purphoros → "Couldn't add to stack, failed to target" → gone.** 14b's
+    pre-targeting runs BEFORE the cast, but a Charm chooses its mode INSIDE
+    the cast (`CharmEffect.makeChoices` within `handlePlayingSpellAbility`),
+    so at pre-target time there is no mode → no target requirement → nothing
+    set → the chosen mode's target is never assigned → lost. **FIXED:**
+    `playChosenSpellAbility` now routes `ApiType.Charm` spells through a direct
+    `ComputerUtil.handlePlayingSpellAbility(..., () -> chooseTargetsFor(sa))` —
+    that runnable runs AFTER `makeChoices` and before the stack-add, so the
+    mode's target is set at the right moment. Non-modal spells keep the 14b
+    pre-target path (graceful decline). Brain-chosen modal *targets* (vs
+    stock picking the mode's target) is a further refinement, not yet done.
 15. **Auto-tap mana payment strands colored sources.** Forge's payment auto-tap chose
     a generic land over a colorless one for The One Ring's {4}, stranding the seat's
     only blue source and locking two castable spells out of the turn.
@@ -580,3 +593,21 @@ Hard-won from two live sessions; read before optimizing anything.
     (latent, harmless while --speculative is off): guard #4 discards the
     executable plan on ANY own-turn REACT, which would now include a
     selfTrigger window — refine to exclude self-trigger before enabling plans.
+    **21b — GATE REDESIGNED (2026-08-10, per Ben: correctness/intent over
+    speed; don't block play lines).** The "sac-outlet OR big-float" gate was
+    Dreadnought-shaped and risked silently removing lines the brain would take
+    (and it whack-a-mole'd one card while missing the trigger CLASS). Norin the
+    Wary exposed it: its blink fires on every spell/attack, and the shaped gate
+    still opened self-trigger windows whenever the seat held any instant, all
+    wasted passes. New design: **open the self-trigger window whenever ANY real
+    action is available** (playable non-empty; non-trivial mana abilities kept,
+    so the no-sink Dreadnought float stays live) — no cleverness about which
+    triggers deserve a window. Flood (Norin) is accepted as slowness, never
+    traded against correctness. `BIG_FLOAT`/`hasNonManaAction`/`hasBigManaFloat`
+    all removed. **Memo hardened alongside:** `_react_signature` now includes
+    every seat's life + our mana pool (not just stack+options), so a same-turn
+    window only fast-passes when the situation is TRULY unchanged and re-opens
+    the instant a life total or the pool shifts — closing the "identical-looking
+    but a new decision is correct" hole. Cross-turn adaptive suppression was
+    considered and REJECTED (most state can change across turns; too likely to
+    eat a line).

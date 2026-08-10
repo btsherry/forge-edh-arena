@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Multiset;
 
 import forge.LobbyPlayer;
+import forge.ai.ComputerUtil;
 import forge.ai.ComputerUtilAbility;
 import forge.ai.ComputerUtilCost;
 import forge.ai.ComputerUtilMana;
@@ -21,6 +22,7 @@ import forge.arena.engine.SeatViews;
 import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.ability.AbilityUtils;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CounterType;
@@ -78,12 +80,6 @@ import forge.util.collect.FCollectionView;
  * silent brain never hangs the game.
  */
 public final class MailboxController extends PlayerControllerAi {
-
-    // A self-trigger window (v4) fires for a mana-only response when a mana
-    // ability would add at least this much RIGHT NOW — a temporary spike worth
-    // floating before the trigger shrinks the board (Selvala + Dreadnought =
-    // 12). Tunable: lower catches more float lines but wakes on big-mana turns.
-    private static final int BIG_FLOAT = 6;
 
     private final MailboxProtocol bus;
     private final int seatIndex;
@@ -148,10 +144,10 @@ public final class MailboxController extends PlayerControllerAi {
         // Dreadnought line lives here: cast Dreadnought, then in response to its
         // "sacrifice unless" ETB sac it to Greater Good (draw 12) and tap Selvala
         // for 12 while it's still a 12/12. v3 sent this to stock, which never
-        // finds it — Selvala provably whiffed the line (2026-08-10). Gated hard
-        // to avoid flooding: it only actually mailboxes when the seat holds a
-        // NON-mana instant-speed action to use here (checked after the filter
-        // below via hasNonManaAction); a bare mana ability never wakes it.
+        // finds it — Selvala provably whiffed the line (2026-08-10). Opens
+        // whenever a real action is available (see the playable filter below);
+        // we accept the extra windows on spammy triggers (Norin) as slowness
+        // rather than risk gating away a line the brain wanted.
         boolean selfTrigger = false;
         if (!ownMainEmpty && !reactive && !tactical && !game.getStack().isEmpty()) {
             for (forge.game.spellability.SpellAbilityStackInstance si : game.getStack()) {
@@ -173,8 +169,6 @@ public final class MailboxController extends PlayerControllerAi {
 
         int turn = game.getPhaseHandler().getTurn();
         List<SpellAbility> playable = new ArrayList<>();
-        boolean hasNonManaAction = false;
-        boolean hasBigManaFloat = false;  // a mana ability adding >=BIG_FLOAT now
         for (SpellAbility sa : ComputerUtilAbility.getSpellAbilities(
                 ComputerUtilAbility.getAvailableCards(game, me), me)) {
             Card host = sa != null ? sa.getHostCard() : null;
@@ -211,29 +205,20 @@ public final class MailboxController extends PlayerControllerAi {
                         || ComputerUtilCost.canPayCost(sa, me, false);
                 if (sa.canPlay() && affordable) {
                     playable.add(sa);
-                    if (!sa.isManaAbility()) {
-                        hasNonManaAction = true;
-                    } else if (selfTrigger
-                            && manaAbilityYield(sa, host) >= BIG_FLOAT) {
-                        // A mana ability that would add a LOT right now — e.g.
-                        // Selvala tapping for 12 while a Phyrexian Dreadnought is
-                        // briefly on the board. Worth a window even with no sink:
-                        // float it here, let the trigger sac the fat body, and the
-                        // mana persists to spend later THIS main phase.
-                        hasBigManaFloat = true;
-                    }
                 }
             } catch (RuntimeException canPlayThrew) {
                 // a mis-evaluated canPlay must not crash the seat — skip it
             }
         }
-        // Self-trigger justifies a window when there is a real non-mana action
-        // to take here (a sac outlet, an instant, an activated ability) OR a big
-        // temporary mana float to capture (BIG_FLOAT). A bare small mana ability
-        // alone never wakes it — that is the anti-flood gate for v4.
-        if (selfTrigger && !hasNonManaAction && !hasBigManaFloat) {
-            return null;
-        }
+        // v4-redesign (2026-08-10): a self-trigger window opens whenever there
+        // is ANY real action available — no cleverness about WHICH triggers
+        // deserve a window. The earlier "sac-outlet or big-float" gate was
+        // Dreadnought-shaped and risked silently removing lines the brain would
+        // have taken; correctness/intent beat speed, so we open generously and
+        // let the brain decide (and pass) every window. Flood is tolerated as
+        // slowness, not eliminated by second-guessing the brain. (playable
+        // already excludes trivial land mana; non-trivial mana abilities like
+        // Selvala-for-12 remain, so the no-sink Dreadnought float stays live.)
         if (playable.isEmpty()) {
             // Instant windows with nothing real to do are a clean pass (never
             // stock); an empty own-main keeps the v1 stock fallthrough.
@@ -320,40 +305,54 @@ public final class MailboxController extends PlayerControllerAi {
      */
     @Override
     public boolean playChosenSpellAbility(SpellAbility sa) {
-        if (sa != null && !sa.isLandAbility()) {
-            // (1) Announce mana X (see mailboxManaX).
-            if (needsManaX(sa)) {
-                org.apache.commons.lang3.Range<Integer> r =
-                        AbilityUtils.getAnnouncementBounds(sa, "X");
-                Integer x = mailboxManaX(sa, r.getMinimum(), r.getMaximum());
-                if (x == null) {
-                    // brain CANCELLED: don't cast. Return true so it keeps
-                    // priority (117.3c) and can float mana and re-cast.
-                    return true;
-                }
-                sa.setXManaCostPaid(x);
+        if (sa == null || sa.isLandAbility()) {
+            return super.playChosenSpellAbility(sa); // null / land: unchanged
+        }
+        // (1) Announce mana X on the cast path (601.2b) — the stock AI path never
+        // does, so a brain's X spell resolved at default X=0. Cancel -> keep
+        // priority so the brain can float mana and re-cast.
+        if (needsManaX(sa)) {
+            org.apache.commons.lang3.Range<Integer> r =
+                    AbilityUtils.getAnnouncementBounds(sa, "X");
+            Integer x = mailboxManaX(sa, r.getMinimum(), r.getMaximum());
+            if (x == null) {
+                return true;
             }
-            // (2) Choose the SPELL's own targets. The AI cast path only runs the
-            // deferred targeting-PLAYER runnable, never the spell target chooser
-            // — so ANY targeted spell cast from the mailbox reached the stack
-            // untargeted, had its mana paid, was rejected ("Couldn't add to
-            // stack, failed to target"), and vanished. This hits AURAS above all
-            // (enchant creature / artifact / land / planeswalker / player — every
-            // deck), plus targeted removal/pump. Set targets via the mailbox
-            // (chooseTargetsFor: single-target -> CHOOSE_ENTITY over
-            // getAllCandidates, which covers all GameEntity kinds; multi-target
-            // -> stock). If none can be chosen, DON'T cast — return true so the
-            // brain keeps priority and re-plans, rather than burning the card.
-            forge.game.spellability.TargetRestrictions tgt =
-                    sa.getTargetRestrictions();
-            Card host = sa.getHostCard();
-            if (tgt != null && host != null
-                    && tgt.getMinTargets(host, sa) > 0
-                    && !sa.isTargetNumberValid()) {
-                if (!chooseTargetsFor(sa)) {
-                    sa.resetTargets();
-                    return true;
+            sa.setXManaCostPaid(x);
+        }
+        // (2) MODAL (Charm) spells choose their mode INSIDE the cast
+        // (CharmEffect.makeChoices runs within handlePlayingSpellAbility), which
+        // is AFTER any pre-targeting — so the chosen mode's target was never set
+        // and the card was lost ("Couldn't add to stack, failed to target",
+        // observed on Collective Resistance 2026-08-10). Cast it directly with
+        // OUR targeting as the chooseTargets runnable: handlePlayingSpellAbility
+        // runs that runnable AFTER makeChoices and before the stack-add, so the
+        // mode's target is set at the right moment. (Stock's deferred runnable
+        // only handled TargetingPlayer, which is why modal targets were lost.)
+        if (sa.getApi() == ApiType.Charm) {
+            ComputerUtil.handlePlayingSpellAbility(getPlayer(), sa, () -> {
+                try {
+                    chooseTargetsFor(sa);
+                } catch (RuntimeException ignore) {
+                    // targeting must never crash the seat
                 }
+            });
+            return true;
+        }
+        // (3) NON-modal targeted spell: pre-set targets BEFORE the cast so we
+        // can gracefully keep the card in hand if none can be chosen (rather
+        // than orphaning it on the stack). The AI cast path otherwise never runs
+        // the spell target chooser, so auras/removal reached the stack
+        // untargeted and vanished — this hits every deck (aura ramp, targeted
+        // removal/pump). chooseTargetsFor: single-target -> CHOOSE_ENTITY over
+        // getAllCandidates (all GameEntity kinds); multi-target -> stock.
+        forge.game.spellability.TargetRestrictions tgt = sa.getTargetRestrictions();
+        Card host = sa.getHostCard();
+        if (tgt != null && host != null && tgt.getMinTargets(host, sa) > 0
+                && !sa.isTargetNumberValid()) {
+            if (!chooseTargetsFor(sa)) {
+                sa.resetTargets();
+                return true;
             }
         }
         return super.playChosenSpellAbility(sa);

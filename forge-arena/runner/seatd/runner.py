@@ -207,10 +207,21 @@ class SeatRunner:
     # ---- fastpaths --------------------------------------------------------
 
     def _react_signature(self, req: dict) -> tuple:
-        stack = tuple(sorted(map(str, (req.get("state", {}) or {}).get("stack", []))))
+        # The memo auto-passes an identical same-turn REACT window without a
+        # model call. It MUST include the state that could change the decision,
+        # or it collapses two windows that look alike but aren't (a ping dropped
+        # someone into counter-range, we floated mana, etc.) and eats a line the
+        # brain would have taken. So: stack + options + every seat's life + our
+        # own mana pool. Correctness over speed — a shifted life total re-opens
+        # the window rather than fast-passing it.
+        st = req.get("state", {}) or {}
+        stack = tuple(sorted(map(str, st.get("stack", []))))
         opts = tuple(sorted(str(o.get("label", "")).split("  ")[0]
                             for o in req.get("options", []) if o.get("id") != 0))
-        return (req.get("turn"), stack, opts)
+        lives = (st.get("life"),) + tuple(o.get("life")
+                                          for o in st.get("opponents", []) or [])
+        pool = st.get("manaPool")
+        return (req.get("turn"), stack, opts, lives, pool)
 
     # ---- executable plan (four-part guard) --------------------------------
 
