@@ -79,6 +79,12 @@ import forge.util.collect.FCollectionView;
  */
 public final class MailboxController extends PlayerControllerAi {
 
+    // A self-trigger window (v4) fires for a mana-only response when a mana
+    // ability would add at least this much RIGHT NOW — a temporary spike worth
+    // floating before the trigger shrinks the board (Selvala + Dreadnought =
+    // 12). Tunable: lower catches more float lines but wakes on big-mana turns.
+    private static final int BIG_FLOAT = 6;
+
     private final MailboxProtocol bus;
     private final int seatIndex;
 
@@ -168,6 +174,7 @@ public final class MailboxController extends PlayerControllerAi {
         int turn = game.getPhaseHandler().getTurn();
         List<SpellAbility> playable = new ArrayList<>();
         boolean hasNonManaAction = false;
+        boolean hasBigManaFloat = false;  // a mana ability adding >=BIG_FLOAT now
         for (SpellAbility sa : ComputerUtilAbility.getSpellAbilities(
                 ComputerUtilAbility.getAvailableCards(game, me), me)) {
             Card host = sa != null ? sa.getHostCard() : null;
@@ -206,17 +213,25 @@ public final class MailboxController extends PlayerControllerAi {
                     playable.add(sa);
                     if (!sa.isManaAbility()) {
                         hasNonManaAction = true;
+                    } else if (selfTrigger
+                            && manaAbilityYield(sa, host) >= BIG_FLOAT) {
+                        // A mana ability that would add a LOT right now — e.g.
+                        // Selvala tapping for 12 while a Phyrexian Dreadnought is
+                        // briefly on the board. Worth a window even with no sink:
+                        // float it here, let the trigger sac the fat body, and the
+                        // mana persists to spend later THIS main phase.
+                        hasBigManaFloat = true;
                     }
                 }
             } catch (RuntimeException canPlayThrew) {
                 // a mis-evaluated canPlay must not crash the seat — skip it
             }
         }
-        // Self-trigger only justifies a window when there is a real, non-mana
-        // action to take here (a sac outlet, an instant, an activated ability);
-        // a bare mana ability alone is not worth waking the brain to respond to
-        // its own trigger. This is the anti-flood gate for v4.
-        if (selfTrigger && !hasNonManaAction) {
+        // Self-trigger justifies a window when there is a real non-mana action
+        // to take here (a sac outlet, an instant, an activated ability) OR a big
+        // temporary mana float to capture (BIG_FLOAT). A bare small mana ability
+        // alone never wakes it — that is the anti-flood gate for v4.
+        if (selfTrigger && !hasNonManaAction && !hasBigManaFloat) {
             return null;
         }
         if (playable.isEmpty()) {
@@ -262,7 +277,7 @@ public final class MailboxController extends PlayerControllerAi {
             // add 2+ RIGHT NOW says so (Cradle, Selvala, Tomb...), so the
             // brain prices the float without doing SVar math itself.
             if (sa.isManaAbility()) {
-                int yield = landManaYield(sa, host);
+                int yield = manaAbilityYield(sa, host);
                 if (yield >= 2) {
                     lab += " [currently adds " + yield + " mana]";
                 }
@@ -1176,12 +1191,14 @@ public final class MailboxController extends PlayerControllerAi {
         if (!bareTap) {
             return false;
         }
-        int yield = landManaYield(sa, host);
+        int yield = manaAbilityYield(sa, host);
         return yield >= 0 && yield <= 1; // unknown (-1) => show it, to be safe
     }
 
-    /** Current total mana yield of a (land) mana-ability chain; -1 if unknown. */
-    private static int landManaYield(SpellAbility sa, Card host) {
+    /** Current total mana yield of a mana-ability chain evaluated against the
+     *  live board (e.g. Selvala's {G},{T}: add X = 12 with a Dreadnought out);
+     *  -1 if it can't be evaluated. Works for any host, not just lands. */
+    private static int manaAbilityYield(SpellAbility sa, Card host) {
         int total = 0;
         boolean sawManaPart = false;
         try {

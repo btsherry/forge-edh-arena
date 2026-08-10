@@ -555,12 +555,23 @@ Hard-won from two live sessions; read before optimizing anything.
     12/12 sacrificed itself for nothing. **FIXED (v4):** a fourth gated window
     `selfTrigger` — my own triggered ability on the stack, no opponent object —
     now mailboxes as `REACT`, BUT only when the seat also holds a NON-mana
-    instant-speed action (a sac outlet, an instant, an activated ability);
-    a bare mana ability never wakes it (anti-flood: Selvala's always-available
-    mana ability would otherwise open a window on every trigger). Within the
-    window, non-trivial mana abilities ARE surfaced (like own-main) so
-    "tap Selvala for 12" is available alongside the sink, and the seat retains
-    priority to chain several responses. RELATED / STILL OPEN: the Urza t26
+    instant-speed action (a sac outlet, an instant, an activated ability) OR a
+    mana ability that would add a LOT right now (>= BIG_FLOAT, currently 6).
+    A bare small mana ability never wakes it (anti-flood: Selvala's
+    always-available mana ability would otherwise open a window on every
+    trigger). Within the window, non-trivial mana abilities ARE surfaced (like
+    own-main) so "tap Selvala for 12" is available alongside the sink, and the
+    seat retains priority to chain several responses.
+    **BIG_FLOAT branch (added same day):** covers the NO-sink case — cast
+    Dreadnought with no Greater Good, tap Selvala for 12 while the 12/12 is
+    briefly on the board, let the ETB sac it, and the 12 mana PERSISTS to spend
+    later this main phase (pools empty at step/phase end, not on trigger
+    resolution). Yield is computed live via `manaAbilityYield` (evaluates
+    Count$-style Amounts against the board). Known imperfection: on a naturally
+    big-mana turn a >=6 mana ability wakes the window even with no temporary
+    spike — a few extra round-trips, accepted. The exact signal ("this trigger
+    is about to shrink the body inflating the yield") needs simulating the
+    trigger and is deferred. RELATED / STILL OPEN: the Urza t26
     death (couldn't Mirror->Island->Mana-Drain the lethal Ojer Axonil) is the
     same family in a REACTIVE window — it needs mana-generation (or a
     land-transform) to afford the answer, which reactive windows still don't
