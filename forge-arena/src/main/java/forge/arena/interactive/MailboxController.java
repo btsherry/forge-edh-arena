@@ -248,63 +248,81 @@ public final class MailboxController extends PlayerControllerAi {
     }
 
     /**
-     * Value announcements — X costs above all (field note 15b). The mailbox
-     * cast path bypasses the stock AI's decision pipeline where X normally
-     * gets set, and stock's own announceRequirements returns null for plain
-     * X-cost spells — which is how a brain-chosen Walking Ballista resolved
-     * at X=0 and died on the spot. The brain now announces its own values.
+     * The ACTUAL AI cast path is PhaseHandler.chooseSpellAbilityToPlay ->
+     * playChosenSpellAbility -> ComputerUtil.handlePlayingSpellAbility, and
+     * that path NEVER announces X (verified: 0 CHOOSE_NUMBER wakes across every
+     * game). announceRequirements below is the HUMAN cast path and is never
+     * reached for an AI/mailbox cast — so a brain-chosen X spell resolved at
+     * its default X=0 (Genesis Wave/Hydra/Ballista/Finale all died 0/0). The
+     * real fix lives here: announce mana X on the cast path before delegating.
+     * 2026-08-10, corrects the mis-hooked field-note-15b attempt.
      */
     @Override
-    public Integer announceRequirements(SpellAbility ability, int min, int max,
-                                        String announce) {
-        Game game = getGame();
-        // Affordability ceiling for mana-X announcements (same math stock uses);
-        // an unpayable X would rewind the whole cast and burn the window.
-        int hi = max;
-        if ("X".equals(announce) || "Y".equals(announce)) {
-            try {
-                int afford = ComputerUtilMana.determineLeftoverMana(
-                        ability, getPlayer(), false);
-                if (afford >= 0) {
-                    hi = Math.min(hi, afford);
-                }
-            } catch (RuntimeException ignored) {
-                // affordability estimate is best-effort; max stands
+    public boolean playChosenSpellAbility(SpellAbility sa) {
+        if (sa != null && !sa.isLandAbility() && needsManaX(sa)) {
+            org.apache.commons.lang3.Range<Integer> r =
+                    AbilityUtils.getAnnouncementBounds(sa, "X");
+            Integer x = mailboxManaX(sa, r.getMinimum(), r.getMaximum());
+            if (x == null) {
+                // brain CANCELLED: don't cast. Return true so it keeps priority
+                // (117.3c) and gets another window to float mana and re-cast.
+                return true;
             }
+            sa.setXManaCostPaid(x);
+        }
+        return super.playChosenSpellAbility(sa);
+    }
+
+    /** True for a spell whose X the card doesn't set itself (mirrors
+     *  PlaySpellAbility: Count$xPaid or empty SVar with an X in the cost). */
+    private static boolean needsManaX(SpellAbility sa) {
+        Cost cost = sa.getPayCosts();
+        if (cost == null || !cost.hasXInAnyCostPart()) {
+            return false;
+        }
+        String sVar = sa.getParamOrDefault("XAlternative", sa.getSVar("X"));
+        return "Count$xPaid".equals(sVar) || sVar.isEmpty();
+    }
+
+    /**
+     * Mailbox a mana-X ('X'/'Y') announcement. Returns the X to pay, or null if
+     * the brain answered -1 to CANCEL the cast (so it can float mana and
+     * re-cast). The ceiling counts the floating pool + untapped sources (same
+     * math stock uses), so an announced X is always payable; a silent/failed
+     * brain gets that affordable ceiling, never a silent 0.
+     */
+    private Integer mailboxManaX(SpellAbility ability, int min, int max) {
+        Game game = getGame();
+        int hi = max;
+        try {
+            int afford = ComputerUtilMana.determineLeftoverMana(
+                    ability, getPlayer(), false);
+            if (afford >= 0) {
+                hi = Math.min(hi, afford);
+            }
+        } catch (RuntimeException ignored) {
+            // best-effort ceiling; max stands
         }
         if (hi < min) {
             hi = min;
         }
-        boolean manaX = "X".equals(announce) || "Y".equals(announce);
-        if (hi == min && !(manaX && hi == 0)) {
-            return min; // genuinely forced value — no decision to make
-        }
-        // A mana-X forced to 0 is NEVER answered silently anymore (2026-08-10:
-        // a Genesis Wave resolved at X=0 because the brain "floated" mana that
-        // did not exist and the clamp forced 0 without waking it). The brain is
-        // woken with a cancel option: -1 announces an unpayable X, the payment
-        // step fails, and CR 733.1 rewinds the whole cast cleanly — the main
-        // phase window then re-opens and the brain can float mana first.
         int turn = game.getPhaseHandler().getTurn();
         Map<String, Object> state = buildState(turn);
         state.put("min", min);
         state.put("max", hi);
+        state.put("cancelable", true);
         Card host = ability.getHostCard();
         String what = host != null ? host.getName() : String.valueOf(ability);
-        String prompt = "Announce '" + announce + "' for " + what
-                + " — pick a number in [" + min + ", " + hi
-                + "] (max counts your floating pool + untapped sources).";
-        if (manaX) {
-            state.put("cancelable", true);
-            prompt += (hi == 0)
-                    ? " Your affordable " + announce + " RIGHT NOW IS 0 — you"
-                      + " have floated no mana. Almost certainly answer -1 to"
-                      + " CANCEL the cast, then activate mana abilities"
-                      + " (commander, Cradle-class lands, untappers) and"
-                      + " re-cast for a real " + announce + "."
-                    : " Answer -1 to CANCEL the cast instead (do that when max"
-                      + " is far below your intent; float mana, then re-cast).";
-        }
+        String prompt = "Announce 'X' for " + what + " — pick a number in ["
+                + min + ", " + hi + "] (max counts your floating pool + untapped "
+                + "sources). ";
+        prompt += (hi == 0)
+                ? "Your affordable X RIGHT NOW is 0 — you have floated no mana. "
+                  + "Almost certainly answer -1 to CANCEL, then activate mana "
+                  + "abilities (commander, Cradle-class lands, untappers) and "
+                  + "re-cast for a real X."
+                : "Answer -1 to CANCEL the cast instead (do that when max is far "
+                  + "below your intent; float mana, then re-cast).";
         MailboxProtocol.Request req = new MailboxProtocol.Request(
                 seatIndex, turn, phaseName(game), "CHOOSE_NUMBER", prompt)
                 .state(state);
@@ -313,13 +331,28 @@ public final class MailboxController extends PlayerControllerAi {
             JsonNode chosen = resp.get("chosen");
             if (chosen != null && chosen.isInt()) {
                 int n = chosen.asInt();
-                if (manaX && n == -1) {
-                    return hi + 1000; // deliberately unpayable -> clean rewind
+                if (n == -1) {
+                    return null; // CANCEL
                 }
                 if (n >= min && n <= hi) {
                     return n;
                 }
             }
+        }
+        return hi; // bus failure / malformed: affordable max, never a silent 0
+    }
+
+    /**
+     * Human cast path (kept correct for completeness; not reached for AI casts).
+     * Delegates mana X to the same mailbox helper; a CANCEL becomes an
+     * unpayable value so PlaySpellAbility rewinds the cast (CR 733.1).
+     */
+    @Override
+    public Integer announceRequirements(SpellAbility ability, int min, int max,
+                                        String announce) {
+        if ("X".equals(announce) || "Y".equals(announce)) {
+            Integer x = mailboxManaX(ability, min, max);
+            return x == null ? max + 1000 : x;
         }
         return super.announceRequirements(ability, min, max, announce);
     }

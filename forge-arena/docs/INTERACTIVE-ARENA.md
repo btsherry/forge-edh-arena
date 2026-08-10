@@ -452,6 +452,25 @@ Hard-won from two live sessions; read before optimizing anything.
     announcements mailbox as `CHOOSE_NUMBER` (state.min/max, max clamped to the
     stock affordability estimate so an unpayable X can never rewind the cast);
     forced values never wake the brain.
+    **15b CORRECTION (2026-08-10, proven WRONG then re-fixed): the
+    `announceRequirements` override was DEAD CODE and X never worked.** It sits
+    on the HUMAN cast path (`PlaySpellAbility.announceValuesLikeX` ->
+    `controller.announceRequirements`). A brain's chosen spell is cast on the
+    AI path — `PhaseHandler` -> `PlayerControllerAi.playChosenSpellAbility` ->
+    `ComputerUtil.handlePlayingSpellAbility`, which contains ZERO X handling —
+    so X stayed at its default 0. Empirical tell: **0 CHOOSE_NUMBER wakes
+    across every recorded game**; Genesis Wave/Hydra/Walking Ballista/Finale
+    all resolved 0/0 or X=0. (My earlier "the clamp silently forced X=0"
+    diagnosis was also wrong — the clamp never ran; announceRequirements never
+    ran.) **REAL FIX:** `MailboxController.playChosenSpellAbility` is now
+    overridden — for a mana-X spell it announces X via the shared `mailboxManaX`
+    helper (affordability-capped `CHOOSE_NUMBER`, `cancelable`) BEFORE
+    delegating to super, and `setXManaCostPaid(x)`. A `-1` answer cancels: the
+    override returns true without casting, so the brain keeps priority (117.3c),
+    floats mana, and re-casts. `announceRequirements` retained (correct for the
+    human path, unused by AI). Lesson: verify the hook is on the ACTUAL cast
+    path, and treat "feature has literally never fired in telemetry" as a
+    red flag, not a quiet success.
 16. **Eliminations aren't pushed to brains (only discoverable via state).**
     **FIXED in v3:** the observer snapshot now carries a per-seat `eliminated`
     flag (`Player.hasLost()`), so runners/pre-planning can react to the actual
