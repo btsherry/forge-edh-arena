@@ -536,3 +536,36 @@ Hard-won from two live sessions; read before optimizing anything.
     d. **_record truncates option lists** (~9 entries) — seq 85 chose id 13
        with 9 recorded options; forensics needed the full list. Record all.
     Fixes pending discussion with Ben before any build.
+    **ALL FOUR (a-d) SHIPPED 2026-08-10 and validated live** in a full
+    opus/medium game: 1 CHOOSE_NUMBER wake (Genesis Wave X=9, deployed a
+    9->17-permanent board), 12 CHOOSE_ENTITY (targeting across all 3 decks),
+    0 failed-to-target, 0 punts. See also notes 14b, 15b-correction, and 21.
+21. **Self-trigger response windows aren't mailboxed — you can't respond to
+    your OWN trigger during your OWN turn** (2026-08-10, confirmed at stakes:
+    Selvala tried the Phyrexian Dreadnought + Greater Good line and whiffed).
+    The gate mailboxes own-main-empty, reactive (an OPPONENT'S object on the
+    stack), and tactical (combat/end-step, empty stack) — but the priority
+    window where your own ETB/triggered ability sits on the stack, before it
+    resolves, matched none of them (reactive requires `activatingPlayer != me`)
+    and fell to stock, which never finds the line. Live proof: seq 157 cast
+    Dreadnought planning "sac it in response to its ETB to draw"; the mailbox
+    jumped from "Dreadnought spell on stack" straight to the trigger's
+    RESOLUTION (choose sacrifices, seq 159) — the response window in between
+    was never offered, so no tap-Selvala-for-12 and no sac-to-Greater-Good; the
+    12/12 sacrificed itself for nothing. **FIXED (v4):** a fourth gated window
+    `selfTrigger` — my own triggered ability on the stack, no opponent object —
+    now mailboxes as `REACT`, BUT only when the seat also holds a NON-mana
+    instant-speed action (a sac outlet, an instant, an activated ability);
+    a bare mana ability never wakes it (anti-flood: Selvala's always-available
+    mana ability would otherwise open a window on every trigger). Within the
+    window, non-trivial mana abilities ARE surfaced (like own-main) so
+    "tap Selvala for 12" is available alongside the sink, and the seat retains
+    priority to chain several responses. RELATED / STILL OPEN: the Urza t26
+    death (couldn't Mirror->Island->Mana-Drain the lethal Ojer Axonil) is the
+    same family in a REACTIVE window — it needs mana-generation (or a
+    land-transform) to afford the answer, which reactive windows still don't
+    surface. Deferred: forward-looking affordability + mana access in reactive
+    windows is a larger change; revisit if it recurs at stakes. Runner caveat
+    (latent, harmless while --speculative is off): guard #4 discards the
+    executable plan on ANY own-turn REACT, which would now include a
+    selfTrigger window — refine to exclude self-trigger before enabling plans.

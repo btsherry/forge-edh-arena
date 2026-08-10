@@ -135,7 +135,29 @@ public final class MailboxController extends PlayerControllerAi {
                     || ph == PhaseType.COMBAT_DAMAGE
                     || ph == PhaseType.COMBAT_END
                     || ph == PhaseType.END_OF_TURN);
-        if (!ownMainEmpty && !reactive && !tactical) {
+        // v4 (field note 21): SELF-TRIGGER windows — one of the seat's OWN
+        // triggered abilities is on the stack (no opponent object, else it's
+        // reactive) and it holds priority BEFORE that trigger resolves. This is
+        // the only window to respond to your own trigger — the Phyrexian
+        // Dreadnought line lives here: cast Dreadnought, then in response to its
+        // "sacrifice unless" ETB sac it to Greater Good (draw 12) and tap Selvala
+        // for 12 while it's still a 12/12. v3 sent this to stock, which never
+        // finds it — Selvala provably whiffed the line (2026-08-10). Gated hard
+        // to avoid flooding: it only actually mailboxes when the seat holds a
+        // NON-mana instant-speed action to use here (checked after the filter
+        // below via hasNonManaAction); a bare mana ability never wakes it.
+        boolean selfTrigger = false;
+        if (!ownMainEmpty && !reactive && !tactical && !game.getStack().isEmpty()) {
+            for (forge.game.spellability.SpellAbilityStackInstance si : game.getStack()) {
+                SpellAbility onStack = si.getSpellAbility();
+                if (onStack != null && onStack.isTrigger()
+                        && onStack.getActivatingPlayer() == me) {
+                    selfTrigger = true; // my own trigger is on the stack to answer
+                    break;
+                }
+            }
+        }
+        if (!ownMainEmpty && !reactive && !tactical && !selfTrigger) {
             // v3: stock NEVER casts for a mailbox seat anymore. Windows not
             // worth the brain's time are a clean pass — the brain owns this
             // hand. (Stock still takes over wholesale on brain timeout, via
@@ -145,6 +167,7 @@ public final class MailboxController extends PlayerControllerAi {
 
         int turn = game.getPhaseHandler().getTurn();
         List<SpellAbility> playable = new ArrayList<>();
+        boolean hasNonManaAction = false;
         for (SpellAbility sa : ComputerUtilAbility.getSpellAbilities(
                 ComputerUtilAbility.getAvailableCards(game, me), me)) {
             Card host = sa != null ? sa.getHostCard() : null;
@@ -158,9 +181,13 @@ public final class MailboxController extends PlayerControllerAi {
                 // Grinning Ignus's {R}, Return: add {C}{C}{R}) as strategic lines.
                 // In a REACTIVE or TACTICAL window a mana ability is never a
                 // meaningful action on its own (tapping Sol Ring answers nothing),
-                // so drop ALL of them there — this stopped rock/land mana abilities
-                // opening empty "respond?" windows for every seat on ramp spells.
-                if (reactive || tactical || isTrivialLandMana(sa, host)) {
+                // so drop ALL of them there. A SELF-TRIGGER window KEEPS non-trivial
+                // mana abilities (like own-main), because "tap Selvala for 12" in
+                // response to Dreadnought's ETB is exactly the point.
+                if (isTrivialLandMana(sa, host)) {
+                    continue;
+                }
+                if (reactive || tactical) {
                     continue;
                 }
             }
@@ -170,21 +197,33 @@ public final class MailboxController extends PlayerControllerAi {
                 // reactive window (e.g. Mana Drain {U}{U} with a single untapped
                 // Island), which opened phantom counter windows. Require real
                 // affordability for reactive responses so the window only fires when
-                // the seat can truly act. Main-phase keeps canPlay() alone, since a
-                // mana line in the option list may itself enable the cost.
+                // the seat can truly act. Main-phase and self-trigger keep canPlay()
+                // alone, since a mana line in the option list may itself enable the
+                // cost (float, then sink).
                 boolean affordable = !(reactive || tactical)
                         || ComputerUtilCost.canPayCost(sa, me, false);
                 if (sa.canPlay() && affordable) {
                     playable.add(sa);
+                    if (!sa.isManaAbility()) {
+                        hasNonManaAction = true;
+                    }
                 }
             } catch (RuntimeException canPlayThrew) {
                 // a mis-evaluated canPlay must not crash the seat — skip it
             }
         }
+        // Self-trigger only justifies a window when there is a real, non-mana
+        // action to take here (a sac outlet, an instant, an activated ability);
+        // a bare mana ability alone is not worth waking the brain to respond to
+        // its own trigger. This is the anti-flood gate for v4.
+        if (selfTrigger && !hasNonManaAction) {
+            return null;
+        }
         if (playable.isEmpty()) {
             // Instant windows with nothing real to do are a clean pass (never
             // stock); an empty own-main keeps the v1 stock fallthrough.
-            return (reactive || tactical) ? null : super.chooseSpellAbilityToPlay();
+            return (reactive || tactical || selfTrigger)
+                    ? null : super.chooseSpellAbilityToPlay();
         }
 
         // Stable id per option this decision; 0 is reserved for "pass".
@@ -198,6 +237,13 @@ public final class MailboxController extends PlayerControllerAi {
                     : "Combat instant window (" + phaseName(game) + ") — fogs, "
                       + "tricks, and saves live here; see state.combat for "
                       + "attackers/blocks. Act at instant speed, or pass.";
+        } else if (selfTrigger) {
+            prompt = "YOUR OWN trigger/ability is on the stack (see state.stack). "
+                    + "This is your window to respond BEFORE it resolves — e.g. "
+                    + "sacrifice a creature to an outlet, tap for mana while a big "
+                    + "body is still on the battlefield, or protect a piece. Act "
+                    + "now, or pass to let it resolve. You keep priority after "
+                    + "acting, so you can chain several responses.";
         } else {
             prompt = "Instant-speed window — respond to what's on the stack, or pass.";
         }
