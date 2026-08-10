@@ -259,16 +259,41 @@ public final class MailboxController extends PlayerControllerAi {
      */
     @Override
     public boolean playChosenSpellAbility(SpellAbility sa) {
-        if (sa != null && !sa.isLandAbility() && needsManaX(sa)) {
-            org.apache.commons.lang3.Range<Integer> r =
-                    AbilityUtils.getAnnouncementBounds(sa, "X");
-            Integer x = mailboxManaX(sa, r.getMinimum(), r.getMaximum());
-            if (x == null) {
-                // brain CANCELLED: don't cast. Return true so it keeps priority
-                // (117.3c) and gets another window to float mana and re-cast.
-                return true;
+        if (sa != null && !sa.isLandAbility()) {
+            // (1) Announce mana X (see mailboxManaX).
+            if (needsManaX(sa)) {
+                org.apache.commons.lang3.Range<Integer> r =
+                        AbilityUtils.getAnnouncementBounds(sa, "X");
+                Integer x = mailboxManaX(sa, r.getMinimum(), r.getMaximum());
+                if (x == null) {
+                    // brain CANCELLED: don't cast. Return true so it keeps
+                    // priority (117.3c) and can float mana and re-cast.
+                    return true;
+                }
+                sa.setXManaCostPaid(x);
             }
-            sa.setXManaCostPaid(x);
+            // (2) Choose the SPELL's own targets. The AI cast path only runs the
+            // deferred targeting-PLAYER runnable, never the spell target chooser
+            // — so ANY targeted spell cast from the mailbox reached the stack
+            // untargeted, had its mana paid, was rejected ("Couldn't add to
+            // stack, failed to target"), and vanished. This hits AURAS above all
+            // (enchant creature / artifact / land / planeswalker / player — every
+            // deck), plus targeted removal/pump. Set targets via the mailbox
+            // (chooseTargetsFor: single-target -> CHOOSE_ENTITY over
+            // getAllCandidates, which covers all GameEntity kinds; multi-target
+            // -> stock). If none can be chosen, DON'T cast — return true so the
+            // brain keeps priority and re-plans, rather than burning the card.
+            forge.game.spellability.TargetRestrictions tgt =
+                    sa.getTargetRestrictions();
+            Card host = sa.getHostCard();
+            if (tgt != null && host != null
+                    && tgt.getMinTargets(host, sa) > 0
+                    && !sa.isTargetNumberValid()) {
+                if (!chooseTargetsFor(sa)) {
+                    sa.resetTargets();
+                    return true;
+                }
+            }
         }
         return super.playChosenSpellAbility(sa);
     }

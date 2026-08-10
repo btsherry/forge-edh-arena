@@ -439,6 +439,29 @@ Hard-won from two live sessions; read before optimizing anything.
     single-target choices as `CHOOSE_ENTITY` (candidates from
     `getAllCandidates`, optional decline when min=0); multi-target and unusual
     cases still fall to stock — never worse than the status quo.
+    **14b — the fix was HALF-DEAD for SPELL casts (2026-08-10, found live):**
+    `chooseTargetsFor` worked for activated abilities (equip), but a targeted
+    SPELL cast from the mailbox never reached it. The AI cast path
+    (`PlayerControllerAi.playChosenSpellAbility` -> `ComputerUtil.
+    handlePlayingSpellAbility(ai, sa, chooseTargets)`) runs only the
+    `chooseTargets` Runnable it's handed, which is
+    `getDeferredTargetingPlayerRunnable` — that resolves a `TargetingPlayer`
+    param ONLY, never the spell's own targets. So an AURA (no TargetingPlayer)
+    reached casting untargeted: mana paid, then the stack rejected it
+    ("Couldn't add to stack, failed to target", visible in gui.out) and the
+    card was discarded from existence. Confirmed on Selvala's Wolfwillow Haven
+    (t8) and Utopia Sprawl (t12); scope is EVERY targeted mailbox-cast spell,
+    all decks — auras above all (her Sprawl/Wild Growth/Fertile Ground/
+    Overgrowth ramp, Song of the Dryads, Kenrith's Transformation), plus
+    targeted removal/pump. Same disease as #15b: a `PlayerController` hook
+    alive on the human path, dead on the AI cast path. **FIXED:**
+    `playChosenSpellAbility` override now, before delegating, calls
+    `chooseTargetsFor(sa)` for any SA with `minTargets > 0` and no valid
+    targets yet (general across all `GameEntity` target kinds); if targeting
+    can't be satisfied it returns true WITHOUT casting, so the brain keeps
+    priority (117.3c) and re-plans instead of losing the card. Lesson
+    (again): a hook that fires on the human path is NOT automatically on the
+    AI cast path — verify against `handlePlayingSpellAbility`.
 15. **Auto-tap mana payment strands colored sources.** Forge's payment auto-tap chose
     a generic land over a colorless one for The One Ring's {4}, stranding the seat's
     only blue source and locking two castable spells out of the turn.
