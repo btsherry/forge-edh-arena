@@ -39,9 +39,30 @@ ANSWER_CONTRACT = {
     "CHOOSE_CARD": ('Answer: {"chosenId": <option id>} — 0 (choose none) only if '
                     'offered in options.'),
     "CHOOSE_NUMBER": ('Answer: {"chosen": <integer>} within state.min..state.max '
-                      '— typically an X value; max is your affordable ceiling, '
-                      'so bigger is usually (not always) better.'),
+                      '— typically an X value; max is your affordable ceiling '
+                      'RIGHT NOW (it counts your floating pool), so bigger is '
+                      'usually (not always) better. If state.cancelable is true '
+                      'you may instead answer {"chosen": -1} to CANCEL the cast '
+                      '— do that when max is far below what you intended: the '
+                      'cast rewinds, and you can activate mana abilities '
+                      '(commander, Cradle-class lands, untappers) to grow the '
+                      'pool, then re-cast for a real X.'),
 }
+
+# Injected into CAST_SPELL / CHOOSE_NUMBER prompts: the anti-hallucination
+# ground truth for mana. Written after the 2026-08-10 game where a brain
+# announced "seven floating mana" off an untapped-source COUNT and wasted
+# Genesis Wave at X=0.
+MANA_GROUND_TRUTH = (
+    'MANA GROUND TRUTH: state.manaPool is your ONLY floating mana — if it is '
+    '0 you have floated NOTHING, no matter what you played earlier. '
+    'state.untappedManaSourceCount counts untapped SOURCES, not mana (a '
+    'Gaea\'s Cradle is 1 source even when it would add 4). The pool empties '
+    'when the current step/phase ends — float only what you will spend this '
+    'phase. Payment auto-taps simple lands and spends your pool first. To '
+    'cast a big X spell: ACTIVATE mana-ability options FIRST (they resolve '
+    'instantly, no stack, cannot be responded to), watch state.manaPool grow '
+    'on the next request, THEN cast the X spell.')
 
 # Optional key a REACT-pass may add to batch its own subsequent same-turn reacts.
 REACT_HOLD_HINT = (
@@ -174,6 +195,8 @@ def validate(req: dict, out) -> dict | None:
     if dtype == "CHOOSE_NUMBER":
         n = out.get("chosen")
         lo, hi = _bounds(req, 0, 0)
+        if _is_int(n) and n == -1 and (req.get("state", {}) or {}).get("cancelable"):
+            return {"chosen": -1}  # explicit cancel sentinel (engine rewinds the cast)
         if not _is_int(n) or not (lo <= n <= hi):
             return None
         return {"chosen": n}
@@ -229,10 +252,28 @@ def bind_plan_step(step: dict, req: dict) -> int | None:
     return None
 
 
+PLAN_KEY_INSTRUCTION = (
+    "OPTIONAL, only on the FIRST main-phase decision of YOUR own turn: a "
+    "\"plan\" key — an ordered array of the REMAINING sorcery-speed CAST "
+    "plays you intend THIS turn, each {\"card\": \"<exact card name>\", "
+    "\"why\": \"<=12 words\"}, in cast order, EXCLUDING the play you are "
+    "making right now and EXCLUDING lands and combat. The runner will "
+    "execute these locally to save time, but re-checks each against the "
+    "live board and hands control back to you the instant anything diverges "
+    "(an opponent responds, a piece is gone, the board changed). Only list "
+    "plays you are confident you'll want regardless of small changes.")
+
+
 def build_user_prompt(req: dict, plan: str | None = None,
-                      observer: dict | None = None) -> str:
+                      observer: dict | None = None,
+                      speculative: bool = False, react_hold: bool = False,
+                      combo_status: str | None = None) -> str:
     """Per-decision prompt for the seat's model session (dossier already lives
-    in the session's first message — this carries only the fresh decision)."""
+    in the session's first message — this carries only the fresh decision).
+
+    Feature text is GATED on the feature actually being on (2026-08-10
+    forensics: the always-on plan-key text primed plan-following abstraction
+    over literal state reading even with the executor disabled)."""
     dtype = req.get("decisionType", "?")
     parts = [
         f"DECISION seq={req.get('seq')} | {dtype} | turn {req.get('turn')} "
@@ -251,21 +292,72 @@ def build_user_prompt(req: dict, plan: str | None = None,
     if plan:
         parts.append(f"YOUR TURN PLAN (advisory — the request state below WINS "
                      f"if they disagree): {plan}")
+    if combo_status:
+        parts.append(combo_status)
+    if dtype in ("CAST_SPELL", "CHOOSE_NUMBER"):
+        parts.append(MANA_GROUND_TRUTH)
     parts.append("REQUEST (ground truth — re-derive your decision from this):")
     parts.append(json.dumps(req, separators=(",", ":")))
-    if dtype == "REACT":
+    if dtype == "REACT" and react_hold:
         parts.append(REACT_HOLD_HINT)
-    parts.append(
-        "Reply with ONLY the JSON answer object on one line — no prose, no "
-        "code fences. REQUIRED: include a \"why\" key — your decision logic in "
-        "<=20 words (it is logged, never shown to opponents).\n"
-        "OPTIONAL, only on the FIRST main-phase decision of YOUR own turn: a "
-        "\"plan\" key — an ordered array of the REMAINING sorcery-speed CAST "
-        "plays you intend THIS turn, each {\"card\": \"<exact card name>\", "
-        "\"why\": \"<=12 words\"}, in cast order, EXCLUDING the play you are "
-        "making right now and EXCLUDING lands and combat. The runner will "
-        "execute these locally to save time, but re-checks each against the "
-        "live board and hands control back to you the instant anything diverges "
-        "(an opponent responds, a piece is gone, the board changed). Only list "
-        "plays you are confident you'll want regardless of small changes.")
+    tail = ("Reply with ONLY the JSON answer object on one line — no prose, no "
+            "code fences. REQUIRED: include a \"why\" key — your decision logic "
+            "in <=20 words (it is logged, never shown to opponents).")
+    if (speculative and dtype == "CAST_SPELL"
+            and req.get("phase") in ("MAIN1", "MAIN2")):
+        tail += "\n" + PLAN_KEY_INSTRUCTION
+    parts.append(tail)
     return "\n".join(parts)
+
+
+def combo_status_line(combos: list, req: dict, limit: int = 3) -> str | None:
+    """Compute the per-decision COMBO STATUS block from the deck's
+    CommanderSpellbook included-combos list vs the request state's zones.
+    Pure name matching — deck-agnostic; works for any deck with combos.json.
+    Returns None when there is nothing useful to say."""
+    if not combos or req.get("decisionType") != "CAST_SPELL":
+        return None
+    st = req.get("state", {}) or {}
+    bf = {c.get("name") for c in st.get("battlefield") or [] if isinstance(c, dict)}
+    hand = {c.get("name") for c in st.get("hand") or [] if isinstance(c, dict)}
+    command = {str(n) for n in st.get("command") or []}
+    grave = {str(n) for n in st.get("graveyard") or []}
+    scored = []
+    for combo in combos:
+        cards = combo.get("cards") or []
+        if not cards:
+            continue
+        locs, missing = [], 0
+        for c in cards:
+            name = c.get("name")
+            if name in bf:
+                locs.append(f"{name} ON BATTLEFIELD")
+            elif name in hand:
+                locs.append(f"{name} IN HAND")
+                missing += 1
+            elif name in command:
+                locs.append(f"{name} IN COMMAND ZONE")
+                missing += 1
+            elif name in grave:
+                locs.append(f"{name} in graveyard")
+                missing += 1
+            else:
+                locs.append(f"{name} not visible (library?)")
+                missing += 2  # further than a castable piece
+        scored.append((missing, combo, locs))
+    if not scored:
+        return None
+    scored.sort(key=lambda t: t[0])
+    if scored[0][0] >= 2 * len(scored[0][1].get("cards", [1])):
+        return None  # nothing assembled or in reach — stay quiet, save tokens
+    lines = ["COMBO STATUS (your deck's real combos; advance/protect/execute "
+             "when favorable):"]
+    for missing, combo, locs in scored[:limit]:
+        need = combo.get("mana_needed")
+        tag = ("ALL PIECES ON BATTLEFIELD — check prerequisites and EXECUTE "
+               "THIS TURN" if missing == 0
+               else f"{missing} step(s) from live")
+        lines.append(f"- {' + '.join(c.get('name','?') for c in combo.get('cards', []))}: "
+                     + "; ".join(locs) + f" — {tag}"
+                     + (f"; needs {need}" if need else ""))
+    return "\n".join(lines)

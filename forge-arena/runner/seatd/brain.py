@@ -87,6 +87,16 @@ class SeatBrain:
             "## DECK DOSSIER (full oracle text — never summarized)\n",
             dossier_p.read_text(),  # fat context is REQUIRED (field note 1)
         ]
+        # Ship-pattern combo knowledge: the CommanderSpellbook included-combos
+        # distillation ONLY (pieces, zone requirements, prerequisites, steps,
+        # produces). Project-internal artifacts (combo-program-*.json,
+        # advisory-combos.json) are deliberately NOT ingested — the shipped
+        # arena-add-deck pipeline won't have them.
+        combos_p = dossier_p.parent / "combos.json"
+        if combos_p.exists():
+            parts += ["\n## DECK COMBOS (CommanderSpellbook — real combos in "
+                      "THIS 100; know them, assemble them, execute them)\n",
+                      combos_p.read_text()]
         if primer_p.exists():
             parts += ["\n## STRATEGY PRIMER\n", primer_p.read_text()]
         parts.append("\nReply exactly: READY")

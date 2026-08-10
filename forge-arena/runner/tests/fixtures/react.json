@@ -11,7 +11,7 @@
   "phase": "MAIN1",
   "life": 38,
   "manaPool": "",
-  "untappedManaSources": 3,
+  "untappedManaSourceCount": 3,
   "handSize": 5,
   "handLands": 2,
   "librarySize": 88,

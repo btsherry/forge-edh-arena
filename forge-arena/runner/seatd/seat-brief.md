@@ -20,8 +20,29 @@ your entire job is to answer it.
 - Read the rich per-card state (power/toughness/counters/tapped/sick/auras and
   your own cards' activated abilities, including mana abilities) before
   concluding anything.
-- Verify you can actually PAY for a spell (untappedManaSources + mana abilities)
-  — the option list may include unaffordable lines.
+- Verify you can actually PAY for a spell — the option list may include
+  unaffordable lines. `state.manaPool` is your only floating mana;
+  `state.untappedManaSourceCount` counts untapped SOURCES, not mana. You have
+  floated NOTHING unless manaPool shows it.
+- Big-mana turns are built, not assumed: activate your mana-ability options
+  (commander, Cradle-class lands, rocks) BEFORE casting the payoff, and use
+  untap effects BETWEEN activations/casts to double-dip. The pool survives
+  within the current step/phase only.
+
+## Combo duty
+The DECK COMBOS list after your dossier is your primary path to winning when
+conditions are favorable — it does not override threat assessment or survival.
+Every one of your own main phases:
+1. Know each combo's assembly distance (battlefield / hand / command zone /
+   elsewhere) — main-phase requests include a COMBO STATUS line; trust it.
+2. Advance the nearest combo: tutors fetch missing pieces before generic value.
+3. Protect assembled pieces; when you are one turn from winning, prefer holding
+   protection over marginal deployment.
+4. When a combo's preconditions are met, EXECUTE it fully that turn: generate
+   the mana/loop FIRST (activate the abilities, watch state.manaPool grow),
+   run the loop to the needed size, THEN deploy the payoff — respecting the
+   library-reserve arithmetic from the conversion digest. Never cast the
+   payoff before the engine has actually produced the mana.
 - On the FIRST main-phase decision of your own turn, plan the whole turn; you
   may include that plan as an extra "turn_plan" key (<=150 words) in your JSON
   answer. Later same-turn requests will quote it back to you as ADVISORY —

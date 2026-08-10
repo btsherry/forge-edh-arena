@@ -456,3 +456,41 @@ Hard-won from two live sessions; read before optimizing anything.
     **FIXED in v3:** the observer snapshot now carries a per-seat `eliminated`
     flag (`Player.hasLost()`), so runners/pre-planning can react to the actual
     turn-order change.
+17. **RETRACTED-AND-REWRITTEN (was: notes 17-20 blaming engine seams).
+    2026-08-10 opus/medium all-AI game forensics, verified against archived
+    per-seat records (archive/20260810-090542-stop/seat-N.jsonl): the ENGINE
+    WAS PROGRAMMATICALLY CORRECT throughout.** What actually happened:
+    - Floating mana IS supported through the mailbox: non-trivial mana
+      abilities (Selvala's {G},{T}: add X included) are listed as options in
+      main-phase windows, mana abilities resolve immediately, and pool-funded
+      casts work (Jeska's Will -> Purphoros same game; Selvala tap chosen 4x
+      in the 2026-08-09 game and again in the fable/high game).
+    - The t18 disaster was a BRAIN misplay chain (opus/medium, live model
+      calls): it hallucinated "seven floating mana" it never generated
+      (state.manaPool was in every request), never picked the Selvala tap
+      option present in its own option list (verified seq 88-90), fired
+      untappers at already-untapped lands (t14), and cast Genesis Wave with
+      an empty pool. The earlier "activation fizzles" (t12 Giada Clue #2,
+      t17 Urza {5}) are consistent with unaffordable activations being
+      legally declined/rewound (733.1), i.e. brain arithmetic errors.
+    - Executable plans (#1) and react-hold (#2) were BOTH OFF this game
+      (runner line: no --speculative/--react-hold; arena-play.sh sets
+      neither). Every misplay was a fresh per-window model decision. The
+      fable/high game ran with both ON and handled Selvala correctly.
+      The round-trip features are exonerated; no revert indicated.
+    Real (small) harness-ergonomics gaps confirmed by the same forensics:
+    a. **Silent forced-X**: Genesis Wave's X was clamp-forced (~0) with zero
+       CHOOSE_NUMBER wakes this game — when the brain casts an X spell the
+       clamp should ALWAYS wake the brain if the max payable X is below a
+       sane threshold, so it can abort instead of wasting the spell.
+    b. **isTrivialLandMana hides high-value land floats**: bare-tap filter
+       drops Gaea's Cradle/Nykthos-class lands from options, so those can
+       never be manually floated (only auto-paid). Filter should be
+       "bare tap AND fixed single mana", not "bare tap".
+    c. **Prompt hygiene**: plan-submission text appears even when the
+       executor is off (gate it), and the prompt should state explicitly:
+       "state.manaPool is ground truth; you have floated NOTHING unless it
+       shows there" — targets the exact hallucination observed.
+    d. **_record truncates option lists** (~9 entries) — seq 85 chose id 13
+       with 9 recorded options; forensics needed the full list. Record all.
+    Fixes pending discussion with Ben before any build.

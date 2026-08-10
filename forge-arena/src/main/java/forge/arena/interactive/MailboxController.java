@@ -20,6 +20,7 @@ import forge.arena.engine.SeatView;
 import forge.arena.engine.SeatViews;
 import forge.game.Game;
 import forge.game.GameEntity;
+import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CounterType;
@@ -210,7 +211,17 @@ public final class MailboxController extends PlayerControllerAi {
             Card host = sa.getHostCard();
             String name = host != null ? host.getName() : sa.getDescription();
             String cost = sa.getPayCosts() != null ? sa.getPayCosts().toSimpleString() : null;
-            req.option(id, label(sa, host), cost, typeHint(host));
+            String lab = label(sa, host);
+            // Ground the float decision: any visible mana ability that would
+            // add 2+ RIGHT NOW says so (Cradle, Selvala, Tomb...), so the
+            // brain prices the float without doing SVar math itself.
+            if (sa.isManaAbility()) {
+                int yield = landManaYield(sa, host);
+                if (yield >= 2) {
+                    lab += " [currently adds " + yield + " mana]";
+                }
+            }
+            req.option(id, lab, cost, typeHint(host));
             byId.put(id, sa);
             id++;
         }
@@ -264,25 +275,47 @@ public final class MailboxController extends PlayerControllerAi {
         if (hi < min) {
             hi = min;
         }
-        if (hi == min) {
-            return min; // forced value — no decision to make
+        boolean manaX = "X".equals(announce) || "Y".equals(announce);
+        if (hi == min && !(manaX && hi == 0)) {
+            return min; // genuinely forced value — no decision to make
         }
+        // A mana-X forced to 0 is NEVER answered silently anymore (2026-08-10:
+        // a Genesis Wave resolved at X=0 because the brain "floated" mana that
+        // did not exist and the clamp forced 0 without waking it). The brain is
+        // woken with a cancel option: -1 announces an unpayable X, the payment
+        // step fails, and CR 733.1 rewinds the whole cast cleanly — the main
+        // phase window then re-opens and the brain can float mana first.
         int turn = game.getPhaseHandler().getTurn();
         Map<String, Object> state = buildState(turn);
         state.put("min", min);
         state.put("max", hi);
         Card host = ability.getHostCard();
         String what = host != null ? host.getName() : String.valueOf(ability);
+        String prompt = "Announce '" + announce + "' for " + what
+                + " — pick a number in [" + min + ", " + hi
+                + "] (max counts your floating pool + untapped sources).";
+        if (manaX) {
+            state.put("cancelable", true);
+            prompt += (hi == 0)
+                    ? " Your affordable " + announce + " RIGHT NOW IS 0 — you"
+                      + " have floated no mana. Almost certainly answer -1 to"
+                      + " CANCEL the cast, then activate mana abilities"
+                      + " (commander, Cradle-class lands, untappers) and"
+                      + " re-cast for a real " + announce + "."
+                    : " Answer -1 to CANCEL the cast instead (do that when max"
+                      + " is far below your intent; float mana, then re-cast).";
+        }
         MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_NUMBER",
-                "Announce '" + announce + "' for " + what + " — pick a number in ["
-                        + min + ", " + hi + "] (max is your affordable ceiling).")
+                seatIndex, turn, phaseName(game), "CHOOSE_NUMBER", prompt)
                 .state(state);
         JsonNode resp = bus.exchange(req);
         if (resp != null) {
             JsonNode chosen = resp.get("chosen");
             if (chosen != null && chosen.isInt()) {
                 int n = chosen.asInt();
+                if (manaX && n == -1) {
+                    return hi + 1000; // deliberately unpayable -> clean rewind
+                }
                 if (n >= min && n <= hi) {
                     return n;
                 }
@@ -808,7 +841,10 @@ public final class MailboxController extends PlayerControllerAi {
             state.put("commanderDamageTaken", ownCmdDmg);
         }
         state.put("manaPool", view.manaPool());
-        state.put("untappedManaSources", view.untappedManaSources());
+        // Renamed from "untappedManaSources" 2026-08-10: a brain read the
+        // SOURCE COUNT as floating mana ("seven floating mana") and wasted its
+        // X spell. The name now says what it is.
+        state.put("untappedManaSourceCount", view.untappedManaSources());
         state.put("handSize", view.handSize());
         state.put("handLands", view.handLands());
         state.put("librarySize", view.librarySize());
@@ -1014,15 +1050,57 @@ public final class MailboxController extends PlayerControllerAi {
      * flooding; every other mana ability (nonland source, or a cost that
      * returns/sacrifices/removes-a-counter) is kept as a selectable option.
      */
+    /**
+     * v4 (2026-08-10, GAN-reviewed): trivial = bare-tap land whose CURRENT
+     * yield is 0 or 1 mana. Yield is data-driven from the ability chain's
+     * Amount params (walking sub-abilities — Nykthos-style chains keep their
+     * mana part on a sub), so Gaea's Cradle / Serra's Sanctum / Ancient Tomb /
+     * Lotus Field become deliberate float options while Forests, duals, and
+     * color-fixers (Command Tower, City of Brass, Cavern — the brain never
+     * gets the color sub-choice anyway, and Cavern's mana is spend-restricted)
+     * stay auto-payment-only. A Cradle with no creatures yields 0 → hidden
+     * until it's live. Costed land abilities (Nykthos {2},{T}) were never
+     * filtered and still aren't.
+     */
     private static boolean isTrivialLandMana(SpellAbility sa, Card host) {
         if (host == null || !host.isLand()) {
             return false;
         }
         Cost cost = sa.getPayCosts();
-        if (cost == null) {
-            return true; // a free land mana source is trivial too
+        boolean bareTap = cost == null
+                || (cost.hasTapCost() && cost.hasOnlySpecificCostType(CostTap.class));
+        if (!bareTap) {
+            return false;
         }
-        return cost.hasTapCost() && cost.hasOnlySpecificCostType(CostTap.class);
+        int yield = landManaYield(sa, host);
+        return yield >= 0 && yield <= 1; // unknown (-1) => show it, to be safe
+    }
+
+    /** Current total mana yield of a (land) mana-ability chain; -1 if unknown. */
+    private static int landManaYield(SpellAbility sa, Card host) {
+        int total = 0;
+        boolean sawManaPart = false;
+        try {
+            for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
+                if (cur.getApi() != null && "Mana".equals(cur.getApi().toString())) {
+                    sawManaPart = true;
+                    String amt = cur.getParam("Amount");
+                    if (amt == null) {
+                        total += 1;
+                    } else {
+                        total += AbilityUtils.calculateAmount(host, amt, cur);
+                    }
+                } else if (cur.getParam("Amount") != null && cur == sa) {
+                    // root carries the amount for simple one-part scripts
+                    sawManaPart = true;
+                    total += AbilityUtils.calculateAmount(
+                            host, cur.getParam("Amount"), cur);
+                }
+            }
+        } catch (RuntimeException e) {
+            return -1; // evaluation failed — treat as strategic, show it
+        }
+        return sawManaPart ? total : 1; // no explicit part: plain single mana
     }
 
     private static List<Map<String, Object>> defenderList(List<GameEntity> defenders) {

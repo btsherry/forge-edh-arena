@@ -48,6 +48,18 @@ class SeatRunner:
         #   {"turn": int, "steps": [{"card","why"}], "idx": int}
         # Consumed locally under the four-part guard; discarded on any divergence.
         self.plan: dict | None = None
+        # Deck combos (CommanderSpellbook included-combos distillation) for the
+        # per-decision COMBO STATUS line. Ship-pattern source: dossier/combos.json
+        # only — no project-internal combo-program/advisory artifacts.
+        self.combos: list = []
+        try:
+            combos_p = (Path(__file__).parents[2] / "decks" / deck
+                        / "dossier" / "combos.json")
+            if combos_p.exists():
+                self.combos = (json.loads(combos_p.read_text()).get("combos")
+                               or [])
+        except (OSError, json.JSONDecodeError):
+            self.combos = []
         self.react_seen: set[tuple] = set()
         self._last_turn: int | None = None
         log_dir = Path(log_dir) if log_dir else Path(__file__).parents[1] / "logs"
@@ -126,7 +138,12 @@ class SeatRunner:
         stamp = {"lives": lives,
                  "stack": st.get("stack") or [],
                  "ownPow": st.get("ownBoardPower"),
-                 "ownPerms": len(st.get("battlefield") or [])}
+                 "ownPerms": len(st.get("battlefield") or []),
+                 # pool in the stamp: the 2026-08-10 "seven floating mana"
+                 # forensics needed exactly this and it wasn't recorded
+                 "pool": st.get("manaPool"),
+                 "untappedSrc": st.get("untappedManaSourceCount",
+                                       st.get("untappedManaSources"))}
         combat = st.get("combat")
         if combat:
             stamp["combat"] = [f"{a.get('name')} {a.get('power')}/"
@@ -145,12 +162,12 @@ class SeatRunner:
                "model": self.brain.model, "effort": self.brain.effort,
                "answer": answer, "why": why, "consumed": consumed,
                "board": stamp}
-        # Log options for model AND plan/hold decisions so a binding/auto-pass
-        # can be audited post-hoc (was model-only; the local fastpaths need it
-        # most for the correctness review).
+        # Log the FULL option list for model/plan/hold decisions (the 08-10
+        # forensics fought the old 9-entry truncation: seq85 chose id 13 with
+        # only 9 recorded). ~80 chars/label keeps a 40-option board <4KB.
         if source in ("model", "plan", "hold"):
-            rec["options"] = [str(o.get("label", ""))[:60]
-                              for o in req.get("options", [])[:9]]
+            rec["options"] = [str(o.get("label", ""))[:80]
+                              for o in req.get("options", [])]
         if req.get("decisionType") == "MULLIGAN":
             st = req.get("state", {}) or {}
             rec["hand"] = st.get("hand")            # audit mulligan judgment
@@ -323,8 +340,10 @@ class SeatRunner:
                 rem = [s.get("card") for s in self.plan["steps"][self.plan["idx"]:]]
                 if rem:
                     plan_text = "remaining planned casts: " + ", ".join(rem)
-            prompt = rules.build_user_prompt(req, plan=plan_text,
-                                             observer=self.mb.read_observer())
+            prompt = rules.build_user_prompt(
+                req, plan=plan_text, observer=self.mb.read_observer(),
+                speculative=self.speculative, react_hold=self.react_hold,
+                combo_status=rules.combo_status_line(self.combos, req))
             # Cap at the deadline (raised to 240 so fable/high effort isn't
             # truncated on long-timeout games; normal 90s games stay budget-bound).
             out, meta = self.brain.decide(prompt, timeout_s=min(budget, 240.0))
