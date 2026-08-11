@@ -38,7 +38,7 @@ built to connect: **Changeling Outcast** (can't be blocked), **Dauthi
 Voidwalker / Nether Traitor / Vashta Nerada** (shadow — effectively
 unblockable), **Vault Skirge / Bitterblossom Faeries / Deep-Cavern Bat / Oona's
 Blackguard** (flying), **Vampire Cutthroat** (skulk), and a menace suite
-(**Blackbloom Rogue, Rapacious Guest, Snarling Gorehound, Stalactite Stalker**).
+(**Blackbloom Rogue, Snarling Gorehound, Stalactite Stalker**).
 Two grant-evasion enablers matter a lot: **Shadow Alley Denizen** (a black
 creature ETB grants intimidate — chain these to push a big threat through) and
 **Shizo, Death's Storehouse** (fear onto a legendary — i.e., onto Rev herself).
@@ -49,7 +49,7 @@ turns the engine.
 doubles it (two per player hit), **Academy Manufactor** turns each Treasure into
 Treasure+Clue+Food, **Sword of Wealth and Power** and **Mastermind Plum** add
 more, **Warren Soultrader** and **Treasure Vault** manufacture them from
-sacrifice/mana, and **Rapacious Guest** spins Food into counters. Treasures are
+sacrifice/mana. Treasures are
 not just ramp — they power **Cranial Plating**, fuel **Cabal Coffers** turns,
 enable **Beseech the Mirror**'s bargain, and are the payoff cards for
 **Revel in Riches** (win at 10 Treasures — a real alternate line here).
@@ -62,21 +62,28 @@ a card from hand; **Thieving Varmint** makes mana *specifically to cast spells
 you don't own*. When you connect, actually spend the stolen cards — the extra
 resources are how you out-grind a three-player table.
 
-**4. Sacrifice / aristocrats.** **Grave Pact** turns any creature death into a
-table-wide edict; feed it with token generators (**Bitterblossom**, **Jadar**'s
-decayed zombies) and free sac outlets (**Warren Soultrader**, **Phyrexian
-Tower**, **Braids, Arisen Nightmare**). **Nadier's Nightblade** drains 1 per
+**4. Sacrifice / aristocrats.** **Grave Pact** and its flash-speed twin
+**Dictate of Erebos** turn any creature death into a table-wide edict — with both
+out, each of your deaths forces *two* sacrifices, and Dictate can be flashed in
+during a rival's combat or in response to a board wipe for a blowout. Feed them
+with token generators (**Bitterblossom**, **Jadar**'s decayed zombies) and free
+sac outlets (**Warren Soultrader**, **Phyrexian Tower**, **Braids, Arisen
+Nightmare**). **Nadier's Nightblade** drains 1 per
 token that leaves — with Bitterblossom + a sac outlet that's a per-turn drain
 clock. **Morbid Opportunist** and **Mari, the Killing Quill** convert the death
 churn into cards/value. **Braids** is a soft-stax edict engine that favors you
 because you have tokens to feed it and opponents don't.
 
 **5. Reanimation.** **Necromancy** (flash), **Chthonian Nightmare** (energy
-loop), **Agadeem's Awakening** (mass, scalable), **Balthor the Defiled** (mass
-black/red), and **Finale of Eternity** (X≥10 returns your yard) recur your best
-bodies — usually **Gray Merchant of Asphodel** for a repeatable drain, or a
-threat after a wipe. **Yawgmoth's Will** replays your whole graveyard (rituals,
-tutors, drains) and is frequently the setup turn for a kill.
+loop), **Agadeem's Awakening** (mass, scalable), and **Finale of Eternity** (X≥10
+returns your yard) recur your best bodies — usually **Gray Merchant of Asphodel**
+for a repeatable drain, or a threat after a wipe. **Chainer, Dementia Master** is
+the standout engine: {B}{B}{B}, pay 3 life to reanimate a creature from *any*
+graveyard under your control — recursion *and* theft in one, repeatable every
+turn. Protect him (Lightning Greaves / Swiftfoot Boots): his reanimated
+Nightmares are exiled if he leaves the battlefield. **Yawgmoth's Will** replays
+your whole graveyard (rituals, tutors, drains) and is frequently the setup turn
+for a kill.
 
 **6. Big-mana drain (the primary kill).** **Cabal Coffers + Urborg, Tomb of
 Yawgmoth** (every land becomes a Swamp) taps for enormous black; **Nykthos** and
