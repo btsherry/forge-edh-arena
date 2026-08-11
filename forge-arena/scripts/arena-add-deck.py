@@ -20,6 +20,7 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 
@@ -50,7 +51,8 @@ def slugify_card(name: str) -> str:
     dropped (Gaea's -> gaeas), hyphens/slashes are word boundaries (Keen-Eyed ->
     keen_eyed), and DFC faces join with '_' (A // B -> a_b), so pass the FULL
     Scryfall name (both faces) for DFCs, not just the front."""
-    s = name.lower().replace("'", "").replace("’", "")   # drop apostrophes
+    s = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()  # Andúril -> Anduril
+    s = s.lower().replace("'", "")                            # drop apostrophes
     s = re.sub(r"[-/]+", " ", s)                               # hyphen/slash -> boundary
     s = re.sub(r"[^a-z0-9 ]+", "", s)                          # drop remaining punctuation
     return re.sub(r"\s+", "_", s.strip())
@@ -58,32 +60,46 @@ def slugify_card(name: str) -> str:
 
 # ---- step 1: parse .dck ------------------------------------------------------
 
+HEADERS = {"metadata": "meta", "commander": "commander", "commanders": "commander",
+           "main": "main", "maindeck": "main", "deck": "main",
+           "sideboard": "sideboard", "sb": "sideboard"}
+
+
 def parse_dck(path: str):
-    name, section, commanders, main = None, None, [], []
+    """Robust to both the Forge sectioned format ([metadata]/[Commander]/[Main])
+    and the flatter Archidekt/Moxfield export (a bare card list with a
+    'Commander:' marker and no metadata). Unheadered lines default to main."""
+    name, commanders, main = None, [], []
+    section = "main"
     for raw in open(path, encoding="utf-8", errors="replace"):
-        line = raw.rstrip("\n")
-        if not line.strip():
+        line = raw.strip()
+        if not line or line.startswith("//"):
             continue
-        low = line.strip().lower()
-        if low.startswith("[metadata]"): section = "meta"; continue
-        if low.startswith("[commander]"): section = "commander"; continue
-        if low.startswith("[main]"): section = "main"; continue
-        if low.startswith("["): section = None; continue        # sideboard/other
+        key = line.strip("[]").rstrip(":").strip().lower()   # [Commander] / Commander: / commander
+        if key in HEADERS:
+            section = HEADERS[key]
+            continue
         if section == "meta":
             if line.lower().startswith("name="):
                 name = line.split("=", 1)[1].strip()
             continue
-        if section in ("commander", "main"):
-            m = re.match(r"\s*(\d+)\s+(.+)", line)
-            if not m:
-                continue
-            qty = int(m.group(1))
-            card = m.group(2).split("|")[0].strip()          # drop |SET|num tags
+        if section == "sideboard":
+            continue
+        m = re.match(r"(\d+)\s*[xX]?\s+(.+)", line)            # "3 Card" / "3x Card"
+        if m:
+            qty, card = int(m.group(1)), m.group(2)
+        else:
+            qty, card = 1, line                                # bare card name -> qty 1
+        card = card.split("|")[0].strip()                      # drop |SET|num tags
+        if card:
             (commanders if section == "commander" else main).append((card, qty))
-    if not name:
-        name = os.path.splitext(os.path.basename(path))[0]
     if not commanders:
-        raise SystemExit("ERROR: no [Commander] found — is this a Commander .dck?")
+        raise SystemExit("ERROR: no commander found — is this a Commander .dck? "
+                         "(need a [Commander] section or a 'Commander:' marker)")
+    if not name:
+        name = commanders[0][0]                                # name the deck after its commander
+    if name.startswith("Name="):
+        name = name[5:].strip()
     total = sum(q for _, q in commanders + main)
     if not (95 <= total <= 105):
         warn(f"deck has {total} cards (expected ~100)")
