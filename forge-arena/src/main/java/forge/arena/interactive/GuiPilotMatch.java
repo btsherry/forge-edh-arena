@@ -73,7 +73,7 @@ public final class GuiPilotMatch {
 
     /** The four Commander decks; index 0 is the default human seat. */
     private static final String[] DECKS = {
-            "selvala-competitive.dck",
+            "selvala-heart-of-the-wilds.dck",
             "purphoros-god-of-the-forge.dck",
             "giada-font-of-hope.dck",
             "urza-lord-high-artificer.dck",
@@ -117,13 +117,22 @@ public final class GuiPilotMatch {
 
     private static void startCommanderMatch(File decksDir, String humanDeckFile,
             boolean allAi) {
-        // Order the seats: human deck first, then the remaining three as mailbox
-        // seats (preserving the fixed DECKS order).
+        // Seat order MUST stay in lockstep with run_table.sh, which launches the
+        // brains: seats 1-3 are always DECKS[1..3] (Purphoros/Giada/Urza). Under
+        // --all-ai every seat is a mailbox deck (the four DECKS in order). Under
+        // --human, seat 0 is the human's deck — ANY deck, including a freshly
+        // ingested one that isn't in DECKS — and seats 1-3 are the three AI decks.
+        // (The old "add every DECKS entry != humanDeck" logic produced a 5-seat
+        // game when the human brought a deck not in DECKS, since it dropped none.)
         List<String> ordered = new ArrayList<>();
-        ordered.add(humanDeckFile);
-        for (String d : DECKS) {
-            if (!d.equals(humanDeckFile)) {
+        if (allAi) {
+            for (String d : DECKS) {
                 ordered.add(d);
+            }
+        } else {
+            ordered.add(humanDeckFile);
+            for (int i = 1; i < DECKS.length; i++) {
+                ordered.add(DECKS[i]);
             }
         }
 
