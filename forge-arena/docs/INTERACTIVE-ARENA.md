@@ -611,3 +611,22 @@ Hard-won from two live sessions; read before optimizing anything.
     but a new decision is correct" hole. Cross-turn adaptive suppression was
     considered and REJECTED (most state can change across turns; too likely to
     eat a line).
+22 — COMBAT BLOCK/ATTACK LEGALITY: aggregate rules were bypassed (2026-08-11,
+    caught live by Ben: Urza blocked a menace Snarling Gorehound with ONE
+    creature and it resolved — Gorehound died, Urza took 0). Root cause:
+    `MailboxController.declareBlockers` / `declareAttackers` validated each
+    participant with the PER-participant `CombatUtil.canBlock` / `canAttack`
+    (which PASS for menace — menace is an aggregate "except by two or more"
+    rule), then committed via `combat.addBlocker`/`addAttacker` **without ever
+    running Forge's whole-assignment validators**. So the seam honored evasion
+    (flying/reach/protection) but ignored every count-based rule. FIX: after
+    assembling the assignment, `declareBlockers` calls
+    `CombatUtil.validateBlocks(combat, defender)` (non-null reason = illegal →
+    `undoBlockingAssignment` each + `super`), and `declareAttackers` calls
+    `CombatUtil.validateAttackers(combat)` (false = illegal → `clearAttackers` +
+    `super`). Now inherits Forge's full legality set: menace/min-blockers,
+    max-blockers, must-block/provoke/lure, can't-block-alone, "attacks each
+    combat if able", can't-attack-alone, banding. Combat DAMAGE assignment
+    (banding damage-control, multi-blocker ordering, trample, deathtouch) was
+    never overridden by the seam — it already defers to stock AI, so it was never
+    broken and needed no change.

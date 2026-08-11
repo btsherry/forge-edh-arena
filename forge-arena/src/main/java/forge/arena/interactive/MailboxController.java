@@ -617,6 +617,16 @@ public final class MailboxController extends PlayerControllerAi {
         for (int i = 0; i < attackCards.size(); i++) {
             combat.addAttacker(attackCards.get(i), attackTargets.get(i));
         }
+        // Per-attacker canAttack (above) does NOT cover the aggregate attack rules
+        // — "must attack / attacks each combat if able", "can't attack alone", band
+        // constraints. validateAttackers checks the whole assignment against the
+        // AttackConstraints; if the brain's attack is illegal (more avoidable
+        // violations than a legal attack), drop it and let stock AI declare a legal
+        // one (mirrors the malformed-input fallback above).
+        if (!CombatUtil.validateAttackers(combat)) {
+            combat.clearAttackers();
+            super.declareAttackers(attacker, combat);
+        }
     }
 
     @Override
@@ -689,6 +699,19 @@ public final class MailboxController extends PlayerControllerAi {
         }
         for (int i = 0; i < blockCards.size(); i++) {
             combat.addBlocker(blockAttackers.get(i), blockCards.get(i));
+        }
+        // Per-blocker canBlock (above) does NOT cover the aggregate block rules —
+        // menace/min-blockers, max-blockers ("can't be blocked by more than one"),
+        // must-block/provoke/lure, "can't block alone". validateBlocks checks the
+        // whole assignment and returns a non-null reason when illegal (e.g. one
+        // creature declared onto a menace attacker); undo the blocks and let stock
+        // AI declare a legal set.
+        String invalidBlocks = CombatUtil.validateBlocks(combat, defender);
+        if (invalidBlocks != null && !invalidBlocks.isEmpty()) {
+            for (Card b : blockCards) {
+                combat.undoBlockingAssignment(b);
+            }
+            super.declareBlockers(defender, combat);
         }
     }
 
