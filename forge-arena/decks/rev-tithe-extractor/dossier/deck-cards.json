@@ -1,0 +1,736 @@
+{
+ "schema": "arena.deck-cards/1",
+ "deck_id": "rev-tithe-extractor",
+ "cards": [
+  {
+   "name": "Rev, Tithe Extractor",
+   "qty": 1,
+   "zone": "commander",
+   "mana_cost": "{3}{B}",
+   "type_line": "Legendary Creature \u2014 Human Rogue",
+   "color_identity": "B",
+   "oracle_text": "Whenever you attack, target creature gains deathtouch until end of turn.\nWhenever one or more creatures you control deal combat damage to a player, create a Treasure token, then look at the top card of that player's library and exile it face down. You may cast that card for as long as it remains exiled. (A Treasure token is an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")"
+  },
+  {
+   "name": "Academy Manufactor",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{3}",
+   "type_line": "Artifact Creature \u2014 Assembly-Worker",
+   "color_identity": "C",
+   "oracle_text": "If you would create a Clue, Food, or Treasure token, instead create one of each."
+  },
+  {
+   "name": "Agadeem's Awakening // Agadeem, the Undercrypt",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{X}{B}{B}{B}",
+   "type_line": "Sorcery // Land",
+   "color_identity": "B",
+   "oracle_text": "Agadeem's Awakening: Return from your graveyard to the battlefield any number of target creature cards that each have a different mana value X or less.\n//\nAgadeem, the Undercrypt: As this land enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {B}."
+  },
+  {
+   "name": "And\u00faril, Narsil Reforged",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}",
+   "type_line": "Legendary Artifact \u2014 Equipment",
+   "color_identity": "C",
+   "oracle_text": "Ascend (If you control ten or more permanents, you get the city's blessing for the rest of the game.)\nWhenever equipped creature attacks, put a +1/+1 counter on each creature you control. If you have the city's blessing, put two +1/+1 counters on each creature you control instead.\nEquip {3}"
+  },
+  {
+   "name": "Balthor the Defiled",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}{B}",
+   "type_line": "Legendary Creature \u2014 Zombie Dwarf",
+   "color_identity": "B",
+   "oracle_text": "Minion creatures get +1/+1.\n{B}{B}{B}, Exile Balthor: Each player returns all black and all red creature cards from their graveyard to the battlefield."
+  },
+  {
+   "name": "Barrowgoyf",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Creature \u2014 Lhurgoyf",
+   "color_identity": "B",
+   "oracle_text": "Deathtouch, lifelink\nBarrowgoyf's power is equal to the number of card types among cards in all graveyards and its toughness is equal to that number plus 1.\nWhenever this creature deals combat damage to a player, you may mill that many cards. If you do, you may put a creature card from among them into your hand."
+  },
+  {
+   "name": "Beseech the Mirror",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}{B}{B}",
+   "type_line": "Sorcery",
+   "color_identity": "B",
+   "oracle_text": "Bargain (You may sacrifice an artifact, enchantment, or token as you cast this spell.)\nSearch your library for a card, exile it face down, then shuffle. If this spell was bargained, you may cast the exiled card without paying its mana cost if that spell's mana value is 4 or less. Put the exiled card into your hand if it wasn't cast this way."
+  },
+  {
+   "name": "Bitterbloom Bearer",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}{B}",
+   "type_line": "Creature \u2014 Faerie Rogue",
+   "color_identity": "B",
+   "oracle_text": "Flash\nFlying\nAt the beginning of your upkeep, you lose 1 life and create a 1/1 blue and black Faerie creature token with flying."
+  },
+  {
+   "name": "Bitterblossom",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}",
+   "type_line": "Kindred Enchantment \u2014 Faerie",
+   "color_identity": "B",
+   "oracle_text": "At the beginning of your upkeep, you lose 1 life and create a 1/1 black Faerie Rogue creature token with flying."
+  },
+  {
+   "name": "Blackbloom Rogue // Blackbloom Bog",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Creature \u2014 Human Rogue // Land",
+   "color_identity": "B",
+   "oracle_text": "Blackbloom Rogue: Menace (This creature can't be blocked except by two or more creatures.)\nThis creature gets +3/+0 as long as an opponent has eight or more cards in their graveyard.\n//\nBlackbloom Bog: This land enters tapped.\n{T}: Add {B}."
+  },
+  {
+   "name": "Braids, Arisen Nightmare",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}{B}",
+   "type_line": "Legendary Creature \u2014 Nightmare",
+   "color_identity": "B",
+   "oracle_text": "At the beginning of your end step, you may sacrifice an artifact, creature, enchantment, land, or planeswalker. If you do, each opponent may sacrifice a permanent of their choice that shares a card type with it. For each opponent who doesn't, that player loses 2 life and you draw a card."
+  },
+  {
+   "name": "Cabal Coffers",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Land",
+   "color_identity": "B",
+   "oracle_text": "{2}, {T}: Add {B} for each Swamp you control."
+  },
+  {
+   "name": "Changeling Outcast",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}",
+   "type_line": "Creature \u2014 Shapeshifter",
+   "color_identity": "B",
+   "oracle_text": "Changeling (This card is every creature type.)\nThis creature can't block and can't be blocked."
+  },
+  {
+   "name": "Chthonian Nightmare",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}",
+   "type_line": "Enchantment",
+   "color_identity": "B",
+   "oracle_text": "When this enchantment enters, you get {E}{E}{E} (three energy counters).\nPay X {E}, Sacrifice a creature, Return this enchantment to its owner's hand: Return target creature card with mana value X from your graveyard to the battlefield. Activate only as a sorcery."
+  },
+  {
+   "name": "Cranial Plating",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}",
+   "type_line": "Artifact \u2014 Equipment",
+   "color_identity": "B",
+   "oracle_text": "Equipped creature gets +1/+0 for each artifact you control.\n{B}{B}: Attach this Equipment to target creature you control.\nEquip {1}"
+  },
+  {
+   "name": "Dark Ritual",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}",
+   "type_line": "Instant",
+   "color_identity": "B",
+   "oracle_text": "Add {B}{B}{B}."
+  },
+  {
+   "name": "Dauthi Voidwalker",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}{B}",
+   "type_line": "Creature \u2014 Dauthi Rogue",
+   "color_identity": "B",
+   "oracle_text": "Shadow (This creature can block or be blocked by only creatures with shadow.)\nIf a card would be put into an opponent's graveyard from anywhere, instead exile it with a void counter on it.\n{T}, Sacrifice this creature: Choose an exiled card an opponent owns with a void counter on it. You may play it this turn without paying its mana cost."
+  },
+  {
+   "name": "Deadly Rollick",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{3}{B}",
+   "type_line": "Instant",
+   "color_identity": "B",
+   "oracle_text": "If you control a commander, you may cast this spell without paying its mana cost.\nExile target creature."
+  },
+  {
+   "name": "Deep-Cavern Bat",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}",
+   "type_line": "Creature \u2014 Bat",
+   "color_identity": "B",
+   "oracle_text": "Flying, lifelink\nWhen this creature enters, look at target opponent's hand. You may exile a nonland card from it until this creature leaves the battlefield."
+  },
+  {
+   "name": "Drana, Liberator of Malakir",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}{B}",
+   "type_line": "Legendary Creature \u2014 Vampire Ally",
+   "color_identity": "B",
+   "oracle_text": "Flying, first strike\nWhenever Drana deals combat damage to a player, put a +1/+1 counter on each attacking creature you control."
+  },
+  {
+   "name": "Elegy Acolyte",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}{B}",
+   "type_line": "Creature \u2014 Human Cleric",
+   "color_identity": "B",
+   "oracle_text": "Lifelink\nWhenever one or more creatures you control deal combat damage to a player, you draw a card and lose 1 life.\nVoid \u2014 At the beginning of your end step, if a nonland permanent left the battlefield this turn or a spell was warped this turn, create a 2/2 colorless Robot artifact creature token."
+  },
+  {
+   "name": "Emergence Zone",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Land",
+   "color_identity": "C",
+   "oracle_text": "{T}: Add {C}.\n{1}, {T}, Sacrifice this land: You may cast spells this turn as though they had flash."
+  },
+  {
+   "name": "Exsanguinate",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{X}{B}{B}",
+   "type_line": "Sorcery",
+   "color_identity": "B",
+   "oracle_text": "Each opponent loses X life. You gain life equal to the life lost this way."
+  },
+  {
+   "name": "Feed the Swarm",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}",
+   "type_line": "Sorcery",
+   "color_identity": "B",
+   "oracle_text": "Destroy target creature or enchantment an opponent controls. You lose life equal to that permanent's mana value."
+  },
+  {
+   "name": "Fell the Profane // Fell Mire",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}{B}",
+   "type_line": "Instant // Land",
+   "color_identity": "B",
+   "oracle_text": "Fell the Profane: Destroy target creature or planeswalker.\n//\nFell Mire: As this land enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {B}."
+  },
+  {
+   "name": "Finale of Eternity",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{X}{B}{B}",
+   "type_line": "Sorcery",
+   "color_identity": "B",
+   "oracle_text": "Destroy up to three target creatures with toughness X or less. If X is 10 or more, return all creature cards from your graveyard to the battlefield."
+  },
+  {
+   "name": "Gemstone Caverns",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Legendary Land",
+   "color_identity": "C",
+   "oracle_text": "If this card is in your opening hand and you're not the starting player, you may begin the game with Gemstone Caverns on the battlefield with a luck counter on it. If you do, exile a card from your hand.\n{T}: Add {C}. If Gemstone Caverns has a luck counter on it, instead add one mana of any color."
+  },
+  {
+   "name": "Grave Pact",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}{B}{B}",
+   "type_line": "Enchantment",
+   "color_identity": "B",
+   "oracle_text": "Whenever a creature you control dies, each other player sacrifices a creature of their choice."
+  },
+  {
+   "name": "Gray Merchant of Asphodel",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{3}{B}{B}",
+   "type_line": "Creature \u2014 Zombie",
+   "color_identity": "B",
+   "oracle_text": "When this creature enters, each opponent loses X life, where X is your devotion to black. You gain life equal to the life lost this way. (Each {B} in the mana costs of permanents you control counts toward your devotion to black.)"
+  },
+  {
+   "name": "Grim Hireling",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{3}{B}",
+   "type_line": "Creature \u2014 Tiefling Rogue",
+   "color_identity": "B",
+   "oracle_text": "Whenever one or more creatures you control deal combat damage to a player, create two Treasure tokens.\n{B}, Sacrifice X Treasures: Target creature gets -X/-X until end of turn. Activate only as a sorcery."
+  },
+  {
+   "name": "Hagra Mauling // Hagra Broodpit",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}{B}",
+   "type_line": "Instant // Land",
+   "color_identity": "B",
+   "oracle_text": "Hagra Mauling: This spell costs {1} less to cast if an opponent controls no basic lands.\nDestroy target creature.\n//\nHagra Broodpit: This land enters tapped.\n{T}: Add {B}."
+  },
+  {
+   "name": "Hatred",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{3}{B}{B}",
+   "type_line": "Instant",
+   "color_identity": "B",
+   "oracle_text": "As an additional cost to cast this spell, pay X life.\nTarget creature gets +X/+0 until end of turn."
+  },
+  {
+   "name": "Imp's Mischief",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}",
+   "type_line": "Instant",
+   "color_identity": "B",
+   "oracle_text": "Change the target of target spell with a single target. You lose life equal to that spell's mana value."
+  },
+  {
+   "name": "Insatiable Avarice",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}",
+   "type_line": "Sorcery",
+   "color_identity": "B",
+   "oracle_text": "Spree (Choose one or more additional costs.)\n+ {2} \u2014 Search your library for a card, then shuffle and put that card on top.\n+ {B}{B} \u2014 Target player draws three cards and loses 3 life."
+  },
+  {
+   "name": "Inspiring Statuary",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{3}",
+   "type_line": "Artifact",
+   "color_identity": "C",
+   "oracle_text": "Nonartifact spells you cast have improvise. (Your artifacts can help cast those spells. Each artifact you tap after you're done activating mana abilities pays for {1}.)"
+  },
+  {
+   "name": "Jadar, Ghoulcaller of Nephalia",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}",
+   "type_line": "Legendary Creature \u2014 Human Wizard",
+   "color_identity": "B",
+   "oracle_text": "At the beginning of your end step, if you control no creatures with decayed, create a 2/2 black Zombie creature token with decayed. (It can't block. When it attacks, sacrifice it at end of combat.)"
+  },
+  {
+   "name": "Jet Medallion",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}",
+   "type_line": "Artifact",
+   "color_identity": "C",
+   "oracle_text": "Black spells you cast cost {1} less to cast."
+  },
+  {
+   "name": "K'rrik, Son of Yawgmoth",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{4}{B/P}{B/P}{B/P}",
+   "type_line": "Legendary Creature \u2014 Phyrexian Horror Minion",
+   "color_identity": "B",
+   "oracle_text": "({B/P} can be paid with either {B} or 2 life.)\nLifelink\nFor each {B} in a cost, you may pay 2 life rather than pay that mana.\nWhenever you cast a black spell, put a +1/+1 counter on K'rrik."
+  },
+  {
+   "name": "Lightning Greaves",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}",
+   "type_line": "Artifact \u2014 Equipment",
+   "color_identity": "C",
+   "oracle_text": "Equipped creature has haste and shroud. (It can't be the target of spells or abilities.)\nEquip {0}"
+  },
+  {
+   "name": "Malakir Rebirth // Malakir Mire",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}",
+   "type_line": "Instant // Land",
+   "color_identity": "B",
+   "oracle_text": "Malakir Rebirth: Choose target creature. You lose 2 life. Until end of turn, that creature gains \"When this creature dies, return it to the battlefield tapped under its owner's control.\"\n//\nMalakir Mire: This land enters tapped.\n{T}: Add {B}."
+  },
+  {
+   "name": "Mari, the Killing Quill",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}{B}",
+   "type_line": "Legendary Creature \u2014 Vampire Assassin",
+   "color_identity": "B",
+   "oracle_text": "Whenever a creature an opponent controls dies, exile it with a hit counter on it.\nAssassins, Mercenaries, and Rogues you control have deathtouch and \"Whenever this creature deals combat damage to a player, you may remove a hit counter from a card that player owns in exile. If you do, draw a card and create two Treasure tokens.\""
+  },
+  {
+   "name": "Mastermind Plum",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Legendary Creature \u2014 Human Wizard",
+   "color_identity": "B",
+   "oracle_text": "Whenever Mastermind Plum attacks, exile up to one target card from a graveyard. If an artifact card was exiled this way, create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")\nWhenever you cast a spell, if mana from a Treasure was spent to cast it, you draw a card and you lose 1 life."
+  },
+  {
+   "name": "Morbid Opportunist",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Creature \u2014 Human Rogue",
+   "color_identity": "B",
+   "oracle_text": "Whenever one or more other creatures die, draw a card. This ability triggers only once each turn."
+  },
+  {
+   "name": "Mutilate",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}{B}",
+   "type_line": "Sorcery",
+   "color_identity": "B",
+   "oracle_text": "All creatures get -1/-1 until end of turn for each Swamp you control."
+  },
+  {
+   "name": "Nadier's Nightblade",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Creature \u2014 Elf Warrior",
+   "color_identity": "B",
+   "oracle_text": "Whenever a token you control leaves the battlefield, each opponent loses 1 life and you gain 1 life."
+  },
+  {
+   "name": "Nashi, Moon Sage's Scion",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}{B}",
+   "type_line": "Legendary Creature \u2014 Rat Ninja",
+   "color_identity": "B",
+   "oracle_text": "Ninjutsu {3}{B} ({3}{B}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\nWhenever Nashi deals combat damage to a player, exile the top card of each player's library. Until end of turn, you may play one of those cards. If you cast a spell this way, pay life equal to its mana value rather than paying its mana cost."
+  },
+  {
+   "name": "Necromancy",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Enchantment",
+   "color_identity": "B",
+   "oracle_text": "You may cast this spell as though it had flash. If you cast it any time a sorcery couldn't have been cast, the controller of the permanent it becomes sacrifices it at the beginning of the next cleanup step.\nWhen this enchantment enters, if it's on the battlefield, it becomes an Aura with \"enchant creature put onto the battlefield with Necromancy.\" Put target creature card from a graveyard onto the battlefield under your control and attach this enchantment to it. When this enchantment leaves the battlefield, that creature's controller sacrifices it."
+  },
+  {
+   "name": "Nether Traitor",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}{B}",
+   "type_line": "Creature \u2014 Spirit",
+   "color_identity": "B",
+   "oracle_text": "Haste\nShadow (This creature can block or be blocked by only creatures with shadow.)\nWhenever another creature is put into your graveyard from the battlefield, you may pay {B}. If you do, return this card from your graveyard to the battlefield."
+  },
+  {
+   "name": "Nykthos, Shrine to Nyx",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Legendary Land",
+   "color_identity": "C",
+   "oracle_text": "{T}: Add {C}.\n{2}, {T}: Choose a color. Add an amount of mana of that color equal to your devotion to that color. (Your devotion to a color is the number of mana symbols of that color in the mana costs of permanents you control.)"
+  },
+  {
+   "name": "Oona's Blackguard",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}",
+   "type_line": "Creature \u2014 Faerie Rogue",
+   "color_identity": "B",
+   "oracle_text": "Flying\nEach other Rogue creature you control enters with an additional +1/+1 counter on it.\nWhenever a creature you control with a +1/+1 counter on it deals combat damage to a player, that player discards a card."
+  },
+  {
+   "name": "Phyrexian Tower",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Legendary Land",
+   "color_identity": "B",
+   "oracle_text": "{T}: Add {C}.\n{T}, Sacrifice a creature: Add {B}{B}."
+  },
+  {
+   "name": "Rapacious Guest",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Creature \u2014 Halfling Citizen",
+   "color_identity": "B",
+   "oracle_text": "Menace\nWhenever one or more creatures you control deal combat damage to a player, create a Food token.\nWhenever you sacrifice a Food, put a +1/+1 counter on this creature.\nWhen this creature leaves the battlefield, target opponent loses life equal to its power."
+  },
+  {
+   "name": "Reliquary Tower",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Land",
+   "color_identity": "C",
+   "oracle_text": "You have no maximum hand size.\n{T}: Add {C}."
+  },
+  {
+   "name": "Revel in Riches",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{4}{B}",
+   "type_line": "Enchantment",
+   "color_identity": "B",
+   "oracle_text": "Whenever a creature an opponent controls dies, create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")\nAt the beginning of your upkeep, if you control ten or more Treasures, you win the game."
+  },
+  {
+   "name": "Scheming Silvertongue // Sign in Blood",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B} // {B}{B}",
+   "type_line": "Creature \u2014 Vampire Warlock // Sorcery",
+   "color_identity": "B",
+   "oracle_text": "Scheming Silvertongue: Flying, lifelink\nAt the beginning of your second main phase, if you gained 2 or more life this turn, this creature becomes prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)\n//\nSign in Blood: Target player draws two cards and loses 2 life."
+  },
+  {
+   "name": "Scheming Symmetry",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}",
+   "type_line": "Sorcery",
+   "color_identity": "B",
+   "oracle_text": "Choose two target players. Each of them searches their library for a card, then shuffles and puts that card on top."
+  },
+  {
+   "name": "Shadow Alley Denizen",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}",
+   "type_line": "Creature \u2014 Vampire Rogue",
+   "color_identity": "B",
+   "oracle_text": "Whenever another black creature you control enters, target creature gains intimidate until end of turn. (It can't be blocked except by artifact creatures and/or creatures that share a color with it.)"
+  },
+  {
+   "name": "Sheoldred // The True Scriptures",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{3}{B}{B}",
+   "type_line": "Legendary Creature \u2014 Phyrexian Praetor // Enchantment \u2014 Saga",
+   "color_identity": "B",
+   "oracle_text": "Sheoldred: Menace\nWhen Sheoldred enters, each opponent sacrifices a nontoken creature or planeswalker of their choice.\n{4}{B}: Exile Sheoldred, then return it to the battlefield transformed under its owner's control. Activate only as a sorcery and only if an opponent has eight or more cards in their graveyard.\n//\nThe True Scriptures: (As this Saga enters and after your draw step, add a lore counter.)\nI \u2014 For each opponent, destroy up to one target creature or planeswalker that player controls.\nII \u2014 Each opponent discards three cards, then mills three cards.\nIII \u2014 Put all creature cards from all graveyards onto the battlefield under your control. Exile this Saga, then return it to the battlefield (front face up)."
+  },
+  {
+   "name": "Shizo, Death's Storehouse",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Legendary Land",
+   "color_identity": "B",
+   "oracle_text": "{T}: Add {B}.\n{B}, {T}: Target legendary creature gains fear until end of turn. (It can't be blocked except by artifact creatures and/or black creatures.)"
+  },
+  {
+   "name": "Skullclamp",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}",
+   "type_line": "Artifact \u2014 Equipment",
+   "color_identity": "C",
+   "oracle_text": "Equipped creature gets +1/-1.\nWhenever equipped creature dies, draw two cards.\nEquip {1}"
+  },
+  {
+   "name": "Snarling Gorehound",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}",
+   "type_line": "Creature \u2014 Dog",
+   "color_identity": "B",
+   "oracle_text": "Menace\nWhenever another creature you control with power 2 or less enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)"
+  },
+  {
+   "name": "Sol Ring",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}",
+   "type_line": "Artifact",
+   "color_identity": "C",
+   "oracle_text": "{T}: Add {C}{C}."
+  },
+  {
+   "name": "Stalactite Stalker",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}",
+   "type_line": "Creature \u2014 Goblin Rogue",
+   "color_identity": "B",
+   "oracle_text": "Menace\nAt the beginning of your end step, if you descended this turn, put a +1/+1 counter on this creature. (You descended if a permanent card was put into your graveyard from anywhere.)\n{2}{B}, Sacrifice this creature: Target creature gets -X/-X until end of turn, where X is this creature's power."
+  },
+  {
+   "name": "Swamp",
+   "qty": 20,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Basic Land \u2014 Swamp",
+   "color_identity": "B",
+   "oracle_text": "({T}: Add {B}.)"
+  },
+  {
+   "name": "Swiftfoot Boots",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}",
+   "type_line": "Artifact \u2014 Equipment",
+   "color_identity": "C",
+   "oracle_text": "Equipped creature has hexproof and haste. (It can't be the target of spells or abilities your opponents control. It can attack and {T} no matter when it came under your control.)\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)"
+  },
+  {
+   "name": "Sword of Feast and Famine",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{3}",
+   "type_line": "Artifact \u2014 Equipment",
+   "color_identity": "C",
+   "oracle_text": "Equipped creature gets +2/+2 and has protection from black and from green.\nWhenever equipped creature deals combat damage to a player, that player discards a card and you untap all lands you control.\nEquip {2}"
+  },
+  {
+   "name": "Sword of Wealth and Power",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{3}",
+   "type_line": "Artifact \u2014 Equipment",
+   "color_identity": "C",
+   "oracle_text": "Equipped creature gets +2/+2 and has protection from instants and from sorceries.\nWhenever equipped creature deals combat damage to a player, create a Treasure token. When you next cast an instant or sorcery spell this turn, copy that spell. You may choose new targets for the copy.\nEquip {2}"
+  },
+  {
+   "name": "Thieving Varmint",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B}",
+   "type_line": "Creature \u2014 Varmint",
+   "color_identity": "B",
+   "oracle_text": "Deathtouch, lifelink\n{T}, Pay 1 life: Add two mana of any one color. Spend this mana only to cast spells you don't own."
+  },
+  {
+   "name": "Throne of Eldraine",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{5}",
+   "type_line": "Legendary Artifact",
+   "color_identity": "C",
+   "oracle_text": "As Throne of Eldraine enters, choose a color.\n{T}: Add four mana of the chosen color. Spend this mana only to cast monocolored spells of that color.\n{3}, {T}: Draw two cards. Spend only mana of the chosen color to activate this ability."
+  },
+  {
+   "name": "Tinybones, the Pickpocket",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}",
+   "type_line": "Legendary Creature \u2014 Skeleton Rogue",
+   "color_identity": "B",
+   "oracle_text": "Deathtouch\nWhenever Tinybones deals combat damage to a player, you may cast target nonland permanent card from that player's graveyard, and mana of any type can be spent to cast that spell."
+  },
+  {
+   "name": "Toxic Deluge",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Sorcery",
+   "color_identity": "B",
+   "oracle_text": "As an additional cost to cast this spell, pay X life.\nAll creatures get -X/-X until end of turn."
+  },
+  {
+   "name": "Treasure Vault",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Artifact Land",
+   "color_identity": "C",
+   "oracle_text": "{T}: Add {C}.\n{X}{X}, {T}, Sacrifice this land: Create X Treasure tokens."
+  },
+  {
+   "name": "Urborg, Tomb of Yawgmoth",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Legendary Land",
+   "color_identity": "C",
+   "oracle_text": "Each land is a Swamp in addition to its other land types."
+  },
+  {
+   "name": "Urza's Saga",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "",
+   "type_line": "Enchantment Land \u2014 Urza's Saga",
+   "color_identity": "C",
+   "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI \u2014 This Saga gains \"{T}: Add {C}.\"\nII \u2014 This Saga gains \"{2}, {T}: Create a 0/0 colorless Construct artifact creature token with 'This token gets +1/+1 for each artifact you control.'\"\nIII \u2014 Search your library for an artifact card with mana cost {0} or {1}, put it onto the battlefield, then shuffle."
+  },
+  {
+   "name": "Vampire Cutthroat",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{B}",
+   "type_line": "Creature \u2014 Vampire Rogue",
+   "color_identity": "B",
+   "oracle_text": "Skulk (This creature can't be blocked by creatures with greater power.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)"
+  },
+  {
+   "name": "Vashta Nerada",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Creature \u2014 Alien Horror",
+   "color_identity": "B",
+   "oracle_text": "Indestructible\nShadow (This creature can block or be blocked by only creatures with shadow.)\nMorbid \u2014 At the beginning of each end step, if a creature died this turn, put a +1/+1 counter on this creature."
+  },
+  {
+   "name": "Vault Skirge",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}{B/P}",
+   "type_line": "Artifact Creature \u2014 Phyrexian Imp",
+   "color_identity": "B",
+   "oracle_text": "({B/P} can be paid with either {B} or 2 life.)\nFlying\nLifelink (Damage dealt by this creature also causes you to gain that much life.)"
+  },
+  {
+   "name": "Viridian Longbow",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{1}",
+   "type_line": "Artifact \u2014 Equipment",
+   "color_identity": "C",
+   "oracle_text": "Equipped creature has \"{T}: This creature deals 1 damage to any target.\"\nEquip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)"
+  },
+  {
+   "name": "Warren Soultrader",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Creature \u2014 Zombie Goblin Wizard",
+   "color_identity": "B",
+   "oracle_text": "Pay 1 life, Sacrifice another creature: Create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")"
+  },
+  {
+   "name": "Withering Torment",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Instant",
+   "color_identity": "B",
+   "oracle_text": "Destroy target creature or enchantment. You lose 2 life."
+  },
+  {
+   "name": "Yawgmoth's Will",
+   "qty": 1,
+   "zone": "main",
+   "mana_cost": "{2}{B}",
+   "type_line": "Sorcery",
+   "color_identity": "B",
+   "oracle_text": "Until end of turn, you may play lands and cast spells from your graveyard.\nIf a card would be put into your graveyard from anywhere this turn, exile that card instead."
+  }
+ ],
+ "unresolved": []
+}
