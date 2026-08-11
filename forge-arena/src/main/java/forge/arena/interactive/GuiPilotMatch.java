@@ -136,6 +136,21 @@ public final class GuiPilotMatch {
             }
         }
 
+        // Fixed-4-pod guard. run_table.sh launches exactly one brain per AI seat
+        // (seats 1-3 under --human, 0-3 under --all-ai). If DECKS ever drifts from
+        // four entries, the GUI would seat more or fewer players than there are
+        // brains — reviving the unbrained-seat hang this bug class already caused.
+        // Fail loud here rather than seat a broken pod. (Until the roster is
+        // config-driven, DECKS and run_table.sh's seats must stay in lockstep at
+        // exactly four.)
+        if (ordered.size() != 4) {
+            throw new IllegalStateException(
+                    "arena pod must be exactly 4 seats (1 human + 3 AI, or 4 AI"
+                    + " under --all-ai), but built " + ordered.size()
+                    + " from DECKS(length=" + DECKS.length + "). Keep DECKS in"
+                    + " lockstep with runner/run_table.sh at exactly 4 entries.");
+        }
+
         List<RegisteredPlayer> players = new ArrayList<>();
         Map<RegisteredPlayer, IGuiGame> guis = new LinkedHashMap<>();
         for (int seat = 0; seat < ordered.size(); seat++) {
