@@ -14,6 +14,7 @@ fable/max)  (6) write + summary.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -129,7 +130,12 @@ def fetch_scryfall(names, cache_dir, use_cache):
     for i in range(0, len(uniq), 75):
         batch = uniq[i:i + 75]
         payload = {"identifiers": [{"name": n} for n in batch]}
-        cache = os.path.join(cache_dir, f"scryfall-{i//75}.json")
+        # Content-addressed cache: keyed by the batch's actual names, so editing
+        # the deck invalidates stale batches. (An index-keyed cache — scryfall-0,
+        # scryfall-1 — silently served the pre-edit cards, dropping swapped-in
+        # cards into 'unresolved' on any re-run.)
+        key = hashlib.sha1("\x1f".join(batch).encode("utf-8")).hexdigest()[:16]
+        cache = os.path.join(cache_dir, f"scryfall-{key}.json")
         try:
             data = _post("https://api.scryfall.com/cards/collection", payload,
                          cache, use_cache)
@@ -183,7 +189,10 @@ def fetch_combos(parsed, slug, cache_dir, use_cache):
         "commanders": [{"card": n, "quantity": q} for n, q in parsed["commanders"]],
         "main": [{"card": n, "quantity": q} for n, q in parsed["main"]],
     }
-    cache = os.path.join(cache_dir, "commanderspellbook.json")
+    # Content-addressed by the decklist, so an edited deck re-fetches combos
+    # instead of serving the pre-edit result (same bug the Scryfall cache had).
+    key = hashlib.sha1(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    cache = os.path.join(cache_dir, f"commanderspellbook-{key}.json")
     try:
         data = _post("https://backend.commanderspellbook.com/find-my-combos",
                      payload, cache, use_cache)
