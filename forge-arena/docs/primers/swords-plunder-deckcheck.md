@@ -1,10 +1,15 @@
-# Rev, Tithe Extractor — Strategy Primer
+# Swords & Plunder — Strategy Primer
+### Rev, Tithe Extractor · mono-black
 
-*Mono-black evasive-aggro built on Treasures, theft, sacrifice, and big-mana
-drain. You win by connecting with hard-to-block creatures, snowballing the
-resources that connection generates, and converting that lead into a drain or a
-voltron kill. Every line in the deck feeds "make an unblockable creature hit a
-face."*
+*The two halves of the name are the deck: the **Swords** — an equipment/voltron
+package (Sword of Feast and Famine, Sword of Wealth and Power, Andúril, Cranial
+Plating, Hatred) that turns a lone unblockable creature into a kill — and the
+**Plunder** — Rev's Treasure-and-theft engine that snowballs every connect into
+mana and stolen cards. Mono-black evasive-aggro built on Treasures, theft,
+sacrifice, and big-mana drain. You win by connecting with hard-to-block
+creatures, snowballing the resources that connection generates, and converting
+that lead into a drain or a voltron kill. Every line in the deck feeds "make an
+unblockable creature hit a face."*
 
 ## The commander
 
