@@ -10,6 +10,11 @@
 # Watch:  tail -f forge-arena/runner/logs/seat-*.log
 set -u
 DIR=$(cd "$(dirname "$0")" && pwd)
+AROOT=$(cd "$DIR/.." && pwd)          # forge-arena/
+# --preflight: only verify every AI seat ships its context files, then exit
+# 0 (all present) / 1 (any missing). arena-play.sh calls this as a launch gate.
+PREFLIGHT_ONLY=0
+if [ "${1:-}" = "--preflight" ]; then PREFLIGHT_ONLY=1; shift; fi
 BASE="${1:-$DIR/../mailbox}"
 MODEL="${SEAT_MODEL:-sonnet}"
 EFFORT="${SEAT_EFFORT:-low}"
@@ -29,6 +34,44 @@ seat() { # seat_no deck
     sleep 2
   done
 }
+
+# Decks this table seats as AI — KEEP IN LOCKSTEP with the seat() launches below
+# and with GuiPilotMatch.DECKS. ALL_SEATS also seats seat 0. PREFLIGHT_DECKS lets a
+# caller (or a test) check an explicit set instead of the default.
+AI_DECKS="purphoros-god-of-the-forge giada-font-of-hope urza-lord-high-artificer"
+[ "${ALL_SEATS:-0}" = "1" ] && AI_DECKS="selvala-heart-of-the-wilds $AI_DECKS"
+AI_DECKS="${PREFLIGHT_DECKS:-$AI_DECKS}"
+
+# Startup preflight: every AI seat needs deck text + combos + a strategy primer
+# (brain.py reads all three), plus the two shared rules digests + seat brief it
+# also reads unguarded. If any are missing, brain init throws and the seat
+# crash-loops mid-game — so refuse to start, list every gap, and point at the fix.
+preflight_decks() {
+  miss=""
+  for f in "docs/research/mtg-rules-summary.md" \
+           "docs/research/mtg-rules-digest-conversion.md" \
+           "runner/seatd/seat-brief.md"; do
+    [ -f "$AROOT/$f" ] || miss="$miss\n  [shared]  MISSING $f"
+  done
+  for d in $AI_DECKS; do
+    [ -f "$AROOT/decks/$d/dossier/deck-cards.json" ] || miss="$miss\n  [$d]  MISSING deck text  (decks/$d/dossier/deck-cards.json)"
+    [ -f "$AROOT/decks/$d/dossier/combos.json" ]     || miss="$miss\n  [$d]  MISSING combos     (decks/$d/dossier/combos.json)"
+    [ -f "$AROOT/docs/primers/$d-deckcheck.md" ]     || miss="$miss\n  [$d]  MISSING strategy   (docs/primers/$d-deckcheck.md)"
+  done
+  if [ -n "$miss" ]; then
+    printf '%b\n' "[run_table] PREFLIGHT FAILED — required files missing:$miss" >&2
+    printf '%s\n' "[run_table] fix: scripts/arena-add-deck.py <deck.dck>  (writes deck text + combos + primer), then relaunch." >&2
+    return 1
+  fi
+  printf '%s\n' "[run_table] preflight OK — AI decks: $AI_DECKS"
+  return 0
+}
+
+if [ "$PREFLIGHT_ONLY" = "1" ]; then
+  preflight_decks
+  exit $?
+fi
+preflight_decks || exit 1
 
 trap 'kill 0' INT TERM
 if [ "${ALL_SEATS:-0}" = "1" ]; then

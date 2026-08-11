@@ -33,12 +33,21 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$MODE" ] || { echo "specify --all-ai or --human [deck]" >&2; exit 2; }
 
+ALL=""
+[ "$MODE" = "all-ai" ] && ALL="ALL_SEATS=1"
+
+# 0) preflight the AI decks BEFORE tearing down any running game: each AI seat must
+# ship deck text + combos + a strategy primer, or brain init crash-loops mid-game.
+# Synchronous so the warning reaches the terminal and nothing (incl. teardown) runs.
+if ! env $ALL "$ROOT/runner/run_table.sh" --preflight; then
+  echo "arena: refusing to start — an AI deck is missing required files (see above)." >&2
+  exit 1
+fi
+
 # 1) clean slate (reuses arena-stop for teardown+archive+clear)
 "$DIR/arena-stop.sh" >/dev/null 2>&1
 
 # 2) seat runners (all four for all-ai; seats 1-3 for human)
-ALL=""
-[ "$MODE" = "all-ai" ] && ALL="ALL_SEATS=1"
 env $ALL SEAT_MODEL="$MODEL" SEAT_EFFORT="$EFFORT" ARENA_MAILBOX_TIMEOUT="$TIMEOUT" \
   nohup "$ROOT/runner/run_table.sh" >"$LOGS/run_table.out" 2>&1 &
 sleep 3
