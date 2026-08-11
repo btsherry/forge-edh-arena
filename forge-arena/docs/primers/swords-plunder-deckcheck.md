@@ -77,11 +77,7 @@ because you have tokens to feed it and opponents don't.
 **5. Reanimation.** **Necromancy** (flash), **Chthonian Nightmare** (energy
 loop), **Agadeem's Awakening** (mass, scalable), and **Finale of Eternity** (X≥10
 returns your yard) recur your best bodies — usually **Gray Merchant of Asphodel**
-for a repeatable drain, or a threat after a wipe. **Chainer, Dementia Master** is
-the standout engine: {B}{B}{B}, pay 3 life to reanimate a creature from *any*
-graveyard under your control — recursion *and* theft in one, repeatable every
-turn. Protect him (Lightning Greaves / Swiftfoot Boots): his reanimated
-Nightmares are exiled if he leaves the battlefield. **Yawgmoth's Will** replays
+for a repeatable drain, or a threat after a wipe. **Yawgmoth's Will** replays
 your whole graveyard (rituals, tutors, drains) and is frequently the setup turn
 for a kill.
 
@@ -91,7 +87,13 @@ Yawgmoth** (every land becomes a Swamp) taps for enormous black; **Nykthos** and
 it into **Exsanguinate**, **Gray Merchant** (mono-black = huge devotion), or
 **Finale of Eternity** to drain the table in one turn. K'rrik + a ritual + a big
 drain is the deck's most explosive sequence — it can end games from an empty
-board.
+board. **Bloodletter of Aclazotz** ({1}{B}{B}{B}, 2/4 flyer) is the
+force-multiplier: while it's out, every point of life an opponent loses *on your
+turn* is doubled — Gray Merchant and Exsanguinate hit for twice as much (and
+refund twice the life, offsetting your own pay-life costs), and your combat
+damage doubles too, so Hatred or a Cranial Plating / Sword swing on an
+unblockable body can one-shot. It also adds 3 to devotion for a bigger Gray
+Merchant. Land it before the drain, not after.
 
 ## Signature synergy lines (combos.json is empty by design — this is a value
 deck, but these are the engines to assemble)

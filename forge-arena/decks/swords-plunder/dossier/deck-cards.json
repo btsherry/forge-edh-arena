@@ -714,13 +714,13 @@
    "oracle_text": "Until end of turn, you may play lands and cast spells from your graveyard.\nIf a card would be put into your graveyard from anywhere this turn, exile that card instead."
   },
   {
-   "name": "Chainer, Dementia Master",
+   "name": "Bloodletter of Aclazotz",
    "qty": 1,
    "zone": "main",
-   "mana_cost": "{3}{B}{B}",
-   "type_line": "Legendary Creature \u2014 Human Minion",
+   "mana_cost": "{1}{B}{B}{B}",
+   "type_line": "Creature \u2014 Vampire Demon",
    "color_identity": "B",
-   "oracle_text": "All Nightmares get +1/+1.\n{B}{B}{B}, Pay 3 life: Put target creature card from a graveyard onto the battlefield under your control. That creature is black and is a Nightmare in addition to its other creature types.\nWhen Chainer leaves the battlefield, exile all Nightmares."
+   "oracle_text": "Flying\nIf an opponent would lose life during your turn, they lose twice that much life instead. (Damage causes loss of life.)"
   },
   {
    "name": "Dictate of Erebos",
