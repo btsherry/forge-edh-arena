@@ -263,6 +263,10 @@ that dictate sequencing.
 - Mulligan heuristics, threat assessment across a pod, and turn sequencing.
 - Primary win line(s) and backups, plus what to protect and when.
 Be specific and concrete; prefer card names and real lines over generalities.
+State execution lines rules-accurately (timing/priority, and announce finite \
+loop counts rather than claiming "infinite" where a loop is bounded). Do NOT \
+restate general game rules — the pilot reading this already holds \
+comprehensive rules digests; cite a rule only where a line hinges on it.
 
 ## DECK COMBOS (CommanderSpellbook)
 {combos}
