@@ -274,7 +274,9 @@ comprehensive rules digests; cite a rule only where a line hinges on it.
 ## FULL CARD LIST (oracle text)
 {cards}
 
-Write the primer now as Markdown."""
+Write the primer now as Markdown. Output ONLY the primer itself — no meta
+commentary, session/operator notes, apologies, or remarks about tooling; the
+file is read verbatim by the pilot and anything else is noise in its context."""
 
 
 def make_primer(slug, deck_cards, combos, primer_path, mode):
