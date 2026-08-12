@@ -90,6 +90,40 @@ your hand gets a full-width window under that. Like everything in the dock,
 every window can be dragged and re-tabbed in-engine; layout changes persist
 in your Forge preferences, not in the package.
 
+## The AI Advisor (human games)
+
+```sh
+forge-arena/scripts/arena-play.sh --human my-deck.dck --advisor
+```
+
+A fourth brain — loaded exactly like the opponents (your deck's dossier,
+combos, primer, both rules digests) — watches your seat and teaches in the
+**Advisor tab** (lower-left dock, beside the Prompt tab):
+
+- **Advice before you act**: every meaningful decision you're offered
+  (priority windows, attacks, blocks, mulligans, targets, X values) is
+  mirrored to the advisor the moment the prompt opens; its 1–3 sentence
+  read appears in the tab while you're still deciding.
+- **Color commentary**: one line per completed turn covering the table's
+  public plays — what mattered and what it means for your plan.
+- **It sees your choices** and teaches from the divergence when it matters —
+  gently, and never with a dedicated interruption.
+- The advisor is **strictly read-only**: it has no way to act or to stall
+  the game (its feed has no return channel). Advice arriving late is
+  advice skipped, never a pause.
+
+Requirements: the deck you pilot must be ingested (`arena-add-deck.py`),
+and the `claude` CLI logged in. The advisor uses the game's `--model` /
+`--effort` and can be re-dialed mid-game from the AI panel's seat-0 row.
+
+**Autopass** rides along (default `casts` mode): priority stops where you
+have nothing castable — or only utility activations like tap abilities —
+pass automatically, each narrated in the Advisor tab as
+`⏭ (auto-passed — …)`. `ARENA_AUTOPASS=strict` wakes you for ANY legal
+action; `ARENA_AUTOPASS=off` disables it. Combat declare steps and stops
+with an opponent's spell on the stack always wake you, and any doubt in the
+scan fails open to showing the prompt.
+
 ## Ingesting a new deck
 
 ```sh
@@ -151,7 +185,7 @@ seat before any game starts.
 
 | Script | What it does |
 |---|---|
-| `scripts/arena-play.sh` | One-shot launch: teardown → preflight → seat brains → GUI; `--all-ai` or `--human [deck.dck]` |
+| `scripts/arena-play.sh` | One-shot launch: teardown → preflight → seat brains → GUI; `--all-ai` or `--human [deck.dck]`, `--advisor` for the teaching panel |
 | `scripts/arena-stop.sh` | Full teardown: kill GUI + runners, archive seat logs, clear mailbox |
 | `scripts/arena-add-deck.py` | Bare `.dck` → playable seat (dossier + combos + lint + primer) |
 | `scripts/arena-status.py` | Ground-truth table snapshot from the engine: pending decision, all seats' life + board |
@@ -163,6 +197,7 @@ seat before any game starts.
 | `runner/status.py` | seatd health + narrative dashboard ("numbers over vibes") |
 | `runner/usage_report.py` | Per-seat token-burn report, works mid-game |
 | `runner/replay.py` | Offline brain replay against recorded fixtures — no engine, real model calls |
+| `runner/advisor_runner.py` | The AI Advisor brain (arena-play `--advisor` launches it): reads the seat-0 decision shadow feed, streams teaching + color commentary |
 
 ## Logs & data out
 
@@ -174,6 +209,7 @@ Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 | `seat-N.jsonl` | The same, structured |
 | `seat-N.usage.json` | Rolling token/cost snapshot for the seat |
 | `game.jsonl` | **The dataset.** One JSON object per decision, all seats, accumulating across games |
+| `advisor-0.log` / `advisor-0.jsonl` | The Advisor tab's stream, and its structured twin — advice, color commentary, autopass notes, and your actual choices' seq pairing |
 | `gui.out`, `run_table.out` | Engine and runner supervision output |
 | `archive/<timestamp>-stop/` | Every finished game's full log set, moved here by `arena-stop.sh` |
 

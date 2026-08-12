@@ -1,0 +1,238 @@
+#!/usr/bin/env python3
+"""AI Advisor runner — a resident brain that watches the human seat's decision
+shadow feed (mailbox/seat-0-advisor/inbox/) and streams teaching commentary
+into runner/logs/advisor-0.log, which the GUI's Advisor tab tails.
+
+One-way by construction: this process only READS the feed, so it can never
+stall the game. Discipline:
+  - ADVICE PREEMPTS COLOR: pending decision requests are answered before any
+    turn-digest commentary; queued digests fold into the advice prompt.
+  - STALE REQUESTS ARE SKIPPED: if several decision windows queued up, only
+    the newest is advised (advising yesterday's window helps nobody).
+  - The human's actual choices ride along as context for the next call —
+    the brain teaches from divergence but never gets a dedicated call for it.
+
+Usage:
+  advisor_runner.py --deck <slug> [--model opus] [--effort low]
+                    [--base <mailbox-dir>] [--timeout 60]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from seatd.brain import SeatBrain  # noqa: E402
+
+POLL_S = 0.5
+
+
+class AdvisorRunner:
+    def __init__(self, deck: str, base: Path, model: str, effort: str, timeout: float):
+        self.inbox = base / "seat-0-advisor" / "inbox"
+        self.timeout = timeout
+        log_dir = Path(__file__).parent / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        self._stream = log_dir / "advisor-0.log"
+        self._jsonl = log_dir / "advisor-0.jsonl"
+        self._usage = log_dir / "seat-0.usage.json"
+        self._control = log_dir / "control" / "seat-0.json"
+        self._control_mtime = 0.0
+        self.brain = SeatBrain(0, deck, model=model, effort=effort,
+                               log=self._say, brief="advisor-brief.md")
+        self.last_seq = 0
+        self.pending_context: list[str] = []  # chosen/digest lines awaiting a call
+        self._init_control(model, effort)
+
+    # ---- output --------------------------------------------------------------
+
+    def _say(self, msg: str) -> None:
+        print(time.strftime("%H:%M:%S"), msg, flush=True)
+
+    def _stream_write(self, text: str) -> None:
+        with self._stream.open("a") as f:
+            f.write(text)
+
+    def _record(self, kind: str, body: dict) -> None:
+        body = {"ts": round(time.time(), 3), "kind": kind, **body}
+        with self._jsonl.open("a") as f:
+            f.write(json.dumps(body) + "\n")
+        try:
+            self._usage.write_text(json.dumps(self.brain.totals))
+        except OSError:
+            pass
+
+    # ---- control file (AI-tab steppers re-dial the advisor mid-game) ----------
+
+    def _init_control(self, model: str, effort: str) -> None:
+        try:
+            self._control.parent.mkdir(parents=True, exist_ok=True)
+            if not self._control.exists():
+                self._control.write_text(json.dumps({"model": model, "effort": effort}))
+            self._control_mtime = self._control.stat().st_mtime
+        except OSError:
+            pass
+
+    def _apply_control(self) -> None:
+        try:
+            mtime = self._control.stat().st_mtime
+            if mtime == self._control_mtime:
+                return
+            self._control_mtime = mtime
+            desired = json.loads(self._control.read_text())
+            model = desired.get("model")
+            effort = desired.get("effort")
+            if model and model != self.brain.model:
+                self.brain.model = model
+                self._say(f"[advisor] model -> {model}")
+            if effort and effort != self.brain.effort:
+                self.brain.effort = effort
+                self._say(f"[advisor] effort -> {effort}")
+        except (OSError, ValueError):
+            pass
+
+    # ---- feed intake -----------------------------------------------------------
+
+    def _scan(self) -> list[tuple[int, str, Path]]:
+        """New inbox items as (seq, kind, path), seq-ordered."""
+        items = []
+        try:
+            for p in self.inbox.iterdir():
+                name = p.name
+                if not name.endswith(".json"):
+                    continue
+                kind, _, tail = name.partition("-")
+                if kind not in ("req", "chosen", "digest", "note"):
+                    continue
+                try:
+                    n = int(tail[:-5])
+                except ValueError:
+                    continue
+                items.append((n, kind, p))
+        except OSError:
+            return []
+        items.sort()
+        return items
+
+    @staticmethod
+    def _load(path: Path) -> dict | None:
+        try:
+            return json.loads(path.read_text())
+        except (OSError, ValueError):
+            return None  # partial write — retry next poll
+
+    # ---- prompts ---------------------------------------------------------------
+
+    @staticmethod
+    def _fmt_options(req: dict) -> str:
+        opts = req.get("options") or []
+        if not opts:
+            return ""
+        lines = [f"  [{o.get('id')}] {o.get('label')}" for o in opts]
+        return "OPTIONS OFFERED:\n" + "\n".join(lines) + "\n"
+
+    def _advise(self, req: dict) -> None:
+        turn, phase = req.get("turn"), req.get("phase")
+        ctx = ""
+        if self.pending_context:
+            ctx = "SINCE LAST TIME:\n" + "\n".join(self.pending_context) + "\n\n"
+            self.pending_context = []
+        prompt = (f"{ctx}DECISION NOW — {req.get('decisionType')} "
+                  f"(turn {turn}, {phase}): {req.get('prompt')}\n"
+                  f"{self._fmt_options(req)}"
+                  f"STATE: {json.dumps(req.get('state'), separators=(',', ':'))}\n\n"
+                  "Advise the human now (1-3 sentences, plain text).")
+        answer, meta = self.brain.decide(prompt, self.timeout)
+        text = (meta.get("raw") or "").strip()
+        if text:
+            self._stream_write(f"\n[t{turn} · {phase}] {text}\n")
+        self._record("advice", {"seq": req.get("seq"), "turn": turn, "phase": phase,
+                                "decisionType": req.get("decisionType"),
+                                "text": text, "latency_s": meta.get("latency_s")})
+
+    def _commentate(self, digest: dict) -> None:
+        turn = digest.get("turn")
+        lines = digest.get("digest") or []
+        prompt = (f"TURN {turn} COMPLETE. Public log of the turn:\n"
+                  + "\n".join(f"  {ln}" for ln in lines[-60:])
+                  + "\n\nONE line of color commentary (plain text).")
+        answer, meta = self.brain.decide(prompt, min(self.timeout, 45.0))
+        text = (meta.get("raw") or "").strip()
+        if text:
+            self._stream_write(f"\n[t{turn} · color] {text}\n")
+        self._record("color", {"seq": digest.get("seq"), "turn": turn,
+                               "text": text, "latency_s": meta.get("latency_s")})
+
+    # ---- main loop ---------------------------------------------------------------
+
+    def run(self) -> None:
+        self._say(f"[advisor] up — deck={self.brain.deck} model={self.brain.model} "
+                  f"watching {self.inbox}")
+        self.brain.ensure_session()  # pre-warm: dossier loads before turn 0
+        self._stream_write("[advisor] session warm — watching your table.\n")
+        while True:
+            self._apply_control()
+            items = self._scan()
+            if not items:
+                time.sleep(POLL_S)
+                continue
+            if items[0][0] < self.last_seq:
+                # seq regression = new game: fresh session, fresh transcript
+                self._say("[advisor] new game detected — resetting session")
+                self.brain.reset()
+                self.pending_context = []
+                self.last_seq = 0
+            reqs, digests = [], []
+            for n, kind, path in items:
+                body = self._load(path)
+                if body is None:
+                    continue  # partial write — leave for next poll
+                self.last_seq = max(self.last_seq, n)
+                if kind == "req":
+                    reqs.append(body)
+                elif kind == "digest":
+                    digests.append(body)
+                elif kind == "chosen":
+                    self.pending_context.append(
+                        f"- the human chose {json.dumps(body.get('chosen'))} "
+                        f"for {body.get('decisionType')} (seq {body.get('seq')})")
+                elif kind == "note":
+                    self._stream_write(f"[t{body.get('turn')}] ⏭ {body.get('note')}\n")
+                    self._record("note", body)
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+            # digests fold into a pending advice call as context (advice preempts
+            # color); with no decision pending they get their own commentary call.
+            if reqs:
+                for stale in reqs[:-1]:
+                    self._record("skipped", {"seq": stale.get("seq"),
+                                             "decisionType": stale.get("decisionType")})
+                for d in digests:
+                    self.pending_context.append(
+                        f"- turn {d.get('turn')} public log: "
+                        + " | ".join((d.get("digest") or [])[-25:]))
+                self._advise(reqs[-1])
+            else:
+                for d in digests:
+                    self._commentate(d)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--deck", required=True, help="the HUMAN's deck slug")
+    ap.add_argument("--model", default="opus")
+    ap.add_argument("--effort", default="low")
+    ap.add_argument("--base", default=str(Path(__file__).resolve().parent.parent / "mailbox"))
+    ap.add_argument("--timeout", type=float, default=60.0)
+    args = ap.parse_args()
+    AdvisorRunner(args.deck, Path(args.base), args.model, args.effort,
+                  args.timeout).run()
+
+
+if __name__ == "__main__":
+    main()

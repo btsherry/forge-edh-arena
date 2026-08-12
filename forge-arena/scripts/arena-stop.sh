@@ -13,6 +13,7 @@ LOGS="$ROOT/runner/logs"
 pkill -f "GuiPilotMatch" 2>/dev/null
 pkill -f "run_table.sh" 2>/dev/null
 pkill -f "seat_runner.py --seat" 2>/dev/null
+pkill -f "advisor_runner.py" 2>/dev/null
 sleep 1
 
 archived=0
@@ -22,6 +23,7 @@ if ls "$LOGS"/seat-*.log "$LOGS"/gui.out >/dev/null 2>&1; then
   # gui.out/run_table.out ride along so the next launch's `>` redirects never
   # clobber a past game's record — every game's full log set survives intact.
   mv "$LOGS"/seat-*.log "$LOGS"/seat-*.jsonl "$LOGS"/seat-*.usage.json \
+     "$LOGS"/advisor-0.log "$LOGS"/advisor-0.jsonl "$LOGS"/advisor_runner.out \
      "$LOGS"/gui.out "$LOGS"/run_table.out "$A/" 2>/dev/null
   archived=$(ls "$A" 2>/dev/null | wc -l | tr -d ' ')
 fi

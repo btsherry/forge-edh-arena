@@ -50,6 +50,8 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
     private final boolean castsAutopass;
     private final int seatIndex;
     private volatile boolean oneStopPass;
+    private int lastDigestTurn;
+    private int lastLogIndex;
 
     public AdvisorControllerHuman(final Game game, final Player p, final LobbyPlayer lp,
             final AdvisorFeed feed, final boolean castsAutopass) {
@@ -72,6 +74,7 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
 
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
+        maybePublishTurnDigest();
         armCastsAutopassIfIdle();
         long n = -1;
         if (feed != null && shouldFeedPriority()) {
@@ -93,6 +96,37 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
     @Override
     public boolean mayAutoPass() {
         return oneStopPass || super.mayAutoPass();
+    }
+
+    /**
+     * Color-commentary source: on the first stop of a new turn, publish the
+     * public game-log delta of the completed turn(s). Batched — one digest
+     * event per turn, never per play. The human gets priority every turn, so
+     * hooking here needs no extra event subscription; auto-passed stops still
+     * execute this method.
+     */
+    private void maybePublishTurnDigest() {
+        if (feed == null) {
+            return;
+        }
+        try {
+            int turn = getGame().getPhaseHandler().getTurn();
+            if (turn <= lastDigestTurn) {
+                return;
+            }
+            List<forge.game.GameLogEntry> all = getGame().getGameLog().getAllEntries();
+            if (lastLogIndex < all.size() && lastDigestTurn > 0) {
+                List<String> lines = new ArrayList<>();
+                for (forge.game.GameLogEntry e : all.subList(lastLogIndex, all.size())) {
+                    lines.add(String.valueOf(e));
+                }
+                feed.publishDigest(lastDigestTurn, lines);
+            }
+            lastLogIndex = all.size();
+            lastDigestTurn = turn;
+        } catch (RuntimeException never) {
+            // commentary is best-effort; the game is not
+        }
     }
 
     /**
@@ -211,6 +245,22 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
             }
             feed.publishChosen(n, "DECLARE_BLOCKERS", blocks.isEmpty() ? "no blocks" : blocks);
         }
+    }
+
+    // ---- pre-game ----------------------------------------------------------
+
+    // The first human decision of every game (the die-roll dialog) — also the
+    // decision that proves the shadow feed is alive before turn 1.
+    @Override
+    public Player chooseStartingPlayer(final boolean isFirstGame) {
+        long n = pub("CHOOSE_STARTING_PLAYER", isFirstGame
+                ? "won the roll — choose who plays first" : "lost last game — choose who plays first");
+        Player chosen = super.chooseStartingPlayer(isFirstGame);
+        if (n >= 0) {
+            feed.publishChosen(n, "CHOOSE_STARTING_PLAYER",
+                    chosen != null ? chosen.getName() : "?");
+        }
+        return chosen;
     }
 
     // ---- mulligan ----------------------------------------------------------
@@ -340,11 +390,23 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
 
     // ---- feed helpers ------------------------------------------------------
 
+    private volatile boolean pubFailureLogged;
+
     private MailboxProtocol.Request request(String type, String prompt) {
         int turn = getGame().getPhaseHandler().getTurn();
         MailboxProtocol.Request r = new MailboxProtocol.Request(seatIndex, turn,
                 String.valueOf(getGame().getPhaseHandler().getPhase()), type, prompt);
-        r.state(MailboxController.buildState(getPlayer(), seatIndex, turn));
+        try {
+            r.state(MailboxController.buildState(getPlayer(), seatIndex, turn));
+        } catch (RuntimeException preGameOrOdd) {
+            // A failed projection must not mute the event — ship a minimal state.
+            java.util.Map<String, Object> minimal = new java.util.LinkedHashMap<>();
+            minimal.put("seat", seatIndex);
+            minimal.put("turn", turn);
+            minimal.put("stateError", String.valueOf(preGameOrOdd));
+            r.state(minimal);
+            logPubFailure(preGameOrOdd);
+        }
         return r;
     }
 
@@ -355,6 +417,7 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
         try {
             return feed.publish(request(type, prompt));
         } catch (RuntimeException never) {
+            logPubFailure(never);
             return -1; // the feed must never break the game
         }
     }
@@ -375,7 +438,18 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
             }
             return feed.publish(r);
         } catch (RuntimeException never) {
+            logPubFailure(never);
             return -1;
+        }
+    }
+
+    // Swallowing must never mean invisible: the first failure prints a full
+    // trace to stderr (gui.out) so a broken shadow is diagnosable.
+    private void logPubFailure(RuntimeException e) {
+        if (!pubFailureLogged) {
+            pubFailureLogged = true;
+            System.err.println("advisor-shadow: publish failed (first occurrence): " + e);
+            e.printStackTrace();
         }
     }
 

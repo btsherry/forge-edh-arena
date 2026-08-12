@@ -59,7 +59,7 @@ class SeatBrain:
 
     def __init__(self, seat: int, deck: str, model: str = "sonnet",
                  effort: str = "low", repo_root: str | Path | None = None,
-                 log=print):
+                 log=print, brief: str = "seat-brief.md"):
         self.seat = int(seat)
         self.deck = deck
         self.model = model
@@ -78,7 +78,7 @@ class SeatBrain:
         dossier_p = root / "forge-arena" / "decks" / deck / "dossier" / "deck-cards.json"
         primer_p = docs / "primers" / f"{deck}-deckcheck.md"
         parts = [
-            (here / "seat-brief.md").read_text(),
+            (here / brief).read_text(),
             # The project's real rules corpus (CR-cited), not a summary of a
             # summary: the game-pilot digest + the win-execution digest.
             (docs / "research" / "mtg-rules-summary.md").read_text(),

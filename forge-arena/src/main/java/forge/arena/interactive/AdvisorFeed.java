@@ -67,6 +67,19 @@ final class AdvisorFeed {
         enqueue("chosen-" + n + ".json", body);
     }
 
+    /**
+     * Publish a completed turn's public game-log delta — the color-commentary
+     * source. One event per turn (batched, never per-play).
+     */
+    void publishDigest(int completedTurn, java.util.List<String> logLines) {
+        long n = seq.incrementAndGet();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("seq", n);
+        body.put("turn", completedTurn);
+        body.put("digest", logLines);
+        enqueue("digest-" + n + ".json", body);
+    }
+
     /** Publish a free-text note (e.g. auto-pass narration) outside any request. */
     void publishNote(int turn, String phase, String text) {
         long n = seq.incrementAndGet();

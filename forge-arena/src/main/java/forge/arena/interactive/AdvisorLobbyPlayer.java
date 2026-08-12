@@ -37,6 +37,8 @@ public final class AdvisorLobbyPlayer extends LobbyPlayerHuman {
         final AdvisorControllerHuman controller =
                 new AdvisorControllerHuman(game, player, this, feed, castsAutopass);
         player.setFirstController(controller);
+        System.err.println("advisor-shadow: controller installed for seat " + id
+                + " (autopass-casts=" + castsAutopass + ")");
         return player;
     }
 }
