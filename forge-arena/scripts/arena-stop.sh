@@ -32,3 +32,10 @@ gui=$(pgrep -f GuiPilotMatch >/dev/null && echo up || echo down)
 decisions=0
 [ -f "$LOGS/game.jsonl" ] && decisions=$(wc -l < "$LOGS/game.jsonl" | tr -d ' ')
 echo "arena stopped: runners=$runners gui=$gui | archived $archived log files | game.jsonl=${decisions:-0} decisions (preserved)"
+
+# Watchers armed by a driving agent session (digest monitors, log tails) are
+# deliberately NOT killed — they re-attach across games by design. Surface
+# them so the operator/agent reads it in the teardown output and decides.
+obs=$(pgrep -f "^python3? .*arena-digest\.py|^tail -F .*runner/logs" | wc -l | tr -d ' ')
+[ "$obs" -gt 0 ] && echo "note: $obs observer process(es) still watching the logs — yours to stop (or keep for the next game)"
+exit 0

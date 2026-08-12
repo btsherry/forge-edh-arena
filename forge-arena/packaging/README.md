@@ -218,6 +218,27 @@ alongside pending decisions.
   mailbox; `game.jsonl` is never cleared — it is the accumulating dataset.
 - To fully remove: delete this directory. Nothing else is installed.
 
+## Driving it from an agent session
+
+The scripts are friendly to being driven by a Claude Code (or similar) agent
+session — `arena-digest.py` exists precisely to be wrapped in a background
+monitor (one compact line per turn, immediate lines for punts and
+eliminations). Keep two lifecycles straight:
+
+- **Game processes** (GUI, seat runners, restart loops) are fully owned by
+  the scripts — `arena-stop.sh` kills and archives them.
+- **Watchers the agent arms** (a digest monitor, a `tail -F` on the logs)
+  are deliberately NOT touched by teardown: `tail -F` re-attaches after log
+  rotation and `game.jsonl` is never cleared, so one watcher spans every
+  game in a session. Arm once per session, not per game.
+
+Teardown order when you're done: `arena-stop.sh` → stop your own watchers →
+audit for strays with
+`pgrep -fl 'GuiPilotMatch|seat_runner|run_table|arena-digest'` (empty =
+clean). `arena-stop.sh` prints a note whenever observer processes are still
+watching the logs, so a driving agent sees the reminder in the teardown
+output itself.
+
 ## Troubleshooting
 
 - **"PREFLIGHT FAILED — required files missing"** — a seat's deck lacks its
