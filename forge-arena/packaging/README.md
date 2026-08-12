@@ -93,6 +93,37 @@ a few minutes), **skip** play from dossier + combos only. Re-runs are cheap:
 API responses are cached; `--no-cache` forces a refetch, `--verify` checks an
 existing deck. Then play it: `arena-play.sh --human my-deck.dck`.
 
+## What each agent receives at start-up
+
+At every game launch, each seat's runner opens a fresh `claude` session and
+sends one initialization prompt — these files, verbatim and in this order
+(all bundled in the package):
+
+1. `forge-light-llm/forge-arena/runner/seatd/seat-brief.md` — the standing
+   seat brief: accuracy and fairness rules, answer format, mana discipline,
+   combo duty.
+2. `forge-light-llm/forge-arena/docs/research/mtg-rules-summary.md` — the
+   general comprehensive-rules digest: turn structure, priority, the stack,
+   combat, keywords, Commander rules.
+3. `forge-light-llm/forge-arena/docs/research/mtg-rules-digest-conversion.md`
+   — the deeper digest of loops/shortcuts (CR 732), mana pools, X spells,
+   and win/loss state-based actions.
+4. A seat-identity line: which seat it is and which deck it pilots.
+5. `…/decks/<slug>/dossier/deck-cards.json` — the deck's full oracle text,
+   never summarized, under the heading `DECK DOSSIER`.
+6. `…/decks/<slug>/dossier/combos.json` — the deck's real Commander
+   Spellbook combos (pieces, prerequisites, steps, what they produce), under
+   `DECK COMBOS`.
+7. `…/docs/primers/<slug>-deckcheck.md` — the strategy primer, under
+   `STRATEGY PRIMER`.
+8. The closing instruction: *"Reply exactly: READY"*.
+
+The session runs with tools disabled and the seat's model/effort pinned, and
+persists for the whole game — every subsequent decision resumes it, so the
+big rules-plus-dossier context is paid once and prompt-cached thereafter.
+`run_table.sh --preflight` verifies items 1–3 and 5–7 exist for every AI
+seat before any game starts.
+
 ## Scripts
 
 | Script | What it does |
@@ -176,10 +207,3 @@ alongside pending decisions.
 - **GUI must be started via the scripts** — the engine resolves `res/`
   (card database, skins) relative to its working directory; the launchers
   handle that.
-
-## Not in this package
-
-The headless statistics harness this project pairs with (seed-paired batch
-runs, A/B deck testing, compiled combo executors) is a separate project and
-none of its scripts, docs, or per-deck artifacts ship here. Also pruned from
-the Forge resources: Adventure mode, music, and non-English card names.
