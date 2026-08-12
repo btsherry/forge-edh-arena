@@ -105,6 +105,29 @@ public final class GuiPilotMatch {
         return out;
     }
 
+    /** System property enabling the seat-0 advisor shadow ("1" = on). */
+    private static final String ADVISOR_PROPERTY = "arena.advisor";
+    /** System property for autopass strictness: off | strict | casts (default casts). */
+    private static final String AUTOPASS_PROPERTY = "arena.autopass";
+
+    private static boolean advisorEnabled() {
+        return "1".equals(System.getProperty(ADVISOR_PROPERTY));
+    }
+
+    /**
+     * The human seat's lobby player: the plain GUI singleton, or — with the
+     * advisor enabled — the {@link AdvisorLobbyPlayer} wrapper publishing the
+     * decision shadow feed to {@code <mailbox>/seat-0-advisor/inbox/}.
+     */
+    private static forge.LobbyPlayer advisorLobbyOrGuiPlayer() {
+        if (!advisorEnabled()) {
+            return GamePlayerUtil.getGuiPlayer();
+        }
+        String mode = System.getProperty(AUTOPASS_PROPERTY, "casts");
+        AdvisorFeed feed = new AdvisorFeed(MailboxProtocol.baseDir(), 0);
+        return new AdvisorLobbyPlayer("Human", feed, "casts".equals(mode));
+    }
+
     public static void main(String[] args) {
         final String[] decks = seatDecks();
         String humanDeck = args.length > 0 ? args[0] : decks[0];
@@ -126,6 +149,17 @@ public final class GuiPilotMatch {
         Singletons.initializeOnce(true);
         // brings up the home screen; same call Main.main makes.
         Singletons.getControl().initialize();
+
+        // Advisor autopass rides on upstream APINA ("auto-pass if no actions"):
+        // strict = APINA verbatim; casts = APINA + the AdvisorControllerHuman
+        // utility-taps filter. In-memory only — deliberately no save(), so the
+        // user's stored Forge preferences stay untouched.
+        if (advisorEnabled()
+                && !"off".equals(System.getProperty(AUTOPASS_PROPERTY, "casts"))) {
+            forge.model.FModel.getPreferences().setPref(
+                    forge.localinstance.properties.ForgePreferences.FPref.YIELD_AUTO_PASS_NO_ACTIONS,
+                    String.valueOf(true));
+        }
 
         // --- assemble + start the match on the EDT --------------------------
         final String humanDeckFinal = humanDeck;
@@ -187,7 +221,10 @@ public final class GuiPilotMatch {
             RegisteredPlayer rp = RegisteredPlayer.forCommander(deck);
             if (seat == 0 && !allAi) {
                 // seat 0 = HUMAN via the GUI player; its IGuiGame renders the game.
-                rp.setPlayer(GamePlayerUtil.getGuiPlayer());
+                // Under -Darena.advisor=1 the seat gets the advisor wrapper instead:
+                // identical GUI wiring (HostedMatch detects by instanceof), plus the
+                // one-way decision shadow feed and optional casts-mode autopass.
+                rp.setPlayer(advisorLobbyOrGuiPlayer());
                 guis.put(rp, GuiBase.getInterface().getNewGuiGame());
             } else {
                 // mailbox seats (all four of them under --all-ai; the GUI then

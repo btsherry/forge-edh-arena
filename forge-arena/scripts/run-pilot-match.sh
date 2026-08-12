@@ -81,6 +81,12 @@ SEAT_DECKS_ARG=""
 [ -n "${ARENA_SEAT_DECKS:-}" ] && \
   SEAT_DECKS_ARG="-Darena.seat.decks=$(printf '%s' "$ARENA_SEAT_DECKS" | tr ' ' ',')"
 
+# Advisor pass-through: ARENA_ADVISOR=1 enables the seat-0 decision shadow
+# feed (+ AI Advisor tab data); ARENA_AUTOPASS picks off|strict|casts.
+ADVISOR_ARGS=""
+[ "${ARENA_ADVISOR:-0}" = "1" ] && \
+  ADVISOR_ARGS="-Darena.advisor=1 -Darena.autopass=${ARENA_AUTOPASS:-casts}"
+
 echo "Forge GUI pilot match"
 echo "  run dir      : $GUI_DIR   (res/ lives here)"
 echo "  human deck   : ${1:-selvala-heart-of-the-wilds.dck}"
@@ -91,7 +97,7 @@ echo
 
 cd "$GUI_DIR"
 # shellcheck disable=SC2086  # MAND/OPENS are intentional multi-arg word lists
-exec "$JAVA" $MAND $OPENS $SEAT_DECKS_ARG \
+exec "$JAVA" $MAND $OPENS $SEAT_DECKS_ARG $ADVISOR_ARGS \
   -Darena.decks.dir="$DECKS_DIR" \
   -Darena.mailbox.dir="$MAILBOX_DIR" \
   -Darena.mailbox.timeout.sec="$TIMEOUT" \

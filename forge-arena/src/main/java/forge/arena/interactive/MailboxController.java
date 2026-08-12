@@ -965,15 +965,25 @@ public final class MailboxController extends PlayerControllerAi {
     // ---- state projection (hidden-info-safe) -------------------------------
 
     private Map<String, Object> buildState(int turn) {
-        SeatView view = SeatViews.of(getPlayer(), seatIndex, turn);
+        return buildState(getPlayer(), seatIndex, turn);
+    }
+
+    /**
+     * Static, reusable hidden-info-safe projection. The advisor shadow feed
+     * ({@link AdvisorControllerHuman}) serializes the HUMAN seat through this
+     * exact method — the fairness discipline lives here once, never
+     * reimplemented (opponent hands/library order are never serialized).
+     */
+    static Map<String, Object> buildState(Player me, int seatIndex, int turn) {
+        SeatView view = SeatViews.of(me, seatIndex, turn);
         Map<String, Object> state = new LinkedHashMap<>();
         state.put("seat", seatIndex);
         state.put("turn", turn);
         state.put("phase", view.phase());
-        state.put("life", getPlayer().getLife());
-        state.put("poison", getPlayer().getPoisonCounters());
+        state.put("life", me.getLife());
+        state.put("poison", me.getPoisonCounters());
         Map<String, Integer> ownCmdDmg = new LinkedHashMap<>();
-        for (java.util.Map.Entry<Card, Integer> e : getPlayer().getCommanderDamage()) {
+        for (java.util.Map.Entry<Card, Integer> e : me.getCommanderDamage()) {
             if (e.getValue() != null && e.getValue() > 0) {
                 ownCmdDmg.put(e.getKey().getName(), e.getValue());
             }
@@ -996,13 +1006,13 @@ public final class MailboxController extends PlayerControllerAi {
         // Own battlefield cards carry their activated abilities (incl. mana
         // abilities); opponents' entries stay lean (public mechanical fields).
         List<Map<String, Object>> ownBattlefield = new ArrayList<>();
-        for (Card c : getPlayer().getCardsIn(ZoneType.Battlefield)) {
+        for (Card c : me.getCardsIn(ZoneType.Battlefield)) {
             ownBattlefield.add(cardState(c, true));
         }
         state.put("battlefield", ownBattlefield);
         // Own hand is private-to-owner (fair): per-card name/manaCost/types.
         List<Map<String, Object>> ownHand = new ArrayList<>();
-        for (Card c : getPlayer().getCardsIn(ZoneType.Hand)) {
+        for (Card c : me.getCardsIn(ZoneType.Hand)) {
             Map<String, Object> hm = new LinkedHashMap<>();
             hm.put("name", c.getName());
             hm.put("manaCost", c.getManaCost() != null ? c.getManaCost().toString() : "");
@@ -1023,7 +1033,7 @@ public final class MailboxController extends PlayerControllerAi {
             // Opponent battlefields are PUBLIC — read the real Card objects, but
             // WITHOUT the verbose per-card abilities list (kept lean).
             List<Map<String, Object>> oppBattlefield = new ArrayList<>();
-            Player oppPlayer = playerById(ov.seatIndex());
+            Player oppPlayer = playerById(me.getGame(), ov.seatIndex());
             if (oppPlayer != null) {
                 for (Card c : oppPlayer.getCardsIn(ZoneType.Battlefield)) {
                     oppBattlefield.add(cardState(c, false));
@@ -1068,7 +1078,7 @@ public final class MailboxController extends PlayerControllerAi {
         // PUBLIC combat context (field note 13): who attacks whom and current
         // blocks — an instant-speed combat decision (fog, trick, save) is
         // unjudgeable without the incoming-damage picture.
-        forge.game.combat.Combat combat = getGame().getPhaseHandler().getCombat();
+        forge.game.combat.Combat combat = me.getGame().getPhaseHandler().getCombat();
         if (combat != null && !combat.getAttackers().isEmpty()) {
             List<Map<String, Object>> combatList = new ArrayList<>();
             for (Card a : combat.getAttackers()) {
@@ -1096,7 +1106,7 @@ public final class MailboxController extends PlayerControllerAi {
         }
         // PUBLIC stack contents (source names only), for interaction context
         List<String> stack = new ArrayList<>();
-        for (forge.game.spellability.SpellAbilityStackInstance si : getGame().getStack()) {
+        for (forge.game.spellability.SpellAbilityStackInstance si : me.getGame().getStack()) {
             SpellAbility sa = si.getSpellAbility();
             Card host = sa != null ? sa.getHostCard() : null;
             stack.add(host != null ? host.getName() : String.valueOf(si));
@@ -1115,7 +1125,11 @@ public final class MailboxController extends PlayerControllerAi {
 
     /** The game's Player whose id matches {@code id}, or null. */
     private Player playerById(int id) {
-        for (Player p : getGame().getPlayers()) {
+        return playerById(getGame(), id);
+    }
+
+    private static Player playerById(Game game, int id) {
+        for (Player p : game.getPlayers()) {
             if (p.getId() == id) {
                 return p;
             }
