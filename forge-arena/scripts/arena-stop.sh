@@ -16,10 +16,13 @@ pkill -f "seat_runner.py --seat" 2>/dev/null
 sleep 1
 
 archived=0
-if ls "$LOGS"/seat-*.log >/dev/null 2>&1; then
+if ls "$LOGS"/seat-*.log "$LOGS"/gui.out >/dev/null 2>&1; then
   A="$LOGS/archive/$(date +%Y%m%d-%H%M%S)-stop"
   mkdir -p "$A"
-  mv "$LOGS"/seat-*.log "$LOGS"/seat-*.jsonl "$LOGS"/seat-*.usage.json "$A/" 2>/dev/null
+  # gui.out/run_table.out ride along so the next launch's `>` redirects never
+  # clobber a past game's record — every game's full log set survives intact.
+  mv "$LOGS"/seat-*.log "$LOGS"/seat-*.jsonl "$LOGS"/seat-*.usage.json \
+     "$LOGS"/gui.out "$LOGS"/run_table.out "$A/" 2>/dev/null
   archived=$(ls "$A" 2>/dev/null | wc -l | tr -d ' ')
 fi
 rm -rf "$ROOT"/mailbox/seat-* "$ROOT"/mailbox/observer-state.json "$LOGS"/control/* 2>/dev/null

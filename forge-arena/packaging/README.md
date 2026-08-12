@@ -33,12 +33,12 @@ From the package root:
 forge-arena/scripts/arena-play.sh --all-ai
 
 # you + three brains: you are seat 0 in the GUI
-forge-arena/scripts/arena-play.sh --human swords-plunder.dck
+forge-arena/scripts/arena-play.sh --human selvala-heart-of-the-wilds.dck   # or {your-deck-name.dck}
 
-# watch decisions land, live
-tail -f forge-arena/runner/logs/seat-*.log
+# watch decisions land, live (the central all-seats log)
+tail -f forge-arena/runner/logs/game.jsonl
 
-# stop everything, archive the seat logs, clear the mailbox
+# stop everything, archive this game's logs, clear the mailbox
 forge-arena/scripts/arena-stop.sh
 ```
 
@@ -51,14 +51,21 @@ dock tab** (per-seat model/effort steppers, token/cost telemetry) or with
 
 ## The table
 
-The AI seats are fixed by the engine: **seat 1 Purphoros, seat 2 Giada,
-seat 3 Urza**, and in `--all-ai` mode **seat 0 Selvala**. In `--human` mode
-you sit at seat 0 with any ingested deck (pass its `.dck` name; default
-`selvala-heart-of-the-wilds.dck`).
+Default roster, seats 0–3: Selvala, Purphoros, Giada, Urza. In `--human`
+mode you take seat 0 with **any** ingested deck (pass its `.dck` name); in
+`--all-ai` mode all four seats are brains.
 
-Bundled decks: `giada-font-of-hope`, `purphoros-god-of-the-forge`,
-`selvala-heart-of-the-wilds`, `urza-lord-high-artificer`, `swords-plunder`,
-`swords-plunder-gc` (the last two are human-seat decks).
+**Agents can pilot any deck.** Set `ARENA_SEAT_DECKS` to four deck slugs in
+seat order before launching — it repoints the engine's seats and the brains
+together, and preflight checks the new lineup automatically:
+
+```sh
+ARENA_SEAT_DECKS="swords-plunder purphoros-god-of-the-forge giada-font-of-hope urza-lord-high-artificer" \
+  forge-arena/scripts/arena-play.sh --all-ai
+```
+
+Six decks ship in `forge-light-llm/forge-arena/decks/`; every deck there —
+bundled or ingested — can sit at any seat.
 
 ## Ingesting a new deck
 
@@ -72,11 +79,11 @@ Forge's card database (warns on cards the engine may not fully script;
 `--strict` refuses them) → strategy primer → write. Outputs, per deck:
 
 ```
-forge-arena/decks/<slug>.dck                       playable deck registration
-forge-arena/decks/<slug>/dossier/deck-cards.json   full oracle text (the brain's card knowledge)
-forge-arena/decks/<slug>/dossier/combos.json       the deck's real combo lines
-forge-arena/decks/<slug>/dossier/.cache/           content-addressed API caches
-forge-arena/docs/primers/<slug>-deckcheck.md       strategy primer (see below)
+forge-light-llm/forge-arena/decks/<slug>.dck                       playable deck registration
+forge-light-llm/forge-arena/decks/<slug>/dossier/deck-cards.json   full oracle text (the brain's card knowledge)
+forge-light-llm/forge-arena/decks/<slug>/dossier/combos.json       the deck's real combo lines
+forge-light-llm/forge-arena/decks/<slug>/dossier/.cache/           content-addressed API caches
+forge-light-llm/forge-arena/docs/primers/<slug>-deckcheck.md       strategy primer (see below)
 ```
 
 Primer options — the pilot plays far better with a good one:
@@ -105,7 +112,7 @@ existing deck. Then play it: `arena-play.sh --human my-deck.dck`.
 
 ## Logs & data out
 
-Everything lands in `forge-arena/runner/logs/`:
+Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 
 | File | Contents |
 |---|---|
@@ -114,7 +121,14 @@ Everything lands in `forge-arena/runner/logs/`:
 | `seat-N.usage.json` | Rolling token/cost snapshot for the seat |
 | `game.jsonl` | **The dataset.** One JSON object per decision, all seats, accumulating across games |
 | `gui.out`, `run_table.out` | Engine and runner supervision output |
-| `archive/<timestamp>-stop/` | Per-game seat logs, moved here by `arena-stop.sh` |
+| `archive/<timestamp>-stop/` | Every finished game's full log set, moved here by `arena-stop.sh` |
+
+Nothing is clobbered: `arena-stop.sh` rolls each game's logs (seat logs +
+engine/runner output) into a timestamped `archive/` folder, and `game.jsonl`
+is append-only. That makes game histories easy to share — the whole
+`runner/logs/` tree is self-contained, so
+`tar czf my-arena-logs.tgz forge-arena/runner/logs/` captures everything if
+you're willing to contribute games.
 
 `seat-N.log` — what a decision looks like:
 
@@ -134,10 +148,11 @@ public state the model saw):
  "board": {...}}
 ```
 
-The engine also maintains `forge-arena/mailbox/observer-state.json` — a
-ground-truth snapshot (turn, phase, per-seat life/hand-size/library/board,
-winner when the game ends) refreshed as the game runs; `arena-status.py`
-pretty-prints it alongside pending decisions.
+The engine also maintains
+`forge-light-llm/forge-arena/mailbox/observer-state.json` — a ground-truth
+snapshot (turn, phase, per-seat life/hand-size/library/board, winner when the
+game ends) refreshed as the game runs; `arena-status.py` pretty-prints it
+alongside pending decisions.
 
 ## Lifecycle notes
 
@@ -145,8 +160,8 @@ pretty-prints it alongside pending decisions.
   outside this package (window layout, game settings) — the package itself
   stays read-only apart from `decks/`, `docs/primers/`, `runner/logs/`, and
   `mailbox/`.
-- `arena-stop.sh` archives per-game seat logs and clears the mailbox;
-  `game.jsonl` is never cleared — it is the accumulating dataset.
+- `arena-stop.sh` rolls the game's logs into `archive/` and clears the
+  mailbox; `game.jsonl` is never cleared — it is the accumulating dataset.
 - To fully remove: delete this directory. Nothing else is installed.
 
 ## Troubleshooting
