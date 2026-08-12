@@ -99,3 +99,8 @@ __pycache__
 .claude
 # EDHREC commander matrix tool intermediates
 forge-gui/tools/build
+
+# arena transient output (not code)
+/runs/
+/stalls/
+/forge-arena/mailbox/
