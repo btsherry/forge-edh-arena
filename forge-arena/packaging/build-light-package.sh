@@ -67,12 +67,14 @@ echo "      run-pilot-match.sh takes the lib/* branch when lib/ exists)"
 mkdir -p "$DEST/forge-arena/target"
 rsync -a "$CLASSES/" "$DEST/forge-arena/target/classes/"
 
-echo "[4/9] forge-gui/res — pruned: other game modes and card-name translations"
+echo "[4/9] forge-gui/res — pruned: adventure (separate app), music (optional"
+echo "      audio), non-English card names. Everything else ships: the desktop"
+echo "      home screen eagerly class-inits every submenu (quest/puzzle/draft),"
+echo "      and FModel.initialize reads deckgendecks — pruning those crashed"
+echo "      startup (ExceptionInInitializerError via VSubmenuQuestStart)."
 mkdir -p "$DEST/forge-gui"
 rsync -a \
-  --exclude '/adventure/' --exclude '/quest/' --exclude '/music/' \
-  --exclude '/deckgendecks/' --exclude '/geneticaidecks/' --exclude '/conquest/' \
-  --exclude '/draft/' --exclude '/puzzle/' --exclude '/cube/' \
+  --exclude '/adventure/' --exclude '/music/' \
   --exclude '/languages/cardnames-*.txt' \
   "$REPO/forge-gui/res/" "$DEST/forge-gui/res/"
 

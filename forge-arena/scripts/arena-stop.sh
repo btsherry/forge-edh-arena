@@ -26,5 +26,6 @@ rm -rf "$ROOT"/mailbox/seat-* "$ROOT"/mailbox/observer-state.json "$LOGS"/contro
 
 runners=$(pgrep -f "seat_runner.py --seat" | wc -l | tr -d ' ')
 gui=$(pgrep -f GuiPilotMatch >/dev/null && echo up || echo down)
-decisions=$(wc -l < "$LOGS/game.jsonl" 2>/dev/null | tr -d ' ')
+decisions=0
+[ -f "$LOGS/game.jsonl" ] && decisions=$(wc -l < "$LOGS/game.jsonl" | tr -d ' ')
 echo "arena stopped: runners=$runners gui=$gui | archived $archived log files | game.jsonl=${decisions:-0} decisions (preserved)"
