@@ -9,9 +9,12 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 
 /**
- * W2/W8 enforcement (plan §4/§9): only {@code forge.arena.engine} may touch
- * Forge game internals. When a rebase renames engine classes, the blast radius
- * must stay one package.
+ * W2/W8 enforcement (plan §4/§9): only the two sanctioned seams may touch
+ * Forge game internals — {@code forge.arena.engine} (headless harness, via
+ * EngineFacade) and {@code forge.arena.interactive} (live-game mailbox seats,
+ * whose PlayerController/LobbyPlayer implementations cannot route through the
+ * facade). When a rebase renames engine classes, the blast radius must stay
+ * inside those packages.
  */
 public class ArchitectureTest {
 
@@ -24,9 +27,12 @@ public class ArchitectureTest {
         noClasses()
                 .that().resideInAPackage("forge.arena..")
                 .and().resideOutsideOfPackage("forge.arena.engine..")
+                .and().resideOutsideOfPackage("forge.arena.interactive..")
                 .should().dependOnClassesThat()
                 .resideInAnyPackage("forge.game..", "forge.ai..", "forge.deck..", "forge.item..", "forge.player..")
-                .because("EngineFacade is the single import point for Forge internals (plan §4, W2)")
+                .because("EngineFacade is the single import point for Forge internals for the headless"
+                        + " harness (plan §4, W2); forge.arena.interactive is the sanctioned live-game"
+                        + " seam (mailbox seats implement PlayerController/LobbyPlayer directly)")
                 .check(arenaClasses);
     }
 
