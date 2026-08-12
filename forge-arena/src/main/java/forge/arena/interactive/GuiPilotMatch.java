@@ -61,17 +61,21 @@ import forge.player.GamePlayerUtil;
  *        [-Darena.decks.dir=forge-arena/decks]
  *        [-Darena.mailbox.dir=forge-arena/mailbox]
  *        [-Darena.mailbox.timeout.sec=300]
+ *        [-Darena.seat.decks=slug0,slug1,slug2,slug3]
  *        forge.arena.interactive.GuiPilotMatch [humanDeckFileName] [busDir]
  * </pre>
- * {@code humanDeckFileName} (arg 0) picks which of the four decks the human
- * plays (default {@code selvala-heart-of-the-wilds.dck}); {@code busDir}
- * (arg 1) overrides the mailbox base dir.
+ * {@code humanDeckFileName} (arg 0) picks which deck the human plays (default
+ * seat 0 of the roster); {@code busDir} (arg 1) overrides the mailbox base
+ * dir. {@code arena.seat.decks} repoints the whole table roster in seat order
+ * (".dck" suffix optional; run-pilot-match.sh forwards ARENA_SEAT_DECKS here
+ * so the engine's seats and run_table.sh's brains stay in lockstep).
  */
 public final class GuiPilotMatch {
 
     private static final String DECKS_DIR_PROPERTY = "arena.decks.dir";
+    private static final String SEAT_DECKS_PROPERTY = "arena.seat.decks";
 
-    /** The four Commander decks; index 0 is the default human seat. */
+    /** The default four Commander decks; index 0 is the default human seat. */
     private static final String[] DECKS = {
             "selvala-heart-of-the-wilds.dck",
             "purphoros-god-of-the-forge.dck",
@@ -82,13 +86,33 @@ public final class GuiPilotMatch {
     private GuiPilotMatch() {
     }
 
+    /**
+     * Table roster in seat order: {@code -Darena.seat.decks} as comma- or
+     * whitespace-separated deck names (".dck" appended if missing), defaulting
+     * to {@link #DECKS}. The 4-pod guard in startCommanderMatch validates the
+     * final roster size, so a malformed property fails loud, not weird.
+     */
+    private static String[] seatDecks() {
+        final String prop = System.getProperty(SEAT_DECKS_PROPERTY);
+        if (prop == null || prop.trim().isEmpty()) {
+            return DECKS;
+        }
+        final String[] raw = prop.trim().split("[,\\s]+");
+        final String[] out = new String[raw.length];
+        for (int i = 0; i < raw.length; i++) {
+            out[i] = raw[i].endsWith(".dck") ? raw[i] : raw[i] + ".dck";
+        }
+        return out;
+    }
+
     public static void main(String[] args) {
-        String humanDeck = args.length > 0 ? args[0] : DECKS[0];
+        final String[] decks = seatDecks();
+        String humanDeck = args.length > 0 ? args[0] : decks[0];
         // --all-ai: EVERY seat (incl. 0) is a mailbox seat; the GUI attaches as
         // a pure spectator via HostedMatch's humanCount==0 watch path.
         final boolean allAi = "--all-ai".equals(humanDeck);
         if (allAi) {
-            humanDeck = DECKS[0];
+            humanDeck = decks[0];
         }
         if (args.length > 1) {
             System.setProperty(MailboxProtocol.DIR_PROPERTY, args[1]);
@@ -107,7 +131,7 @@ public final class GuiPilotMatch {
         final String humanDeckFinal = humanDeck;
         FThreads.invokeInEdtNowOrLater(() -> {
             try {
-                startCommanderMatch(decksDir, humanDeckFinal, allAi);
+                startCommanderMatch(decksDir, humanDeckFinal, allAi, decks);
             } catch (RuntimeException e) {
                 System.err.println("GuiPilotMatch: failed to start match: " + e);
                 e.printStackTrace();
@@ -116,39 +140,39 @@ public final class GuiPilotMatch {
     }
 
     private static void startCommanderMatch(File decksDir, String humanDeckFile,
-            boolean allAi) {
+            boolean allAi, String[] decks) {
         // Seat order MUST stay in lockstep with run_table.sh, which launches the
-        // brains: seats 1-3 are always DECKS[1..3] (Purphoros/Giada/Urza). Under
-        // --all-ai every seat is a mailbox deck (the four DECKS in order). Under
-        // --human, seat 0 is the human's deck — ANY deck, including a freshly
-        // ingested one that isn't in DECKS — and seats 1-3 are the three AI decks.
-        // (The old "add every DECKS entry != humanDeck" logic produced a 5-seat
-        // game when the human brought a deck not in DECKS, since it dropped none.)
+        // brains: seats 1-3 are always roster[1..3]. Under --all-ai every seat is
+        // a mailbox deck (the four roster entries in order). Under --human,
+        // seat 0 is the human's deck — ANY deck, including a freshly ingested
+        // one that isn't in the roster — and seats 1-3 are the three AI decks.
+        // Both sides derive the roster from ARENA_SEAT_DECKS (here via the
+        // arena.seat.decks property), so a lineup change moves them together.
         List<String> ordered = new ArrayList<>();
         if (allAi) {
-            for (String d : DECKS) {
+            for (String d : decks) {
                 ordered.add(d);
             }
         } else {
             ordered.add(humanDeckFile);
-            for (int i = 1; i < DECKS.length; i++) {
-                ordered.add(DECKS[i]);
+            for (int i = 1; i < decks.length; i++) {
+                ordered.add(decks[i]);
             }
         }
 
         // Fixed-4-pod guard. run_table.sh launches exactly one brain per AI seat
-        // (seats 1-3 under --human, 0-3 under --all-ai). If DECKS ever drifts from
-        // four entries, the GUI would seat more or fewer players than there are
-        // brains — reviving the unbrained-seat hang this bug class already caused.
-        // Fail loud here rather than seat a broken pod. (Until the roster is
-        // config-driven, DECKS and run_table.sh's seats must stay in lockstep at
-        // exactly four.)
+        // (seats 1-3 under --human, 0-3 under --all-ai). If the roster drifts
+        // from four entries, the GUI would seat more or fewer players than there
+        // are brains — reviving the unbrained-seat hang this bug class already
+        // caused. Fail loud here rather than seat a broken pod; this also
+        // validates a malformed arena.seat.decks property.
         if (ordered.size() != 4) {
             throw new IllegalStateException(
                     "arena pod must be exactly 4 seats (1 human + 3 AI, or 4 AI"
                     + " under --all-ai), but built " + ordered.size()
-                    + " from DECKS(length=" + DECKS.length + "). Keep DECKS in"
-                    + " lockstep with runner/run_table.sh at exactly 4 entries.");
+                    + " from a roster of " + decks.length + " (arena.seat.decks"
+                    + " must list exactly 4 decks, in seat order, matching"
+                    + " runner/run_table.sh's ARENA_SEAT_DECKS).");
         }
 
         List<RegisteredPlayer> players = new ArrayList<>();

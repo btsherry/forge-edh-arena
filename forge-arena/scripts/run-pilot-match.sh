@@ -22,6 +22,9 @@
 #                          falling back to stock AI (default 300).
 #                          Use a SMALL value (e.g. 3) for a no-brains smoke test.
 #   ARENA_MAILBOX_DIR      override the mailbox base dir.
+#   ARENA_SEAT_DECKS       four deck slugs in seat order — repoints the table
+#                          roster (forwarded as -Darena.seat.decks; keep the
+#                          same value on run_table.sh so brains match seats).
 #   JAVA_HOME              honored if set; else `java` on PATH (needs JDK 17+).
 set -u
 
@@ -71,6 +74,13 @@ fi
 
 if [ -n "${JAVA_HOME:-}" ]; then JAVA="$JAVA_HOME/bin/java"; else JAVA="java"; fi
 
+# Table roster pass-through: spaces become commas so the property stays one
+# JVM argument (GuiPilotMatch splits on both). Empty when unset — the word
+# then vanishes from the (intentionally unquoted) exec arg list.
+SEAT_DECKS_ARG=""
+[ -n "${ARENA_SEAT_DECKS:-}" ] && \
+  SEAT_DECKS_ARG="-Darena.seat.decks=$(printf '%s' "$ARENA_SEAT_DECKS" | tr ' ' ',')"
+
 echo "Forge GUI pilot match"
 echo "  run dir      : $GUI_DIR   (res/ lives here)"
 echo "  human deck   : ${1:-selvala-heart-of-the-wilds.dck}"
@@ -81,7 +91,7 @@ echo
 
 cd "$GUI_DIR"
 # shellcheck disable=SC2086  # MAND/OPENS are intentional multi-arg word lists
-exec "$JAVA" $MAND $OPENS \
+exec "$JAVA" $MAND $OPENS $SEAT_DECKS_ARG \
   -Darena.decks.dir="$DECKS_DIR" \
   -Darena.mailbox.dir="$MAILBOX_DIR" \
   -Darena.mailbox.timeout.sec="$TIMEOUT" \

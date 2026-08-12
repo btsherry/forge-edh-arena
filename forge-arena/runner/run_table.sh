@@ -35,11 +35,18 @@ seat() { # seat_no deck
   done
 }
 
-# Decks this table seats as AI — KEEP IN LOCKSTEP with the seat() launches below
-# and with GuiPilotMatch.DECKS. ALL_SEATS also seats seat 0. PREFLIGHT_DECKS lets a
-# caller (or a test) check an explicit set instead of the default.
-AI_DECKS="purphoros-god-of-the-forge giada-font-of-hope urza-lord-high-artificer"
-[ "${ALL_SEATS:-0}" = "1" ] && AI_DECKS="selvala-heart-of-the-wilds $AI_DECKS"
+# Table roster in seat order (0-3) — override with ARENA_SEAT_DECKS (four deck
+# slugs, space-separated). GuiPilotMatch reads the same roster via the
+# arena.seat.decks property (run-pilot-match.sh forwards ARENA_SEAT_DECKS), so
+# the engine's seats and the brains launched here move together. ALL_SEATS also
+# seats seat 0. PREFLIGHT_DECKS lets a caller (or a test) check an explicit set.
+TABLE="${ARENA_SEAT_DECKS:-selvala-heart-of-the-wilds purphoros-god-of-the-forge giada-font-of-hope urza-lord-high-artificer}"
+# shellcheck disable=SC2086  # intentional word split: TABLE is a slug list
+set -- $TABLE
+[ $# -eq 4 ] || { echo "[run_table] ARENA_SEAT_DECKS must list exactly 4 deck slugs in seat order (got $#: $TABLE)" >&2; exit 1; }
+D0=$1; D1=$2; D2=$3; D3=$4
+AI_DECKS="$D1 $D2 $D3"
+[ "${ALL_SEATS:-0}" = "1" ] && AI_DECKS="$D0 $AI_DECKS"
 AI_DECKS="${PREFLIGHT_DECKS:-$AI_DECKS}"
 
 # Startup preflight: every AI seat needs deck text + combos + a strategy primer
@@ -75,11 +82,11 @@ preflight_decks || exit 1
 
 trap 'kill 0' INT TERM
 if [ "${ALL_SEATS:-0}" = "1" ]; then
-  seat 0 selvala-heart-of-the-wilds &   # all-AI mode: 4th brain takes seat 0
+  seat 0 "$D0" &   # all-AI mode: 4th brain takes seat 0
 fi
-seat 1 purphoros-god-of-the-forge &
-seat 2 giada-font-of-hope &
-seat 3 urza-lord-high-artificer &
+seat 1 "$D1" &
+seat 2 "$D2" &
+seat 3 "$D3" &
 echo "seatd table up (seats 1-3, model=$MODEL, timeout=${ARENA_MAILBOX_TIMEOUT}s)"
 echo "logs: tail -f $DIR/logs/seat-*.log"
 wait
