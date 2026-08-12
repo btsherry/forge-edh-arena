@@ -10,8 +10,8 @@ Usage: python3 forge-arena/scripts/arena-status.py [mailbox-dir]
 """
 import json, glob, sys, os
 
-BASE = sys.argv[1] if len(sys.argv) > 1 else \
-    "/Users/toor/Claude/personal/forge-edh-arena/forge-arena/mailbox"
+BASE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mailbox")
 DECKS = {0: "Selvala (YOU/human)", 1: "Purphoros", 2: "Giada", 3: "Urza"}
 
 
