@@ -67,6 +67,29 @@ ARENA_SEAT_DECKS="swords-plunder purphoros-god-of-the-forge giada-font-of-hope u
 Six decks ship in `forge-light-llm/forge-arena/decks/`; every deck there —
 bundled or ingested — can sit at any seat.
 
+## The AI panel
+
+The match screen's **upper-left dock** opens on the **AI** tab (its siblings
+— Stack, Combat, Log, Dependencies — are one click away). It is the live
+control surface for the brains:
+
+- **Per-seat model/effort steppers** — click ◀ ▶ to re-dial any seat
+  mid-game (haiku → sonnet → opus → fable; low → max). Changes apply at that
+  seat's next decision; the same knob is scriptable via `runner/arena-ctl.py`.
+- **Liveness dot per seat** — green: decided within the last minute; yellow:
+  within five; gray: offline or not yet started.
+- **Per-seat usage line** — calls, output tokens, cache-hit rate, and the
+  API-equivalent cost of the seat so far.
+- **Table total** — the same figures summed across all four seats
+  (subscription transport: the dollar figure is what the game *would* have
+  cost on the API, not a charge).
+
+The default match layout is tuned for manual piloting: the three opponents
+share a tabbed cell across the top, your battlefield sits beneath them, and
+your hand gets a full-width window under that. Like everything in the dock,
+every window can be dragged and re-tabbed in-engine; layout changes persist
+in your Forge preferences, not in the package.
+
 ## Ingesting a new deck
 
 ```sh
