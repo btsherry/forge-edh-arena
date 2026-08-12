@@ -41,6 +41,12 @@ def log(msg): print(msg, flush=True)
 def warn(msg): print(f"  ! {msg}", file=sys.stderr, flush=True)
 
 
+def rel(p):
+    """Display paths package-root-relative — echoes must never leak the local
+    absolute prefix (hostname/username) into logs, screenshots, or shared runs."""
+    return os.path.relpath(p, REPO)
+
+
 def slugify_deck(name: str) -> str:
     """Deck directory slug: kebab-case (matches the bundled decks)."""
     s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
@@ -273,14 +279,15 @@ def make_primer(slug, deck_cards, combos, primer_path, mode):
     log("DeckCheck.co gives the best commander-specific analysis we've seen "
         "(subthemes,\nsac loops, keyword overlaps, synergy lines). Options:")
     log(f"  (A) Paste a DeckCheck review (recommended). Open https://deckcheck.co,")
-    log(f"      run this deck, copy the review, save it to:\n        {primer_path}")
+    log(f"      run this deck, copy the review, save it to (under the package root):"
+        f"\n        {rel(primer_path)}")
     log(f"  (B) Generate locally with the top model (fable, max effort) from your")
     log(f"      dossier + combos + live EDHREC/web research.")
     log(f"  (skip) Play off the dossier + combos only.")
     if mode is None:
         mode = (input("Choose [A/b/skip]: ").strip().lower() or "a")
     if mode in ("a", "A"):
-        input(f"  Save the DeckCheck review to {primer_path}, then press ENTER "
+        input(f"  Save the DeckCheck review to {rel(primer_path)}, then press ENTER "
               "(or Ctrl-C to skip)... ")
         return os.path.exists(primer_path)
     if mode == "skip":
@@ -361,17 +368,17 @@ def main():
 
     primer_path = os.path.join(PRIMERS, f"{slug}-deckcheck.md")
     have_primer = make_primer(slug, deck_cards, combos, primer_path, args.primer)
-    log(f"[5/6] primer: {'written ' + primer_path if have_primer else 'skipped'}")
+    log(f"[5/6] primer: {'written ' + rel(primer_path) if have_primer else 'skipped'}")
 
     log(f"[6/6] done. Deck '{slug}' is ready:")
-    log(f"      {dst_dck}")
-    log(f"      {os.path.join(dossier, 'deck-cards.json')}  "
+    log(f"      {rel(dst_dck)}")
+    log(f"      {rel(os.path.join(dossier, 'deck-cards.json'))}  "
         f"({len(deck_cards['cards'])} cards"
         + (f", {len(deck_cards['unresolved'])} unresolved" if deck_cards['unresolved'] else "")
         + ")")
-    log(f"      {os.path.join(dossier, 'combos.json')}  ({len(combos['combos'])} combos)")
-    log(f"  Play it: swap '{slug}' into run_table.sh / arena-play.sh, or "
-        f"ARENA seat --deck {slug}")
+    log(f"      {rel(os.path.join(dossier, 'combos.json'))}  ({len(combos['combos'])} combos)")
+    log(f"  Play it: arena-play.sh --human {slug}.dck — or put '{slug}' in "
+        f"ARENA_SEAT_DECKS for a brain to pilot it")
 
 
 if __name__ == "__main__":
