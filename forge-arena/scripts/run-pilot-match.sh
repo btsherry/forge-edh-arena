@@ -46,8 +46,18 @@ if [ ! -f "$ARENA_CLASSES/forge/arena/interactive/GuiPilotMatch.class" ]; then
   echo "ERROR: GuiPilotMatch not compiled at $ARENA_CLASSES — compile the interactive package first." >&2
   exit 1
 fi
-if [ ! -f "$ARENA_CP_TXT" ]; then
-  echo "ERROR: $ARENA_CP_TXT missing — run the arena build once (it bundles Jackson + module deps the fat jar lacks)." >&2
+# Classpath tail — dual-mode, one script for both worlds:
+#   source tree:   reactor-generated classpath.txt (absolute paths incl. ~/.m2);
+#   packaged tree: a flat lib/ of jars at the package root (forge-light-llm).
+# lib/ wins when present; the source tree has no lib/, so its behavior is
+# unchanged. The wildcard stays quoted so the JVM, not the shell, expands it —
+# and the fat jar still precedes it, so fat-jar classes win duplicates as today.
+if [ -d "$REPO_ROOT/lib" ]; then
+  CP_EXTRA="$REPO_ROOT/lib/*"
+elif [ -f "$ARENA_CP_TXT" ]; then
+  CP_EXTRA=$(cat "$ARENA_CP_TXT")
+else
+  echo "ERROR: no classpath source — need $REPO_ROOT/lib/ (packaged tree) or $ARENA_CP_TXT (source tree: run the arena build once; it bundles Jackson + module deps the fat jar lacks)." >&2
   exit 1
 fi
 
@@ -76,5 +86,5 @@ exec "$JAVA" $MAND $OPENS \
   -Darena.mailbox.dir="$MAILBOX_DIR" \
   -Darena.mailbox.timeout.sec="$TIMEOUT" \
   -Darena.runner.logs.dir="$REPO_ROOT/forge-arena/runner/logs" \
-  -cp "$ARENA_CLASSES:$JAR:$(cat "$ARENA_CP_TXT")" \
+  -cp "$ARENA_CLASSES:$JAR:$CP_EXTRA" \
   forge.arena.interactive.GuiPilotMatch "$@"
