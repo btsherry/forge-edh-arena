@@ -1,0 +1,313 @@
+{
+ "note": "almost-included: at least one piece is NOT in the 99 \u2014 deckbuilding advice only, never runtime tutor/tracking data (plan \u00a73 Gate 3 semantic rule)",
+ "combos": [
+  {
+   "id": "1561-3862",
+   "cards": [
+    "Orcish Bowmasters",
+    "Peer into the Abyss"
+   ],
+   "produces": [
+    "Infinite +1/+1 counters on a creature",
+    "Near-infinite card draw for target opponent",
+    "Near-infinite damage",
+    "Near-infinite draw triggers for target opponent",
+    "Target opponent loses the game"
+   ]
+  },
+  {
+   "id": "1561-5342",
+   "cards": [
+    "Peer into the Abyss",
+    "Bloodletter of Aclazotz"
+   ],
+   "produces": [
+    "Infinite lifeloss for target opponent",
+    "Target opponent loses the game"
+   ]
+  },
+  {
+   "id": "5342-5944",
+   "cards": [
+    "Unstoppable Slasher",
+    "Bloodletter of Aclazotz"
+   ],
+   "produces": [
+    "Target opponent loses the game",
+    "Infinite lifeloss for target opponent"
+   ]
+  },
+  {
+   "id": "856-4231-5670",
+   "cards": [
+    "Warren Soultrader",
+    "Cauldron Familiar",
+    "Academy Manufactor"
+   ],
+   "produces": [
+    "Infinite artifact ETB",
+    "Infinite artifact LTB",
+    "Infinite artifact sacrifice triggers",
+    "Infinite artifact tokens",
+    "Infinite creature LTB",
+    "Infinite creature ETB",
+    "Infinite colored mana",
+    "Infinite creature sacrifice triggers",
+    "Infinite death triggers",
+    "Infinite lifegain triggers",
+    "Infinite lifegain",
+    "Infinite card draw",
+    "Infinite lifeloss",
+    "Infinite draw triggers",
+    "Infinite Treasure tokens",
+    "Infinite Clue tokens"
+   ]
+  },
+  {
+   "id": "4141-5342",
+   "cards": [
+    "Bloodletter of Aclazotz",
+    "Blood Tribute"
+   ],
+   "produces": [
+    "Infinite lifeloss for target opponent",
+    "Near-infinite lifegain",
+    "Target opponent loses the game"
+   ]
+  },
+  {
+   "id": "2615-5342",
+   "cards": [
+    "Tree of Perdition",
+    "Bloodletter of Aclazotz"
+   ],
+   "produces": [
+    "Near-infinite lifeloss for target opponent"
+   ]
+  },
+  {
+   "id": "5342-6004",
+   "cards": [
+    "Grievous Wound",
+    "Bloodletter of Aclazotz"
+   ],
+   "produces": [
+    "Target opponent loses the game",
+    "Infinite lifeloss for target opponent"
+   ]
+  },
+  {
+   "id": "5342-5460",
+   "cards": [
+    "Bloodletter of Aclazotz",
+    "Rush of Dread"
+   ],
+   "produces": [
+    "Infinite lifeloss for target opponent",
+    "Target opponent loses the game"
+   ]
+  },
+  {
+   "id": "1612-5342",
+   "cards": [
+    "Bloodletter of Aclazotz",
+    "Shard of the Nightbringer"
+   ],
+   "produces": [
+    "Infinite lifeloss for target opponent",
+    "Near-infinite lifegain",
+    "Target opponent loses the game"
+   ]
+  },
+  {
+   "id": "5136-5342",
+   "cards": [
+    "Bloodletter of Aclazotz",
+    "Quietus Spike"
+   ],
+   "produces": [
+    "Infinite lifeloss for target opponent",
+    "Target opponent loses the game"
+   ]
+  },
+  {
+   "id": "876-4944",
+   "cards": [
+    "Crackdown Construct",
+    "Lightning Greaves"
+   ],
+   "produces": [
+    "Infinitely large creature until end of turn"
+   ]
+  },
+  {
+   "id": "4794-5342",
+   "cards": [
+    "Bloodletter of Aclazotz",
+    "Fraying Omnipotence"
+   ],
+   "produces": [
+    "Each opponent loses the game",
+    "Infinite lifeloss"
+   ]
+  },
+  {
+   "id": "156-5342",
+   "cards": [
+    "Bloodletter of Aclazotz",
+    "Scourge of the Skyclaves"
+   ],
+   "produces": [
+    "Each opponent loses the game",
+    "Infinite lifeloss"
+   ]
+  },
+  {
+   "id": "4843-5342",
+   "cards": [
+    "Bloodletter of Aclazotz",
+    "Virtus the Veiled"
+   ],
+   "produces": [
+    "Infinite lifeloss for target opponent",
+    "Target opponent loses the game"
+   ]
+  },
+  {
+   "id": "2581-5065",
+   "cards": [
+    "Helm of Obedience",
+    "Dauthi Voidwalker"
+   ],
+   "produces": [
+    "Exile target opponent's library"
+   ]
+  },
+  {
+   "id": "5342-7319",
+   "cards": [
+    "Shredder, Shadow Master",
+    "Bloodletter of Aclazotz"
+   ],
+   "produces": [
+    "Each opponent loses the game",
+    "Infinite lifeloss"
+   ]
+  },
+  {
+   "id": "5342-7450",
+   "cards": [
+    "Pox Plague",
+    "Bloodletter of Aclazotz"
+   ],
+   "produces": [
+    "Near-infinite lifeloss for all players"
+   ]
+  },
+  {
+   "id": "5342-6765",
+   "cards": [
+    "Alpharael, Stonechosen",
+    "Bloodletter of Aclazotz"
+   ],
+   "produces": [
+    "Target opponent loses the game",
+    "Infinite lifeloss for target opponent"
+   ]
+  },
+  {
+   "id": "3862-6804",
+   "cards": [
+    "Requiem Monolith",
+    "Orcish Bowmasters"
+   ],
+   "produces": [
+    "Infinite card draw for target opponent",
+    "Infinite draw triggers for target opponent",
+    "Infinite lifeloss for target opponent",
+    "Near-infinite +1/+1 counters on a creature token"
+   ]
+  },
+  {
+   "id": "2129-5342",
+   "cards": [
+    "Bloodletter of Aclazotz",
+    "Scytheclaw"
+   ],
+   "produces": [
+    "Infinite lifeloss for target opponent",
+    "Target opponent loses the game"
+   ]
+  },
+  {
+   "id": "5104-5670-6291",
+   "cards": [
+    "Warren Soultrader",
+    "Nadier's Nightblade",
+    "Stridehangar Automaton"
+   ],
+   "produces": [
+    "Infinite artifact ETB",
+    "Infinite artifact LTB",
+    "Infinite artifact sacrifice triggers",
+    "Infinite artifact tokens",
+    "Infinite creature LTB",
+    "Infinite creature ETB",
+    "Infinite colored mana",
+    "Infinite creature sacrifice triggers",
+    "Infinite death triggers",
+    "Infinite lifegain triggers",
+    "Infinite lifeloss",
+    "Infinite Treasure tokens"
+   ]
+  },
+  {
+   "id": "5104-6215",
+   "cards": [
+    "Tombstone Stairwell",
+    "Nadier's Nightblade"
+   ],
+   "produces": [
+    "Near-infinite lifeloss",
+    "Near-infinite creature ETB",
+    "Near-infinite creature LTB",
+    "Near-infinite death triggers",
+    "Near-infinite lifegain",
+    "Near-infinite lifegain triggers"
+   ]
+  },
+  {
+   "id": "5342-5605",
+   "cards": [
+    "Torgaar, Famine Incarnate",
+    "Bloodletter of Aclazotz"
+   ],
+   "produces": [
+    "Infinite lifeloss for target opponent",
+    "Target opponent loses the game"
+   ]
+  },
+  {
+   "id": "2057-3591",
+   "cards": [
+    "Ashiok, Wicked Manipulator",
+    "Necropotence"
+   ],
+   "produces": [
+    "Exile your library"
+   ]
+  },
+  {
+   "id": "5342-5377",
+   "cards": [
+    "Bloodletter of Aclazotz",
+    "Ebonblade Reaper"
+   ],
+   "produces": [
+    "Infinite lifeloss for target opponent",
+    "Target opponent loses the game"
+   ]
+  }
+ ],
+ "schema": "arena.advisory-combos/1"
+}
