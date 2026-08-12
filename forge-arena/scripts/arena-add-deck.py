@@ -306,7 +306,11 @@ def make_primer(slug, deck_cards, combos, primer_path, mode):
                           for c in deck_cards["cards"]], indent=1))
     try:
         out = subprocess.run(
-            ["claude", "-p", "-", "--model", "fable", "--effort", "max"],
+            # Headless -p auto-denies gated tools, so grant the two read-only
+            # research tools explicitly or the EDHREC/web step silently fails
+            # and the model burns its budget hunting for an allowed avenue.
+            ["claude", "-p", "-", "--model", "fable", "--effort", "max",
+             "--allowedTools", "WebSearch,WebFetch"],
             input=prompt, capture_output=True, text=True, timeout=1200)
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         warn(f"fable primer generation failed ({e}); skipping primer")
