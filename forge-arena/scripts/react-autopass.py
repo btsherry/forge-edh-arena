@@ -14,8 +14,8 @@ Usage: python3 forge-arena/scripts/react-autopass.py [mailbox-dir]
 """
 import json, os, sys, time, glob
 
-BASE = sys.argv[1] if len(sys.argv) > 1 else \
-    "/Users/toor/Claude/personal/forge-edh-arena/forge-arena/mailbox"
+BASE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mailbox")
 
 # Abilities that are never a meaningful response on their own. Matched by
 # prefix against the option label (labels look like "Giver of Runes  {T} — ...").
