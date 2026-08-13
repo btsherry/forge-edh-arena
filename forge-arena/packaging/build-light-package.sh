@@ -122,6 +122,7 @@ done
 echo "[9/9] top level — README (from packaging/), LICENSE, provenance stamp"
 [ -f "$DIR/README.md" ] && cp "$DIR/README.md" "$DEST/README.md" \
   || echo "  WARN: $DIR/README.md not written yet — package has no README"
+[ -f "$DIR/PATCH-NOTES.md" ] && cp "$DIR/PATCH-NOTES.md" "$DEST/PATCH-NOTES.md"
 cp "$REPO/LICENSE" "$DEST/LICENSE"
 { echo "forge-light-llm — built $(date -u '+%Y-%m-%d %H:%M UTC')"
   echo "source: $(git -C "$REPO" rev-parse --short HEAD) ($(git -C "$REPO" branch --show-current))"
