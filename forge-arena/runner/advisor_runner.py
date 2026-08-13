@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 import time
 from pathlib import Path
@@ -90,6 +91,65 @@ class AdvisorRunner:
         self.last_seq = 0
         self.pending_context: list[str] = []  # chosen/digest lines awaiting a call
         self._init_control(model, effort)
+        # ---- frequency governor state (the charm patch) ----------------------
+        # Advice is deliberately sparse: 3-5 moments per turn — first main and
+        # combat guaranteed, the rest admitted by seeded dice. Danger (an
+        # opponent's spell on the stack) pierces the budget unconditionally.
+        self.rng = random.Random()
+        self.gov_turn = -1
+        self.gov_budget = 0
+        self.gov_main1_done = False
+        try:
+            own = json.loads((arena_root / "decks" / deck / "dossier"
+                              / "deck-cards.json").read_text())
+            self.own_card_names = {c.get("name") for c in own.get("cards", [])}
+        except (OSError, ValueError):
+            self.own_card_names = set()
+
+    # ---- frequency governor ----------------------------------------------------
+
+    RANDOM_ADMIT_P = 0.35
+
+    def _gov_new_turn(self, turn: int) -> None:
+        seed = f"{self.brain.session_id or 'warmup'}:{turn}"
+        self.rng.seed(seed)
+        self.gov_turn = turn
+        self.gov_budget = self.rng.randint(3, 5)
+        self.gov_main1_done = False
+        self._record("governor", {"turn": turn, "budget": self.gov_budget,
+                                  "seed": seed})
+
+    def _admit(self, req: dict) -> tuple[bool, str]:
+        """Governor verdict for one request: (advise?, reason)."""
+        turn = int(req.get("turn") or 0)
+        if turn > self.gov_turn:
+            self._gov_new_turn(turn)
+        dtype = req.get("decisionType") or ""
+        if dtype != "PRIORITY":
+            # Explicit questions (targets, X, mulligans, declares) are always
+            # answered; combat declares are the guaranteed combat slots.
+            if self.gov_budget > 0:
+                self.gov_budget -= 1
+            return True, "question"
+        # Danger pierces the budget: an opponent's spell is on the stack.
+        state = req.get("state") or {}
+        stack = state.get("stack") or []
+        if self.own_card_names and any(s not in self.own_card_names for s in stack):
+            if self.gov_budget > 0:
+                self.gov_budget -= 1
+            return True, "danger"
+        # Guaranteed slot: the first main-phase stop of the turn.
+        phase = str(req.get("phase") or "")
+        if not self.gov_main1_done and "MAIN1" in phase:
+            self.gov_main1_done = True
+            if self.gov_budget > 0:
+                self.gov_budget -= 1
+            return True, "main1"
+        # The sprinkle: seeded dice while budget remains.
+        if self.gov_budget > 0 and self.rng.random() < self.RANDOM_ADMIT_P:
+            self.gov_budget -= 1
+            return True, "sprinkle"
+        return False, "budget"
 
     # ---- output --------------------------------------------------------------
 
@@ -250,17 +310,28 @@ class AdvisorRunner:
                     path.unlink()
                 except OSError:
                     pass
-            # digests fold into a pending advice call as context (advice preempts
-            # color); with no decision pending they get their own commentary call.
+            # Governor: stale requests die first (advising yesterday's window
+            # helps nobody), then the NEWEST request faces the admission rules.
+            for stale in reqs[:-1]:
+                self._record("skipped", {"seq": stale.get("seq"),
+                                         "decisionType": stale.get("decisionType")})
+            admitted = None
             if reqs:
-                for stale in reqs[:-1]:
-                    self._record("skipped", {"seq": stale.get("seq"),
-                                             "decisionType": stale.get("decisionType")})
+                ok, reason = self._admit(reqs[-1])
+                if ok:
+                    admitted = (reqs[-1], reason)
+                else:
+                    self._record("skipped_gov", {"seq": reqs[-1].get("seq"),
+                                                 "decisionType": reqs[-1].get("decisionType"),
+                                                 "turn": reqs[-1].get("turn")})
+            # digests fold into a pending advice call as context (advice preempts
+            # color); with no admitted decision they get their own commentary call.
+            if admitted is not None:
                 for d in digests:
                     self.pending_context.append(
                         f"- turn {d.get('turn')} public log: "
                         + " | ".join((d.get("digest") or [])[-25:]))
-                self._advise(reqs[-1])
+                self._advise(admitted[0])
             else:
                 for d in digests:
                     self._commentate(d)
