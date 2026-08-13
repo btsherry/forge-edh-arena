@@ -120,8 +120,19 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
                 if (getPlayer().getManaPool().totalMana() > 0) {
                     return false;
                 }
+                // Own main phases are SACRED — no auto-pass by ANY layer.
+                // Game-4 MAIN2 incident: upstream's affordability solver
+                // (ComputerUtilMana) is blind to Selvala-class mana (Cradle/
+                // Nykthos/power-scaled), so even a correct rebase inherits its
+                // false "nothing castable". Mains cost one click; a swallowed
+                // main costs the turn.
+                final PhaseType ph = getGame().getPhaseHandler().getPhase();
+                if (ph != null && ph.isMain()
+                        && getGame().getPhaseHandler().isPlayerTurn(getPlayer())) {
+                    return false;
+                }
             } catch (RuntimeException ignored) {
-                return false; // can't read the pool → fail open to prompting
+                return false; // can't read the state → fail open to prompting
             }
         }
         return oneStopPass || super.mayAutoPass();
@@ -177,6 +188,10 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
             if (phase == PhaseType.COMBAT_DECLARE_ATTACKERS
                     || phase == PhaseType.COMBAT_DECLARE_BLOCKERS) {
                 return;
+            }
+            if (phase != null && phase.isMain()
+                    && getGame().getPhaseHandler().isPlayerTurn(getPlayer())) {
+                return; // own mains are sacred — never arm, never narrate
             }
             for (SpellAbilityStackInstance si : getGame().getStack()) {
                 SpellAbility sa = si.getSpellAbility();
@@ -442,6 +457,60 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
     // (WatchLocalGame precedent for the spectator controller).
     @Override
     public void updateAchievements() {
+    }
+
+    // ---- mana color picks ---------------------------------------------------
+
+    private volatile boolean colorPickNoted;
+
+    /**
+     * Discrete skip for arbitrary any-color mana picks (the Gemstone Caverns /
+     * City of Brass class): with a MONO-colored commander, a 3+-color choice
+     * is arbitrary — off-color mana casts nothing in this deck, so the dialog
+     * is pure interruption. Name-free by design (card names never live in
+     * Java); multi-color commanders keep the dialog; fail-open on any doubt.
+     */
+    private byte autoPickColorOrZero(final forge.card.ColorSet colors) {
+        try {
+            if (colors == null || colors.countColors() < 3) {
+                return 0; // constrained choices stay human
+            }
+            final List<Card> cmdrs = getPlayer().getCommanders();
+            if (cmdrs == null || cmdrs.size() != 1) {
+                return 0;
+            }
+            final forge.card.ColorSet id = cmdrs.get(0).getRules().getColorIdentity();
+            if (id == null || id.countColors() != 1) {
+                return 0;
+            }
+            final byte mono = id.getColor();
+            if (!colors.hasAnyColor(mono)) {
+                return 0;
+            }
+            if (feed != null && !colorPickNoted) {
+                colorPickNoted = true; // one receipt per game, then silent
+                feed.publishNote(getGame().getPhaseHandler().getTurn(),
+                        String.valueOf(getGame().getPhaseHandler().getPhase()),
+                        "(auto-picking your commander's color for any-color mana choices this game)");
+            }
+            return mono;
+        } catch (RuntimeException failOpen) {
+            return 0;
+        }
+    }
+
+    @Override
+    public byte chooseColor(final String message, final SpellAbility sa,
+            final forge.card.ColorSet colors) {
+        final byte auto = autoPickColorOrZero(colors);
+        return auto != 0 ? auto : super.chooseColor(message, sa, colors);
+    }
+
+    @Override
+    public byte chooseColorAllowColorless(final String message, final Card c,
+            final forge.card.ColorSet colors) {
+        final byte auto = autoPickColorOrZero(colors);
+        return auto != 0 ? auto : super.chooseColorAllowColorless(message, c, colors);
     }
 
     // ---- feed helpers ------------------------------------------------------
