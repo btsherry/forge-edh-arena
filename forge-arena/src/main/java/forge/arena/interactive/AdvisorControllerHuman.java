@@ -5,8 +5,6 @@ import java.util.List;
 import java.util.Map;
 
 import forge.LobbyPlayer;
-import forge.ai.ComputerUtilAbility;
-import forge.ai.ComputerUtilMana;
 import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.card.Card;
@@ -44,7 +42,6 @@ import forge.util.collect.FCollectionView;
 public class AdvisorControllerHuman extends PlayerControllerHuman {
 
     private static final int MAX_OPTIONS = 40;
-    private static final int DEGENERATE_BOARD_CARDS = 60;
 
     private final AdvisorFeed feed;
     private final boolean castsAutopass;
@@ -90,11 +87,37 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
         if (n >= 0) {
             feed.publishChosen(n, "PRIORITY", describeSas(chosen));
         }
+        // Every silent skip leaves a receipt: upstream APINA passes produced no
+        // narration before (the t11 audit found the gap). Deduped per phase.
+        if (chosen == null && feed != null
+                && !getPlayer().getView().hasAvailableActions()) {
+            String key = getGame().getPhaseHandler().getTurn() + ":"
+                    + getGame().getPhaseHandler().getPhase();
+            if (!key.equals(lastSilentNoteKey)) {
+                lastSilentNoteKey = key;
+                feed.publishNote(getGame().getPhaseHandler().getTurn(),
+                        String.valueOf(getGame().getPhaseHandler().getPhase()),
+                        "(auto-passed — nothing available)");
+            }
+        }
         return chosen;
     }
 
+    private String lastSilentNoteKey;
+
     @Override
     public boolean mayAutoPass() {
+        // Ben's floating-mana rule: unspent mana in the pool signals intent —
+        // never auto-clear the stop, OURS or upstream's. (Also compensates the
+        // floating-mana-lost confirm dialog, which the wrapper's lobby-player
+        // identity check silently disables upstream.)
+        try {
+            if (getPlayer().getManaPool().totalMana() > 0) {
+                return false;
+            }
+        } catch (RuntimeException ignored) {
+            return false; // can't read the pool → fail open to prompting
+        }
         return oneStopPass || super.mayAutoPass();
     }
 
@@ -139,6 +162,9 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
             return;
         }
         try {
+            if (getPlayer().getManaPool().totalMana() > 0) {
+                return; // floating mana = intent; the stop stays open
+            }
             PhaseType phase = getGame().getPhaseHandler().getPhase();
             if (phase == PhaseType.COMBAT_DECLARE_ATTACKERS
                     || phase == PhaseType.COMBAT_DECLARE_BLOCKERS) {
@@ -149,11 +175,6 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
                 if (sa == null || !getPlayer().equals(sa.getActivatingPlayer())) {
                     return; // an opponent's spell is up — always offer the window
                 }
-            }
-            int boardSize = getPlayer().getCardsIn(ZoneType.Hand).size()
-                    + getPlayer().getCardsIn(ZoneType.Battlefield).size();
-            if (boardSize > DEGENERATE_BOARD_CARDS) {
-                return; // degenerate board — fail open to prompting
             }
             List<String> utilityOnly = new ArrayList<>();
             if (hasRealPlay(utilityOnly) || utilityOnly.isEmpty()) {
@@ -170,35 +191,62 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
     }
 
     /**
-     * Mirrors AvailableActions' kept-ability predicate (non-mana, affordable,
-     * fully targetable — the engine's own enumeration), then classifies:
-     * castable spell / land drop / planeswalker activation = a REAL play;
-     * everything else is utility and gets collected for the narration line.
+     * Rebased on upstream's own actionable scan ({@code collectActionable},
+     * which runs under its AI-controller swap) — we can structurally never
+     * see FEWER plays than upstream sees; our job is only classification:
+     * <ul>
+     *   <li>REAL play: castable spell, land drop, planeswalker ability;</li>
+     *   <li>REAL play (Ben's equipment rule): ANY affordable activation on an
+     *       equipment that ENTERED THE BATTLEFIELD THIS TURN — the drop turn
+     *       is when equipping is the natural play, never skip it (the t11
+     *       Lightning Greaves incident);</li>
+     *   <li>REAL play: anything actionable we fail to classify (fail-open —
+     *       the t11 missed-spell incident made this the logic, not just the
+     *       exception handler);</li>
+     *   <li>utility: everything else, collected for the narration line.</li>
+     * </ul>
      */
     private boolean hasRealPlay(List<String> utilityOut) {
+        java.util.Set<forge.game.card.CardView> actionable =
+                forge.ai.AvailableActions.collectActionable(getPlayer(), 500);
+        if (actionable == null || actionable.isEmpty()) {
+            return false; // upstream sees nothing; its own APINA handles the pass
+        }
+        int matched = 0;
         for (ZoneType zone : new ZoneType[] { ZoneType.Hand, ZoneType.Battlefield, ZoneType.Flashback }) {
             for (Card card : getPlayer().getCardsIn(zone)) {
+                if (!actionable.contains(card.getView())) {
+                    continue;
+                }
+                matched++;
+                if (card.isEquipment() && card.enteredThisTurn()) {
+                    return true; // Ben's rule: fresh equipment holds the turn open
+                }
+                boolean classified = false;
                 for (SpellAbility sa : card.getAllPossibleAbilities(getPlayer(), true)) {
-                    if (sa.isManaAbility() || !canAfford(sa) || !ComputerUtilAbility.isFullyTargetable(sa)) {
+                    if (sa.isManaAbility()) {
+                        classified = true;
                         continue;
                     }
                     if (sa.isSpell() || sa instanceof LandAbility || sa.isPwAbility()) {
                         return true;
                     }
-                    if (!utilityOut.contains(card.getName())) {
-                        utilityOut.add(card.getName());
+                    if (sa.isActivatedAbility()) {
+                        classified = true;
+                        if (!utilityOut.contains(card.getName())) {
+                            utilityOut.add(card.getName());
+                        }
                     }
+                }
+                if (!classified) {
+                    return true; // upstream says actionable, we can't say why — fail open
                 }
             }
         }
-        return false;
-    }
-
-    private boolean canAfford(SpellAbility sa) {
-        if (sa.getPayCosts() == null || !sa.getPayCosts().hasManaCost()) {
-            return true;
+        if (matched < actionable.size()) {
+            return true; // actionable cards outside our walk — fail open
         }
-        return ComputerUtilMana.canPayManaCost(sa, getPlayer(), 0, false);
+        return false;
     }
 
     /** Feed priority stops only at moments worth advising on. */
