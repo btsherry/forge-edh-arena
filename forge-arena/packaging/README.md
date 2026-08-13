@@ -119,10 +119,19 @@ and the `claude` CLI logged in. The advisor uses the game's `--model` /
 **Autopass** rides along (default `casts` mode): priority stops where you
 have nothing castable — or only utility activations like tap abilities —
 pass automatically, each narrated in the Advisor tab as
-`⏭ (auto-passed — …)`. `ARENA_AUTOPASS=strict` wakes you for ANY legal
-action; `ARENA_AUTOPASS=off` disables it. Combat declare steps and stops
-with an opponent's spell on the stack always wake you, and any doubt in the
-scan fails open to showing the prompt.
+`⏭ (auto-passed — …)`. The stakes-based guarantees, learned from live play:
+your own **main phases are never auto-passed** by any layer, ever; neither
+are combat declare steps, stops with an opponent's spell on the stack, any
+stop while you have **mana floating** (unspent pool mana signals intent),
+or the whole turn after an **equipment drops** with its equip affordable.
+`ARENA_AUTOPASS=strict` wakes you for ANY legal action;
+`ARENA_AUTOPASS=off` disables it. Any doubt in the scan fails open to
+showing the prompt.
+
+**Bonus quality-of-life** (mono-colored commanders): arbitrary any-color
+mana picks (Gemstone Caverns, City of Brass…) auto-answer with your
+commander's color — one receipt in the Advisor tab, then silence.
+Multicolor commanders keep the dialog.
 
 ## Ingesting a new deck
 
@@ -192,6 +201,7 @@ seat before any game starts.
 | `scripts/arena-digest.py` | One compact line per game turn — an ambient "how's it going" feed |
 | `scripts/run-pilot-match.sh` | The underlying GUI launcher (arena-play calls it); direct use for custom setups |
 | `scripts/run-gui.sh` | Plain Forge desktop GUI, no mailbox seats — sanity checks |
+| `scripts/react-autopass.py` | Daemon answering provably-no-op REACT windows in milliseconds (arena-play launches it automatically) |
 | `runner/run_table.sh` | Starts the per-seat brain daemons (arena-play calls it); `--preflight` verifies every seat's files |
 | `runner/arena-ctl.py` | Set any seat's model/effort mid-game |
 | `runner/status.py` | seatd health + narrative dashboard ("numbers over vibes") |

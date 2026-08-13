@@ -74,6 +74,12 @@ if [ "$ADVISOR" = "1" ]; then
     --model "$MODEL" --effort "$EFFORT" >"$LOGS/advisor_runner.out" 2>&1 &
 fi
 
+# 2.6) react-autopass daemon: answers provably-no-op REACT windows (every
+# non-pass option is the seat's own stack item) in milliseconds, before a
+# brain burns a call. Promoted from manual stopgap 2026-08-13 — it earned it.
+# arena-stop kills it; teardown archives its log.
+nohup python3 "$DIR/react-autopass.py" >>"$LOGS/react-autopass.out" 2>&1 &
+
 # 3) GUI (spectator for all-ai, human seat 0 otherwise)
 if [ "$MODE" = "all-ai" ]; then GUI_ARG="--all-ai"; else GUI_ARG="$HUMAN_DECK"; fi
 ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" \
