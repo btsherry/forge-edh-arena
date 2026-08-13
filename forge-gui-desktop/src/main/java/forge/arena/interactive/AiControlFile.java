@@ -19,8 +19,44 @@ import java.util.regex.Pattern;
  */
 public final class AiControlFile {
 
-    public static final String[] MODELS = {"haiku", "sonnet", "opus", "fable"};
+    private static final String[] DEFAULT_MODELS = {"haiku", "sonnet", "opus", "fable"};
     public static final String[] EFFORTS = {"low", "medium", "high", "xhigh", "max"};
+
+    /**
+     * Dial cycle: the four Claude names plus any {@code -Darena.extra.models}
+     * entries (comma-separated backend model strings, whitelisted upstream by
+     * run-pilot-match.sh so {@link #write} can never be fed a quote).
+     * Recomputed per call — like {@link #logsDir()} — so headless tests can
+     * inject the property at runtime.
+     */
+    public static String[] models() {
+        final String extra = System.getProperty("arena.extra.models", "");
+        if (extra.isEmpty()) {
+            return DEFAULT_MODELS.clone();
+        }
+        final java.util.LinkedHashSet<String> out =
+                new java.util.LinkedHashSet<>(java.util.Arrays.asList(DEFAULT_MODELS));
+        for (final String s : extra.split(",")) {
+            if (s.matches("[A-Za-z0-9._:/-]+")) {
+                out.add(s);
+            }
+        }
+        return out.toArray(new String[0]);
+    }
+
+    /**
+     * Display form for the AI panel's narrow model column: backend strings
+     * shorten to {@code or:<last-segment>} / {@code oai:<last-segment>} so
+     * or/ and oai/ variants of one model stay distinguishable; Claude names
+     * pass through untouched. The full string belongs in the tooltip.
+     */
+    public static String displayModel(final String raw) {
+        if (raw == null || !(raw.startsWith("or/") || raw.startsWith("oai/"))) {
+            return raw;
+        }
+        final String prefix = raw.startsWith("or/") ? "or:" : "oai:";
+        return prefix + raw.substring(raw.lastIndexOf('/') + 1);
+    }
 
     private static final Pattern MODEL_RE = Pattern.compile("\"model\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern EFFORT_RE = Pattern.compile("\"effort\"\\s*:\\s*\"([^\"]+)\"");
@@ -57,12 +93,19 @@ public final class AiControlFile {
     /** Cycle model (isModel=true) or effort by dir (+1/-1), clamped, and persist. */
     public static void step(final int seat, final boolean isModel, final int dir) {
         final File f = controlFile(seat);
-        final String[] cycle = isModel ? MODELS : EFFORTS;
+        final String[] cycle = isModel ? models() : EFFORTS;
         final String cur = find(f, isModel ? MODEL_RE : EFFORT_RE,
                 cycle[dir > 0 ? 0 : cycle.length - 1]);
-        int idx = 0;
+        int idx = -1;
         for (int i = 0; i < cycle.length; i++) {
             if (cycle[i].equals(cur)) { idx = i; break; }
+        }
+        if (idx < 0) {
+            // Current value is not in this GUI's cycle (e.g. a backend model
+            // the JVM wasn't told about). A stepper click must be a no-op,
+            // never a silent rewrite to haiku/sonnet — that would convert a
+            // paid backend seat mid-game on a misclick (plan F-11).
+            return;
         }
         final String next = cycle[Math.max(0, Math.min(cycle.length - 1, idx + dir))];
         final String model = isModel ? next : find(f, MODEL_RE, "sonnet");
@@ -120,14 +163,19 @@ public final class AiControlFile {
         final long cacheDenom = read + write;
         final String cacheStr = cacheDenom > 0
                 ? Math.round(100.0 * read / cacheDenom) + "% cache" : "—";
-        return String.format("%d calls · %s out · %s · ≈$%.2f API-equiv",
-                calls, human(out), cacheStr, cost);
+        // Backend seats bill real dollars — never relabel them as
+        // subscription-equivalent (plan F-35). Claude seats keep the exact
+        // wording they have always had.
+        final String costWord = body.contains("\"backend\"")
+                ? "API-BILLED" : "API-equiv";
+        return String.format("%d calls · %s out · %s · ≈$%.2f %s",
+                calls, human(out), cacheStr, cost, costWord);
     }
 
     /** Table-wide totals across all four seats, or {@code null} if none live. */
     public static String tableTotals() {
         long calls = 0, out = 0;
-        double cost = 0;
+        double covered = 0, billed = 0;
         boolean any = false;
         for (int n = 0; n < 4; n++) {
             final File u = usageFile(n);
@@ -135,14 +183,26 @@ public final class AiControlFile {
                 final String body = new String(Files.readAllBytes(u.toPath()), StandardCharsets.UTF_8);
                 calls += usageLong(body, "calls");
                 out += usageLong(body, "output_tokens");
-                cost += usageDouble(body, "cost_usd");
+                if (body.contains("\"backend\"")) {
+                    billed += usageDouble(body, "cost_usd");
+                } else {
+                    covered += usageDouble(body, "cost_usd");
+                }
                 any = true;
             } catch (final IOException ignored) {
                 // seat offline — skip
             }
         }
-        return any ? String.format("TABLE: %d calls · %s out · ≈$%.2f API-equiv (subscription — $0 actual)",
-                calls, human(out), cost) : null;
+        if (!any) {
+            return null;
+        }
+        // All-Claude tables keep the exact historical wording; mixed tables
+        // split real dollars out so they are never shown as "$0 actual".
+        final String costStr = billed > 0
+                ? String.format("≈$%.2f subscription + $%.2f API-BILLED", covered, billed)
+                : String.format("≈$%.2f API-equiv (subscription — $0 actual)", covered);
+        return String.format("TABLE: %d calls · %s out · %s",
+                calls, human(out), costStr);
     }
 
     private static String human(final long n) {

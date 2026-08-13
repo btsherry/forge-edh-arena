@@ -120,7 +120,13 @@ public class VAiControl implements IVDoc<CAiControl> {
 
     private void refreshFromFiles() {
         for (int n = 0; n < SEATS; n++) {
-            modelLbl[n].setText(AiControlFile.model(n, "—"));
+            // Backend model strings are long: show or:<segment> / oai:<segment>
+            // in the narrow column with the full string as the tooltip. Claude
+            // names display exactly as before (displayModel passes them through).
+            final String rawModel = AiControlFile.model(n, "—");
+            final String shown = AiControlFile.displayModel(rawModel);
+            modelLbl[n].setText(shown);
+            modelLbl[n].setToolTipText(shown.equals(rawModel) ? null : rawModel);
             effortLbl[n].setText(AiControlFile.effort(n, "—"));
             final long age = AiControlFile.usageAgeMillis(n);
             // green: decided recently; yellow: alive-ish; gray: offline/unknown

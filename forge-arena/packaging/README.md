@@ -90,6 +90,46 @@ your hand gets a full-width window under that. Like everything in the dock,
 every window can be dragged and re-tabbed in-engine; layout changes persist
 in your Forge preferences, not in the package.
 
+## Other models on the backend (optional, API-billed)
+
+By default every AI seat runs Claude through your `claude` login — no key,
+no API bill. Optionally, any seat can instead run **any OpenRouter model**
+or **any OpenAI-compatible endpoint** (Ollama, LM Studio, vLLM). This is
+opt-in per seat and changes nothing when unused.
+
+```sh
+# seat order 0-3; empty entries keep the default Claude model.
+# seat 1 -> Gemini via OpenRouter, seat 3 -> local Ollama, rest Claude:
+export OPENROUTER_API_KEY=sk-or-...       # or/ seats bill THIS key
+export ARENA_OAI_BASE_URL=http://localhost:11434/v1   # for oai/ seats
+ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1" \
+  forge-arena/scripts/arena-play.sh --human my-deck.dck --advisor
+```
+
+Model strings: bare names (`haiku|sonnet|opus|fable`) = Claude CLI;
+`or/<vendor>/<model>` = OpenRouter (needs `OPENROUTER_API_KEY`; **real
+API billing**); `oai/<model>` = your `ARENA_OAI_BASE_URL` endpoint
+(`ARENA_OAI_API_KEY` optional — keyless local endpoints work). Seat 0 takes
+a backend model only in `--all-ai` games; the Advisor is Claude-only.
+Backend entries join the AI panel's model stepper (shown as
+`or:gemini-2.5-pro`, full name in the tooltip), and their usage lines say
+**API-BILLED** — never "subscription-covered".
+
+**Cost rails, and their honest limits.** Each backend seat stops calling out
+(and plays on safe defaults) at `ARENA_MAX_SEAT_COST_USD` per game (default
+**$5.00**, `0` = unlimited) and at `ARENA_MAX_SEAT_CALLS` HTTP attempts
+(default 250) — the call cap is the rail that still works when a route
+reports no cost figures. Do the arithmetic before picking a pricey model:
+every call re-sends the seat's full context (a ~50–100K-token deck dossier
+plus recent history — depth tunable via `ARENA_BACKEND_HISTORY`, default 8),
+so an Opus-class model at $15/M input costs **~$2+ per decision** and hits
+the $5 cap within a couple of turns, while a ~$1/M model plays most of a
+game under it. Two caveats: OpenRouter **BYOK** routes report only
+OpenRouter's fee as cost (~5% of real spend), and `oai/` endpoints report
+none — in both cases set a hard limit on the provider key itself; that
+limit, not ours, is the real rail. Timeouts/latches degrade a backend seat
+to safe defaults exactly like a Claude timeout — the game never stalls.
+
 ## The AI Advisor (human games)
 
 ```sh

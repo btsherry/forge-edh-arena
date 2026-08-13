@@ -1,5 +1,35 @@
 # forge-light-llm — Patch Notes
 
+## v3 — unreleased
+
+### New: bring your own models
+
+Any AI seat can now run **any OpenRouter model** or **any OpenAI-compatible
+endpoint** (Ollama, LM Studio, vLLM) instead of Claude — per seat, mixed
+tables welcome:
+
+```sh
+ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1" \
+  forge-arena/scripts/arena-play.sh --all-ai
+```
+
+- **Opt-in and isolated** — with no backend model configured, nothing
+  changes: Claude seats run exactly as before on your `claude` login.
+- **Per-seat model strings** — `or/<vendor>/<model>` (OpenRouter, uses
+  `OPENROUTER_API_KEY`, API-billed) or `oai/<model>` (your
+  `ARENA_OAI_BASE_URL`; keyless local endpoints work). Backend models join
+  the AI panel's steppers and re-dial mid-game like everything else — you
+  can even switch a seat Claude ↔ backend mid-game and back; its Claude
+  session survives the detour.
+- **Cost rails on by default** — $5/seat/game spend cap (`ARENA_MAX_SEAT_
+  COST_USD`) plus a 250-attempt call cap that works even where providers
+  report no cost; caps, latches, and failures all degrade a seat to safe
+  defaults without ever stalling the game.
+- **Config errors fail at launch, on your terminal** — missing key, a model
+  whose context can't fit the deck dossier — before anything is torn down.
+- The README's "Other models on the backend" section covers the details,
+  including the honest cost arithmetic to read before picking a $15/M model.
+
 ## v2 — 2026-08-13
 
 ### New: The AI Advisor
