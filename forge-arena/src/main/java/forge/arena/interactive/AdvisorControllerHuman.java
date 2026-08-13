@@ -80,8 +80,10 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
         }
         List<SpellAbility> chosen;
         try {
+            inPriorityStop = true;
             chosen = super.chooseSpellAbilityToPlay();
         } finally {
+            inPriorityStop = false;
             oneStopPass = false; // strictly one stop, even on exceptions
         }
         if (n >= 0) {
@@ -107,19 +109,25 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
 
     @Override
     public boolean mayAutoPass() {
-        // Ben's floating-mana rule: unspent mana in the pool signals intent —
-        // never auto-clear the stop, OURS or upstream's. (Also compensates the
-        // floating-mana-lost confirm dialog, which the wrapper's lobby-player
-        // identity check silently disables upstream.)
-        try {
-            if (getPlayer().getManaPool().totalMana() > 0) {
-                return false;
+        // Ben's floating-mana rule: unspent pool mana signals intent — never
+        // auto-clear the stop, ours or upstream's. SCOPED strictly to the
+        // priority-stop window: mayAutoPass is ALSO the guard inside
+        // autoPassCancel (PCH:3847), and vetoing there blocks yield CLEANUP at
+        // turn boundaries — a stuck pass-until-end-of-turn skipped whole turns
+        // (game-3 combat-skip incident).
+        if (inPriorityStop) {
+            try {
+                if (getPlayer().getManaPool().totalMana() > 0) {
+                    return false;
+                }
+            } catch (RuntimeException ignored) {
+                return false; // can't read the pool → fail open to prompting
             }
-        } catch (RuntimeException ignored) {
-            return false; // can't read the pool → fail open to prompting
         }
         return oneStopPass || super.mayAutoPass();
     }
+
+    private volatile boolean inPriorityStop;
 
     /**
      * Color-commentary source: on the first stop of a new turn, publish the

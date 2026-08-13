@@ -1016,7 +1016,18 @@ public final class MailboxController extends PlayerControllerAi {
             Map<String, Object> hm = new LinkedHashMap<>();
             hm.put("name", c.getName());
             hm.put("manaCost", c.getManaCost() != null ? c.getManaCost().toString() : "");
-            hm.put("types", c.getType() != null ? c.getType().toString() : "");
+            // MDFC/DFC back faces are real information in hand (a land back is
+            // a land drop): serialize both faces' types so the state never
+            // contradicts the deck text (the Bala Ged mulligan incident).
+            String types = c.getType() != null ? c.getType().toString() : "";
+            try {
+                if (c.hasAlternateState()) {
+                    types = types + " // " + c.getAlternateState().getType();
+                }
+            } catch (RuntimeException ignored) {
+                // odd card layouts — front face alone is still true
+            }
+            hm.put("types", types);
             ownHand.add(hm);
         }
         state.put("hand", ownHand);
