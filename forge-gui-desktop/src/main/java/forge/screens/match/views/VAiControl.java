@@ -136,8 +136,11 @@ public class VAiControl implements IVDoc<CAiControl> {
             // names display exactly as before (displayModel passes them through).
             final String rawModel = AiControlFile.model(n, "—");
             String shown = AiControlFile.displayModel(rawModel);
-            if (shown != null && shown.length() > 20) {
-                shown = shown.substring(0, 19) + "…";
+            // 13 chars + ellipsis stays safely inside the 170px column at the
+            // panel font — 20 was measured too wide and painted under the "−"
+            // button (Ben's screenshot, 2026-08-13 evening game).
+            if (shown != null && shown.length() > 14) {
+                shown = shown.substring(0, 13) + "…";
             }
             modelLbl[n].setText(shown);
             modelLbl[n].setToolTipText(shown != null && shown.equals(rawModel)
