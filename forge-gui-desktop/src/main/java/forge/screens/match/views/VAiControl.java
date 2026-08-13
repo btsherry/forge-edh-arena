@@ -43,6 +43,13 @@ public class VAiControl implements IVDoc<CAiControl> {
     private final JLabel[] modelLbl = new JLabel[SEATS];
     private final JLabel[] effortLbl = new JLabel[SEATS];
     private final JLabel[] usageLbl = new JLabel[SEATS];
+    // Stepper buttons are hidden (not just inert) whenever a click would be a
+    // no-op — out-of-cycle backend models, clamped cycle ends. A dead button
+    // overlaying a long or:/oai: label was unreadable noise (Ben, 2026-08-13).
+    private final JButton[] modelMinus = new JButton[SEATS];
+    private final JButton[] modelPlus = new JButton[SEATS];
+    private final JButton[] effortMinus = new JButton[SEATS];
+    private final JButton[] effortPlus = new JButton[SEATS];
     private final JLabel totalLbl = new JLabel(" ");
     private final Timer refresh;
 
@@ -50,7 +57,7 @@ public class VAiControl implements IVDoc<CAiControl> {
         this.controller = controller;
         body.setOpaque(false);
         body.setLayout(new MigLayout("insets 6, gapy 4, wrap 7",
-                "[40!][20!][60:80:120][24!][24!][60:80:120][24!]"));
+                "[40!][20!][60:110:170][24!][24!][60:80:120][24!]"));
         body.add(header("Seat"));
         body.add(header(""));
         body.add(header("Model"));
@@ -63,16 +70,20 @@ public class VAiControl implements IVDoc<CAiControl> {
             status[n] = new JLabel("●");
             modelLbl[n] = value("—");
             effortLbl[n] = value("—");
+            modelMinus[n] = stepBtn("−", () -> step(n, true, -1));
+            modelPlus[n] = stepBtn("+", () -> step(n, true, +1));
+            effortMinus[n] = stepBtn("−", () -> step(n, false, -1));
+            effortPlus[n] = stepBtn("+", () -> step(n, false, +1));
             body.add(header("  " + n));
             body.add(status[n]);
             body.add(modelLbl[n]);
-            body.add(stepBtn("−", () -> step(n, true, -1)));
-            body.add(stepBtn("+", () -> step(n, true, +1)));
+            body.add(modelMinus[n]);
+            body.add(modelPlus[n]);
             body.add(effortLbl[n]);
             final JPanel eBtns = new JPanel(new MigLayout("insets 0, gap 2"));
             eBtns.setOpaque(false);
-            eBtns.add(stepBtn("−", () -> step(n, false, -1)));
-            eBtns.add(stepBtn("+", () -> step(n, false, +1)));
+            eBtns.add(effortMinus[n]);
+            eBtns.add(effortPlus[n]);
             body.add(eBtns, "wrap");
             // per-seat usage line, spanning the full row under the controls
             usageLbl[n] = dim("—");
@@ -121,13 +132,24 @@ public class VAiControl implements IVDoc<CAiControl> {
     private void refreshFromFiles() {
         for (int n = 0; n < SEATS; n++) {
             // Backend model strings are long: show or:<segment> / oai:<segment>
-            // in the narrow column with the full string as the tooltip. Claude
+            // ellipsized to the column, full string in the tooltip. Claude
             // names display exactly as before (displayModel passes them through).
             final String rawModel = AiControlFile.model(n, "—");
-            final String shown = AiControlFile.displayModel(rawModel);
+            String shown = AiControlFile.displayModel(rawModel);
+            if (shown != null && shown.length() > 20) {
+                shown = shown.substring(0, 19) + "…";
+            }
             modelLbl[n].setText(shown);
-            modelLbl[n].setToolTipText(shown.equals(rawModel) ? null : rawModel);
+            modelLbl[n].setToolTipText(shown != null && shown.equals(rawModel)
+                    ? null : rawModel);
             effortLbl[n].setText(AiControlFile.effort(n, "—"));
+            // Hide dead steppers instead of rendering no-op buttons over the
+            // label (out-of-cycle backend model: both model buttons vanish;
+            // clamped ends: just the dead direction).
+            modelMinus[n].setVisible(AiControlFile.canStep(n, true, -1));
+            modelPlus[n].setVisible(AiControlFile.canStep(n, true, +1));
+            effortMinus[n].setVisible(AiControlFile.canStep(n, false, -1));
+            effortPlus[n].setVisible(AiControlFile.canStep(n, false, +1));
             final long age = AiControlFile.usageAgeMillis(n);
             // green: decided recently; yellow: alive-ish; gray: offline/unknown
             status[n].setForeground(age < 60_000 ? new java.awt.Color(0x3D, 0xC8, 0x5C)

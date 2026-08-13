@@ -72,6 +72,15 @@ public class AiTabHarness {
         String after = new String(Files.readAllBytes(ctl.toPath()));
         check(before.equals(after), "step on out-of-cycle model must not rewrite the file");
 
+        // canStep mirrors step()'s no-op logic — the panel hides dead buttons
+        check(!AiControlFile.canStep(2, true, -1), "out-of-cycle model: minus is dead");
+        check(!AiControlFile.canStep(2, true, +1), "out-of-cycle model: plus is dead");
+        AiControlFile.write(2, "haiku", "low");
+        check(!AiControlFile.canStep(2, true, -1), "clamped at haiku: minus is dead");
+        check(AiControlFile.canStep(2, true, +1), "haiku: plus is live");
+        check(!AiControlFile.canStep(2, false, -1), "clamped at low effort: minus is dead");
+        AiControlFile.write(2, "or/google/gemini-2.5-pro", "low");
+
         // display form for the narrow model column
         check("or:gemini-2.5-pro".equals(AiControlFile.displayModel("or/google/gemini-2.5-pro")), "or/ display form");
         check("oai:mistral-7b".equals(AiControlFile.displayModel("oai/mistral-7b")), "oai/ display form");

@@ -90,24 +90,43 @@ public final class AiControlFile {
         return find(controlFile(seat), EFFORT_RE, dflt);
     }
 
+    /**
+     * Index a step would land on, or -1 when the click would be a no-op:
+     * current value out-of-cycle (e.g. a backend model this JVM wasn't told
+     * about — plan F-11), or already clamped at the cycle end. The panel uses
+     * the same predicate to HIDE no-op buttons instead of rendering dead ones.
+     */
+    private static int stepIndex(final String[] cycle, final String cur, final int dir) {
+        int idx = -1;
+        for (int i = 0; i < cycle.length; i++) {
+            if (cycle[i].equals(cur)) { idx = i; break; }
+        }
+        if (idx < 0) {
+            return -1;
+        }
+        final int next = Math.max(0, Math.min(cycle.length - 1, idx + dir));
+        return next == idx ? -1 : next;
+    }
+
+    /** Would a step actually change the value? (false = the button is dead) */
+    public static boolean canStep(final int seat, final boolean isModel, final int dir) {
+        final String[] cycle = isModel ? models() : EFFORTS;
+        final String cur = find(controlFile(seat), isModel ? MODEL_RE : EFFORT_RE,
+                cycle[dir > 0 ? 0 : cycle.length - 1]);
+        return stepIndex(cycle, cur, dir) >= 0;
+    }
+
     /** Cycle model (isModel=true) or effort by dir (+1/-1), clamped, and persist. */
     public static void step(final int seat, final boolean isModel, final int dir) {
         final File f = controlFile(seat);
         final String[] cycle = isModel ? models() : EFFORTS;
         final String cur = find(f, isModel ? MODEL_RE : EFFORT_RE,
                 cycle[dir > 0 ? 0 : cycle.length - 1]);
-        int idx = -1;
-        for (int i = 0; i < cycle.length; i++) {
-            if (cycle[i].equals(cur)) { idx = i; break; }
+        final int nextIdx = stepIndex(cycle, cur, dir);
+        if (nextIdx < 0) {
+            return; // no-op click: out-of-cycle value or clamped end
         }
-        if (idx < 0) {
-            // Current value is not in this GUI's cycle (e.g. a backend model
-            // the JVM wasn't told about). A stepper click must be a no-op,
-            // never a silent rewrite to haiku/sonnet — that would convert a
-            // paid backend seat mid-game on a misclick (plan F-11).
-            return;
-        }
-        final String next = cycle[Math.max(0, Math.min(cycle.length - 1, idx + dir))];
+        final String next = cycle[nextIdx];
         final String model = isModel ? next : find(f, MODEL_RE, "sonnet");
         final String effort = isModel ? find(f, EFFORT_RE, "low") : next;
         write(seat, model, effort);
