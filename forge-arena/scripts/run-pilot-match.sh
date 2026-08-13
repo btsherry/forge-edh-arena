@@ -87,6 +87,18 @@ ADVISOR_ARGS=""
 [ "${ARENA_ADVISOR:-0}" = "1" ] && \
   ADVISOR_ARGS="-Darena.advisor=1 -Darena.autopass=${ARENA_AUTOPASS:-casts}"
 
+# Backend models for the AI panel's dial cycle (plan F-27/F-34): the unique
+# or/ | oai/ entries from ARENA_SEAT_MODELS slots 1-3 only (slot 0 is the
+# human/advisor seat), whitelisted so AiControlFile.write()'s unescaped
+# JSON format can never be fed a quote or backslash.
+EXTRA_MODELS_ARG=""
+if [ -n "${ARENA_SEAT_MODELS:-}" ]; then
+  EXTRA=$(printf '%s' "$ARENA_SEAT_MODELS" | tr ',' '\n' | awk '
+    NR >= 2 && NR <= 4 && ($0 ~ /^(or|oai)\//) && $0 ~ /^[A-Za-z0-9._:\/-]+$/ \
+      && !seen[$0]++ { printf "%s%s", (out ? "," : ""), $0; out = 1 }')
+  [ -n "$EXTRA" ] && EXTRA_MODELS_ARG="-Darena.extra.models=$EXTRA"
+fi
+
 echo "Forge GUI pilot match"
 echo "  run dir      : $GUI_DIR   (res/ lives here)"
 echo "  human deck   : ${1:-selvala-heart-of-the-wilds.dck}"
@@ -97,7 +109,7 @@ echo
 
 cd "$GUI_DIR"
 # shellcheck disable=SC2086  # MAND/OPENS are intentional multi-arg word lists
-exec "$JAVA" $MAND $OPENS $SEAT_DECKS_ARG $ADVISOR_ARGS \
+exec "$JAVA" $MAND $OPENS $SEAT_DECKS_ARG $ADVISOR_ARGS $EXTRA_MODELS_ARG \
   -Darena.decks.dir="$DECKS_DIR" \
   -Darena.mailbox.dir="$MAILBOX_DIR" \
   -Darena.mailbox.timeout.sec="$TIMEOUT" \

@@ -68,9 +68,12 @@ env $ALL SEAT_MODEL="$MODEL" SEAT_EFFORT="$EFFORT" ARENA_MAILBOX_TIMEOUT="$TIMEO
 sleep 3
 
 # 2.5) advisor brain (human mode only): reads the seat-0 shadow feed the GUI
-# engine writes; one-way, so it can never stall the game.
+# engine writes; one-way, so it can never stall the game. Backend API keys are
+# stripped (plan F-19): only run_table.sh's seat children may hold them —
+# env -u is a no-op when the vars are unset, so the Claude path is untouched.
 if [ "$ADVISOR" = "1" ]; then
-  nohup python3 "$ROOT/runner/advisor_runner.py" --deck "$HUMAN_SLUG" \
+  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
+    python3 "$ROOT/runner/advisor_runner.py" --deck "$HUMAN_SLUG" \
     --model "$MODEL" --effort "$EFFORT" >"$LOGS/advisor_runner.out" 2>&1 &
 fi
 
@@ -78,13 +81,15 @@ fi
 # non-pass option is the seat's own stack item) in milliseconds, before a
 # brain burns a call. Promoted from manual stopgap 2026-08-13 — it earned it.
 # arena-stop kills it; teardown archives its log.
-nohup python3 "$DIR/react-autopass.py" >>"$LOGS/react-autopass.out" 2>&1 &
+nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
+  python3 "$DIR/react-autopass.py" >>"$LOGS/react-autopass.out" 2>&1 &
 
 # 3) GUI (spectator for all-ai, human seat 0 otherwise)
 if [ "$MODE" = "all-ai" ]; then GUI_ARG="--all-ai"; else GUI_ARG="$HUMAN_DECK"; fi
 ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" \
   ARENA_AUTOPASS="${ARENA_AUTOPASS:-casts}" \
-  nohup "$DIR/run-pilot-match.sh" "$GUI_ARG" >"$LOGS/gui.out" 2>&1 &
+  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
+  "$DIR/run-pilot-match.sh" "$GUI_ARG" >"$LOGS/gui.out" 2>&1 &
 
 # 4) wait until the match is actually live
 i=0
