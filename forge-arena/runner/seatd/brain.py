@@ -24,6 +24,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from . import backends
+
 _FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
@@ -66,7 +68,18 @@ class SeatBrain:
         self.model = model
         self.effort = effort  # pinned — never inherit the user's saved default
         self.log = log
+        # session_id is CLAUDE session state only. Backend transports keep
+        # their own transcript on self.backend, and backend envelopes never
+        # carry a session_id, so a backend detour can neither poison nor
+        # discard a live Claude session (plan F-01 / Gemini r3-1).
         self.session_id: str | None = None
+        self.backend = backends.make(model, seat=self.seat, log=log)
+        self._parked_backend = None  # held across a detour for a warm return
+        # Backend failure latches, runner-lifetime by design (plan F-09):
+        # auth-class keyed by base URL (never cleared mid-session — the env
+        # is frozen at spawn, so a re-dial can't fix a bad key); model-class
+        # keyed by model id (cleared per game in reset()).
+        self.backend_latches: dict = {"auth": {}, "model": {}}
         self.calls = 0
         # Cumulative burn since instantiation (includes the dossier init call).
         self.totals = {"calls": 0, "input_tokens": 0, "output_tokens": 0,
@@ -110,9 +123,42 @@ class SeatBrain:
 
     # ---- transport -----------------------------------------------------------
 
+    def set_model(self, model: str) -> None:
+        """Apply a (possibly transport-changing) model re-dial. Per-transport
+        session state: the Claude session_id and any backend transcript are
+        BOTH preserved across a switch — a detour is a detour, not a divorce.
+        Cost totals and latches are never touched here (plan §4)."""
+        old_kind, _ = backends.parse_model(self.model)
+        new_kind, new_id = backends.parse_model(model)
+        self.model = model
+        if new_kind == old_kind:
+            if self.backend is not None and new_id != self.backend.model_id:
+                self.backend.model_id = new_id   # or/->or/: transcript kept,
+                self.backend._meta = None        # per-call id updated
+            return
+        if self.backend is not None:
+            self._parked_backend = self.backend
+        if new_kind == "claude":
+            self.backend = None
+            self.log(f"[seat {self.seat}] transport -> claude cli "
+                     f"(claude session {'resumes' if self.session_id else 'cold'})")
+            return
+        parked = self._parked_backend
+        if (parked is not None and parked.kind == new_kind
+                and parked.model_id == new_id):
+            self.backend, self._parked_backend = parked, None
+            self.log(f"[seat {self.seat}] transport -> {new_kind} "
+                     f"(transcript resumed, no re-init)")
+        else:
+            self.backend = backends.make(model, seat=self.seat, log=self.log)
+            self.log(f"[seat {self.seat}] transport -> {new_kind} "
+                     f"(cold start — init payload re-sends at next decision)")
+
     def _call(self, prompt: str, timeout_s: float, resume: bool) -> dict | None:
         """One headless call. Returns the parsed --output-format json envelope
         (NOT the answer), or None on failure/timeout."""
+        if self.backend is not None:
+            return self.backend.call(prompt, timeout_s, self, effort=self.effort)
         cmd = ["claude", "-p", "-", "--output-format", "json",
                "--model", self.model, "--effort", self.effort,
                "--disallowedTools", "*"]
@@ -159,7 +205,21 @@ class SeatBrain:
     # ---- lifecycle -------------------------------------------------------------
 
     def ensure_session(self, timeout_s: float = 300.0) -> bool:
-        """Load the dossier into a fresh session (once per game)."""
+        """Load the dossier into a fresh session (once per game, per transport:
+        Claude iff no session_id, backend iff its transcript is empty)."""
+        if self.backend is not None:
+            if self.backend.ready:
+                return True
+            t0 = time.time()
+            env = self.backend.init(self._init_message, timeout_s, brain=self)
+            if env is None:
+                return False
+            self.calls += 1
+            self._accumulate(env)
+            self.log(f"[seat {self.seat}] backend session up ({self.model}) in "
+                     f"{time.time() - t0:.1f}s — {self.deck} dossier loaded "
+                     f"as system context")
+            return True
         if self.session_id:
             return True
         t0 = time.time()
@@ -180,13 +240,24 @@ class SeatBrain:
         self.session_id = None
         self.calls = 0
         self.totals = {k: (0.0 if k == "cost_usd" else 0) for k in self.totals}
+        # Per-game backend state: model-class latches (incl. cost/call caps)
+        # clear; auth-class latches persist — a bad key does not heal between
+        # games (plan F-06/F-09). Transcripts drop so init re-sends.
+        self.backend_latches["model"].clear()
+        for b in (self.backend, self._parked_backend):
+            if b is not None:
+                b.reset_for_new_game()
 
     # ---- decisions ----------------------------------------------------------------
 
     def decide(self, prompt: str, timeout_s: float) -> tuple[dict | None, dict]:
         """Send one decision prompt; return (answer dict or None, meta)."""
         meta = {"latency_s": None, "usage": None, "cache_read": None, "raw": None}
-        if not self.ensure_session():
+        # Init is budget-bounded on BOTH transports (plan F-08): a lazy re-init
+        # (game boundary or mid-game transport swap) must fit the decision
+        # window it runs in; one that can't returns False -> safe default now,
+        # retry at the next boundary.
+        if not self.ensure_session(timeout_s=min(max(timeout_s - 5.0, 5.0), 240.0)):
             return None, meta
         t0 = time.time()
         env = self._call(prompt, timeout_s, resume=True)
@@ -201,7 +272,7 @@ class SeatBrain:
                           "cache_read_input_tokens", "cache_creation_input_tokens")}
         meta["cache_read"] = usage.get("cache_read_input_tokens")
         meta["raw"] = env.get("result")
-        if self.calls > 1 and not meta["cache_read"]:
+        if self.backend is None and self.calls > 1 and not meta["cache_read"]:
             self.log(f"[seat {self.seat}] WARN cache MISS on resumed session")
         # `claude -p --resume` may rotate session ids; always chase the latest.
         if env.get("session_id"):

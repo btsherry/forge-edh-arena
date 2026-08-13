@@ -16,10 +16,11 @@ Wiring rules (from docs/AGENT-SDK-SEATS.md):
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
-from . import rules
+from . import backends, rules
 from .brain import SeatBrain
 from .protocol import SeatMailbox
 
@@ -76,7 +77,35 @@ class SeatRunner:
         # effort are per-call flags on a transcript-based session).
         self._control_path = log_dir / "control" / f"seat-{seat}.json"
         self._control_mtime = 0.0
+        # Crash-restart spend persistence (plan F-02): run_table.sh restarts a
+        # crashed runner in 2s with a fresh brain — the backend cost/call rails
+        # must resume, not reset. Backend seats only: the Claude path's totals
+        # start at zero exactly as they always have.
+        if self.brain.backend is not None:
+            self._seed_spend()
         self._init_control()
+
+    def _seed_spend(self) -> None:
+        p = self._jsonl_path.parent / f"seat-{self.seat}.usage.json"
+        try:
+            prev = json.loads(p.read_text())
+        except (OSError, ValueError):
+            if p.exists():
+                self._say(f"[seat {self.seat}] usage snapshot unreadable — "
+                          f"resetting cost counters (rails restart at zero)")
+            return
+        for k in ("calls", "input_tokens", "output_tokens",
+                  "cache_read_input_tokens", "cache_creation_input_tokens",
+                  "cost_usd", "backend_attempts", "unmetered_attempts",
+                  "unmetered_est_tokens"):
+            v = prev.get(k)
+            if isinstance(v, (int, float)):
+                self.brain.totals[k] = v
+        if self.brain.totals.get("cost_usd") or self.brain.totals.get(
+                "backend_attempts"):
+            self._say(f"[seat {self.seat}] resumed spend rails from snapshot: "
+                      f"${self.brain.totals.get('cost_usd', 0):.2f}, "
+                      f"{self.brain.totals.get('backend_attempts', 0)} attempts")
 
     def _init_control(self) -> None:
         try:
@@ -98,17 +127,29 @@ class SeatRunner:
             return
         if mtime == self._control_mtime:
             return
-        self._control_mtime = mtime
         try:
             desired = json.loads(self._control_path.read_text())
         except (OSError, json.JSONDecodeError):
-            return  # partial write — picked up on the next poll
+            # Torn/bad write: mtime is deliberately NOT recorded, so the next
+            # poll retries instead of swallowing the change forever (plan F-34).
+            return
         model = desired.get("model")
         effort = desired.get("effort")
+        model_change = (isinstance(model, str) and model
+                        and model != self.brain.model)
+        # Debounce a dial-to-backend (plan F-38): a stepper traversing a
+        # prefixed entry between clicks must not bill a cold-start init. Only
+        # swaps TO a backend wait for a 2s-stable file; Claude re-dials keep
+        # today's instant path.
+        if (model_change and not startup
+                and backends.parse_model(model)[0] != "claude"
+                and time.time() - mtime < 2.0):
+            return  # mtime not recorded — re-evaluated next poll
+        self._control_mtime = mtime
         changes = []
-        if isinstance(model, str) and model and model != self.brain.model:
+        if model_change:
             changes.append(f"model {self.brain.model}->{model}")
-            self.brain.model = model
+            self.brain.set_model(model)
         if isinstance(effort, str) and effort and effort != self.brain.effort:
             changes.append(f"effort {self.brain.effort}->{effort}")
             self.brain.effort = effort
@@ -175,14 +216,22 @@ class SeatRunner:
         if meta:
             rec["latency_s"] = meta.get("latency_s")
             rec["usage"] = meta.get("usage")
-        rec["cum"] = dict(self.brain.totals)  # burn since instantiation
+        cum = dict(self.brain.totals)  # burn since instantiation
+        if self.brain.backend is not None:
+            cum["backend"] = self.brain.backend.kind      # additive (plan §8)
+            if self.brain.backend.cap_unenforceable:
+                cum["cap_enforceable"] = False
+        rec["cum"] = cum
         try:
             with self._jsonl_path.open("a") as f:
                 f.write(json.dumps(rec) + "\n")
             # Always-current snapshot: THE final readout is whatever this
-            # holds when the game closes (survives kill/crash).
-            (self._jsonl_path.parent / f"seat-{self.seat}.usage.json").write_text(
-                json.dumps(rec["cum"], indent=1))
+            # holds when the game closes (survives kill/crash). Atomic so a
+            # crash-restart's spend seed can never read a torn file (F-02).
+            usage_p = self._jsonl_path.parent / f"seat-{self.seat}.usage.json"
+            tmp_p = usage_p.with_name(usage_p.name + ".tmp")
+            tmp_p.write_text(json.dumps(cum, indent=1))
+            os.replace(tmp_p, usage_p)
             # Shared narrative line (append-only; single-line writes are atomic
             # enough on a local fs; no seat ever reads this file).
             with self._game_log.open("a") as f:
@@ -198,11 +247,15 @@ class SeatRunner:
 
     def _usage_readout(self, label: str) -> None:
         t = self.brain.totals
+        # Real backend dollars are never relabeled as subscription-covered
+        # (plan F-35): the suffix tells the truth per transport.
+        suffix = ("API-billed via backend" if self.brain.backend is not None
+                  else "API-equivalent; subscription-covered")
         self._say(f"[seat {self.seat}] USAGE {label}: {t['calls']} calls, "
                   f"in={t['input_tokens']} out={t['output_tokens']} "
                   f"cache_read={t['cache_read_input_tokens']} "
                   f"cache_write={t['cache_creation_input_tokens']} "
-                  f"(≈${t['cost_usd']:.2f} API-equivalent; subscription-covered)")
+                  f"(≈${t['cost_usd']:.2f} {suffix})")
 
     # ---- fastpaths --------------------------------------------------------
 

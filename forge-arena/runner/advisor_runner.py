@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from seatd import backends  # noqa: E402
 from seatd.brain import SeatBrain  # noqa: E402
 
 POLL_S = 0.5
@@ -174,7 +175,20 @@ class AdvisorRunner:
     def _init_control(self, model: str, effort: str) -> None:
         try:
             self._control.parent.mkdir(parents=True, exist_ok=True)
-            if not self._control.exists():
+            # The advisor is Claude-only in v1 (plan F-10): a stale backend
+            # model left in the control file by a previous session must not
+            # be honored — reset it so the AI panel shows what actually runs.
+            stale = False
+            if self._control.exists():
+                try:
+                    cur = json.loads(self._control.read_text())
+                    stale = backends.parse_model(cur.get("model"))[0] != "claude"
+                except ValueError:
+                    stale = True
+            if stale:
+                self._say("[advisor] control file held a backend model — "
+                          "advisor is Claude-only in v1; resetting to defaults")
+            if stale or not self._control.exists():
                 self._control.write_text(json.dumps({"model": model, "effort": effort}))
             self._control_mtime = self._control.stat().st_mtime
         except OSError:
@@ -185,17 +199,34 @@ class AdvisorRunner:
             mtime = self._control.stat().st_mtime
             if mtime == self._control_mtime:
                 return
+            try:
+                desired = json.loads(self._control.read_text())
+            except ValueError:
+                return  # torn write — mtime not recorded, retried next poll
             self._control_mtime = mtime
-            desired = json.loads(self._control.read_text())
             model = desired.get("model")
             effort = desired.get("effort")
             if model and model != self.brain.model:
-                self.brain.model = model
-                self._say(f"[advisor] model -> {model}")
+                if backends.parse_model(model)[0] != "claude":
+                    # Claude-only guard, mid-game leg (plan F-10): refuse the
+                    # dial, tell the human IN the advisor stream, and write the
+                    # control file back so the panel recovers instead of
+                    # displaying a model that is not running.
+                    self._say(f"[advisor] backend model {model} refused — "
+                              f"advisor is Claude-only in v1")
+                    self._stream_write(
+                        f"\n[advisor] {model} is a backend model — the advisor "
+                        f"is Claude-only in v1; staying on {self.brain.model}.\n")
+                    self._control.write_text(json.dumps(
+                        {"model": self.brain.model, "effort": self.brain.effort}))
+                    self._control_mtime = self._control.stat().st_mtime
+                else:
+                    self.brain.model = model
+                    self._say(f"[advisor] model -> {model}")
             if effort and effort != self.brain.effort:
                 self.brain.effort = effort
                 self._say(f"[advisor] effort -> {effort}")
-        except (OSError, ValueError):
+        except OSError:
             pass
 
     # ---- feed intake -----------------------------------------------------------
@@ -345,7 +376,15 @@ def main() -> None:
     ap.add_argument("--base", default=str(Path(__file__).resolve().parent.parent / "mailbox"))
     ap.add_argument("--timeout", type=float, default=60.0)
     args = ap.parse_args()
-    AdvisorRunner(args.deck, Path(args.base), args.model, args.effort,
+    model = args.model
+    if backends.parse_model(model)[0] != "claude":
+        # Launch-flag leg of the Claude-only guard (plan F-10): fall back to
+        # the default Claude model rather than exiting — the advisor never
+        # dies over a model string.
+        print(f"[advisor] backend model {model} is not supported for the "
+              f"advisor in v1 — falling back to opus", flush=True)
+        model = "opus"
+    AdvisorRunner(args.deck, Path(args.base), model, args.effort,
                   args.timeout).run()
 
 
