@@ -129,6 +129,11 @@ def _post(url, payload, cache_path=None, use_cache=True):
     return data
 
 
+def _normname(name):
+    """Punctuation/case-insensitive lookup key ("Spider-Punk" == "spider punk")."""
+    return re.sub(r"[^a-z0-9]+", "", name.lower())
+
+
 def fetch_scryfall(names, cache_dir, use_cache):
     """Return {name_lower: card_json} and a list of not-found names."""
     uniq = sorted({n for n in names})
@@ -149,8 +154,13 @@ def fetch_scryfall(names, cache_dir, use_cache):
             raise SystemExit(f"ERROR: Scryfall request failed: {e}")
         for c in data.get("data", []):
             found[c["name"].lower()] = c
+            # Punctuation-insensitive index too: Scryfall's identifier lookup
+            # accepts "Spider Punk" but returns canonical "Spider-Punk" — an
+            # exact-key round trip loses the card (same class as flavor names).
+            found.setdefault(_normname(c["name"]), c)
             for face in c.get("card_faces", []) or []:      # index front-face too
                 found.setdefault(face.get("name", "").lower(), c)
+                found.setdefault(_normname(face.get("name", "")), c)
         for nf in data.get("not_found", []):
             not_found.append(nf.get("name", "?"))
         time.sleep(0.1)                                     # Scryfall rate limit
@@ -171,7 +181,7 @@ def build_deck_cards(parsed, scry, slug):
     cards, unresolved = [], []
     for zone, lst in (("commander", parsed["commanders"]), ("main", parsed["main"])):
         for name, qty in lst:
-            c = scry.get(name.lower())
+            c = scry.get(name.lower()) or scry.get(_normname(name))
             if not c:
                 unresolved.append(name)
                 continue
