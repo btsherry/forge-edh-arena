@@ -1145,6 +1145,14 @@ public final class MailboxController extends PlayerControllerAi {
      * ACTIVATED abilities are listed too — including mana abilities, so lines
      * like Grinning Ignus's mana ability are visible.
      */
+    // The keyword classes a decision-maker must not have to remember: what
+    // removal bounces off, and how combat actually resolves.
+    private static final String[] SALIENT_KEYWORDS = {
+            "indestructible", "hexproof", "shroud", "ward", "protection",
+            "flying", "reach", "first strike", "double strike", "deathtouch",
+            "lifelink", "trample", "vigilance", "menace", "haste", "defender",
+    };
+
     private static Map<String, Object> cardState(Card c, boolean includeAbilities) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", c.getId());
@@ -1156,6 +1164,32 @@ public final class MailboxController extends PlayerControllerAi {
         }
         m.put("types", c.getType() != null ? c.getType().toString() : "");
         m.put("tapped", c.isTapped());
+        // Effective keywords (engine-computed, so board-wide grants like an
+        // Avacyn's indestructibility are included). Grounding, not trivia:
+        // a brain advised destroying The One Ring because nothing in-context
+        // said "Indestructible" — recall under pressure loses to stated fact.
+        List<String> kws = new ArrayList<>();
+        for (forge.game.keyword.KeywordInterface ki : c.getKeywords()) {
+            String kw = ki.getOriginal();
+            if (kw == null || kw.isEmpty()) {
+                continue;
+            }
+            String lower = kw.toLowerCase(java.util.Locale.ROOT);
+            for (String salient : SALIENT_KEYWORDS) {
+                if (lower.startsWith(salient)) {
+                    if (!kws.contains(kw)) {
+                        kws.add(kw);
+                    }
+                    break;
+                }
+            }
+            if (kws.size() >= 8) {
+                break;
+            }
+        }
+        if (!kws.isEmpty()) {
+            m.put("keywords", kws);
+        }
         Multiset<CounterType> counters = c.getCounters();
         if (counters != null && !counters.isEmpty()) {
             Map<String, Integer> cm = new LinkedHashMap<>();
