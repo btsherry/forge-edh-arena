@@ -59,7 +59,8 @@ class SeatBrain:
 
     def __init__(self, seat: int, deck: str, model: str = "sonnet",
                  effort: str = "low", repo_root: str | Path | None = None,
-                 log=print, brief: str = "seat-brief.md"):
+                 log=print, brief: str = "seat-brief.md",
+                 extra_parts: list[str] | None = None):
         self.seat = int(seat)
         self.deck = deck
         self.model = model
@@ -99,6 +100,11 @@ class SeatBrain:
                       combos_p.read_text()]
         if primer_p.exists():
             parts += ["\n## STRATEGY PRIMER\n", primer_p.read_text()]
+        # Caller-supplied context (e.g. the ADVISOR reads every deck at the
+        # table — an observer teaches better knowing the pod; seat brains
+        # never get this, their fairness contract keeps opponents' lists dark).
+        if extra_parts:
+            parts += extra_parts
         parts.append("\nReply exactly: READY")
         self._init_message = "\n".join(parts)
 

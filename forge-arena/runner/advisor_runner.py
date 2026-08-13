@@ -28,6 +28,48 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from seatd.brain import SeatBrain  # noqa: E402
 
 POLL_S = 0.5
+# Table roster convention shared with run_table.sh / GuiPilotMatch: four deck
+# slugs in seat order, overridable via ARENA_SEAT_DECKS.
+DEFAULT_TABLE = ("selvala-heart-of-the-wilds purphoros-god-of-the-forge "
+                 "giada-font-of-hope urza-lord-high-artificer")
+
+
+def opponent_deck_sections(own_deck: str, arena_root: Path) -> list[str]:
+    """Full oracle text + combo lists for every OTHER deck at the table.
+
+    The advisor is an observer-teacher: knowing the pod's decks is the
+    experienced-friend model (and grounds card facts like indestructible in
+    context instead of trusting recall). Seat brains never receive this —
+    their fairness contract keeps opponents' lists dark.
+    """
+    import os
+    roster = (os.environ.get("ARENA_SEAT_DECKS", "").split() or DEFAULT_TABLE.split())
+    parts: list[str] = []
+    for slug in roster:
+        if slug == own_deck:
+            continue
+        dossier = arena_root / "decks" / slug / "dossier"
+        try:
+            cards = json.loads((dossier / "deck-cards.json").read_text()).get("cards", [])
+        except (OSError, ValueError):
+            parts.append(f"\n## OPPONENT DECK {slug} — dossier missing (not ingested)\n")
+            continue
+        lines = []
+        for c in cards:
+            oracle = (c.get("oracle_text") or "").replace("\n", " / ")
+            lines.append(f"{c.get('name')} — {c.get('mana_cost', '')} — "
+                         f"{c.get('type_line', '')} — {oracle}")
+        section = (f"\n## OPPONENT DECK: {slug} (public deck metadata — use for "
+                   f"threat forecasting and teaching)\n" + "\n".join(lines))
+        try:
+            combos = json.loads((dossier / "combos.json").read_text()).get("combos", [])
+            if combos:
+                section += ("\n### their known combos (CommanderSpellbook)\n"
+                            + json.dumps(combos, separators=(",", ":")))
+        except (OSError, ValueError):
+            pass
+        parts.append(section)
+    return parts
 
 
 class AdvisorRunner:
@@ -41,8 +83,10 @@ class AdvisorRunner:
         self._usage = log_dir / "seat-0.usage.json"
         self._control = log_dir / "control" / "seat-0.json"
         self._control_mtime = 0.0
+        arena_root = Path(__file__).resolve().parent.parent
         self.brain = SeatBrain(0, deck, model=model, effort=effort,
-                               log=self._say, brief="advisor-brief.md")
+                               log=self._say, brief="advisor-brief.md",
+                               extra_parts=opponent_deck_sections(deck, arena_root))
         self.last_seq = 0
         self.pending_context: list[str] = []  # chosen/digest lines awaiting a call
         self._init_control(model, effort)
