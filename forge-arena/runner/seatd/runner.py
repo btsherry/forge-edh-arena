@@ -294,6 +294,21 @@ class SeatRunner:
         return oid
 
     @staticmethod
+    def _resourceless_react(req: dict) -> bool:
+        """Strictly-measured dead-window class (2026-08-13 study): REACT
+        with pool AND untapped sources BOTH present and BOTH zero. The brain
+        passed 324/325 of these historically — but the 325th was a real play
+        (free/convoke/sac-cost class), so these windows are never SKIPPED,
+        only routed to effort=low: full authority, faster verdicts. Absent
+        fields disqualify (fail-open to normal effort)."""
+        if req.get("decisionType") != "REACT":
+            return False
+        st = req.get("state") or {}
+        untapped = st.get("untappedManaSourceCount",
+                          st.get("untappedManaSources"))
+        return st.get("manaPool") == 0 and untapped == 0
+
+    @staticmethod
     def _stack_names(req: dict) -> list[str]:
         return [str(x) for x in (req.get("state", {}) or {}).get("stack", [])]
 
@@ -413,7 +428,13 @@ class SeatRunner:
                 combo_status=rules.combo_status_line(self.combos, req))
             # Cap at the deadline (raised to 240 so fable/high effort isn't
             # truncated on long-timeout games; normal 90s games stay budget-bound).
-            out, meta = self.brain.decide(prompt, timeout_s=min(budget, 240.0))
+            fast_eff = ("low" if self._resourceless_react(req)
+                        and self.brain.effort != "low" else None)
+            if fast_eff:
+                self._say(f"[seat {self.seat}] resourceless REACT -> "
+                          f"effort low for this window")
+            out, meta = self.brain.decide(prompt, timeout_s=min(budget, 240.0),
+                                          effort=fast_eff)
             clean = rules.validate(req, out) if out is not None else None
             if isinstance(out, dict) and isinstance(out.get("why"), str):
                 why = out["why"][:200]

@@ -154,13 +154,16 @@ class SeatBrain:
             self.log(f"[seat {self.seat}] transport -> {new_kind} "
                      f"(cold start — init payload re-sends at next decision)")
 
-    def _call(self, prompt: str, timeout_s: float, resume: bool) -> dict | None:
+    def _call(self, prompt: str, timeout_s: float, resume: bool,
+              effort: str | None = None) -> dict | None:
         """One headless call. Returns the parsed --output-format json envelope
-        (NOT the answer), or None on failure/timeout."""
+        (NOT the answer), or None on failure/timeout. `effort` overrides the
+        seat effort for THIS call only (resourceless-window routing)."""
+        eff = effort or self.effort
         if self.backend is not None:
-            return self.backend.call(prompt, timeout_s, self, effort=self.effort)
+            return self.backend.call(prompt, timeout_s, self, effort=eff)
         cmd = ["claude", "-p", "-", "--output-format", "json",
-               "--model", self.model, "--effort", self.effort,
+               "--model", self.model, "--effort", eff,
                "--disallowedTools", "*"]
         if resume and self.session_id:
             cmd += ["--resume", self.session_id]
@@ -250,7 +253,8 @@ class SeatBrain:
 
     # ---- decisions ----------------------------------------------------------------
 
-    def decide(self, prompt: str, timeout_s: float) -> tuple[dict | None, dict]:
+    def decide(self, prompt: str, timeout_s: float,
+               effort: str | None = None) -> tuple[dict | None, dict]:
         """Send one decision prompt; return (answer dict or None, meta)."""
         meta = {"latency_s": None, "usage": None, "cache_read": None, "raw": None}
         # Init is budget-bounded on BOTH transports (plan F-08): a lazy re-init
@@ -260,7 +264,7 @@ class SeatBrain:
         if not self.ensure_session(timeout_s=min(max(timeout_s - 5.0, 5.0), 240.0)):
             return None, meta
         t0 = time.time()
-        env = self._call(prompt, timeout_s, resume=True)
+        env = self._call(prompt, timeout_s, resume=True, effort=effort)
         meta["latency_s"] = round(time.time() - t0, 2)
         if env is None:
             return None, meta
