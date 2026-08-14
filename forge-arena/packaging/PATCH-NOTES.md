@@ -30,6 +30,28 @@ ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1" \
 - The README's "Other models on the backend" section covers the details,
   including the honest cost arithmetic to read before picking a $15/M model.
 
+### New: local ELO ladders
+
+Every finished game now rates three local ladders — pilot (models, `human`,
+and `human+advisor` are all pilots), deck, and pilot×deck — scored as six
+pairwise 1v1s by finish order with tie groups for simultaneous eliminations.
+Ratings update at teardown, display per seat in the AI panel, persist across
+package rebuilds, and accumulate a plottable per-game history. Which model
+actually pilots your deck best is now a number.
+
+### New: Advisor pause button
+
+A button at the bottom of the Advisor tab pauses/resumes the coach mid-game
+(paused = no advice, no model calls, no teardown); the AI panel's seat-0 row
+reflects the state.
+
+### Improved: table pace
+
+Seat runners answer ~0.2–0.35s faster per decision (measured against a
+4,400-decision pace study: inbox-poll quantization was the largest
+non-thinking overhead). Advice lands snappier in advised games for the same
+reason.
+
 ## v2 — 2026-08-13
 
 ### New: The AI Advisor

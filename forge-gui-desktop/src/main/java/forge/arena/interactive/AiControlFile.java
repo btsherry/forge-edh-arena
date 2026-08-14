@@ -147,6 +147,65 @@ public final class AiControlFile {
         }
     }
 
+    // ---- advisor on/off toggle (plan §13b) ---------------------------------
+
+    /** logs/control/advisor.json — written by the Advisor tab's button,
+     *  honored by advisor_runner at its next poll. Missing file = enabled
+     *  (the launch default; arena-stop clears control/, so every session
+     *  starts enabled). */
+    public static File advisorToggleFile() {
+        return new File(logsDir(), "control/advisor.json");
+    }
+
+    public static boolean advisorEnabled() {
+        final File f = advisorToggleFile();
+        if (!f.exists()) {
+            return true;
+        }
+        try {
+            final String s = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            return !s.contains("false");
+        } catch (final IOException e) {
+            return true;
+        }
+    }
+
+    public static void setAdvisorEnabled(final boolean enabled) {
+        final File f = advisorToggleFile();
+        try {
+            f.getParentFile().mkdirs();
+            final File tmp = new File(f.getParentFile(), f.getName() + ".tmp");
+            Files.write(tmp.toPath(),
+                    ("{\"enabled\": " + enabled + "}").getBytes(StandardCharsets.UTF_8));
+            Files.move(tmp.toPath(), f.toPath(), StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (final IOException ignored) {
+            // runner absent / dir unwritable — button click shows no effect
+        }
+    }
+
+    // ---- ELO digest line (plan §13.4; flat regex only — no JSON dependency) --
+
+    /** Per-seat ELO line from logs/elo/seat-N.json, or {@code null} if the
+     *  applier has not rated a game for this seat yet. */
+    public static String eloSummary(final int seat) {
+        final File f = new File(logsDir(), "elo/seat-" + seat + ".json");
+        final String body;
+        try {
+            body = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+        } catch (final IOException e) {
+            return null;
+        }
+        final double m = usageDouble(body, "m");
+        final double d = usageDouble(body, "d");
+        final double md = usageDouble(body, "md");
+        final long n = usageLong(body, "n");
+        final Matcher pm = Pattern.compile("\"pilot\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+        final String pilot = pm.find() ? pm.group(1) : "?";
+        return String.format("ELO  pilot %.0f · deck %.0f · pair %.0f · n=%d (%s)",
+                m, d, md, n, displayModel(pilot));
+    }
+
     /** Age in ms of the seat's usage snapshot (Long.MAX_VALUE if none) — liveness. */
     public static long usageAgeMillis(final int seat) {
         final File u = usageFile(seat);

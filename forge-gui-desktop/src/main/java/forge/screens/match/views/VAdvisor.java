@@ -65,11 +65,33 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         scroll.setBorder(null);
         body.add(status, "growx");
         body.add(scroll, "grow, push");
+        // In-game advisor on/off (plan §13b): writes logs/control/advisor.json,
+        // which advisor_runner honors at its next poll (paused = no scanning,
+        // no model calls; the engine's one-way feed keeps writing harmlessly).
+        // The AI tab's seat-0 row reflects the same state on its own refresh.
+        toggle.setFocusable(false);
+        toggle.setMargin(new java.awt.Insets(1, 8, 1, 8));
+        toggle.addActionListener(e -> {
+            final boolean next = !forge.arena.interactive.AiControlFile.advisorEnabled();
+            forge.arena.interactive.AiControlFile.setAdvisorEnabled(next);
+            syncToggle();
+        });
+        body.add(toggle, "gaptop 2");
         refresh = new Timer(1000, e -> poll());
         refresh.setRepeats(true);
     }
 
+    private final javax.swing.JButton toggle =
+            new javax.swing.JButton("Advisor: ON");
+
+    private void syncToggle() {
+        final boolean on = forge.arena.interactive.AiControlFile.advisorEnabled();
+        toggle.setText(on ? "Advisor: ON — click to pause"
+                          : "Advisor: PAUSED — click to resume");
+    }
+
     private void poll() {
+        syncToggle();
         final String fresh = tail.readNew();
         if (!fresh.isEmpty()) {
             text.append(fresh);

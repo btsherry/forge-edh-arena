@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from seatd import backends  # noqa: E402
 from seatd.brain import SeatBrain  # noqa: E402
 
-POLL_S = 0.5
+POLL_S = 0.25  # advice feels snappier; cost is a stat() at 4Hz
 # Table roster convention shared with run_table.sh / GuiPilotMatch: four deck
 # slugs in seat order, overridable via ARENA_SEAT_DECKS.
 DEFAULT_TABLE = ("selvala-heart-of-the-wilds purphoros-god-of-the-forge "
@@ -229,6 +229,13 @@ class AdvisorRunner:
         except OSError:
             pass
 
+    def _toggle_enabled(self) -> bool:
+        try:
+            body = json.loads((self._control.parent / "advisor.json").read_text())
+            return bool(body.get("enabled", True))
+        except (OSError, ValueError):
+            return True  # missing/torn file = enabled (launch default)
+
     # ---- feed intake -----------------------------------------------------------
 
     def _scan(self) -> list[tuple[int, str, Path]]:
@@ -308,8 +315,27 @@ class AdvisorRunner:
                   f"watching {self.inbox}")
         self.brain.ensure_session()  # pre-warm: dossier loads before turn 0
         self._stream_write("[advisor] session warm — watching your table.\n")
+        enabled = True
         while True:
             self._apply_control()
+            # In-game on/off toggle (plan 13b): the Advisor tab's button writes
+            # logs/control/advisor.json; disabled = no scanning, no model calls
+            # (the engine's one-way feed keeps writing, harmlessly). arena-stop
+            # clears control/, so every session starts enabled.
+            want = self._toggle_enabled()
+            if want != enabled:
+                enabled = want
+                if enabled:
+                    self._say("[advisor] resumed by toggle")
+                    self._stream_write("\n[advisor] back — resuming counsel from here.\n")
+                    self.last_seq = max(self.last_seq,
+                                        max((n for n, _, _ in self._scan()), default=0))
+                else:
+                    self._say("[advisor] paused by toggle")
+                    self._stream_write("\n[advisor] paused — click the button to bring me back.\n")
+            if not enabled:
+                time.sleep(POLL_S)
+                continue
             items = self._scan()
             if not items:
                 time.sleep(POLL_S)

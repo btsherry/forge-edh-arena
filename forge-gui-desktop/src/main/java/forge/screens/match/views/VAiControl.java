@@ -43,6 +43,7 @@ public class VAiControl implements IVDoc<CAiControl> {
     private final JLabel[] modelLbl = new JLabel[SEATS];
     private final JLabel[] effortLbl = new JLabel[SEATS];
     private final JLabel[] usageLbl = new JLabel[SEATS];
+    private final JLabel[] eloLbl = new JLabel[SEATS];
     // Stepper buttons are hidden (not just inert) whenever a click would be a
     // no-op — out-of-cycle backend models, clamped cycle ends. A dead button
     // overlaying a long or:/oai: label was unreadable noise (Ben, 2026-08-13).
@@ -87,7 +88,11 @@ public class VAiControl implements IVDoc<CAiControl> {
             body.add(eBtns, "wrap");
             // per-seat usage line, spanning the full row under the controls
             usageLbl[n] = dim("—");
-            body.add(usageLbl[n], "span 7, gapleft 20, gaptop 0, gapbottom 4, wrap");
+            body.add(usageLbl[n], "span 7, gapleft 20, gaptop 0, wrap");
+            // per-seat ELO line (plan §13.4): fed by runner/ratings.py's flat
+            // digests; blank until a first game has been rated.
+            eloLbl[n] = dim(" ");
+            body.add(eloLbl[n], "span 7, gapleft 20, gaptop 0, gapbottom 4, wrap");
         }
         totalLbl.setForeground(java.awt.Color.LIGHT_GRAY);
         body.add(totalLbl, "span 7, gaptop 6");
@@ -159,7 +164,16 @@ public class VAiControl implements IVDoc<CAiControl> {
                     : age < 300_000 ? new java.awt.Color(0xD8, 0xB4, 0x2A)
                     : java.awt.Color.DARK_GRAY);
             final String usage = AiControlFile.usageSummary(n);
-            usageLbl[n].setText(usage != null ? usage : "— no decisions yet");
+            String usageText = usage != null ? usage : "— no decisions yet";
+            // Seat 0 doubles as the advisor's row in advised games: reflect
+            // the in-game toggle so a paused advisor never looks live (§13b).
+            if (n == 0 && AiControlFile.advisorToggleFile().exists()
+                    && !AiControlFile.advisorEnabled()) {
+                usageText = "advisor paused · " + usageText;
+            }
+            usageLbl[n].setText(usageText);
+            final String elo = AiControlFile.eloSummary(n);
+            eloLbl[n].setText(elo != null ? elo : " ");
         }
         final String totals = AiControlFile.tableTotals();
         totalLbl.setText(totals != null ? totals : " ");

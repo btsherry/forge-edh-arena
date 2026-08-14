@@ -318,7 +318,10 @@ class SeatRunner:
 
     # ---- the loop ------------------------------------------------------------
 
-    def run(self, poll_s: float = 0.5) -> None:
+    # poll_s 0.5->0.15 (2026-08-13 pace study: median non-model overhead was
+    # 0.72s/decision across 4.4K decisions; inbox-poll quantization was its
+    # largest slice. stat() at ~7Hz is free; the engine's own resp poll is 75ms.)
+    def run(self, poll_s: float = 0.15) -> None:
         swept = self.mb.sweep_outbox()
         self._say(f"[seat {self.seat}] runner up — deck={self.deck} "
                   f"model={self.brain.model} timeout={self.timeout_s}s"

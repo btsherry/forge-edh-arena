@@ -173,6 +173,33 @@ mana picks (Gemstone Caverns, City of Brass…) auto-answer with your
 commander's color — one receipt in the Advisor tab, then silence.
 Multicolor commanders keep the dialog.
 
+## Local ELO ladders
+
+Every finished game feeds three local ratings ladders automatically — **by
+pilot** (each model, plus `human` and `human+advisor` as their own pilots),
+**by deck**, and **by pilot×deck pair**. A 4-player game scores as six
+pairwise 1v1s by finish order (simultaneous eliminations tie), starting at
+1000 with K=40 for a pilot's first ten games. Nothing to configure:
+
+- The engine records placements at game end; teardown
+  (`arena-stop.sh`) rates the game and updates
+  `forge-arena/runner/ratings.json` (current ladders) and
+  `ratings-history.jsonl` (per-game record, plottable).
+- The AI panel shows each seat's line — `ELO pilot 1042 · deck 987 ·
+  pair 1010 · n=12` — refreshed after each rated game.
+- Aborted/torn-down-mid-game sessions rate nothing; a game whose seat/deck
+  bookkeeping looks inconsistent is skipped loudly rather than mis-rated.
+- Ratings are per-installation state: package rebuilds preserve them, and
+  they never ship in the tarball.
+
+## The Advisor pause button
+
+Advised games get an on/off button at the bottom of the **Advisor tab**:
+pause mid-game (no advice, no model calls) and resume when you want the
+coach back — no teardown. The AI panel's seat-0 row shows `advisor paused`
+while it's off. A game launched with `--advisor` rates as `human+advisor`
+on the ladders regardless of mid-game pausing.
+
 ## Ingesting a new deck
 
 ```sh
