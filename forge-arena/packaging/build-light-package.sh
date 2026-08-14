@@ -43,8 +43,16 @@ CLASSES="$REPO/forge-arena/target/classes"
 [ -f "$CP_TXT" ]  || { echo "ERROR: $CP_TXT missing — run the arena build first." >&2; exit 1; }
 [ -f "$CLASSES/forge/arena/interactive/GuiPilotMatch.class" ] || {
   echo "ERROR: GuiPilotMatch.class missing under $CLASSES." >&2; exit 1; }
+KEEP=""
 if [ -e "$DEST" ]; then
   [ "$FORCE" = 1 ] || { echo "ERROR: $DEST exists — pass --force to replace it." >&2; exit 1; }
+  # Ratings are per-installation state (plan F-25): a rebuild must never
+  # destroy a tree's accumulated ELO ladders/history. Stash and restore.
+  if ls "$DEST"/forge-arena/runner/ratings.json "$DEST"/forge-arena/runner/ratings-history.jsonl >/dev/null 2>&1; then
+    KEEP=$(mktemp -d)
+    cp "$DEST"/forge-arena/runner/ratings.json "$DEST"/forge-arena/runner/ratings-history.jsonl "$KEEP/" 2>/dev/null
+    echo "[preserve] existing ELO ratings stashed across the rebuild"
+  fi
   rm -rf "$DEST"
 fi
 mkdir -p "$DEST"
@@ -108,8 +116,16 @@ cp "$REPO/forge-arena/docs/research/mtg-rules-summary.md" \
 
 echo "[7/9] runner — the seatd tree (no tests, no pycache, empty logs/)"
 rsync -a --exclude '__pycache__/' --exclude '/tests/' --exclude '/logs/' \
+  --exclude '/ratings.json' --exclude '/ratings-history.jsonl' --exclude '/results/' \
   "$REPO/forge-arena/runner/" "$DEST/forge-arena/runner/"
-mkdir -p "$DEST/forge-arena/runner/logs" "$DEST/forge-arena/mailbox"
+mkdir -p "$DEST/forge-arena/runner/logs" "$DEST/forge-arena/runner/results" \
+  "$DEST/forge-arena/mailbox"
+if [ -n "$KEEP" ]; then
+  cp "$KEEP"/ratings.json "$KEEP"/ratings-history.jsonl \
+     "$DEST/forge-arena/runner/" 2>/dev/null
+  rm -rf "$KEEP"
+  echo "[preserve] ELO ratings restored into the rebuilt tree"
+fi
 
 echo "[8/9] scripts — play/stop/launch/ingest/observe (batch, canary, prep,"
 echo "      smoke, discovery harnesses, react-autopass stay home)"

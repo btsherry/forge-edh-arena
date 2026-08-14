@@ -17,6 +17,12 @@ pkill -f "advisor_runner.py" 2>/dev/null
 pkill -f "react-autopass.py" 2>/dev/null
 sleep 1
 
+# ELO sweep BEFORE the archive: the applier attributes pilots from game.jsonl
+# (never archived) and needs unconsumed spool files in runner/results/. Rated
+# and skipped spools then ride into the archive; unrated ones stay for the
+# next sweep. Never blocks teardown.
+python3 "$ROOT/runner/ratings.py" >>"$LOGS/ratings.out" 2>&1 || true
+
 archived=0
 if ls "$LOGS"/seat-*.log "$LOGS"/gui.out >/dev/null 2>&1; then
   A="$LOGS/archive/$(date +%Y%m%d-%H%M%S)-stop"
@@ -25,7 +31,9 @@ if ls "$LOGS"/seat-*.log "$LOGS"/gui.out >/dev/null 2>&1; then
   # clobber a past game's record — every game's full log set survives intact.
   mv "$LOGS"/seat-*.log "$LOGS"/seat-*.jsonl "$LOGS"/seat-*.usage.json \
      "$LOGS"/advisor-0.log "$LOGS"/advisor-0.jsonl "$LOGS"/advisor_runner.out \
-     "$LOGS"/react-autopass.out "$LOGS"/gui.out "$LOGS"/run_table.out "$A/" 2>/dev/null
+     "$LOGS"/react-autopass.out "$LOGS"/gui.out "$LOGS"/run_table.out \
+     "$LOGS"/ratings.out "$ROOT"/runner/results/*.rated \
+     "$ROOT"/runner/results/*.skipped "$A/" 2>/dev/null
   archived=$(ls "$A" 2>/dev/null | wc -l | tr -d ' ')
 fi
 rm -rf "$ROOT"/mailbox/seat-* "$ROOT"/mailbox/observer-state.json "$LOGS"/control/* 2>/dev/null

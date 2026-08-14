@@ -42,6 +42,9 @@ public final class MailboxLobbyPlayer extends LobbyPlayerAi {
         // identity), so calling it for every mailbox seat's controller is safe:
         // only the first call for a given Game actually subscribes.
         ObserverSnapshot.ensureRegistered(p.getGame(), baseDir);
+        // Same idempotent pattern: the ELO result spool (placements + control
+        // typing at game end, consumed by runner/ratings.py). Passive.
+        GameResultSpool.ensureRegistered(p.getGame());
         return new MailboxController(p.getGame(), p, this,
                 MailboxProtocol.forSeat(baseDir, p.getId()));
     }

@@ -208,6 +208,23 @@ public final class GuiPilotMatch {
                     + " must list exactly 4 decks, in seat order, matching"
                     + " runner/run_table.sh's ARENA_SEAT_DECKS).");
         }
+        // Stash the resolved seat-ordered SLUG roster for the ELO result spool
+        // (plan F-23: the deck ladder keys on slugs, and display names don't
+        // match runner-side slugs — this property is the authoritative join).
+        final StringBuilder slugCsv = new StringBuilder();
+        for (int i = 0; i < ordered.size(); i++) {
+            if (i > 0) {
+                slugCsv.append(',');
+            }
+            String base = ordered.get(i);
+            final int slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
+            if (slash >= 0) {
+                base = base.substring(slash + 1);
+            }
+            slugCsv.append(base.endsWith(".dck")
+                    ? base.substring(0, base.length() - 4) : base);
+        }
+        System.setProperty("arena.seat.slugs", slugCsv.toString());
 
         List<RegisteredPlayer> players = new ArrayList<>();
         Map<RegisteredPlayer, IGuiGame> guis = new LinkedHashMap<>();
