@@ -170,8 +170,25 @@ public final class MailboxController extends PlayerControllerAi {
 
         int turn = game.getPhaseHandler().getTurn();
         List<SpellAbility> playable = new ArrayList<>();
-        for (SpellAbility sa : ComputerUtilAbility.getSpellAbilities(
-                ComputerUtilAbility.getAvailableCards(game, me), me)) {
+        // getSpellAbilities() deliberately STRIPS alternative-cost versions of a
+        // spell whenever the base spell is castable (stock AI re-derives them at
+        // cast time via getOriginalAndAltCostAbilities). The mailbox plays the
+        // chosen SA directly, so the brain only ever saw the paid version:
+        // Fierce Guardianship showed as {2}{U}, the seat chose it believing it
+        // free (it controlled its commander), and the payer tapped four sources
+        // (2026-08-17 game 5 — the counter it held all game fizzled). Expand
+        // alt costs into DISTINCT options, cheaper ones first, exactly as stock
+        // does when it casts.
+        List<SpellAbility> enumerated;
+        try {
+            enumerated = ComputerUtilAbility.getOriginalAndAltCostAbilities(
+                    ComputerUtilAbility.getSpellAbilities(
+                            ComputerUtilAbility.getAvailableCards(game, me), me), me);
+        } catch (RuntimeException e) {
+            enumerated = ComputerUtilAbility.getSpellAbilities(
+                    ComputerUtilAbility.getAvailableCards(game, me), me);
+        }
+        for (SpellAbility sa : enumerated) {
             Card host = sa != null ? sa.getHostCard() : null;
             if (sa == null) {
                 continue;
@@ -269,6 +286,22 @@ public final class MailboxController extends PlayerControllerAi {
             if (tax > 0) {
                 cost = (cost != null ? cost : "") + " + {" + tax + "} commander tax";
                 lab += " [effective cost: " + describeTotalCost(sa, tax) + "]";
+            }
+            // A spell offered at {0} whose printed cost is not {0} is an
+            // alternative cost the seat qualifies for right now (Fierce
+            // Guardianship-class 'if you control a commander', Force of Will
+            // pitch, etc.). Say so plainly — the paid version is listed too.
+            try {
+                if (sa.isSpell() && host != null && host.getManaCost() != null
+                        && host.getManaCost().getCMC() > 0
+                        && sa.getPayCosts() != null && sa.getPayCosts().isOnlyManaCost()
+                        && sa.getPayCosts().getTotalMana() != null
+                        && sa.getPayCosts().getTotalMana().getCMC() == 0) {
+                    lab += " [FREE — alternative cost you qualify for right now; printed cost "
+                            + host.getManaCost() + "]";
+                }
+            } catch (RuntimeException ignore) {
+                // label decoration must never break option building
             }
             // Ground the float decision: any visible mana ability that would
             // add 2+ RIGHT NOW says so (Cradle, Selvala, Tomb...), so the

@@ -590,6 +590,24 @@ public class MagicStack /* extends MyObservable */ implements Iterable<SpellAbil
         }
 
         if (thisHasFizzled) { // Fizzle
+            // Arena diagnostic (2026-08-17): a fizzle is a silent outcome that
+            // has already cost a game (a mailbox seat's counterspell resolved
+            // and its target survived). Log WHY so the next one is diagnosable
+            // from gui.out. One line, no behavior change.
+            try {
+                StringBuilder why = new StringBuilder();
+                for (forge.game.spellability.TargetChoices tc : sa.getAllTargetChoices()) {
+                    for (forge.game.GameObject o : tc) {
+                        why.append(o).append(o instanceof forge.game.card.Card
+                                ? " [zone=" + ((forge.game.card.Card) o).getZone() + "]" : "").append("; ");
+                    }
+                }
+                System.err.println("[arena] FIZZLE: " + sa.getHostCard() + " by "
+                        + sa.getActivatingPlayer() + " — targets: "
+                        + (why.length() == 0 ? "(none set)" : why) + " stack now: " + this);
+            } catch (RuntimeException ignore) {
+                // diagnostics must never affect resolution
+            }
             if (sa.isBestow()) {
                 // 702.102e: if its target is illegal, the effect making it an Aura spell ends.
                 // It continues resolving as a creature spell.

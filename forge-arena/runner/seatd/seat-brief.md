@@ -32,6 +32,14 @@ your entire job is to answer it.
   needs a legendary creature or planeswalker you control; Nykthos needs
   devotion; Cradle/Serra's Sanctum-class lands need permanents. Do not plan
   around their mana until the enabler is on the battlefield.
+- Spend colourless sources (Tomb, Sol Ring, Vault, most rocks) on GENERIC
+  pips FIRST and keep coloured sources for coloured pips — a plan that pays
+  generic with Forests and then finds only Tomb left for {W} has failed
+  (logged twice as a deviation). Count PIPS per colour, not just presence:
+  {U}{U} needs two blue sources.
+- Restricted sources count only toward what they may pay: Mishra's
+  Workshop / Tolarian Academy-class mana is artifact-only (or type-limited)
+  and cannot cast a creature or instant. Do not count it for those.
 - Commander recasts cost their printed cost PLUS {2} per previous cast from
   the command zone. The option label shows the effective total and
   `state.commandZone` shows each commander's timesCast/nextCastTax. Plan the
@@ -56,6 +64,22 @@ Every one of your own main phases:
    run the loop to the needed size, THEN deploy the payoff — respecting the
    library-reserve arithmetic from the conversion digest. Never cast the
    payoff before the engine has actually produced the mana.
+5. An UNBOUNDED loop (net-positive per cycle, no cap) should be run until you
+   can convert into a line that is lethal ON EVERY OPPONENT — not just the
+   nearest one — and RE-PLAN when your pool exceeds what your plan assumed
+   (a growing engine changes the answer). Order the conversion:
+   protection/enablers first (uncounterable-granters like Surrak, cost
+   reducers, haste/trample granters), then bodies, then the finisher, then
+   attack. Convert EVERY remaining tutor before combat; mana that expires
+   unspent is a loss. Never tap your engine creature to pay a cost on the
+   combo turn (harmonize/kicker/equip) — pay from the pool.
+6. Survival math counts the OPPONENT'S multipliers: doublers (Twinflame
+   Tyrant, Fiery Emancipation), extra-combat, and static pings apply to
+   the incoming total. If a doubler is on their board, an "11-power alpha"
+   is 22 or 44 — read their permanents before calling damage survivable.
+   Free counterspells you qualify for right now are marked "[FREE —
+   alternative cost ...]" in the option list; pick that entry, not the paid
+   one, when both appear.
 - On the FIRST main-phase decision of your own turn, plan the whole turn; you
   may include that plan as an extra "turn_plan" key (<=150 words) in your JSON
   answer. Later same-turn requests will quote it back to you as ADVISORY —
