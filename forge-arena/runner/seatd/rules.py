@@ -38,6 +38,18 @@ ANSWER_CONTRACT = {
                     'state.min..state.max; repeats only if state.allowRepeat.'),
     "CHOOSE_CARD": ('Answer: {"chosenId": <option id>} — 0 (choose none) only if '
                     'offered in options.'),
+    "CHOOSE_CARDS": ('Answer: {"chosen": [<option id>, ...]} — unique ids, count '
+                     'within state.min..state.max (a multi-card search: e.g. '
+                     'Cultivate\'s two basics, "up to two"). [] only if min is 0.'),
+    "PAY_UNLESS": ('Answer: {"chosenId": 1} to PAY state.unlessCost now (uses '
+                   'floating mana first, then untapped sources), or {"chosenId": 0} '
+                   'to decline and let the effect happen. If state.effectIsMine is '
+                   'true this is YOUR OWN spell (e.g. paying X to keep a tutored card '
+                   'on the battlefield — usually pay if you can); if false an '
+                   'opponent is taxing you (counter-unless, Rhystic Study, Propaganda) '
+                   '— pay only when what you protect is worth the mana.'),
+    "CONFIRM": ('Answer: {"chosenId": 1} = yes, {"chosenId": 0} = no. Read the '
+                'question in the prompt; state.confirmMode names the situation.'),
     "CHOOSE_NUMBER": ('Answer: {"chosen": <integer>} within state.min..state.max '
                       '— typically an X value; max is your affordable ceiling '
                       'RIGHT NOW (it counts your floating pool), so bigger is '
@@ -103,7 +115,8 @@ def validate(req: dict, out) -> dict | None:
     dtype = req.get("decisionType")
     ids = _option_ids(req)
 
-    if dtype in ("CAST_SPELL", "REACT", "CHOOSE_ENTITY", "CHOOSE_CARD"):
+    if dtype in ("CAST_SPELL", "REACT", "CHOOSE_ENTITY", "CHOOSE_CARD",
+                 "PAY_UNLESS", "CONFIRM"):
         cid = out.get("chosenId")
         if not _is_int(cid) or cid not in ids:
             return None  # unknown id is NOT a pass — it falls to stock
@@ -165,7 +178,7 @@ def validate(req: dict, out) -> dict | None:
             clean.append({"blocker": b, "attacker": a})
         return {"blocks": clean}
 
-    if dtype == "CHOOSE_ENTITIES":
+    if dtype in ("CHOOSE_ENTITIES", "CHOOSE_CARDS"):
         arr = out.get("chosen")
         if not isinstance(arr, list):
             return None
@@ -218,9 +231,11 @@ def safe_default(req: dict) -> dict:
     if dtype == "CHOOSE_MODE":
         lo, _ = _bounds(req, 1, 1)
         return {"chosen": list(range(lo))}       # first `min` indices
-    if dtype == "CHOOSE_ENTITIES":
+    if dtype in ("CHOOSE_ENTITIES", "CHOOSE_CARDS"):
         lo, _ = _bounds(req, 0, len(ids))
         return {"chosen": [i for i in ids if i != 0][:lo]}
+    if dtype in ("PAY_UNLESS", "CONFIRM"):
+        return {"chosenId": 0}                   # decline / no: legal, spends nothing
     if dtype in ("CHOOSE_ENTITY", "CHOOSE_CARD"):
         if 0 in ids:
             return {"chosenId": 0}               # optional: choose none

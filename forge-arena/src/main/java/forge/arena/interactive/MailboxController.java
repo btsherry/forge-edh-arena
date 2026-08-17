@@ -25,6 +25,7 @@ import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
+import forge.game.player.PlayerActionConfirmMode;
 import forge.game.card.CounterType;
 import forge.game.combat.Combat;
 import forge.game.combat.CombatUtil;
@@ -1035,6 +1036,183 @@ public final class MailboxController extends PlayerControllerAi {
             return base + " + {" + tax + "} = " + (baseCmc + tax) + " mana";
         } catch (RuntimeException e) {
             return "+{" + tax + "} tax";
+        }
+    }
+
+    // ---- unless-costs, multi-card searches, may-confirms (2026-08-17) --------
+    // Three surfaces that stock AI had been deciding FOR the brain, with
+    // heuristics wrong for the situation:
+    //  - payCostToPreventEffect: ChangeZoneAi.willPayUnlessCost refuses to pay
+    //    for any non-creature (Transmute Artifact's X -> Mana Vault binned) and
+    //    refuses opponents' taxes on our own spells (Mana Leak-class): the
+    //    brain never got to say "yes, pay".
+    //  - chooseCardsForZoneChange (plural): stock literally returns null, so a
+    //    mailbox seat's MULTI-card search (Cultivate/Kodama's Reach, "up to
+    //    two") fetched NOTHING.
+    //  - confirmAction: "cancel the search?" / "cast this while searching?" /
+    //    optional-effect confirms answered by stock heuristics.
+    // Every path is fail-open: forced choice, malformed answer, or exception
+    // -> super (stock), exactly as before.
+
+    /** "Pay {cost} or {effect happens}" — the brain decides, and pays only
+     *  if it can. Answer contract: {"chosenId": 1} = pay, 0 = decline. */
+    @Override
+    public boolean payCostToPreventEffect(forge.game.cost.Cost cost, SpellAbility sa,
+            boolean alreadyPaid, forge.util.collect.FCollectionView<Player> allPayers) {
+        try {
+            if (alreadyPaid || cost == null || sa == null) {
+                return super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
+            }
+            Player me = getPlayer();
+            // Can we even pay? If not, there is nothing to ask.
+            if (!ComputerUtilCost.canPayCost(cost, sa, me, true)) {
+                return false;
+            }
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Card host = sa.getHostCard();
+            String effect = sa.getStackDescription();
+            if (effect == null || effect.isEmpty()) {
+                effect = sa.getDescription();
+            }
+            boolean mine = sa.getActivatingPlayer() == me;
+            Map<String, Object> state = buildState(turn);
+            state.put("min", 0);
+            state.put("max", 1);
+            state.put("unlessCost", cost.toSimpleString());
+            state.put("effectSource", host != null ? host.getName() : null);
+            state.put("effectIsMine", mine);
+            String prompt = "PAY OR ELSE: pay " + cost.toSimpleString() + " now, or "
+                    + (host != null ? host.getName() : "the effect") + " does: "
+                    + (effect != null ? effect.trim() : "(unknown)")
+                    + (mine ? " (this is YOUR OWN spell/ability — e.g. paying X to keep a "
+                             + "tutored card, or an optional additional payment)"
+                            : " (an OPPONENT's effect taxing you — e.g. a counter-unless-you-pay, "
+                             + "Rhystic Study, Propaganda)")
+                    + ". Paying uses your floating mana first, then untapped sources.";
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "PAY_UNLESS", prompt)
+                    .state(state)
+                    .option(0, "Decline — do not pay; let the effect happen", null, "NONE")
+                    .option(1, "Pay " + cost.toSimpleString(), cost.toSimpleString(), "PAY");
+            JsonNode resp = bus.exchange(req);
+            if (resp == null || resp.get("chosenId") == null || !resp.get("chosenId").isInt()) {
+                return super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
+            }
+            if (resp.get("chosenId").asInt() != 1) {
+                return false;
+            }
+            forge.game.cost.CostPayment pay = new forge.game.cost.CostPayment(cost, sa);
+            return pay.payComputerCosts(new forge.ai.AiCostDecision(me, sa, true));
+        } catch (RuntimeException e) {
+            return super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
+        }
+    }
+
+    /** Multi-card search/fetch (Cultivate, "search for up to N"). Stock
+     *  returns null (= fetch nothing). Answer contract: {"chosen": [ids]}
+     *  with min..max entries; 0/empty = none when min == 0. */
+    @Override
+    public List<Card> chooseCardsForZoneChange(ZoneType destination, List<ZoneType> origin,
+            SpellAbility sa, CardCollection fetchList, int min, int max,
+            DelayedReveal delayedReveal, String selectPrompt, Player decider) {
+        try {
+            List<Card> opts = fetchList == null ? Collections.<Card>emptyList() : new ArrayList<>(fetchList);
+            if (opts.isEmpty() || max <= 0) {
+                return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max, delayedReveal, selectPrompt, decider);
+            }
+            int lo = Math.max(0, min);
+            int hi = Math.min(max, opts.size());
+            if (hi <= lo && lo >= opts.size()) {
+                return new ArrayList<>(opts); // forced: take them all
+            }
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", lo);
+            state.put("max", hi);
+            state.put("destination", destination != null ? destination.name() : null);
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "CHOOSE_CARDS",
+                    (selectPrompt != null && !selectPrompt.isEmpty() ? selectPrompt : "Choose cards")
+                            + (destination != null ? " -> " + destination.name() : "")
+                            + " (choose " + lo + "-" + hi + "; answer {\"chosen\": [ids]})")
+                    .state(state);
+            Map<Integer, Card> byId = new LinkedHashMap<>();
+            for (Card c : opts) {
+                int oid = c.getId();
+                if (oid <= 0 || byId.containsKey(oid)) {
+                    return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max, delayedReveal, selectPrompt, decider);
+                }
+                req.option(oid, cardChoiceLabel(c),
+                        c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
+                byId.put(oid, c);
+            }
+            JsonNode resp = bus.exchange(req);
+            if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+                return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max, delayedReveal, selectPrompt, decider);
+            }
+            List<Card> picked = new ArrayList<>();
+            Set<Integer> seen = new HashSet<>();
+            for (JsonNode n : resp.get("chosen")) {
+                if (n == null || !n.isInt()) {
+                    return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max, delayedReveal, selectPrompt, decider);
+                }
+                Card c = byId.get(n.asInt());
+                if (c == null || !seen.add(n.asInt())) {
+                    return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max, delayedReveal, selectPrompt, decider);
+                }
+                picked.add(c);
+            }
+            if (picked.size() < lo || picked.size() > hi) {
+                return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max, delayedReveal, selectPrompt, decider);
+            }
+            return picked;
+        } catch (RuntimeException e) {
+            return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max, delayedReveal, selectPrompt, decider);
+        }
+    }
+
+    /** Yes/no confirms the brain should own: cancelling a search it just
+     *  declined, casting-while-searching, optional effects. Other modes
+     *  (Random, BidLife, Tribute, damage assignment...) stay with stock. */
+    @Override
+    public boolean confirmAction(SpellAbility sa, PlayerActionConfirmMode mode, String message,
+            List<String> options, Card cardToShow, Map<String, Object> params) {
+        try {
+            if (mode != PlayerActionConfirmMode.ChangeZoneGeneral
+                    && mode != PlayerActionConfirmMode.OptionalChoose
+                    && mode != PlayerActionConfirmMode.ChangeZoneToAltDestination
+                    && mode != PlayerActionConfirmMode.ChangeZoneFromAltSource
+                    && mode != null) {
+                return super.confirmAction(sa, mode, message, options, cardToShow, params);
+            }
+            if (mode == null && (message == null || !message.toLowerCase().contains("play"))) {
+                // untyped confirms other than "do you want to play X" stay stock
+                return super.confirmAction(sa, mode, message, options, cardToShow, params);
+            }
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Card host = sa != null ? sa.getHostCard() : cardToShow;
+            Map<String, Object> state = buildState(turn);
+            state.put("min", 1);
+            state.put("max", 1);
+            state.put("confirmMode", mode != null ? mode.name() : "untyped");
+            String prompt = "CONFIRM (" + (mode != null ? mode.name() : "question") + "): "
+                    + (message != null ? message : "?")
+                    + (host != null ? "  [source: " + host.getName() + "]" : "");
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "CONFIRM", prompt)
+                    .state(state)
+                    .option(0, "No", null, "NO")
+                    .option(1, "Yes", null, "YES");
+            JsonNode resp = bus.exchange(req);
+            if (resp == null || resp.get("chosenId") == null || !resp.get("chosenId").isInt()) {
+                return super.confirmAction(sa, mode, message, options, cardToShow, params);
+            }
+            return resp.get("chosenId").asInt() == 1;
+        } catch (RuntimeException e) {
+            return super.confirmAction(sa, mode, message, options, cardToShow, params);
         }
     }
 
