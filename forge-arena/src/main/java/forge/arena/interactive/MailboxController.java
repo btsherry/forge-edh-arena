@@ -258,6 +258,17 @@ public final class MailboxController extends PlayerControllerAi {
             String name = host != null ? host.getName() : sa.getDescription();
             String cost = sa.getPayCosts() != null ? sa.getPayCosts().toSimpleString() : null;
             String lab = label(sa, host);
+            // Commander tax is applied by CostAdjustment at PAYMENT time, so
+            // the SA's stored cost never shows it: Selvala's third cast read
+            // {1}{G}{G} when the true bill was 7. The brain sequenced around 3,
+            // the mana payer refused, and Forge's failed-payment path (its own
+            // FIXME) orphaned the commander with no zone (2026-08-17). Show the
+            // effective cost and say why so the brain never picks it short.
+            int tax = commanderTax(sa, host);
+            if (tax > 0) {
+                cost = (cost != null ? cost : "") + " + {" + tax + "} commander tax";
+                lab += " [effective cost: " + describeTotalCost(sa, tax) + "]";
+            }
             // Ground the float decision: any visible mana ability that would
             // add 2+ RIGHT NOW says so (Cradle, Selvala, Tomb...), so the
             // brain prices the float without doing SVar math itself.
@@ -307,6 +318,28 @@ public final class MailboxController extends PlayerControllerAi {
     public boolean playChosenSpellAbility(SpellAbility sa) {
         if (sa == null || sa.isLandAbility()) {
             return super.playChosenSpellAbility(sa); // null / land: unchanged
+        }
+        // Affordability guard (2026-08-17): if the seat cannot actually pay
+        // for this spell right now (commander tax, colour, whatever), refuse
+        // it HERE and keep priority — never hand it to
+        // handlePlayingSpellAbility, whose failed-payment path moves the card
+        // stack->stack and invalidates it (upstream FIXME: "stuck on stack
+        // zone ... nowhere to be found"). Mana abilities are exempt (they ARE
+        // the payment). Fail-open: if the check itself throws, play as before.
+        if (sa.isSpell() && !sa.isManaAbility()) {
+            boolean payable = true;
+            try {
+                sa.setActivatingPlayer(getPlayer());
+                payable = ComputerUtilCost.canPayCost(sa, getPlayer(), false);
+            } catch (RuntimeException ignore) {
+                payable = true;
+            }
+            if (!payable) {
+                Card h = sa.getHostCard();
+                System.err.println("[mailbox seat " + seatIndex + "] REFUSED unaffordable cast: "
+                        + (h != null ? h.getName() : sa) + " — cost not payable now (kept in zone)");
+                return true; // keep priority; brain gets a fresh window with the same options
+            }
         }
         // (1) Announce mana X on the cast path (601.2b) — the stock AI path never
         // does, so a brain's X spell resolved at default X=0. Cancel -> keep
@@ -977,6 +1010,34 @@ public final class MailboxController extends PlayerControllerAi {
                 : super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList, delayedReveal, selectPrompt, isOptional, decider);
     }
 
+    /** Commander tax for casting {@code host} from the command zone right
+     *  now (Forge's own formula: 2 x prior casts), else 0. */
+    private int commanderTax(SpellAbility sa, Card host) {
+        try {
+            if (host == null || !sa.isSpell() || !host.isCommander()) {
+                return 0;
+            }
+            if (host.getZone() == null || !host.getZone().is(ZoneType.Command)) {
+                return 0;
+            }
+            return getPlayer().getCommanderCast(host) * 2;
+        } catch (RuntimeException e) {
+            return 0;
+        }
+    }
+
+    /** Human-readable total for the label, e.g. "{1}{G}{G} + {4} = 7 mana". */
+    private static String describeTotalCost(SpellAbility sa, int tax) {
+        try {
+            String base = sa.getPayCosts() != null ? sa.getPayCosts().toSimpleString() : "";
+            int baseCmc = sa.getPayCosts() != null && sa.getPayCosts().getTotalMana() != null
+                    ? sa.getPayCosts().getTotalMana().getCMC() : 0;
+            return base + " + {" + tax + "} = " + (baseCmc + tax) + " mana";
+        } catch (RuntimeException e) {
+            return "+{" + tax + "} tax";
+        }
+    }
+
     // ---- state projection (hidden-info-safe) -------------------------------
 
     private Map<String, Object> buildState(int turn) {
@@ -1006,6 +1067,22 @@ public final class MailboxController extends PlayerControllerAi {
         if (!ownCmdDmg.isEmpty()) {
             state.put("commanderDamageTaken", ownCmdDmg);
         }
+        // The seat's OWN command zone (opponents' were already serialized;
+        // the seat's never was — after a failed recast Selvala's brain wrote
+        // "not on the battlefield or in my command zone", blind). Cast counts
+        // make the tax derivable: next cast costs base + 2*casts.
+        List<Map<String, Object>> ownCmd = new ArrayList<>();
+        for (Card c : me.getCardsIn(ZoneType.Command)) {
+            if (!c.isCommander()) {
+                continue;
+            }
+            Map<String, Object> cm = new LinkedHashMap<>();
+            cm.put("name", c.getName());
+            cm.put("timesCast", me.getCommanderCast(c));
+            cm.put("nextCastTax", me.getCommanderCast(c) * 2);
+            ownCmd.add(cm);
+        }
+        state.put("commandZone", ownCmd);
         state.put("manaPool", view.manaPool());
         // Renamed from "untappedManaSources" 2026-08-10: a brain read the
         // SOURCE COUNT as floating mana ("seven floating mana") and wasted its

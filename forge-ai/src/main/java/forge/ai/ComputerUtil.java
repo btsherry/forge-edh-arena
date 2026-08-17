@@ -82,6 +82,8 @@ public class ComputerUtil {
         final Card host = sa.getHostCard();
         final Zone hz = host.isCopiedSpell() ? null : host.getZone();
         source.setSplitStateToPlayAbility(sa);
+        final Zone originZone = game.getZoneOf(source);
+        final int originPos = originZone != null ? originZone.getCards().indexOf(source) : 0;
 
         if (sa.isSpell() && !source.isCopiedSpell()) {
             sa = AbilityUtils.addSpliceEffects(sa);
@@ -129,15 +131,16 @@ public class ComputerUtil {
             }
             return true;
         }
-        // FIXME: Should not arrive here, though the card seems to be stuck on stack zone and invalidated and nowhere to be found, try to put back to original zone and maybe try to cast again if possible at later time?
-        System.out.println("[" + sa.getActivatingPlayer() + "] AI failed to play " + sa.getHostCard() + " [" + sa.getHostCard().getZone() + "]");
-        sa.setSkip(true);
-        if (host != null && hz != null && hz.is(ZoneType.Stack)) {
-            Card c = game.getAction().moveTo(hz.getZoneType(), host, null, null);
-            for (SpellAbility csa : c.getSpellAbilities()) {
-                csa.setSkip(true);
-            }
-        }
+        // Payment failed after the card reached the stack. Roll the cast back
+        // to its ORIGIN zone (hand / command / graveyard...) exactly as the
+        // no-mana-cost variant below already does — the historical path moved
+        // the card stack->stack and invalidated it ("stuck on stack zone ...
+        // nowhere to be found"), which orphaned commanders cast short of tax
+        // (arena, 2026-08-17).
+        System.out.println("[" + sa.getActivatingPlayer() + "] AI failed to play " + sa.getHostCard()
+                + " [" + sa.getHostCard().getZone() + "] — rolling back to " + originZone);
+        game.getStack().unfreezeStack();
+        GameActionUtil.rollbackAbility(sa, originZone, originPos, pay, source);
         return false;
     }
 

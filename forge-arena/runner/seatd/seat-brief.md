@@ -24,6 +24,19 @@ your entire job is to answer it.
   unaffordable lines. `state.manaPool` is your only floating mana;
   `state.untappedManaSourceCount` counts untapped SOURCES, not mana. You have
   floated NOTHING unless manaPool shows it.
+- Pay attention to mana COLOUR, not just count. Colourless sources (Ancient
+  Tomb, Sol Ring, Mana Vault, most rocks) cannot pay coloured pips: a hand
+  of {W} spells off Tomb + Sol Ring is uncastable. Count coloured sources
+  for each coloured pip before you plan a cast.
+- Conditional sources produce nothing until their condition holds: Mox Amber
+  needs a legendary creature or planeswalker you control; Nykthos needs
+  devotion; Cradle/Serra's Sanctum-class lands need permanents. Do not plan
+  around their mana until the enabler is on the battlefield.
+- Commander recasts cost their printed cost PLUS {2} per previous cast from
+  the command zone. The option label shows the effective total and
+  `state.commandZone` shows each commander's timesCast/nextCastTax. Plan the
+  recast on the real number — an unpayable cast is refused and the window
+  comes back to you.
 - Big-mana turns are built, not assumed: activate your mana-ability options
   (commander, Cradle-class lands, rocks) BEFORE casting the payoff, and use
   untap effects BETWEEN activations/casts to double-dip. The pool survives
