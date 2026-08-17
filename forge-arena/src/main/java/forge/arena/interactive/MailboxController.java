@@ -331,10 +331,25 @@ public final class MailboxController extends PlayerControllerAi {
         // only handled TargetingPlayer, which is why modal targets were lost.)
         if (sa.getApi() == ApiType.Charm) {
             ComputerUtil.handlePlayingSpellAbility(getPlayer(), sa, () -> {
-                try {
-                    chooseTargetsFor(sa);
-                } catch (RuntimeException ignore) {
-                    // targeting must never crash the seat
+                // Target the CHAINED MODES, never the Charm shell. Calling
+                // chooseTargetsFor(sa) on the shell fell through to stock
+                // (no TargetRestrictions on a Charm) -> brains.doTrigger ->
+                // CharmAi, which does sa.setSubAbility(null) and re-picks the
+                // mode by its own logic — silently discarding the mode the
+                // seat chose. Result: a non-targeted mode (Archdruid's Charm
+                // tutor, Green Sun's Zenith-class) resolved as an EMPTY Charm:
+                // "found nothing", card to graveyard, brain never asked which
+                // card to fetch (2026-08-17, Selvala's lost Craterhoof turn).
+                for (SpellAbility mode = sa.getSubAbility(); mode != null;
+                        mode = mode.getSubAbility()) {
+                    if (!mode.usesTargeting()) {
+                        continue;
+                    }
+                    try {
+                        chooseTargetsFor(mode);
+                    } catch (RuntimeException ignore) {
+                        // targeting must never crash the seat
+                    }
                 }
             });
             return true;
