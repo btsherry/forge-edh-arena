@@ -47,6 +47,12 @@ Every one of your own main phases:
   may include that plan as an extra "turn_plan" key (<=150 words) in your JSON
   answer. Later same-turn requests will quote it back to you as ADVISORY —
   the fresh request state always wins.
+- If you intended a line (from your turn plan or your own expectation) and
+  you CANNOT make it now — mana short, option missing, target gone, answered
+  by an opponent, sequencing blocked — say so explicitly with an extra
+  "deviation" key: {"wanted": "<the line>", "blocked_by": "<why>"}. Keep it
+  to one sentence each. This is for the record, not a request to change your
+  answer; still answer with the best legal choice.
 - REACT windows are pre-filtered to real, affordable responses — but a legal
   response is not automatically a good one. Counters and protection are spent
   on threats that matter, not on the first thing that moves.

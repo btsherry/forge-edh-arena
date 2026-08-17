@@ -63,6 +63,11 @@ class SeatRunner:
             self.combos = []
         self.react_seen: set[tuple] = set()
         self._last_turn: int | None = None
+        # Stated intent for the current own turn (brain's `turn_plan`), kept in
+        # NORMAL mode purely as an ADVISORY quote-back + deviation reference —
+        # never executed (that is the separate, off-by-default speculative
+        # plan). Cleared every turn.
+        self.turn_intent: str | None = None
         log_dir = Path(log_dir) if log_dir else Path(__file__).parents[1] / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         self._log_path = log_dir / f"seat-{seat}.log"
@@ -216,6 +221,11 @@ class SeatRunner:
         if meta:
             rec["latency_s"] = meta.get("latency_s")
             rec["usage"] = meta.get("usage")
+        dev = getattr(self, "_deviation", None)
+        if dev:
+            rec["deviation"] = dev
+        if self.turn_intent and source == "model":
+            rec["turn_intent"] = self.turn_intent
         cum = dict(self.brain.totals)  # burn since instantiation
         if self.brain.backend is not None:
             cum["backend"] = self.brain.backend.kind      # additive (plan §8)
@@ -241,6 +251,7 @@ class SeatRunner:
                     "type": rec["type"], "seq": rec["seq"], "source": source,
                     "model": self.brain.model, "effort": self.brain.effort,
                     "answer": answer, "why": why,
+                    "deviation": rec.get("deviation"),
                     "latency_s": rec.get("latency_s"), "board": stamp}) + "\n")
         except OSError:
             pass
@@ -363,6 +374,7 @@ class SeatRunner:
             self._last_turn = req.get("turn")
             self.react_seen.clear()
             self.hold = None  # hold posture is single-turn
+            self.turn_intent = None
 
         seq, dtype = req.get("seq"), req.get("decisionType")
 
@@ -422,6 +434,8 @@ class SeatRunner:
                 rem = [s.get("card") for s in self.plan["steps"][self.plan["idx"]:]]
                 if rem:
                     plan_text = "remaining planned casts: " + ", ".join(rem)
+            elif self.turn_intent:
+                plan_text = self.turn_intent
             prompt = rules.build_user_prompt(
                 req, plan=plan_text, observer=self.mb.read_observer(),
                 speculative=self.speculative, react_hold=self.react_hold,
@@ -438,6 +452,25 @@ class SeatRunner:
             clean = rules.validate(req, out) if out is not None else None
             if isinstance(out, dict) and isinstance(out.get("why"), str):
                 why = out["why"][:200]
+            # Capture stated intent (normal mode) and surface deviations
+            # LOUDLY: a plan the brain wanted but could not execute is the
+            # single most useful line in a play-quality review.
+            if isinstance(out, dict):
+                tp = out.get("turn_plan")
+                if (isinstance(tp, str) and tp.strip()
+                        and req.get("phase") in ("MAIN1", "MAIN2")):
+                    self.turn_intent = tp.strip()[:600]
+                dev = out.get("deviation")
+                if isinstance(dev, dict) and (dev.get("wanted") or dev.get("blocked_by")):
+                    self._deviation = {"wanted": str(dev.get("wanted", ""))[:200],
+                                       "blocked_by": str(dev.get("blocked_by", ""))[:200]}
+                    self._say(f"[seat {self.seat}] DEVIATION t{req.get('turn')} "
+                              f"{req.get('phase','')}: wanted \"{self._deviation['wanted']}\" "
+                              f"— blocked by: {self._deviation['blocked_by']}")
+                else:
+                    self._deviation = None
+            else:
+                self._deviation = None
             if clean is not None:
                 answer, source = clean, "model"
                 # Install an executable plan from the model's first own-turn main
