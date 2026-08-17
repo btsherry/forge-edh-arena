@@ -279,13 +279,39 @@ class SeatRunner:
         # own mana pool. Correctness over speed — a shifted life total re-opens
         # the window rather than fast-passing it.
         st = req.get("state", {}) or {}
-        stack = tuple(sorted(map(str, st.get("stack", []))))
+        # Option A (2026-08-17): in a cascade of the seat's OWN triggers
+        # (myriad tokens, Purphoros pings, Selvala's untap loop) each window
+        # differs from the last only by one fewer identical trigger — the memo
+        # missed all of them and the brain re-said "let my triggers resolve"
+        # 10+ times per attack. When EVERY stack item is this seat's own
+        # trigger, the signature keeps the SET of names (not the multiset), so
+        # a shrinking cascade of the same triggers memoizes after the first
+        # pass. Any opponent object or non-trigger on the stack restores the
+        # exact multiset (an opponent's spell in the middle is a new decision).
+        names = list(map(str, st.get("stack", [])))
+        if self._all_own_triggers(req):
+            stack = ("OWN-TRIGGERS", tuple(sorted(set(names))))
+        else:
+            stack = tuple(sorted(names))
         opts = tuple(sorted(str(o.get("label", "")).split("  ")[0]
                             for o in req.get("options", []) if o.get("id") != 0))
         lives = (st.get("life"),) + tuple(o.get("life")
                                           for o in st.get("opponents", []) or [])
         pool = st.get("manaPool")
         return (req.get("turn"), stack, opts, lives, pool)
+
+    def _all_own_triggers(self, req: dict) -> bool:
+        """True iff the stack is non-empty and EVERY item is a triggered
+        ability controlled by this seat (needs the additive stackOwners /
+        stackKinds fields; absent -> False, fail-open to full treatment)."""
+        st = req.get("state") or {}
+        owners = st.get("stackOwners")
+        kinds = st.get("stackKinds")
+        if not isinstance(owners, list) or not isinstance(kinds, list) or not owners:
+            return False
+        if len(owners) != len(kinds):
+            return False
+        return all(o == self.seat for o in owners) and all(k == "trigger" for k in kinds)
 
     # ---- executable plan (four-part guard) --------------------------------
 
@@ -442,11 +468,20 @@ class SeatRunner:
                 combo_status=rules.combo_status_line(self.combos, req))
             # Cap at the deadline (raised to 240 so fable/high effort isn't
             # truncated on long-timeout games; normal 90s games stay budget-bound).
-            fast_eff = ("low" if self._resourceless_react(req)
-                        and self.brain.effort != "low" else None)
-            if fast_eff:
-                self._say(f"[seat {self.seat}] resourceless REACT -> "
-                          f"effort low for this window")
+            # Option B (2026-08-17): a REACT where every stack item is the
+            # seat's OWN trigger (measured 7+/game at 8-16s each, never once a
+            # real play) thinks at effort low — full authority retained, never
+            # skipped, so a trick in response to your own trigger stays live.
+            fast_eff = None
+            if self.brain.effort != "low":
+                if self._resourceless_react(req):
+                    fast_eff = "low"
+                    self._say(f"[seat {self.seat}] resourceless REACT -> "
+                              f"effort low for this window")
+                elif dtype == "REACT" and self._all_own_triggers(req):
+                    fast_eff = "low"
+                    self._say(f"[seat {self.seat}] own-trigger REACT -> "
+                              f"effort low for this window")
             out, meta = self.brain.decide(prompt, timeout_s=min(budget, 240.0),
                                           effort=fast_eff)
             clean = rules.validate(req, out) if out is not None else None

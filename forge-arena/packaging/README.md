@@ -282,8 +282,8 @@ Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 
 | File | Contents |
 |---|---|
-| `seat-N.log` | Human-readable decision stream for seat N |
-| `seat-N.jsonl` | The same, structured |
+| `seat-N.log` | Human-readable decision stream for seat N — including `DEVIATION` lines whenever the brain's plan met reality ("wanted X — blocked by Y"); `grep DEVIATION` is the fastest play-quality review |
+| `seat-N.jsonl` | The same, structured (`deviation` and `turn_intent` fields on each record) |
 | `seat-N.usage.json` | Rolling token/cost snapshot for the seat |
 | `game.jsonl` | **The dataset.** One JSON object per decision, all seats, accumulating across games |
 | `advisor-0.log` / `advisor-0.jsonl` | The Advisor tab's stream, and its structured twin — advice, color commentary, autopass notes, and your actual choices' seq pairing |

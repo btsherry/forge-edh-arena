@@ -1,6 +1,6 @@
 # forge-light-llm — Patch Notes
 
-## v3 — unreleased
+## v3 — 2026-08-17
 
 ### New: bring your own models
 
@@ -19,12 +19,12 @@ ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1" \
   `OPENROUTER_API_KEY`, API-billed) or `oai/<model>` (your
   `ARENA_OAI_BASE_URL`; keyless local endpoints work). Backend models join
   the AI panel's steppers and re-dial mid-game like everything else — you
-  can even switch a seat Claude ↔ backend mid-game and back; its Claude
-  session survives the detour.
-- **Cost rails on by default** — $5/seat/game spend cap (`ARENA_MAX_SEAT_
-  COST_USD`) plus a 250-attempt call cap that works even where providers
-  report no cost; caps, latches, and failures all degrade a seat to safe
-  defaults without ever stalling the game.
+  can switch a seat Claude ↔ backend mid-game and back; its Claude session
+  survives the detour.
+- **Cost rails on by default** — $5/seat/game spend cap
+  (`ARENA_MAX_SEAT_COST_USD`) plus a 250-attempt call cap that works even
+  where providers report no cost; caps, latches, and failures all degrade a
+  seat to safe defaults without ever stalling the game.
 - **Config errors fail at launch, on your terminal** — missing key, a model
   whose context can't fit the deck dossier — before anything is torn down.
 - The README's "Other models on the backend" section covers the details,
@@ -32,12 +32,25 @@ ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1" \
 
 ### New: local ELO ladders
 
-Every finished game now rates three local ladders — pilot (models, `human`,
+Every finished game rates three local ladders — pilot (models, `human`,
 and `human+advisor` are all pilots), deck, and pilot×deck — scored as six
 pairwise 1v1s by finish order with tie groups for simultaneous eliminations.
 Ratings update at teardown, display per seat in the AI panel, persist across
 package rebuilds, and accumulate a plottable per-game history. Which model
 actually pilots your deck best is now a number.
+
+### New: the deviation log
+
+Every seat now records, in plain words, each moment its plan met reality:
+
+```
+[seat 2] DEVIATION t3 MAIN1: wanted "Cast Giada off Ancient Tomb" — blocked by:
+  Ancient Tomb produces only colorless; no white source in play
+```
+
+Deviations land in the seat logs and as a structured `deviation` field on
+each decision record, alongside the turn's stated intent — a play-quality
+review is now a grep, and the day's brief tuning came straight out of it.
 
 ### New: Advisor pause button
 
@@ -45,12 +58,52 @@ A button at the bottom of the Advisor tab pauses/resumes the coach mid-game
 (paused = no advice, no model calls, no teardown); the AI panel's seat-0 row
 reflects the state.
 
-### Improved: table pace
+### Faster: every decision, and the dead windows
 
-Seat runners answer ~0.2–0.35s faster per decision (measured against a
-4,400-decision pace study: inbox-poll quantization was the largest
-non-thinking overhead). Advice lands snappier in advised games for the same
-reason.
+- **~2–3 seconds off every single AI decision.** Each brain call had been
+  paying to connect the host's entire MCP tool roster before answering,
+  for a process with all tools disabled. Median decision time fell from
+  ~8s to ~5s across the table; time spent actually thinking rose from
+  58% to ~88% of the clock. Nothing the brains see or decide changed.
+- **Dead windows think light, never skip.** Reaction windows where a seat
+  has zero mana and zero untapped sources, and windows where every stack
+  item is the seat's own trigger, are answered at low effort — the brain
+  keeps full authority (a combat trick in response to your own trigger is
+  still yours to cast); it just doesn't deliberate over "let my trigger
+  resolve." A cascade of identical own triggers (token pings, untap loops)
+  now fast-passes after the first pass instead of re-asking on every step.
+- Seat runners and the advisor poll faster; the AI panel hides stepper
+  buttons that would do nothing.
+
+### Improved: what the brains can see and choose
+
+- **Modal spells honor the chosen mode.** Tutors and other non-targeted
+  modes of Charm-style spells now resolve as the seat chose them (Green
+  Sun's Zenith, Archdruid's Charm, Transmute Artifact all find their card).
+- **Every "pay X or else" is the brain's call**: taxes on your spells
+  (Esper Sentinel, Rhystic Study, counter-unless), pay-the-difference
+  tutors, "sacrifice unless" upkeeps. Multi-card searches (Cultivate-class)
+  and yes/no confirms reach the seat as well.
+- **Free alternative costs are offered as their own option** — Fierce
+  Guardianship, Deflecting Swat and the rest of the free-if-commander
+  family show up at `{0}`, labeled, beside the paid version.
+- **Commander tax is shown on the label** (`[effective cost: {1}{G}{G} +
+  {4} = 7 mana]`), a seat can see its own command zone and cast counts, and
+  an unaffordable cast is refused locally instead of attempted.
+- **Seat brief tuned from live evidence**: mana colour and pip counting,
+  conditional and restricted mana sources (Mox Amber, Workshop),
+  commander tax, unbounded-loop conversion (loop to a table kill, order
+  enablers → bodies → finisher, spend every tutor), and survival math that
+  counts the opponent's damage doublers.
+
+### Fixed (v2)
+
+- A commander cast short of its tax could be lost from every zone for the
+  rest of the game (an upstream engine failure path). Failed payments now
+  return the card to where it came from, and seats no longer attempt casts
+  they cannot pay for.
+- Modal-spell modes chosen by a seat could be silently discarded at cast
+  time, resolving the spell as a no-op ("found nothing"). Resolved.
 
 ## v2 — 2026-08-13
 

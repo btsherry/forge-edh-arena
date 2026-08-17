@@ -1420,12 +1420,26 @@ public final class MailboxController extends PlayerControllerAi {
         }
         // PUBLIC stack contents (source names only), for interaction context
         List<String> stack = new ArrayList<>();
+        // Additive (2026-08-17): who controls each stack item and whether it is
+        // a triggered/activated ability vs a spell — public information (every
+        // player sees whose object is on the stack). Lets the runner recognise
+        // "every stack item is my OWN trigger" windows and route them to a
+        // lighter think (never skip), and lets the memo fastpath ignore how
+        // MANY identical own-triggers remain in a cascade.
+        List<Integer> stackOwners = new ArrayList<>();
+        List<String> stackKinds = new ArrayList<>();
         for (forge.game.spellability.SpellAbilityStackInstance si : me.getGame().getStack()) {
             SpellAbility sa = si.getSpellAbility();
             Card host = sa != null ? sa.getHostCard() : null;
             stack.add(host != null ? host.getName() : String.valueOf(si));
+            Player ctl = sa != null ? sa.getActivatingPlayer() : null;
+            stackOwners.add(ctl != null ? ctl.getId() : -1);
+            stackKinds.add(sa == null ? "?" : sa.isTrigger() ? "trigger"
+                    : sa.isSpell() ? "spell" : "ability");
         }
         state.put("stack", stack);
+        state.put("stackOwners", stackOwners);
+        state.put("stackKinds", stackKinds);
         return state;
     }
 
