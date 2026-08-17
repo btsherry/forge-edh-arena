@@ -162,9 +162,16 @@ class SeatBrain:
         eff = effort or self.effort
         if self.backend is not None:
             return self.backend.call(prompt, timeout_s, self, effort=eff)
+        # --strict-mcp-config + empty --mcp-config: the seat has every tool
+        # disallowed, yet by default the CLI still connects the user's whole
+        # MCP roster (9 servers on Ben's box) on every spawn — measured at
+        # ~3.3s of the ~6s per-call floor (2026-08-17 pace study). Skipping
+        # it changes nothing the model can see or do; --disallowedTools "*"
+        # already made those servers inert.
         cmd = ["claude", "-p", "-", "--output-format", "json",
                "--model", self.model, "--effort", eff,
-               "--disallowedTools", "*"]
+               "--disallowedTools", "*",
+               "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
         if resume and self.session_id:
             cmd += ["--resume", self.session_id]
         try:

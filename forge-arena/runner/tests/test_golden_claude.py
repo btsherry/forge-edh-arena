@@ -17,7 +17,8 @@ DECK = "selvala-heart-of-the-wilds"
 
 GOLDEN_INIT_ARGV = ["claude", "-p", "-", "--output-format", "json",
                     "--model", "opus", "--effort", "low",
-                    "--disallowedTools", "*"]
+                    "--disallowedTools", "*",
+                    "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
 GOLDEN_DECIDE_ARGV = GOLDEN_INIT_ARGV + ["--resume", "sess-golden-1"]
 GOLDEN_TOTALS_KEYS = {"calls", "input_tokens", "output_tokens",
                       "cache_read_input_tokens",
