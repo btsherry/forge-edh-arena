@@ -32,8 +32,9 @@ if ls "$LOGS"/seat-*.log "$LOGS"/gui.out >/dev/null 2>&1; then
   mv "$LOGS"/seat-*.log "$LOGS"/seat-*.jsonl "$LOGS"/seat-*.usage.json \
      "$LOGS"/advisor-0.log "$LOGS"/advisor-0.jsonl "$LOGS"/advisor_runner.out \
      "$LOGS"/react-autopass.out "$LOGS"/gui.out "$LOGS"/run_table.out \
-     "$LOGS"/ratings.out "$ROOT"/runner/results/*.rated \
-     "$ROOT"/runner/results/*.skipped "$A/" 2>/dev/null
+     "$LOGS"/ratings.out "$LOGS"/transport-events.jsonl \
+     "$ROOT"/runner/results/*.rated \
+     "$ROOT"/runner/results/*.skipped "$ROOT"/runner/results/*.voided "$A/" 2>/dev/null
   archived=$(ls "$A" 2>/dev/null | wc -l | tr -d ' ')
 fi
 rm -rf "$ROOT"/mailbox/seat-* "$ROOT"/mailbox/observer-state.json "$LOGS"/control/* 2>/dev/null

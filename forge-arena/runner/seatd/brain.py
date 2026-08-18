@@ -103,6 +103,8 @@ class SeatBrain:
         self._fail_streak = 0
         self._fail_streak_t0: float | None = None
         self._rejoin_pending = False
+        self.wedges = 0  # lifetime count; the runner mirrors these into
+                         # transport-events.jsonl for the ratings void check
         # Cumulative burn since instantiation (includes the dossier init call).
         self.totals = {"calls": 0, "input_tokens": 0, "output_tokens": 0,
                        "cache_read_input_tokens": 0,
@@ -310,6 +312,7 @@ class SeatBrain:
                  f"next decision")
         self.session_id = None          # ensure_session() re-inits lazily
         self._rejoin_pending = True     # first prompt tells the brain it rejoined
+        self.wedges += 1
         self._fail_streak = 0
         self._fail_streak_t0 = None
 

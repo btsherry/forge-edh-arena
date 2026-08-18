@@ -206,6 +206,18 @@ class SeatRunner:
                                for a in combat][:6]
         return stamp
 
+    def _transport_event(self, kind: str) -> None:
+        """Append {ts, seat, kind} to logs/transport-events.jsonl — the
+        ratings applier voids transport-contaminated games from this file
+        (any wedge, or a punt pile-up on one seat)."""
+        try:
+            p = self._jsonl_path.parent / "transport-events.jsonl"
+            with p.open("a") as f:
+                f.write(json.dumps({"ts": time.time(), "seat": self.seat,
+                                    "kind": kind}) + "\n")
+        except OSError:
+            pass  # never let bookkeeping hurt the game
+
     def _record(self, req: dict, answer: dict, source: str, meta=None,
                 why: str | None = None, consumed: bool = True) -> None:
         stamp = self.board_stamp(req)
@@ -737,6 +749,12 @@ class SeatRunner:
             why = "punt: deadline nearly expired"
         if answer is None:
             answer = rules.safe_default(req)
+        if source == "punt":
+            self._transport_event("punt")
+        wedges = getattr(self.brain, "wedges", 0)
+        if wedges > getattr(self, "_wedges_seen", 0):
+            self._wedges_seen = wedges
+            self._transport_event("wedge")
 
         if dtype == "REACT" and answer == {"chosenId": 0}:
             self.react_seen.add(self._react_signature(req))

@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import os
 import sys
 import time
 from collections import Counter
@@ -141,7 +142,54 @@ def attribute(spool: dict, window_recs: list[dict], log=print):
     return pilots, counts, None
 
 
-def process_spool(spool: dict, tables: dict, game_log: Path, log=print):
+VOID_PUNT_THRESHOLD = 8   # punts on ONE seat inside the window => transport-contaminated
+
+
+def load_transport_events(game_log: Path) -> list[dict]:
+    """logs/transport-events.jsonl beside game.jsonl (seat runners append
+    {ts, seat, kind: punt|wedge}); absent file = no events."""
+    p = game_log.parent / "transport-events.jsonl"
+    out = []
+    try:
+        with p.open() as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                    if isinstance(rec, dict):
+                        out.append(rec)
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return out
+
+
+def void_reason(spool: dict, events: list[dict]) -> str | None:
+    """A game is VOID for rating when transport failure degraded a seat
+    inside its window: any session wedge, or >= VOID_PUNT_THRESHOLD punts on
+    a single seat. ARENA_RATE_VOIDED=1 overrides (rates anyway)."""
+    if os.environ.get("ARENA_RATE_VOIDED") == "1":
+        return None
+    t0 = spool["startMillis"] / 1000.0 - WINDOW_SLACK_S
+    t1 = spool["endMillis"] / 1000.0 + WINDOW_SLACK_S
+    punts: dict = {}
+    for e in events:
+        ts = e.get("ts")
+        if not isinstance(ts, (int, float)) or not (t0 <= ts <= t1):
+            continue
+        if e.get("kind") == "wedge":
+            return f"seat {e.get('seat')} session wedged mid-game"
+        if e.get("kind") == "punt":
+            n = punts.get(e.get("seat"), 0) + 1
+            punts[e.get("seat")] = n
+            if n >= VOID_PUNT_THRESHOLD:
+                return (f"seat {e.get('seat')} punted {n}+ decisions "
+                        f"(transport degradation)")
+    return None
+
+
+def process_spool(spool: dict, tables: dict, game_log: Path, log=print,
+                  events: list[dict] | None = None):
     """Rate one game. Returns the history record, or None if skipped."""
     seats = {s["seat"]: s for s in spool.get("seats", [])}
     groups = spool.get("placementGroups") or []
@@ -157,6 +205,21 @@ def process_spool(spool: dict, tables: dict, game_log: Path, log=print):
     if err:
         log(f"[ratings] SKIP: {err}")
         return None
+    reason = void_reason(spool, events if events is not None
+                         else load_transport_events(game_log))
+    if reason:
+        log(f"[ratings] VOID (recorded, not rated): {reason}")
+        slug_v = {n: (s["slug"] or None) for n, s in seats.items()}
+        return {"ts": round(time.time(), 3),
+                "start": spool["startMillis"], "end": spool["endMillis"],
+                "turns": spool.get("turnsPlayed"),
+                "advisor": spool.get("advisor", False),
+                "voided": True, "voidReason": reason,
+                "seats": [{"seat": n, "pilot": pilots[n], "slug": slug_v[n],
+                           "control": seats[n]["control"],
+                           "modelDecisions": counts.get(n) or {}}
+                          for n in sorted(seats)],
+                "placementGroups": groups, "changes": {}}
     pairs = pair_scores(groups)
     slug_of = {n: (s["slug"] or None) for n, s in seats.items()}
     combo_of = {n: (f"{pilots[n]}|{slug_of[n]}"
@@ -225,6 +288,7 @@ def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
             tables.setdefault(k, {})
         rated = 0
         last_record = None
+        events = load_transport_events(game_log)
         for p in spools:
             try:
                 spool = json.loads(p.read_text())
@@ -232,13 +296,18 @@ def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
                 log(f"[ratings] SKIP {p.name}: unreadable ({e})")
                 p.rename(p.with_name(p.name + ".skipped"))
                 continue
-            rec = process_spool(spool, tables, game_log, log=log)
+            rec = process_spool(spool, tables, game_log, log=log,
+                                events=events)
             if rec is None:
                 p.rename(p.with_name(p.name + ".skipped"))
                 continue
             rec["spool"] = p.name
             with history_path.open("a") as f:
                 f.write(json.dumps(rec) + "\n")
+            if rec.get("voided"):
+                # the record survives for review; the ladders never move
+                p.rename(p.with_name(p.name + ".voided"))
+                continue
             p.rename(p.with_name(p.name + ".rated"))
             last_record = rec
             rated += 1

@@ -204,5 +204,67 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual(e1.tables(), e2.tables())
 
 
+class VoidGames(unittest.TestCase):
+    """Transport-contaminated games are recorded but never rated."""
+
+    def _events(self, env, events):
+        p = env.tmp / "logs" / "transport-events.jsonl"
+        p.write_text("\n".join(json.dumps(e) for e in events) + "\n")
+
+    def test_wedge_in_window_voids(self):
+        env = Env()
+        env.add_spool(spool([[3], [2], [1], [0]]))
+        self._events(env, [{"ts": 1000_000_000.0 + 120, "seat": 2, "kind": "wedge"}])
+        n, out = env.run()
+        self.assertEqual(n, 0, "a voided game must not count as rated")
+        self.assertFalse((env.tmp / "ratings.json").exists(),
+                         "ladders must not move on a voided game")
+        hist = (env.tmp / "ratings-history.jsonl").read_text().strip().splitlines()
+        rec = json.loads(hist[-1])
+        self.assertTrue(rec.get("voided"))
+        self.assertIn("wedged", rec.get("voidReason", ""))
+        self.assertTrue(list((env.tmp / "results").glob("*.voided")),
+                        "spool should be renamed .voided")
+
+    def test_punt_pileup_on_one_seat_voids(self):
+        env = Env()
+        env.add_spool(spool([[3], [2], [1], [0]]))
+        self._events(env, [{"ts": 1000_000_000.0 + 100 + i, "seat": 1,
+                            "kind": "punt"} for i in range(9)])
+        n, _ = env.run()
+        self.assertEqual(n, 0)
+        rec = json.loads((env.tmp / "ratings-history.jsonl")
+                         .read_text().strip().splitlines()[-1])
+        self.assertTrue(rec.get("voided"))
+
+    def test_events_outside_window_do_not_void(self):
+        env = Env()
+        env.add_spool(spool([[3], [2], [1], [0]]))
+        self._events(env, [{"ts": 1000_000_000.0 - 9999, "seat": 2, "kind": "wedge"},
+                           {"ts": 1000_001_000.0 + 9999, "seat": 1, "kind": "punt"}])
+        n, _ = env.run()
+        self.assertEqual(n, 1, "out-of-window events must not void the game")
+
+    def test_scattered_punts_below_threshold_rate_normally(self):
+        env = Env()
+        env.add_spool(spool([[3], [2], [1], [0]]))
+        self._events(env, [{"ts": 1000_000_000.0 + 100 + i, "seat": i % 4,
+                            "kind": "punt"} for i in range(7)])
+        n, _ = env.run()
+        self.assertEqual(n, 1, "a few scattered punts are normal, not contamination")
+
+    def test_env_override_rates_anyway(self):
+        import os
+        env = Env()
+        env.add_spool(spool([[3], [2], [1], [0]]))
+        self._events(env, [{"ts": 1000_000_000.0 + 120, "seat": 2, "kind": "wedge"}])
+        os.environ["ARENA_RATE_VOIDED"] = "1"
+        try:
+            n, _ = env.run()
+        finally:
+            del os.environ["ARENA_RATE_VOIDED"]
+        self.assertEqual(n, 1, "ARENA_RATE_VOIDED=1 must force rating")
+
+
 if __name__ == "__main__":
     unittest.main()
