@@ -77,3 +77,15 @@ spell-copy untapper — likely a new archetype or a TapForMana generalization),
 Urza's library-exile win is an ORACLE_WIN-class route, and the deck's cEDH
 speed would pressure-test the pilot's protection/patience layers. Candidate
 fourth archetype family after SpellCopyLoop.
+
+## Mana discipline (2026-08-17, from live-game evidence)
+
+- This deck's mana is COLOURLESS-HEAVY: most rocks and several lands cannot
+  pay {U}. Count your actual blue sources before committing to a {U}{U}+
+  spell (Counterspell, Mana Drain, Hullbreaker Horror's protection window):
+  the two recorded misses were both "{U}{U} with one blue source".
+- Urza's tap-an-artifact ability is a blue source ONLY while Urza is on the
+  battlefield, and each activation costs you an untapped artifact — count it
+  as blue-per-untapped-artifact, not as a standing blue land.
+- Mishra's Workshop pays for ARTIFACT spells only — never count it toward
+  instants, sorceries, or Urza himself.

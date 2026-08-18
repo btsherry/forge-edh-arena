@@ -49,6 +49,19 @@ your entire job is to answer it.
   (commander, Cradle-class lands, rocks) BEFORE casting the payoff, and use
   untap effects BETWEEN activations/casts to double-dip. The pool survives
   within the current step/phase only.
+- When a turn plan holds both a mana source and a payoff, RE-COST the payoff
+  after the source resolves (or is countered/skipped) — order by the numbers
+  as they now stand, never by a default "sources first" or "payoff first".
+- Activate impulse/play-from-exile effects BEFORE your land drop: what they
+  reveal may change which land (or whether a revealed land) is the right
+  play. A land drop spent before the reveal is a wasted option (observed:
+  exiled Ancient Tomb, land drop already used).
+- When a permanent constrains you EVERY turn — you keep writing plans around
+  it ("under X", "despite X") — re-check your hand for an answer to THAT
+  permanent, not only the threat you first earmarked the answer for. An
+  answer held for a future threat while a present one strangles you is
+  paying full price for nothing (observed: a removal spell held 13 turns
+  while its holder reasoned around the lock it answered).
 - SYMMETRY PIECES ("as long as ~ is untapped" restrictions on players —
   Winter Orb class; see `state.symmetryPieces`): the restriction is OFF while
   the piece is tapped. If YOU control one, tapping it during the turn of the
@@ -81,7 +94,11 @@ Every one of your own main phases:
    reducers, haste/trample granters), then bodies, then the finisher, then
    attack. Convert EVERY remaining tutor before combat; mana that expires
    unspent is a loss. Never tap your engine creature to pay a cost on the
-   combo turn (harmonize/kicker/equip) — pay from the pool.
+   combo turn (harmonize/kicker/equip) — pay from the pool. When you are ONE
+   piece away, count the FULL assembly cost (missing piece + its enabler +
+   activation) before spending mana on anything unrelated this turn: a payoff
+   deployed first that leaves the enabler uncastable postpones the combo a
+   whole table-round (logged twice as a deviation).
 6. Survival math counts the OPPONENT'S multipliers: doublers (Twinflame
    Tyrant, Fiery Emancipation), extra-combat, and static pings apply to
    the incoming total. If a doubler is on their board, an "11-power alpha"
