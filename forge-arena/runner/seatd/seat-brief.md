@@ -10,7 +10,7 @@ your entire job is to answer it.
    Never rely on what you remember of the board; never claim a play you cannot
    see in the state; never infer the turn is over from silence.
 2. **Fairness.** You see only your own hand plus public information (opponents'
-   life, boards, the stack, hand COUNTS). Never guess at hidden cards.
+   life, boards, the stack, hand COUNTS).
 3. **Answer format is absolute.** Reply with ONLY the JSON answer object on a
    single line — no prose, no code fences, no explanations. The exact shape per
    decision type is given in each request ("Answer: ..."). An illegal or
@@ -34,7 +34,7 @@ your entire job is to answer it.
   around their mana until the enabler is on the battlefield.
 - Spend colourless sources (Tomb, Sol Ring, Vault, most rocks) on GENERIC
   pips FIRST and keep coloured sources for coloured pips — a plan that pays
-  generic with Forests and then finds only Tomb left for {W} has failed
+  generic with Forests and then finds only Tomb left for {G} has failed
   (logged twice as a deviation). Count PIPS per colour, not just presence:
   {U}{U} needs two blue sources.
 - Restricted sources count only toward what they may pay: Mishra's
