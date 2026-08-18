@@ -1,6 +1,6 @@
 # Forge EDH Arena — Implementation Plan v3.3
 
-> **Repo note (2026-07-15):** This is the master spec, authored in a planning session prior to implementation (as v3.1) and amended in-repo since. T0 verification is complete — see [T0-VERIFICATION.md](T0-VERIFICATION.md) for confirmed/corrected class names (4 corrections, incl. no engine turn cap; arena-side limits required). Per §11: when this document and the Forge source disagree, the source wins, and this document gets updated in the same PR.
+> **Repo note (2026-07-15):** This is the master spec, authored in a planning session prior to implementation (as v3.1) and amended in-repo since. T0 verification is complete — see [T0-VERIFICATION.md](research/T0-VERIFICATION.md) for confirmed/corrected class names (4 corrections, incl. no engine turn cap; arena-side limits required). Per §11: when this document and the Forge source disagree, the source wins, and this document gets updated in the same PR.
 
 **Mission:** A headless, standalone engine on top of Card-Forge/forge that runs 4-player Commander pods with assignable AI per seat, at batch scale, to compare netdecks against user-designed decks with heavy statistical, qualitative, and play-pattern analysis — plus a combo-aware AI layer (per-deck prep, live tracking, deliberate execution, combo-directed tutoring).
 
@@ -18,7 +18,7 @@
 
 **Verified (repo/wiki, July 2026):** module layout (forge-core, forge-game, forge-ai, forge-gui with res/ data, GUI frontends); headless CLI simulator SimulateMatch supporting `sim -f commander` with multiple decks, `-n`, tournaments; per-player AI personality profiles in forge-gui/res/ai/*.ai; experimental lookahead ("simulation") AI; wiki warns AI-vs-AI games can run very long; new sets implemented within weeks.
 
-**Assumptions to verify in T0 before scaffolding** (code archaeology, may have drifted): class names PlayerControllerAi, AiController, ChangeZoneAi, GameCopier, GameStateEvaluator, SpellAbilityPicker, ComputerUtilMana; RegisteredPlayer.forCommander(...); GameRules(GameType.Commander); Match.playGame(); card-script DSL location forge-gui/res/cardsfolder/; .dck section headers; a subscribable game event bus. T0 produces `forge-arena/docs/T0-VERIFICATION.md` with the corrected names; all code below uses these names provisionally and must be updated from T0 output.
+**Assumptions to verify in T0 before scaffolding** (code archaeology, may have drifted): class names PlayerControllerAi, AiController, ChangeZoneAi, GameCopier, GameStateEvaluator, SpellAbilityPicker, ComputerUtilMana; RegisteredPlayer.forCommander(...); GameRules(GameType.Commander); Match.playGame(); card-script DSL location forge-gui/res/cardsfolder/; .dck section headers; a subscribable game event bus. T0 produces `forge-arena/docs/research/T0-VERIFICATION.md` with the corrected names; all code below uses these names provisionally and must be updated from T0 output.
 
 ## 2. Architecture (v3)
 
@@ -630,7 +630,7 @@ The Win Routes spec (route definitions + classification rules) is a documentatio
 
 ## 11. Handoff notes for Claude Code
 
-- **T0 first, half a day, non-negotiable.** Grep-and-read: SimulateMatch, PlayerControllerAi, AiController, ChangeZoneAi, simulation package, .dck parser, event bus. Write docs/T0-VERIFICATION.md correcting §1; update the provisional names in this document's code sketches before implementing them.
+- **T0 first, half a day, non-negotiable.** Grep-and-read: SimulateMatch, PlayerControllerAi, AiController, ChangeZoneAi, simulation package, .dck parser, event bus. Write docs/research/T0-VERIFICATION.md correcting §1; update the provisional names in this document's code sketches before implementing them.
 - **Schemas first** (schemas/*.schema.json), then emitters, then consumers. Artifact schema versions are load-bearing.
 - All new code in forge-arena/. Upstream edits require `// ARENA-PATCH:` + UPSTREAM-PATCHES.md entry. Candidate upstream PRs: controller injection hook, loop-shortcut/bulk-repeat utility, extra event visibility.
 - PR-sized tasks, each landing with its tests from §8. CI = scripts/smoke.sh (build + unit + 25-game canary).
@@ -671,7 +671,7 @@ External DeckCheck.co analyses, one per deck — an input the discovery harnesse
 - `forge-arena/docs/archive/PHASE-11-PLAN.md` — Ben-approved plan: one execution path per combo, no fallback tier, full oracle text as compiler input alongside scripts.
 - `forge-arena/docs/WIN-ROUTES.md` — Win Routes spec (v1): closed set of conversion routes, per-deck feature classification rules (cache-first, library-driven).
 - `forge-arena/docs/PROJECT-BRIEF.md` — Canonical project brief (one sentence): drop in ANY deck, prep detects combos, pilot assembles and converts to wins with no hardcoded logic.
-- `forge-arena/docs/T0-VERIFICATION.md` — Forge internals verification (complete) against Plan v3.1 §1: all assumptions confirmed except 4 corrections.
+- `forge-arena/docs/research/T0-VERIFICATION.md` — Forge internals verification (complete) against Plan v3.1 §1: all assumptions confirmed except 4 corrections.
 - `forge-arena/docs/archive/PAIRING-AUDIT-GIADA.md` — Giada pairing audit: two-auditor card-text reconfirmation of the wipe+shield pairs (2026-07-23).
 - `forge-arena/docs/archive/SELVALA-ARC.md` — Selvala mana-loop arc, a living plan (started 2026-07-30).
 - `forge-arena/docs/archive/SELVALA-BUILD-MANIFEST.md` — Selvala win-rate build manifest: synthesis of five surveys.
