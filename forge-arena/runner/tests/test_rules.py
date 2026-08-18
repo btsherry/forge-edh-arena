@@ -182,5 +182,35 @@ class PromptBuilder(unittest.TestCase):
         self.assertIn(json.dumps(req, separators=(",", ":"))[:60], p)
 
 
+class ConfirmDefaultShapeTests(unittest.TestCase):
+    """CONFIRM punts are shape-aware (game 7): own free play/copy -> yes;
+    trigger yes-costs and sacrifice/pay-life confirms -> no."""
+    def _req(self, prompt, mode, **st):
+        state = {"confirmMode": mode, "min": 1, "max": 1}
+        state.update(st)
+        return {"decisionType": "CONFIRM", "prompt": prompt, "state": state,
+                "options": [{"id": 0, "label": "No"}, {"id": 1, "label": "Yes"}]}
+
+    def test_free_copy_play_defaults_yes(self):
+        r = self._req("Do you want to play Dramatic Reversal (copy) without paying?", "untyped")
+        self.assertEqual(rules.safe_default(r), {"chosenId": 1})
+
+    def test_trigger_with_cost_defaults_no(self):
+        r = self._req("OPTIONAL TRIGGER: Rings ... Saying YES pays {2}", "TRIGGER", yesCost="{2}")
+        self.assertEqual(rules.safe_default(r), {"chosenId": 0})
+
+    def test_free_trigger_defaults_yes(self):
+        r = self._req("OPTIONAL TRIGGER: you may draw a card", "TRIGGER", yesCost="none")
+        self.assertEqual(rules.safe_default(r), {"chosenId": 1})
+
+    def test_sacrifice_confirm_defaults_no(self):
+        r = self._req("Do you want to sacrifice a creature to play X?", "untyped")
+        self.assertEqual(rules.safe_default(r), {"chosenId": 0})
+
+    def test_defaults_stay_legal(self):
+        for r in (self._req("play it?", "untyped"), self._req("t", "TRIGGER", yesCost="{1}")):
+            self.assertIsNotNone(rules.validate(r, rules.safe_default(r)))
+
+
 if __name__ == "__main__":
     unittest.main()

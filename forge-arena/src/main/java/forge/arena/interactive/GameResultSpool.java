@@ -143,6 +143,16 @@ public final class GameResultSpool {
           .append("}");
         try {
             final Path dir = resultsDir();
+            if (dir == null) {
+                // No canonical results location — this is a unit test or an
+                // ad-hoc launch that set neither an absolute logs dir nor an
+                // absolute mailbox dir. Spooling to the relative default here
+                // wrote a doubled path (forge-arena/forge-arena/runner/results)
+                // under Surefire's module cwd, 2026-08-17. Skip cleanly.
+                System.err.println("[arena] game result NOT spooled "
+                        + "(no arena.runner.logs.dir / absolute arena.mailbox.dir set)");
+                return;
+            }
             Files.createDirectories(dir);
             final Path out = dir.resolve("game-" + startMillis + "-"
                     + ProcessHandle.current().pid() + ".json");
@@ -172,12 +182,27 @@ public final class GameResultSpool {
         return "human";
     }
 
+    /**
+     * The canonical results directory, or {@code null} when there is none.
+     *
+     * <p>Preference: an explicit {@code arena.runner.logs.dir} (the real
+     * launcher, run-pilot-match.sh, always sets it absolute) -> its sibling
+     * {@code results/}. Failing that, an explicitly-set, ABSOLUTE
+     * {@code arena.mailbox.dir}. A relative/unset mailbox dir returns
+     * {@code null} so callers skip the spool rather than writing a
+     * cwd-relative path — under Surefire (cwd = module dir) that produced the
+     * doubled {@code forge-arena/forge-arena/runner/results} tree.
+     */
     private static Path resultsDir() {
         final String logs = System.getProperty("arena.runner.logs.dir", "");
         if (!logs.isEmpty()) {
             return Paths.get(logs).getParent().resolve("results");
         }
-        return MailboxProtocol.baseDir().getParent().resolve("runner").resolve("results");
+        final String mb = System.getProperty(MailboxProtocol.DIR_PROPERTY);
+        if (mb != null && Paths.get(mb).isAbsolute()) {
+            return Paths.get(mb).getParent().resolve("runner").resolve("results");
+        }
+        return null;
     }
 
     private static String esc(final String s) {

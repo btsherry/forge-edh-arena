@@ -104,3 +104,10 @@ forge-gui/tools/build
 /runs/
 /stalls/
 /forge-arena/mailbox/
+/forge-arena/runner/logs/
+/forge-arena/runner/results/
+/forge-arena/runner/ratings.json
+/forge-arena/runner/ratings-history.jsonl
+/forge-arena/runner/ratings.lock
+# defensive: the doubled-path spool dir if a test ever writes it again
+/forge-arena/forge-arena/

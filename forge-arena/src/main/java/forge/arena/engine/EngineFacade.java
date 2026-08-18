@@ -24,7 +24,6 @@ import forge.game.event.GameEventPlayerPriority;
 import forge.game.event.GameEventTurnBegan;
 import forge.game.player.RegisteredPlayer;
 import forge.player.GamePlayerUtil;
-import forge.view.TimeLimitedCodeBlock;
 
 /**
  * The ONLY class in forge-arena allowed to import Forge game internals for

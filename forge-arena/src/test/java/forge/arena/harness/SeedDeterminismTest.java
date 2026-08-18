@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
 
 import forge.arena.engine.ArenaLimits;
 import forge.arena.engine.SeatSpec;

@@ -548,12 +548,50 @@ public final class MailboxController extends PlayerControllerAi {
             if (maxT != 1) {
                 return super.chooseTargetsFor(currentAbility); // multi-target: stock
             }
-            List<forge.game.GameEntity> candidates =
-                    tgt.getAllCandidates(currentAbility);
-            if (candidates == null || candidates.isEmpty()) {
+            Game game = getGame();
+            // Candidates are GameObjects: players/cards for ordinary
+            // targeting, and STACK ITEMS (SpellAbility objects) for
+            // spell/ability targeting. The seat used to feed
+            // tgt.getAllCandidates() straight through, which for a
+            // "target spell" ability lists the spell's HOST CARD sitting in
+            // the Stack zone — the seat then targeted the CARD, a legal-
+            // looking target that CounterEffect (getTargetSpells) never
+            // sees: every counterspell a seat targeted itself resolved as a
+            // no-op (Fierce Guardianship + Swan Song vs Generous Gift, game 7
+            // 2026-08-17; the game-5 fizzle). Stock CounterAi and the human
+            // TargetSelection both target si.getSpellAbility(); so do we now.
+            boolean stackTargeting = tgt.getZone() != null
+                    && tgt.getZone().contains(ZoneType.Stack);
+            List<forge.game.GameObject> candidates = new ArrayList<>();
+            if (stackTargeting) {
+                for (forge.game.spellability.SpellAbilityStackInstance si
+                        : game.getStack()) {
+                    SpellAbility onStack = si.getSpellAbility();
+                    if (onStack != null && onStack != currentAbility
+                            && currentAbility.canTargetSpellAbility(onStack)) {
+                        candidates.add(onStack);
+                    }
+                }
+                // "target spell or permanent"-style: keep any non-stack
+                // GameEntity candidates too (never the stack-zone cards).
+                List<forge.game.GameEntity> ents = tgt.getAllCandidates(currentAbility);
+                if (ents != null) {
+                    for (forge.game.GameEntity e : ents) {
+                        if (e instanceof Card && ((Card) e).isInZone(ZoneType.Stack)) {
+                            continue;
+                        }
+                        candidates.add(e);
+                    }
+                }
+            } else {
+                List<forge.game.GameEntity> ents = tgt.getAllCandidates(currentAbility);
+                if (ents != null) {
+                    candidates.addAll(ents);
+                }
+            }
+            if (candidates.isEmpty()) {
                 return super.chooseTargetsFor(currentAbility);
             }
-            Game game = getGame();
             int turn = game.getPhaseHandler().getTurn();
             Map<String, Object> state = buildState(turn);
             state.put("min", minT);
@@ -566,20 +604,39 @@ public final class MailboxController extends PlayerControllerAi {
             if (minT == 0) {
                 req.option(0, "No target (decline)", null, "NONE");
             }
-            Map<Integer, forge.game.GameEntity> byId = new LinkedHashMap<>();
+            Map<Integer, forge.game.GameObject> byId = new LinkedHashMap<>();
             int id = 1;
-            for (forge.game.GameEntity e : candidates) {
+            for (forge.game.GameObject e : candidates) {
                 String label;
-                if (e instanceof Card) {
+                String kind;
+                if (e instanceof SpellAbility) {
+                    SpellAbility s = (SpellAbility) e;
+                    Card sh = s.getHostCard();
+                    Player ap = s.getActivatingPlayer();
+                    String desc;
+                    try {
+                        desc = s.getStackDescription();
+                    } catch (RuntimeException ignore) {
+                        desc = "";
+                    }
+                    label = (sh != null ? sh.getName() : "?")
+                            + (s.isSpell() ? " (spell)" : s.isTrigger() ? " (trigger)" : " (ability)")
+                            + " [" + (ap != null ? ap.getName() : "?") + "]"
+                            + (desc != null && !desc.isEmpty()
+                                ? " — " + (desc.length() > 90 ? desc.substring(0, 90) : desc) : "");
+                    kind = "STACK";
+                } else if (e instanceof Card) {
                     Card c = (Card) e;
                     label = c.getName()
                             + (c.isCreature() ? " " + c.getNetPower() + "/"
                                 + c.getNetToughness() : "")
                             + " [" + c.getController().getName() + "]";
+                    kind = "CARD";
                 } else {
-                    label = e.getName();
+                    label = ((forge.game.GameEntity) e).getName();
+                    kind = "PLAYER";
                 }
-                req.option(id, label, null, e instanceof Card ? "CARD" : "PLAYER");
+                req.option(id, label, null, kind);
                 byId.put(id, e);
                 id++;
             }
@@ -591,7 +648,7 @@ public final class MailboxController extends PlayerControllerAi {
                     if (cid == 0 && minT == 0) {
                         return true; // legal decline; ability proceeds untargeted
                     }
-                    forge.game.GameEntity pick = byId.get(cid);
+                    forge.game.GameObject pick = byId.get(cid);
                     if (pick != null) {
                         currentAbility.resetTargets();
                         if (currentAbility.getTargets().add(pick)) {
@@ -1246,6 +1303,206 @@ public final class MailboxController extends PlayerControllerAi {
             return resp.get("chosenId").asInt() == 1;
         } catch (RuntimeException e) {
             return super.confirmAction(sa, mode, message, options, cardToShow, params);
+        }
+    }
+
+    // ---- triggers: the seat aims and confirms its own triggers ---------------
+
+    /**
+     * Trigger TARGETING (game 7, 2026-08-17). Stock puts a seat's triggers on
+     * the stack via prepareSingleSa -> brains.doTrigger(sa, true), i.e. the
+     * api-specific AI heuristics pick the target — Tidespout Tyrant's "you may
+     * return target permanent" bounced Urza's OWN 17/17 Construct, then the
+     * Tyrant itself. The mailbox overrides spell targeting (chooseTargetsFor)
+     * but never intercepted this path. Now: for every trigger in the seat's
+     * simultaneous batch, each targeting SA in its chain is aimed through the
+     * seat (single-target -> CHOOSE_ENTITY; multi-target/odd -> stock, exactly
+     * as chooseTargetsFor already does). Non-targeting triggers keep stock's
+     * doTrigger setup untouched; copied spells keep stock's branch verbatim.
+     * ORDER of simultaneous triggers stays stock (orderSimultaneousSa) — a
+     * separate, smaller surface.
+     */
+    @Override
+    public void orderAndPlaySimultaneousSa(List<SpellAbility> activePlayerSAs) {
+        Game game = getGame();
+        Player me = getPlayer();
+        for (final SpellAbility sa : orderSimultaneousSa(activePlayerSAs)) {
+            if (sa.isTrigger() && !sa.isCopied()) {
+                boolean ready;
+                try {
+                    ready = prepareTriggerViaSeat(sa);
+                } catch (RuntimeException e) {
+                    // the seam must never crash the seat — stock is the floor
+                    ready = getAi().doTrigger(sa, true);
+                }
+                if (ready) {
+                    ComputerUtil.playStack(sa, me, game);
+                }
+            } else {
+                if (sa.isCopied()) {
+                    if (sa.isSpell()) {
+                        if (!sa.getHostCard().isInZone(ZoneType.Stack)) {
+                            sa.setHostCard(game.getAction().moveToStack(sa.getHostCard(), sa));
+                        } else {
+                            game.getStackZone().add(sa.getHostCard());
+                        }
+                    }
+                    if (sa.isMayChooseNewTargets()) {
+                        forge.game.spellability.TargetChoices tc = sa.getTargets();
+                        if (!sa.setupTargets()) {
+                            sa.setTargets(tc);
+                        }
+                    }
+                }
+                game.getStack().add(sa);
+            }
+        }
+    }
+
+    /** Mirror of stock prepareSingleSa with the seat aiming targeting triggers. */
+    private boolean prepareTriggerViaSeat(SpellAbility sa) {
+        Card host = sa.getHostCard();
+        if (sa.getApi() == ApiType.Charm) {
+            // modal trigger: mode choice already reaches the seat via
+            // chooseModeForAbility (CHOOSE_MODE); stock flow otherwise
+            if (!forge.game.ability.effects.CharmEffect.makeChoices(sa)) {
+                return false;
+            }
+            if (!sa.hasParam("Random")) {
+                return true;
+            }
+            sa = sa.getSubAbility();
+        }
+        if (sa.hasParam("TargetingPlayer")) {
+            Player targetingPlayer = AbilityUtils.getDefinedPlayers(
+                    host, sa.getParam("TargetingPlayer"), sa).get(0);
+            sa.setTargetingPlayer(targetingPlayer);
+            return targetingPlayer.getController().chooseTargetsFor(sa);
+        }
+        boolean anyTargeting = false;
+        for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
+            if (s.usesTargeting()) {
+                anyTargeting = true;
+                break;
+            }
+        }
+        if (!anyTargeting) {
+            return getAi().doTrigger(sa, true); // stock setup for non-targeting triggers
+        }
+        for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
+            if (!s.usesTargeting()) {
+                continue;
+            }
+            s.setActivatingPlayer(getPlayer());
+            if (!chooseTargetsFor(s)) {
+                // no legal/wanted target for a required targeting step: the
+                // trigger cannot go on the stack (same outcome stock produces
+                // when doTrigger declines)
+                Card h = s.getHostCard();
+                forge.game.spellability.TargetRestrictions tr = s.getTargetRestrictions();
+                if (tr != null && h != null && tr.getMinTargets(h, s) > 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Optional-trigger CONFIRM (game 7, 2026-08-17). "You may [pay X to] ..."
+     * triggers resolve through WrappedAbility -> confirmTrigger, which stock
+     * routes to brains.doTrigger — e.g. CopySpellAbilityAi NEVER pays for a
+     * Rings of Brighthearth copy of the seat's own activated ability (rolls a
+     * low profile chance, then refuses activated abilities outright), so
+     * Urza's Rings + Basalt Monolith "infinite" netted zero mana every cycle
+     * while the brain narrated the loop. The seat now answers every optional
+     * trigger itself: CONFIRM with the trigger text, the yes-cost, the chosen
+     * targets and the stack. Only an unpayable yes-cost is auto-declined.
+     */
+    @Override
+    public boolean confirmTrigger(forge.game.trigger.WrappedAbility wrapper) {
+        try {
+            if (wrapper.isMandatory()) {
+                return true;
+            }
+            SpellAbility sa = wrapper.getWrappedAbility();
+            Card host = wrapper.getHostCard();
+            Player me = getPlayer();
+            Cost yesCost = sa.getPayCosts();
+            boolean hasCost = false;
+            if (yesCost != null) {
+                for (forge.game.cost.CostPart part : yesCost.getCostParts()) {
+                    if (part instanceof forge.game.cost.CostPartMana) {
+                        forge.game.cost.CostPartMana cm = (forge.game.cost.CostPartMana) part;
+                        if (cm.getMana() != null && !cm.getMana().isZero()) {
+                            hasCost = true;
+                        }
+                    } else {
+                        hasCost = true; // tap / sacrifice / life / discard...
+                    }
+                }
+            }
+            if (hasCost) {
+                boolean payable;
+                try {
+                    payable = ComputerUtilCost.canPayCost(sa, me, true);
+                } catch (RuntimeException ignore) {
+                    payable = true;
+                }
+                if (!payable) {
+                    System.err.println("[mailbox seat " + seatIndex + "] optional trigger "
+                            + (host != null ? host.getName() : "?")
+                            + " auto-declined: yes-cost " + yesCost.toSimpleString()
+                            + " not payable now");
+                    return false;
+                }
+            }
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", 1);
+            state.put("max", 1);
+            state.put("confirmMode", "TRIGGER");
+            state.put("triggerSource", host != null ? host.getName() : null);
+            String trigText;
+            try {
+                trigText = wrapper.getTrigger() != null
+                        ? wrapper.getTrigger().toString() : String.valueOf(sa);
+            } catch (RuntimeException ignore) {
+                trigText = String.valueOf(sa);
+            }
+            state.put("triggerText", trigText);
+            state.put("yesCost", hasCost ? yesCost.toSimpleString() : "none");
+            List<String> tgts = new ArrayList<>();
+            for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
+                if (s.usesTargeting()) {
+                    for (forge.game.GameObject o : s.getTargets()) {
+                        tgts.add(o instanceof SpellAbility
+                                ? ((SpellAbility) o).getHostCard().getName() + " (spell/ability)"
+                                : o.toString());
+                    }
+                }
+            }
+            state.put("chosenTargets", tgts);
+            String prompt = "OPTIONAL TRIGGER (yours to accept or decline): "
+                    + (host != null ? host.getName() + " — " : "") + trigText
+                    + (hasCost ? "  Saying YES pays " + yesCost.toSimpleString()
+                        + " (pool now " + me.getManaPool().totalMana() + ")." : "  Saying YES costs nothing.")
+                    + (tgts.isEmpty() ? "" : "  Targets already chosen: " + tgts + ".")
+                    + "  1 = yes (do it" + (hasCost ? ", pay" : "") + "), 0 = no.";
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "CONFIRM", prompt)
+                    .state(state)
+                    .option(0, "No — decline the trigger", null, "NO")
+                    .option(1, "Yes" + (hasCost ? " — pay " + yesCost.toSimpleString() + " and do it" : " — do it"),
+                            hasCost ? yesCost.toSimpleString() : null, "YES");
+            JsonNode resp = bus.exchange(req);
+            if (resp == null || resp.get("chosenId") == null || !resp.get("chosenId").isInt()) {
+                return super.confirmTrigger(wrapper);
+            }
+            return resp.get("chosenId").asInt() == 1;
+        } catch (RuntimeException e) {
+            return super.confirmTrigger(wrapper);
         }
     }
 

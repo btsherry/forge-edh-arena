@@ -29,6 +29,17 @@ from . import backends
 _FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
+WEDGE_FAILS = 3          # consecutive failed calls ...
+WEDGE_SECONDS = 60.0     # ... spanning at least this long => wedged
+WEDGE_HARD_FAILS = 6     # or this many in a row regardless of time
+REJOIN_NOTE = ("[SESSION NOTE] Your previous session for this game was lost "
+               "(transport failure) and this is a FRESH session mid-game. You "
+               "have no memory of earlier turns: trust the board/state in each "
+               "decision as authoritative, re-derive your plan from what is on "
+               "the battlefield, in your hand and on the stack, and re-state a "
+               "turn_plan when you next have priority.]\n\n")
+
+
 def extract_json(text: str) -> dict | None:
     """Best-effort extraction of the answer object from model text."""
     if not isinstance(text, str) or not text.strip():
@@ -81,6 +92,17 @@ class SeatBrain:
         # keyed by model id (cleared per game in reset()).
         self.backend_latches: dict = {"auth": {}, "model": {}}
         self.calls = 0
+        # Wedged-session recovery (game 7, 2026-08-17): Giada's resident
+        # session went dark for 11 min (timeouts, then upstream 500s on that
+        # one conversation) and Urza's mid-combo; the runner just re-resumed
+        # the wedged session forever, punting to safe defaults. After
+        # WEDGE_FAILS consecutive failures spanning >= WEDGE_SECONDS (fast
+        # exit-1 bursts alone don't count — a 15s blip should not cost the
+        # game memory), or WEDGE_HARD_FAILS regardless of time, drop --resume
+        # and re-init a fresh session with the dossier at the next decision.
+        self._fail_streak = 0
+        self._fail_streak_t0: float | None = None
+        self._rejoin_pending = False
         # Cumulative burn since instantiation (includes the dossier init call).
         self.totals = {"calls": 0, "input_tokens": 0, "output_tokens": 0,
                        "cache_read_input_tokens": 0,
@@ -185,8 +207,11 @@ class SeatBrain:
             self.log(f"[seat {self.seat}] claude launch failed: {e}")
             return None
         if proc.returncode != 0:
+            # the error text is usually in the STDOUT envelope (API Error:
+            # 500 ...), stderr is often empty — log both (game 7)
             self.log(f"[seat {self.seat}] claude exit {proc.returncode}: "
-                     f"{proc.stderr.strip()[:200]}")
+                     f"stderr={proc.stderr.strip()[:160]!r} "
+                     f"stdout={proc.stdout.strip()[:200]!r}")
             return None
         try:
             env = json.loads(proc.stdout)
@@ -249,6 +274,9 @@ class SeatBrain:
         Totals restart too — each game's readout counts its own burn."""
         self.session_id = None
         self.calls = 0
+        self._fail_streak = 0
+        self._fail_streak_t0 = None
+        self._rejoin_pending = False
         self.totals = {k: (0.0 if k == "cost_usd" else 0) for k in self.totals}
         # Per-game backend state: model-class latches (incl. cost/call caps)
         # clear; auth-class latches persist — a bad key does not heal between
@@ -257,6 +285,33 @@ class SeatBrain:
         for b in (self.backend, self._parked_backend):
             if b is not None:
                 b.reset_for_new_game()
+
+    def _note_failure(self) -> None:
+        """Consecutive-failure accounting; wedge => fresh session next call."""
+        now = time.time()
+        if self._fail_streak == 0:
+            self._fail_streak_t0 = now
+        self._fail_streak += 1
+        span = now - (self._fail_streak_t0 or now)
+        wedged = (self._fail_streak >= WEDGE_HARD_FAILS
+                  or (self._fail_streak >= WEDGE_FAILS and span >= WEDGE_SECONDS))
+        if not wedged:
+            return
+        if self.backend is not None:
+            # backend transports have their own latches/caps (plan F-06/F-09);
+            # only the Claude resident session gets the drop-and-reinit cure
+            return
+        if self.session_id is None:
+            return
+        old = self.session_id
+        self.log(f"[seat {self.seat}] SESSION WEDGED — {self._fail_streak} consecutive "
+                 f"failures over {span:.0f}s on session {old[:8]}; dropping --resume, "
+                 f"a fresh session (dossier reload, no game memory) starts at the "
+                 f"next decision")
+        self.session_id = None          # ensure_session() re-inits lazily
+        self._rejoin_pending = True     # first prompt tells the brain it rejoined
+        self._fail_streak = 0
+        self._fail_streak_t0 = None
 
     # ---- decisions ----------------------------------------------------------------
 
@@ -270,11 +325,17 @@ class SeatBrain:
         # retry at the next boundary.
         if not self.ensure_session(timeout_s=min(max(timeout_s - 5.0, 5.0), 240.0)):
             return None, meta
+        if self._rejoin_pending:
+            prompt = REJOIN_NOTE + prompt
+            self._rejoin_pending = False
         t0 = time.time()
         env = self._call(prompt, timeout_s, resume=True, effort=effort)
         meta["latency_s"] = round(time.time() - t0, 2)
         if env is None:
+            self._note_failure()
             return None, meta
+        self._fail_streak = 0
+        self._fail_streak_t0 = None
         self.calls += 1
         self._accumulate(env)
         usage = env.get("usage") or {}

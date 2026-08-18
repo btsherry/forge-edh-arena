@@ -1,7 +1,5 @@
 package forge.arena.interactive;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 import org.testng.Assert;

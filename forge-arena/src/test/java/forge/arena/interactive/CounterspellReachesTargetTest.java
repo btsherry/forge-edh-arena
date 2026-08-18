@@ -77,6 +77,12 @@ public class CounterspellReachesTargetTest {
 
         // opponent casts a noncreature spell (Divination) — put it on the stack
         for (int i = 0; i < 3; i++) put("Island", opp, ZoneType.Battlefield);
+        // A LIBRARY for the opponent: with an empty library an UNcountered
+        // Divination draws nothing and still hits the graveyard, which made
+        // this test pass for months while the seat targeted the Divination
+        // CARD (never countering anything). Now a resolved Divination is
+        // visible as +2 cards in hand / -2 in library.
+        for (int i = 0; i < 6; i++) put("Island", opp, ZoneType.Library);
         Card div = put("Divination", opp, ZoneType.Hand);
         SpellAbility divSa = div.getFirstSpellAbility();
         divSa.setActivatingPlayer(opp);
@@ -153,6 +159,10 @@ public class CounterspellReachesTargetTest {
         // Divination countered => it never drew (opp hand stays 0) and it is in the graveyard
         Assert.assertTrue(divInGy, "Divination should be countered (in graveyard)");
         Assert.assertEquals(oppHand, 0, "Divination must not have resolved (opponent drew cards)");
+        Assert.assertEquals(opp.getCardsIn(ZoneType.Library).size(), 6,
+                "opponent library must be untouched — a resolved Divination draws two");
+        Assert.assertTrue(seen.stream().anyMatch(s -> s.contains("CHOOSE_ENTITY") && s.contains("\"STACK\"")),
+                "the counter's target must be offered as a STACK item (spell), not the stack-zone card");
     }
 
     /** Live shape (game 5): the seat paid {2}{U} for Guardianship (its
@@ -179,6 +189,12 @@ public class CounterspellReachesTargetTest {
         for (int i = 0; i < 3; i++) put("Island", p, ZoneType.Battlefield);
         put("Fierce Guardianship", p, ZoneType.Hand);
         for (int i = 0; i < 3; i++) put("Island", opp, ZoneType.Battlefield);
+        // A LIBRARY for the opponent: with an empty library an UNcountered
+        // Divination draws nothing and still hits the graveyard, which made
+        // this test pass for months while the seat targeted the Divination
+        // CARD (never countering anything). Now a resolved Divination is
+        // visible as +2 cards in hand / -2 in library.
+        for (int i = 0; i < 6; i++) put("Island", opp, ZoneType.Library);
         Card div = put("Divination", opp, ZoneType.Hand);
         SpellAbility divSa = div.getFirstSpellAbility();
         divSa.setActivatingPlayer(opp);
@@ -239,5 +255,7 @@ public class CounterspellReachesTargetTest {
                 + " reqs=" + seen.size());
         Assert.assertTrue(cast, "Guardianship was never cast");
         Assert.assertTrue(divInGy && oppHand == 0, "paid Guardianship must still counter its target");
+        Assert.assertEquals(opp.getCardsIn(ZoneType.Library).size(), 6,
+                "opponent library must be untouched — a resolved Divination draws two");
     }
 }

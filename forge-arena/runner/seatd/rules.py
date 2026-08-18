@@ -49,7 +49,14 @@ ANSWER_CONTRACT = {
                    'opponent is taxing you (counter-unless, Rhystic Study, Propaganda) '
                    '— pay only when what you protect is worth the mana.'),
     "CONFIRM": ('Answer: {"chosenId": 1} = yes, {"chosenId": 0} = no. Read the '
-                'question in the prompt; state.confirmMode names the situation.'),
+                'question in the prompt; state.confirmMode names the situation. '
+                'confirmMode TRIGGER = one of YOUR OWN optional ("you may") '
+                'triggers is resolving: state.triggerText is the trigger, '
+                'state.yesCost is what saying yes costs (paid from your pool/'
+                'sources when it resolves), state.chosenTargets is what it will '
+                'affect. Loops live here (Rings of Brighthearth copies, "may pay '
+                'to copy/untap/draw"): if the yes-cost is part of a line you are '
+                'executing, say yes.'),
     "CHOOSE_NUMBER": ('Answer: {"chosen": <integer>} within state.min..state.max '
                       '— typically an X value; max is your affordable ceiling '
                       'RIGHT NOW (it counts your floating pool), so bigger is '
@@ -234,8 +241,26 @@ def safe_default(req: dict) -> dict:
     if dtype in ("CHOOSE_ENTITIES", "CHOOSE_CARDS"):
         lo, _ = _bounds(req, 0, len(ids))
         return {"chosen": [i for i in ids if i != 0][:lo]}
-    if dtype in ("PAY_UNLESS", "CONFIRM"):
-        return {"chosenId": 0}                   # decline / no: legal, spends nothing
+    if dtype == "CONFIRM":
+        # Shape-aware (game 7, 2026-08-17): a punt answered NO to "cast your
+        # free Dramatic Reversal copy?" and Urza's loop unwound at 72s a step.
+        # Confirms about the seat's OWN free play/copy default to YES (they
+        # spend nothing and are what the seat was doing); everything else —
+        # trigger yes-costs, sacrifice/pay-life/exile confirms — stays NO,
+        # the answer that spends nothing.
+        st = req.get("state", {}) or {}
+        mode = str(st.get("confirmMode", "") or "")
+        prompt = str(req.get("prompt", "") or "").lower()
+        if mode == "TRIGGER":
+            free = str(st.get("yesCost", "none")).lower() in ("none", "", "0", "{0}")
+            return {"chosenId": 1 if free else 0}
+        if mode in ("untyped", "OptionalChoose") and any(
+                w in prompt for w in ("play", "cast", "copy")) and not any(
+                w in prompt for w in ("sacrifice", "pay life", "exile", "discard")):
+            return {"chosenId": 1}
+        return {"chosenId": 0}
+    if dtype == "PAY_UNLESS":
+        return {"chosenId": 0}                   # decline: legal, spends nothing
     if dtype in ("CHOOSE_ENTITY", "CHOOSE_CARD"):
         if 0 in ids:
             return {"chosenId": 0}               # optional: choose none

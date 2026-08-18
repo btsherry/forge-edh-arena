@@ -1,7 +1,6 @@
 package forge.arena.bootstrap;
 
 import java.io.File;
-import java.util.Random;
 
 import forge.GuiDesktop;
 import forge.gui.GuiBase;

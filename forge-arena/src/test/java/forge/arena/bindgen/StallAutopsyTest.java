@@ -18,7 +18,6 @@ import forge.arena.combo.ExecutorBindings;
 import forge.arena.combo.SimResult;
 import forge.arena.prep.ClaudeClient;
 import forge.arena.prep.RouteLibrary;
-import forge.arena.prep.RouteRules;
 
 /**
  * Plan §8 StallAutopsyTest: distinct stalls are deduped by state hash (one
