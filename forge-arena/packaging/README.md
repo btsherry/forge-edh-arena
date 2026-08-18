@@ -189,6 +189,10 @@ pairwise 1v1s by finish order (simultaneous eliminations tie), starting at
   pair 1010 · n=12` — refreshed after each rated game.
 - Aborted/torn-down-mid-game sessions rate nothing; a game whose seat/deck
   bookkeeping looks inconsistent is skipped loudly rather than mis-rated.
+- Games degraded by transport failure (a seat's model session wedging, punt
+  pile-ups) are **voided**: recorded in the history with the reason, but the
+  ladders never move on a contaminated result. `ARENA_RATE_VOIDED=1` rates
+  them anyway.
 - Ratings are per-installation state: package rebuilds preserve them, and
   they never ship in the tarball.
 

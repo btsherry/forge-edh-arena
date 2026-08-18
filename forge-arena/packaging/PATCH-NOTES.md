@@ -1,5 +1,89 @@
 # forge-light-llm — Patch Notes
 
+## v3.1 — 2026-08-17
+
+### Faster: loops fast-forward, MCP-free decisions stay
+
+- **Declared-loop replay.** A seat executing a repetitive loop (Scepter
+  mana, storm counts, token pings) can declare `repeat_cycle: N` after one
+  full iteration; the runner replays the whole cycle's answers N times at
+  zero model calls and wakes the brain the instant ANYTHING differs — a new
+  stack object, a changed option list, a player leaving. A loop iteration
+  that cost ~60–80 seconds of deliberation now costs milliseconds after the
+  first pass. Life totals and the growing pool are expected loop movement
+  and never break the replay; novelty always does.
+- **Free own-trigger confirms think light** ("cast the Scepter copy?" class)
+  — routed to low effort with full authority, same policy as own-trigger
+  reaction windows.
+- (Carried from v3, the biggest single win: every decision stopped paying
+  ~2–3s of MCP tool-roster initialization for a process with all tools
+  disabled — median decision time fell from ~8s to ~5s. v3.1 keeps that and
+  removes the next tail: the loop.)
+
+### Fixed: counterspells actually counter
+
+Two distinct defects made seat-cast counters resolve as no-ops:
+
+- Seats targeted the stack-zone CARD instead of the spell on the stack —
+  a "countered" spell resolved anyway ("found nothing" fizzles, Winter Orb
+  surviving two counters in one game). Spell targeting now aims at the
+  stack entry itself, the same object the rules operate on.
+- A targeted spell cast by a seat could reach resolution with its targets
+  stripped after an interleaved trigger. Cast-time diagnostics now verify
+  the stack entry carries the seat's chosen targets, and the full collision
+  (counter + tax trigger + cast trigger, all on one stack) is covered by
+  regression tests.
+
+### New: your own triggers are yours
+
+- **Optional "you may [pay X to]…" triggers reach the seat** as a confirm
+  with the trigger text, the cost, and the chosen targets — Rings of
+  Brighthearth copies, may-draws, may-bounces. (Stock AI silently declined
+  the seat's own Rings copies: a live "infinite mana" combo netted zero for
+  three full turns.)
+- **Targeting triggers are aimed by the seat** — Tidespout Tyrant no longer
+  bounces its controller's own 17/17 because a heuristic liked the look of
+  it.
+
+### New: the symmetry break
+
+If a seat controls a permanent whose restriction reads "as long as ~ is
+untapped" and affects all players (Winter Orb, Static Orb, Storage Matrix),
+windows on the turn right before the seat's own now offer **[SYMMETRY
+BREAK]**: tap the piece through any outlet whose cost can tap it (Urza,
+Clock of Omens, its own tap ability) with the piece pre-selected as the
+payment. The seat's untap step escapes the lock; the piece untaps during
+that same step and keeps restricting everyone else. Detected from card
+mechanics, not card names — future cards with the same shape work
+automatically. All seats see `state.symmetryPieces` and whose untap is next.
+
+### New: more decisions belong to the brain
+
+- Discard selection (rummage, forced discards where you choose).
+- Split/adventure/MDFC face and side picks.
+- "Reduce this cost by up to N" numbers.
+- Generic "choose N cards" effect choices.
+
+### New: transport resilience and honest ratings
+
+- A seat whose resident session goes dark (timeouts, upstream 500s) now
+  drops the wedged session after a sustained failure streak and rejoins the
+  game on a fresh one — with a note telling the brain to re-derive its plan
+  from the live board. A brief blip never costs the session.
+- Emergency defaults are shape-aware: a punt no longer answers "no" to the
+  seat's own free copy-cast mid-combo.
+- Games degraded by transport failure are **voided for ratings**: the
+  history keeps the record (with the reason), the ladders never move on a
+  contaminated result. `ARENA_RATE_VOIDED=1` overrides.
+
+### Improved: seat brief tuned from live evidence
+
+Assembly-cost counting when one combo piece away; re-cost the payoff after
+its mana source resolves; impulse/play-from-exile before the land drop;
+re-check your hand for an answer to the permanent you keep planning around;
+symmetry-piece timing; per-deck mana-discipline notes (Urza's colourless-
+heavy base).
+
 ## v3 — 2026-08-17
 
 ### New: bring your own models

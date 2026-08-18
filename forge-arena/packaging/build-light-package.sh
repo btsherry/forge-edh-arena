@@ -116,7 +116,8 @@ cp "$REPO/forge-arena/docs/research/mtg-rules-summary.md" \
 
 echo "[7/9] runner — the seatd tree (no tests, no pycache, empty logs/)"
 rsync -a --exclude '__pycache__/' --exclude '/tests/' --exclude '/logs/' \
-  --exclude '/ratings.json' --exclude '/ratings-history.jsonl' --exclude '/results/' \
+  --exclude '/ratings.json' --exclude '/ratings-history.jsonl' \
+  --exclude '/ratings.lock' --exclude '/results/' \
   "$REPO/forge-arena/runner/" "$DEST/forge-arena/runner/"
 mkdir -p "$DEST/forge-arena/runner/logs" "$DEST/forge-arena/runner/results" \
   "$DEST/forge-arena/mailbox"
