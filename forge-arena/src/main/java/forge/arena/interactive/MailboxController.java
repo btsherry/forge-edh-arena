@@ -25,6 +25,7 @@ import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
+import forge.game.card.CardCollectionView;
 import forge.game.player.PlayerActionConfirmMode;
 import forge.game.card.CounterType;
 import forge.game.combat.Combat;
@@ -1280,6 +1281,257 @@ public final class MailboxController extends PlayerControllerAi
         Card pick = byId.get(cid);
         return pick != null ? pick
                 : super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList, delayedReveal, selectPrompt, isOptional, decider);
+    }
+
+    /**
+     * Discard selection (backlog item 4, 2026-08-17). Stock picked the seat's
+     * discards by heuristic (getCardsToDiscard) — Faithless Looting-class
+     * rummage, Sheoldred discards, hellbent costs all bypassed the brain.
+     * Engages only when every candidate is visible to this chooser (own hand,
+     * or an effect that reveals) — hidden-info discipline over convenience.
+     */
+    @Override
+    public CardCollection chooseCardsToDiscardFrom(Player p, SpellAbility sa,
+            CardCollection validCards, int min, int max, CardCollectionView visibleToChooser) {
+        try {
+            if (validCards == null || validCards.isEmpty() || max <= 0) {
+                return super.chooseCardsToDiscardFrom(p, sa, validCards, min, max, visibleToChooser);
+            }
+            int lo = Math.max(0, min);
+            int hi = Math.min(max, validCards.size());
+            if (lo >= validCards.size()) {
+                return new CardCollection(validCards); // forced: all of them
+            }
+            for (Card c : validCards) {
+                if (p != getPlayer() && (visibleToChooser == null || !visibleToChooser.contains(c))) {
+                    // choosing from cards we may not see: stock keeps that job
+                    return super.chooseCardsToDiscardFrom(p, sa, validCards, min, max, visibleToChooser);
+                }
+            }
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", lo);
+            state.put("max", hi);
+            Card src = sa != null ? sa.getHostCard() : null;
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "CHOOSE_CARDS",
+                    "DISCARD " + lo + "-" + hi + " from "
+                            + (p == getPlayer() ? "YOUR hand" : p.getName() + "'s cards")
+                            + (src != null ? " [source: " + src.getName() + "]" : "")
+                            + " (answer {\"chosen\": [ids]})")
+                    .state(state);
+            Map<Integer, Card> byId = new LinkedHashMap<>();
+            for (Card c : validCards) {
+                int oid = c.getId();
+                if (oid <= 0 || byId.containsKey(oid)) {
+                    return super.chooseCardsToDiscardFrom(p, sa, validCards, min, max, visibleToChooser);
+                }
+                req.option(oid, cardChoiceLabel(c),
+                        c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
+                byId.put(oid, c);
+            }
+            JsonNode resp = bus.exchange(req);
+            if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+                return super.chooseCardsToDiscardFrom(p, sa, validCards, min, max, visibleToChooser);
+            }
+            CardCollection picked = new CardCollection();
+            Set<Integer> seen = new HashSet<>();
+            for (JsonNode n : resp.get("chosen")) {
+                Card c = n != null && n.isInt() ? byId.get(n.asInt()) : null;
+                if (c == null || !seen.add(n.asInt())) {
+                    return super.chooseCardsToDiscardFrom(p, sa, validCards, min, max, visibleToChooser);
+                }
+                picked.add(c);
+            }
+            if (picked.size() < lo || picked.size() > hi) {
+                return super.chooseCardsToDiscardFrom(p, sa, validCards, min, max, visibleToChooser);
+            }
+            return picked;
+        } catch (RuntimeException e) {
+            return super.chooseCardsToDiscardFrom(p, sa, validCards, min, max, visibleToChooser);
+        }
+    }
+
+    /**
+     * Face pick from a FINITE list (split/adventure/MDFC prompts). The other
+     * chooseSingleCardFace overload (predicate + whole card DB, "name a
+     * card") stays stock — the mailbox never ships an unbounded option list.
+     */
+    @Override
+    public forge.card.ICardFace chooseSingleCardFace(SpellAbility sa,
+            List<forge.card.ICardFace> faces, String message) {
+        try {
+            if (faces == null || faces.size() <= 1) {
+                return super.chooseSingleCardFace(sa, faces, message);
+            }
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", 1);
+            state.put("max", 1);
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "CHOOSE_CARD",
+                    "CHOOSE FACE: " + (message != null ? message : "pick a face")
+                            + (sa != null && sa.getHostCard() != null
+                                ? " [source: " + sa.getHostCard().getName() + "]" : ""))
+                    .state(state);
+            Map<Integer, forge.card.ICardFace> byId = new LinkedHashMap<>();
+            int id = 1;
+            for (forge.card.ICardFace f : faces) {
+                String label = f.getName()
+                        + (f.getManaCost() != null ? "  " + f.getManaCost() : "")
+                        + (f.getType() != null ? " — " + f.getType() : "");
+                req.option(id, label, null, "FACE");
+                byId.put(id, f);
+                id++;
+            }
+            JsonNode resp = bus.exchange(req);
+            if (resp != null && resp.get("chosenId") != null && resp.get("chosenId").isInt()) {
+                forge.card.ICardFace pick = byId.get(resp.get("chosenId").asInt());
+                if (pick != null) {
+                    return pick;
+                }
+            }
+            return super.chooseSingleCardFace(sa, faces, message);
+        } catch (RuntimeException e) {
+            return super.chooseSingleCardFace(sa, faces, message);
+        }
+    }
+
+    /** State pick (MDFC "play which side", copy-as choices). */
+    @Override
+    public forge.game.card.CardState chooseSingleCardState(SpellAbility sa,
+            List<forge.game.card.CardState> states, String message, Map<String, Object> params) {
+        try {
+            if (states == null || states.size() <= 1) {
+                return super.chooseSingleCardState(sa, states, message, params);
+            }
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", 1);
+            state.put("max", 1);
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "CHOOSE_CARD",
+                    "CHOOSE STATE/SIDE: " + (message != null ? message : "pick a state")
+                            + (sa != null && sa.getHostCard() != null
+                                ? " [source: " + sa.getHostCard().getName() + "]" : ""))
+                    .state(state);
+            Map<Integer, forge.game.card.CardState> byId = new LinkedHashMap<>();
+            int id = 1;
+            for (forge.game.card.CardState st : states) {
+                String label = st.getName()
+                        + (st.getType() != null ? " — " + st.getType() : "");
+                req.option(id, label, null, "STATE");
+                byId.put(id, st);
+                id++;
+            }
+            JsonNode resp = bus.exchange(req);
+            if (resp != null && resp.get("chosenId") != null && resp.get("chosenId").isInt()) {
+                forge.game.card.CardState pick = byId.get(resp.get("chosenId").asInt());
+                if (pick != null) {
+                    return pick;
+                }
+            }
+            return super.chooseSingleCardState(sa, states, message, params);
+        } catch (RuntimeException e) {
+            return super.chooseSingleCardState(sa, states, message, params);
+        }
+    }
+
+    /** "Reduce this cost by up to N" (cost-reduction X). Stock always maxed;
+     *  now the brain owns the number. */
+    @Override
+    public int chooseNumberForCostReduction(SpellAbility sa, int min, int max) {
+        try {
+            if (max <= min) {
+                return super.chooseNumberForCostReduction(sa, min, max);
+            }
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", min);
+            state.put("max", max);
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "CHOOSE_NUMBER",
+                    "COST REDUCTION: choose a number " + min + "-" + max
+                            + (sa != null && sa.getHostCard() != null
+                                ? " for " + sa.getHostCard().getName() : "")
+                            + " (answer {\"chosen\": <n>})")
+                    .state(state);
+            JsonNode resp = bus.exchange(req);
+            if (resp != null && resp.get("chosen") != null && resp.get("chosen").isInt()) {
+                int n = resp.get("chosen").asInt();
+                if (n >= min && n <= max) {
+                    return n;
+                }
+            }
+            return super.chooseNumberForCostReduction(sa, min, max);
+        } catch (RuntimeException e) {
+            return super.chooseNumberForCostReduction(sa, min, max);
+        }
+    }
+
+    /**
+     * Generic "choose N cards for effect" (keep/sacrifice/distribute
+     * choices). Same CHOOSE_CARDS shape as discards; falls to stock whenever
+     * anything is off-shape.
+     */
+    @Override
+    public CardCollectionView chooseCardsForEffect(CardCollectionView sourceList,
+            SpellAbility sa, String title, int min, int max, boolean isOptional,
+            Map<String, Object> params) {
+        try {
+            if (sourceList == null || sourceList.isEmpty() || max <= 0) {
+                return super.chooseCardsForEffect(sourceList, sa, title, min, max, isOptional, params);
+            }
+            int lo = Math.max(0, isOptional ? 0 : min);
+            int hi = Math.min(max, sourceList.size());
+            if (lo >= sourceList.size()) {
+                return new CardCollection(sourceList); // forced: all of them
+            }
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", lo);
+            state.put("max", hi);
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "CHOOSE_CARDS",
+                    (title != null && !title.isEmpty() ? title : "Choose cards")
+                            + " (choose " + lo + "-" + hi
+                            + "; answer {\"chosen\": [ids]})")
+                    .state(state);
+            Map<Integer, Card> byId = new LinkedHashMap<>();
+            for (Card c : sourceList) {
+                int oid = c.getId();
+                if (oid <= 0 || byId.containsKey(oid)) {
+                    return super.chooseCardsForEffect(sourceList, sa, title, min, max, isOptional, params);
+                }
+                req.option(oid, cardChoiceLabel(c),
+                        c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
+                byId.put(oid, c);
+            }
+            JsonNode resp = bus.exchange(req);
+            if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+                return super.chooseCardsForEffect(sourceList, sa, title, min, max, isOptional, params);
+            }
+            CardCollection picked = new CardCollection();
+            Set<Integer> seen = new HashSet<>();
+            for (JsonNode n : resp.get("chosen")) {
+                Card c = n != null && n.isInt() ? byId.get(n.asInt()) : null;
+                if (c == null || !seen.add(n.asInt())) {
+                    return super.chooseCardsForEffect(sourceList, sa, title, min, max, isOptional, params);
+                }
+                picked.add(c);
+            }
+            if (picked.size() < lo || picked.size() > hi) {
+                return super.chooseCardsForEffect(sourceList, sa, title, min, max, isOptional, params);
+            }
+            return picked;
+        } catch (RuntimeException e) {
+            return super.chooseCardsForEffect(sourceList, sa, title, min, max, isOptional, params);
+        }
     }
 
     /** Commander tax for casting {@code host} from the command zone right
