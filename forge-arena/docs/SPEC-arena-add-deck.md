@@ -6,7 +6,10 @@ per-card oracle text, the deck's real combos, an engine-implementability check,
 and a strategy primer — with **no hand-authoring**. This is the distribution
 blocker: without it, only the four bundled decks work.
 
-Status: SPEC (not built). Companion to the packaging plan (see chat 2026-08-10).
+Status: **BUILT** — implemented and shipped as `scripts/arena-add-deck.py` (cited
+from that script's header); this doc is its behavioral contract, not a pre-build
+plan. The "Build order" section below is the original plan, now complete.
+Companion to the packaging plan (see chat 2026-08-10).
 
 ---
 
