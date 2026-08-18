@@ -18,7 +18,11 @@ their own inboxes). The distilled learnings from both sessions and the next
 architectural step live under **Operational learnings** and **Next architecture**
 below — read those first if you are picking this up.
 
-> Status: research prototype ("v1"). Built on Card-Forge/forge (GPL-3.0);
+> Status (2026-08-17): SHIPPED — this seam is the core of the
+> **forge-light-llm** distributable (v1 2026-08-12 → v3.1 2026-08-17, on R2
+> as `-latest`). User-facing docs: `packaging/README.md` + `PATCH-NOTES.md`.
+> Engineering inventory: [INVENTORY.md](INVENTORY.md). Upstream-merge safety:
+> [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md). Built on Card-Forge/forge (GPL-3.0);
 > non-commercial fan content under WotC's Fan Content Policy. Any distribution
 > is source-available under GPL-3.0.
 
@@ -33,16 +37,32 @@ rest of forge-arena) must eventually reproduce without an LLM.
 
 ## Architecture
 
-All new code lives in `forge-arena/src/main/java/forge/arena/interactive/`. No
-parent-module patches — it rides the same controller-injection seam the headless
-arena uses.
+The seam's core lives in `forge-arena/src/main/java/forge/arena/interactive/`
+and rides the same controller-injection seam the headless arena uses.
+**The original "no parent-module patches" rule was deliberately dropped**
+(2026-08-17, first for the vanished-commander engine fix): the fork now
+diverges from upstream in 16 files outside forge-arena — 8 surgical patches
+(~150 lines, `[arena]`-marked), 7 new files (the forge-ai TapCostPreference
+hook and the gui-desktop Advisor/AI-panel tabs), 1 layout default. The
+authoritative list, with per-file rationale and guarding tests, is
+[INVENTORY.md §1](INVENTORY.md); the merge-safety plan is
+[UPSTREAM-SYNC.md](UPSTREAM-SYNC.md).
 
 | File | Role |
 |---|---|
 | `MailboxProtocol.java` | The file bus. Per-seat `inbox/`+`outbox/`; atomic writes (temp+rename); poll for the response; timeout → `null` (caller falls back to stock). Request/response wire records. No Forge imports — pure transport. |
 | `MailboxController.java` | `extends forge.ai.PlayerControllerAi`. Overrides the top-level decisions (`chooseSpellAbilityToPlay`, `mulliganKeepHand`, `declareAttackers`, `declareBlockers`) **plus high-value sub-choices** (`chooseSingleEntityForEffect`, `chooseEntitiesForEffect`, `chooseModeForAbility`, `chooseSingleCardForZoneChange`). Serializes a hidden-info-safe state and exchanges it over the bus. **Every override times out to `super` (stock AI)** so a silent/slow brain never hangs the game. |
 | `MailboxLobbyPlayer.java` | `extends forge.ai.LobbyPlayerAi`. Injects the controller via `IGameEntitiesFactory.createIngamePlayer` (the seam both headless and GUI paths converge on — `Game.java`), so a mailbox seat is honored in a GUI game with no engine/GUI patch. |
-| `GuiPilotMatch.java` | `main(...)` launcher: bootstraps the desktop GUI, seats a human at seat 0 and `MailboxLobbyPlayer`s at seats 1–3 over the four decks, and starts the match so the human's `IGuiGame` renders it. |
+| `GuiPilotMatch.java` | `main(...)` launcher: bootstraps the desktop GUI, seats a human at seat 0 and `MailboxLobbyPlayer`s at seats 1–3 (or all four in `--all-ai`), resolves the roster (`arena.seat.decks` / `ARENA_SEAT_DECKS`), and starts the match. |
+| `ObserverSnapshot.java` | Event-bus-driven public snapshot (`mailbox/observer-state.json`, ~200ms debounce): per-seat life/board/eliminated, whose turn — the pre-planning + dashboard + launch-liveness feed. |
+| `GameResultSpool.java` | At game end writes `runner/results/game-<ts>-<pid>.json` (placement groups from `Game.lostPlayers`, control typing by LobbyPlayer class) — the ELO applier's input. Skips cleanly when no absolute output dir is configured (tests). |
+| `AdvisorControllerHuman.java` / `AdvisorFeed.java` / `AdvisorLobbyPlayer.java` | The seat-0 **shadow feed** for the AI Advisor: mirrors the human's decision windows read-only through the same `buildState` projection (fairness lives in one place). No return channel — the advisor can never act or stall. |
+
+Parent-module residents (see INVENTORY §1b): `forge-ai/TapCostPreference`
+(tap-payment pre-selection hook consulted by `AiCostDecision`), and in
+forge-gui-desktop the `AiControlFile` protocol + `V/CAiControl` (AI panel:
+per-seat model/effort steppers, token/cost telemetry, ELO line) and
+`V/CAdvisor` + `AdvisorLogTail` (Advisor tab + pause button).
 
 ### The hybrid control model (important)
 
@@ -72,11 +92,16 @@ Consequences:
   which card a tutor/search fetches (`CHOOSE_CARD`). These are gated narrowly to
   *genuine* choices (>1 legal option, or an optional single) and, for the entity
   hooks, to card/permanent options only.
-- **Sub-choices still stock:** normal **spell targeting** (`chooseTargetsFor`
-  mutates the SpellAbility in place — deliberately left on stock), plus all the
-  trivial/forced hooks (`confirmAction`, trigger ordering, mana-color, numbers,
-  yes/no). So a line whose value hinges on a *spell target* (as opposed to an
-  effect's choose/copy/mode/fetch) is still stock's.
+- **(2026-08-17) Nearly everything above has since moved to the seat.**
+  Spell/ability targeting is seat-owned (notes 14/14b/14c) including **stack
+  targeting** — counters aim at the SpellAbility on the stack, never the
+  stack-zone card (note 36). The seat also owns its **own triggers** (targeting
+  note 34, optional yes/no note 35), pay-or-else costs, confirms, X and
+  cost-reduction numbers, discards, face/state picks, and multi-card choices.
+  The full current matrix — seat-owned vs deliberately-stock, with rationale —
+  is [INVENTORY.md §2](INVENTORY.md). Still stock by choice: multi-target
+  spells, whole-DB card naming, trigger ordering, combat damage assignment,
+  and mana auto-tap source selection (except the TapCostPreference hook).
 
 ### Fairness
 
@@ -99,7 +124,7 @@ stock AI. The engine deletes both files once the response is read.
 ```json
 {
   "seq": 12, "seat": 3, "turn": 22, "phase": "MAIN1",
-  "decisionType": "CAST_SPELL | REACT | MULLIGAN | DECLARE_ATTACKERS | DECLARE_BLOCKERS | CHOOSE_ENTITY | CHOOSE_ENTITIES | CHOOSE_MODE | CHOOSE_CARD",
+  "decisionType": "CAST_SPELL | REACT | MULLIGAN | DECLARE_ATTACKERS | DECLARE_BLOCKERS | CHOOSE_ENTITY | CHOOSE_ENTITIES | CHOOSE_MODE | CHOOSE_CARD | CHOOSE_CARDS | CHOOSE_NUMBER | PAY_UNLESS | CONFIRM",
   "prompt": "…",
   "state": {
     "seat","turn","phase","life","manaPool","untappedManaSources",
@@ -111,8 +136,13 @@ stock AI. The engine deletes both files once the response is read.
     "opponents":[{"seat","life","poison","creaturePower","battlefield":[ …per-card objects… ]}],
     /* + "defenders":[{id,label,type}] for DECLARE_ATTACKERS */
     /* + "attackers":[{id,label}]       for DECLARE_BLOCKERS  */
-    /* + "min","max" for CHOOSE_ENTITY/CHOOSE_ENTITIES/CHOOSE_MODE/CHOOSE_CARD */
-    /* + "allowRepeat":bool for CHOOSE_MODE; "destination":<zone> for CHOOSE_CARD */
+    /* + "min","max" for CHOOSE_ENTITY/CHOOSE_ENTITIES/CHOOSE_MODE/CHOOSE_CARD(S)/CHOOSE_NUMBER */
+    /* + "allowRepeat":bool for CHOOSE_MODE; "destination":<zone> for CHOOSE_CARD(S) */
+    /* + "commandZone":[{name,timesCast,nextCastTax}] — own commanders */
+    /* + "stackOwners":[seat...], "stackKinds":["trigger"|"spell"|...] — additive stack metadata */
+    /* + "symmetryPieces":[{name,controllerSeat,untapped}], "untapNextSeat" — Winter-Orb-class facts */
+    /* + effective keywords per card (indestructible/hexproof/ward/protection/evergreens, incl. granted) */
+    /* + "confirmMode","triggerText","yesCost","chosenTargets" on CONFIRM(TRIGGER) */
   },
   "options": [ {"id":0,"label":"Pass (do nothing)","cost":null,"type":"PASS"}, … ]
 }
@@ -166,7 +196,25 @@ and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists
   into `options`; must satisfy `min`/`max`; may repeat an index only when
   `allowRepeat` is true.
 - `CHOOSE_CARD` → `{"chosenId": <cardId>}` — the tutored/searched card (id `0` =
-  choose none, offered only when optional).
+  choose none, offered only when optional). Also used for face/state picks
+  (sequential ids).
+- `CHOOSE_CARDS` → `{"chosen":[<cardId>,…]}` — multi-card searches
+  (Cultivate-class), discard selection, choose-N-for-effect; must satisfy
+  `min`/`max`, no duplicates.
+- `CHOOSE_NUMBER` → `{"chosen": <int>}` within `min`..`max` — X announcements
+  on the cast path, cost-reduction amounts.
+- `PAY_UNLESS` → `{"chosenId": 0|1}` — 1 = pay (taxes like Rhystic/Sentinel,
+  counter-unless, pay-the-difference tutors, sacrifice-unless upkeeps).
+- `CONFIRM` → `{"chosenId": 0|1}` — yes/no confirms; `state.confirmMode ==
+  "TRIGGER"` marks the seat's own optional "you may [pay X to]…" trigger
+  (Rings-class), with `triggerText`/`yesCost`/`chosenTargets` in state.
+
+**Extra answer keys** (all optional, stripped before the wire): `turn_plan`
+(first own-main decision — quoted back later as advisory), `deviation`
+(`{wanted, blocked_by}` — the play-quality review trail, logged loudly),
+`hold_turn: true` (on a REACT pass — arm the same-turn hold posture),
+`repeat_cycle: N` (loop fast-forward: the runner replays the just-completed
+identical cycle N times at zero model calls, breaking on ANY novelty; cap 64).
 
 Malformed / unknown ids / wrong-count / illegal choices fall back to stock
 (never partially applied). Trivial windows (no castable ability / no eligible
@@ -176,42 +224,57 @@ attacker or blocker; a forced single sub-choice; a non-card entity option) are
 ## Running it
 
 ```sh
-# Desktop GUI, human vs 3 mailbox seats (Selvala seat 0 by default):
-ARENA_MAILBOX_TIMEOUT=600 forge-arena/scripts/run-pilot-match.sh
-# Ground-truth table dashboard (whose turn, all seats' life/board, pending decision):
-python3 forge-arena/scripts/arena-status.py
-# Plain GUI launch (no mailbox):
-forge-arena/scripts/run-gui.sh
+# THE launcher (one-shot: preflight -> teardown -> seat runners -> advisor ->
+# react-autopass -> GUI -> waits for liveness, prints one status line):
+forge-arena/scripts/arena-play.sh --all-ai                       # 4 AI seats, spectator GUI
+forge-arena/scripts/arena-play.sh --human [deck.dck] [--advisor] # you at seat 0
+#   knobs: --model haiku|sonnet|opus|fable  --effort low|medium|high|xhigh|max
+#          --timeout N   (defaults: opus / medium / 90s)
+forge-arena/scripts/arena-stop.sh    # teardown + ELO sweep + log archive
+
+# Ground-truth dashboard / live decision stream:
+python3 forge-arena/runner/status.py
+tail -f forge-arena/runner/logs/game.jsonl
+
+# Low-level (what arena-play wraps): run_table.sh (seat daemons),
+# run-pilot-match.sh (GUI JVM), run-gui.sh (plain GUI, no mailbox).
 ```
 The launcher runs from `forge-gui/` (Forge resolves `res/` from cwd) and pulls
 the desktop `--add-opens`/JVM args from `forge-gui-desktop/pom.xml`. Decks are
 read from Forge's Commander deck folder + `forge-arena/decks/`.
 
-**The brain side:** one agent per seat, given a static brief (its own deck's
-oracle text + primer + a short EDH rules card) once, then resumed per decision
-(context persists — the deck is not re-read). An orchestrator watches the
-inboxes (see `arena-status.py`, or a file monitor) and routes each pending
-request to the right agent, which writes the response file.
+**The brain side (SHIPPED — the Track-5 architecture below is built):** one
+resident daemon per seat (`runner/seatd/`, supervised by `run_table.sh` with
+restart + crash-loop damping). Each daemon holds a persistent model session
+(Claude CLI `--resume`, MCP-disabled — the single biggest latency win, ~2-3s
+off every decision) loaded once with the deck dossier + primer + both rules
+digests, self-serves its inbox, and layers: memo/autopass/hold fastpaths,
+executable plans, deviation + turn-intent capture, effort routing
+(resourceless / own-trigger / free-confirm windows think at `low`), cycle
+replay (`repeat_cycle`), wedge recovery (a dead session is dropped and
+rejoined fresh mid-game), and transport-event emission for ratings voiding.
+Any seat can instead run an **OpenRouter or OpenAI-compatible backend model**
+(`ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1"`) with $-and-call
+cost rails — see `packaging/README.md` §"Other models on the backend".
 
-## Known limitations (v1)
+## Known limitations (current, 2026-08-17)
 
-1. **Reactive play is partial.** The agent now makes its own instant-speed
-   responses when an opponent has a spell/ability on the stack (`REACT`), but
-   proactively flashing into an empty stack, and responding during the agent's
-   own turn, are still stock (bounded out to avoid flooding own-turn windows).
-2. **Some sub-choices go to stock.** The agent now makes copy/choose, modal, and
-   tutor-fetch sub-choices (`CHOOSE_ENTITY`/`CHOOSE_ENTITIES`/`CHOOSE_MODE`/
-   `CHOOSE_CARD`), but **normal spell targeting is still stock** (`chooseTargetsFor`
-   mutates the SpellAbility in place and is deliberately not intercepted) — see
-   hybrid model.
-3. **Narration is unreliable.** Agents sometimes report plays that didn't happen;
-   trust the board (`arena-status.py` / the request state), not the agent's prose.
-4. **Observer snapshot is coarse.** The dashboard now stays live during the
-   human's turn via the public event-bus `observer-state.json`, but it's a
-   ~200ms-debounced public snapshot (no hands/libraries), not a per-priority feed.
-5. **Latency.** Each consulted decision costs an agent resume + think (seconds to
-   minutes on a large model). A per-decision poll from the orchestrator batches a
-   whole turn per wake to reduce this.
+1. **Deliberately-stock surfaces** — multi-target spells, whole-DB card
+   naming, trigger ordering, combat damage assignment, mana auto-tap source
+   selection (INVENTORY §2 has the rationale per row).
+2. **Mixed-owner trigger cascades** (my trigger + your trigger alternating on
+   the stack) still cost one model call per window — the own-trigger memo
+   collapse correctly refuses to fire there. Bounded, safe, slow.
+3. **`canPayCost` guard conservatism** (note 41): the unaffordable-cast guard
+   can refuse a genuinely payable cast (observed: Ancient Tomb pain-land).
+   Self-healing — the brain gets the window back and floats mana explicitly —
+   but costs a round-trip.
+4. **Narration is unreliable** (unchanged): trust the request state and the
+   board, never the agent's prose. The deviation log exists precisely to make
+   the brain's *intent* auditable against reality.
+5. **Latency floor is model think-time** (~4-6s p50 at opus/low-medium after
+   the MCP-skip + fastpath + cycle-replay work). Remaining tail: mixed-owner
+   cascades (#2) and first-iteration loop passes before `repeat_cycle` arms.
 
 ## Upgrade roadmap
 
@@ -253,13 +316,15 @@ request to the right agent, which writes the response file.
 - Teacher→student: feed caught misplays into both the agent briefs and the
   deterministic runner.
 
-**Track 4 — packaging & release**
-- Versioned protocol spec + docs + an example brain → "bring your own agent."
-- Self-contained module (seat + launcher + scripts + dashboard).
-- GPL-3.0, non-commercial fan-content compliance; no card images needed for the
-  mailbox path.
+**Track 4 — packaging & release — ✅ SHIPPED (v1 2026-08-12 → v3.1 2026-08-17)**
+as **forge-light-llm**: zero-setup tarball on R2 (`-latest` alias), 7 bundled
+decks, deck ingestion, README + PATCH-NOTES, GPL-3.0 source-available. Build:
+`../BUILDING.md` + `packaging/build-light-package.sh` (the manifest).
 
-**Track 5 — autonomous per-seat brains (THE NEXT STEP — build plan: [AGENT-SDK-SEATS.md](AGENT-SDK-SEATS.md))**
+**Track 5 — autonomous per-seat brains — ✅ SHIPPED as `runner/seatd/`**
+(resident daemons, supervised, warm-cache, self-serving; the design doc
+[AGENT-SDK-SEATS.md](AGENT-SDK-SEATS.md) is retained as the historical plan).
+Original sketch follows —
 - Replace sleep/wake subagents with one **persistent Agent-SDK process per seat**
   (see *Next architecture*). Each seat runs an always-alive loop, **pre-plans on the
   public snapshot while opponents play**, and services its mailbox directly — no
@@ -322,7 +387,44 @@ re-pay the dossier (Operational learnings §2).
   request; nothing is lost mid-decision because writes are atomic).
 - Per-seat log for observability + teacher→student capture (Track 3).
 
-## Operational learnings & field notes (2026-08-06)
+## The shipped stack around the seam (2026-08-13 → 08-17)
+
+Engineering summary of the major systems now layered on this seam — the
+user-facing docs live in `packaging/README.md`; per-file map in INVENTORY §4.
+
+- **Backends (OpenRouter / OpenAI-compatible), per seat.** `or/<vendor>/<model>`
+  (API-billed, `OPENROUTER_API_KEY`) or `oai/<model>` (`ARENA_OAI_BASE_URL`,
+  keyless local endpoints OK) via `ARENA_SEAT_MODELS` or live re-dial from the
+  AI panel — a seat can detour Claude↔backend mid-game and its Claude session
+  survives. Rails: `ARENA_MAX_SEAT_COST_USD` ($5/seat/game default) + a
+  250-call cap that works when providers report no cost; caps/latches/failures
+  degrade to safe defaults, never stall the game. Config errors fail AT LAUNCH
+  on the terminal. Design contract: **no harm to the Claude path** — backend
+  state is fully isolated (`seatd/backends.py`).
+- **ELO ladders.** `GameResultSpool` (engine) → `runner/ratings.py` at
+  teardown: pilot / deck / pilot×deck ladders, six pairwise 1v1s by finish
+  order with tie groups, K-decay, per-seat panel digests, plottable history.
+  Pilot attribution from `game.jsonl` decision records (majority model in the
+  game window). Transport-contaminated games are **voided** (recorded with
+  reason, ladders frozen; `ARENA_RATE_VOIDED=1` overrides).
+- **The AI Advisor** (human games, `--advisor`): a fourth brain on the seat-0
+  read-only shadow feed — advice before you act, table-aware mulligans, color
+  commentary, coach's memory, pause button; `advisor-0.jsonl` dataset.
+- **Smart autopass** (`ARENA_AUTOPASS`, default `casts`): stakes-based
+  guarantees (own mains/combat/opponent-spell/floating-mana stops never
+  skipped) + `react-autopass.py` answering provably-no-op REACTs at ~200ms.
+- **The deviation log**: every seat states its plan (`turn_plan`) and reports
+  each thwarted line (`deviation {wanted, blocked_by}`) — grep `DEVIATION`
+  for a play-quality review. The brief-tuning loop runs off this evidence.
+- **Pace stack**: MCP-init skip (~2-3s/decision, median 8s→5s), memo +
+  own-trigger cascade collapse, dead-window effort routing, and
+  brain-declared **cycle replay** (game 8: three kill loops, ~200 decisions
+  replayed at ~0.5s each, three opponents eliminated sequentially in ~3 min).
+- **Resilience**: wedged-session detection → fresh-session rejoin with a
+  board-truth note; shape-aware punt defaults (own free copy-cast → yes);
+  transport events feeding the ratings void check.
+
+## Operational learnings & field notes (2026-08-06 —)
 
 Hard-won from two live sessions; read before optimizing anything.
 
@@ -630,3 +732,126 @@ Hard-won from two live sessions; read before optimizing anything.
     (banding damage-control, multi-blocker ordering, trample, deathtouch) was
     never overridden by the seam — it already defers to stock AI, so it was never
     broken and needed no change.
+
+23. **AI Advisor shipped (2026-08-12/13).** Seat-0 shadow feed
+    (`AdvisorControllerHuman` → the same `buildState` projection, fairness in
+    one place), dedicated coach brain, Advisor dock tab, deliberate cadence
+    (3-5 moments/turn, danger overrides), coach's memory, strictly read-only,
+    pause button (08-13). Dataset: `advisor-0.jsonl`.
+24. **Smart autopass, stakes-based not heuristic (2026-08-13).** Own mains,
+    combat declares, opponent-spell stops, floating-mana stops, and
+    post-equip windows are NEVER auto-passed by any layer; everything else
+    defaults to `casts` mode with ⏭ receipts. `react-autopass.py` promoted to
+    standard launch (from note-12 stopgap).
+25. **MDFC + keywords serialization (2026-08-13).** Bundled deck data carries
+    both faces (a modal land back IS a land — mulligan judgment), and every
+    board state serializes effective keywords (indestructible/hexproof/ward/
+    protection/evergreens incl. granted) — facts, not recall tests.
+26. **MCP-init skip — the single biggest latency win (2026-08-17).**
+    `--strict-mcp-config --mcp-config '{"mcpServers":{}}'` on every brain
+    call: each decision had been paying ~2-3s to connect the host's full MCP
+    roster with all tools disabled. Median decision 8s→5s; thinking share
+    58%→88%. Golden-argv test pins the flags.
+27. **Deviation logger + turn intent (2026-08-17).** `turn_plan` captured at
+    the first own-main window and quoted back as advisory; `deviation
+    {wanted, blocked_by}` logged LOUDLY. Found its first real pattern within
+    hours (note 29's tax-blind labels; game-7's answer-framing tunnel vision).
+28. **Modal-spell mode discard (2026-08-17, FIXED).** Charm-shell targeting
+    fell through to stock `CharmAi`, which `setSubAbility(null)`-ed the
+    seat's chosen mode and re-picked by its own logic — tutors "found
+    nothing". Fix: target the CHAINED MODES inside the cast runnable, never
+    the shell. Live-shaped regression test.
+29. **Vanished commander on failed payment (2026-08-17, FIXED, 4 layers).**
+    Tax-blind labels → seat chose an unpayable recast → upstream FIXME moved
+    the card stack→stack and orphaned it FOREVER. Fixes: effective-cost
+    labels (`[effective cost: {1}{G}{G} + {4} = 7 mana]`), local
+    affordability guard (REFUSED + window returned), own `commandZone` in
+    state, and the **first deliberate upstream behavioral patch**:
+    `ComputerUtil.handlePlayingSpellAbility` rolls back to origin zone
+    (`UnaffordableCastRollbackTest` guards it — see UPSTREAM-SYNC.md).
+30. **PAY_UNLESS / CHOOSE_CARDS / CONFIRM surfaces (2026-08-17).** Every
+    "pay X or else" (Rhystic/Sentinel taxes, counter-unless, pay-the-
+    difference tutors, sacrifice-unless), multi-card searches
+    (Cultivate-class), and yes/no confirms reach the seat. Stock's
+    `willPayUnlessCost` hard-refused non-creatures — a paid-for Mana Vault
+    went to the graveyard.
+31. **Free alternative costs offered (2026-08-17).** `getSpellAbilities`
+    strips alt-cost SAs when the base is castable; the mailbox option list
+    was built from the stripped list, so Fierce Guardianship showed only as
+    {2}{U} and the payer tapped four sources. Fix: enumerate via
+    `getOriginalAndAltCostAbilities` cheaper-first, label `[FREE — alternative
+    cost you qualify for right now; printed cost X]`.
+32. **Own-trigger cascade memo + dead-window routing (2026-08-17).** When
+    EVERY stack item is the seat's own trigger, the memo signature collapses
+    the multiset to a set (a shrinking cascade of identical triggers
+    fast-passes after one look); resourceless REACTs and own-trigger REACTs
+    route to effort low — full authority, never skipped.
+33. **Local ELO (2026-08-17).** See "The shipped stack" above. Design pin:
+    control typing by LobbyPlayer CLASS, never by name (F-24); ratings are
+    per-installation state and never ship.
+34. **Trigger TARGETING was stock (2026-08-17, FIXED).** A seat's targeting
+    triggers were aimed by `brains.doTrigger` heuristics — Tidespout Tyrant
+    bounced its controller's own 17/17, then the Tyrant itself.
+    `orderAndPlaySimultaneousSa`/`prepareTriggerViaSeat` now route each
+    targeting SA in the seat's trigger chain through `chooseTargetsFor`.
+35. **Optional-trigger yes/no was stock (2026-08-17, FIXED —
+    game-losing class).** `WrappedAbility.resolve → confirmTrigger →
+    brains.doTrigger`: stock `CopySpellAbilityAi` NEVER pays for a Rings of
+    Brighthearth copy of the seat's own activated ability — Urza's
+    Rings+Basalt "infinite" netted ZERO for three turns while the brain
+    narrated the loop (pool 7→4→7 every cycle). Now a
+    `CONFIRM (confirmMode=TRIGGER)` with trigger text, yes-cost, chosen
+    targets; only an unpayable yes-cost auto-declines. Blast radius was every
+    "you may [pay X to]…" trigger at the table.
+36. **The two fizzles (2026-08-17, both FIXED).** (a) Seats targeted the
+    stack-zone CARD, not the stack SpellAbility — `CounterEffect` reads
+    `getTargetSpells()`, so every seat-cast counter resolved as a NO-OP
+    (Guardianship + Swan Song both "resolved", Generous Gift survived; the
+    Swan Song Bird was even created). `chooseTargetsFor` now enumerates
+    `SpellAbilityStackInstance.getSpellAbility()` for stack-zone targeting
+    and EXCLUDES stack-zone cards. (b) The live "(none set)" caster-side
+    target loss: precondition eliminated by construction; cast-time
+    diagnostics `[arena] TARGETLOSS` / `[arena] SA-SWAP` name any recurrence.
+    `GuardedCastTargetIntegrityTest` replays the full game-7 collision
+    (guarded cast + PAY_UNLESS interleave + counter + seat-aimed Tyrant
+    trigger) in three scenarios. Test-harness lesson: option-id probe regexes
+    MUST anchor to the option object (`\{"id":N,"label":"…`) — matching
+    anywhere in the body hits card ids in state.battlefield (bit twice).
+37. **Four more surfaces (2026-08-17).** Discard selection (visible-only,
+    hidden-info-disciplined), split/adventure/MDFC face picks (finite lists
+    only), card state/side picks, cost-reduction numbers, generic
+    choose-N-for-effect. All reuse existing wire shapes; all fall to stock
+    on any off-shape answer.
+38. **Symmetry break (2026-08-17).** Detect from script metadata
+    (`Mode$ Continuous` + `IsPresent$ Card.Self+untapped` + `Affected$
+    Player` — exactly Winter/Static Orb + Storage Matrix; auto-excludes the
+    15 self-buff while-untapped cards); when the seat's untap is NEXT, offer
+    `[SYMMETRY BREAK]` — tap the piece via any CostTapType outlet with the
+    piece PRE-SELECTED as payment (forge-ai `TapCostPreference` hook; no
+    preference → stock untouched). The one case where a mana ability IS the
+    meaningful action. Window opens for the offer. Tests across two pieces ×
+    two outlets + the Druid negative.
+39. **Cycle replay (2026-08-17) — loops at engine speed.** Brain declares
+    `repeat_cycle: N` on a decision identical to an earlier one this turn;
+    the runner replays the recorded cycle (label-rebound, validated per
+    window) until N rounds or ANY novelty (new stack object, changed
+    options, player left, turn boundary). Life/pool are deliberately OUTSIDE
+    the signature (loops move them). Game 8 live: three armed cycles
+    (16+18+18 rounds), ~200 decisions at ~0.5s, three opponents killed
+    sequentially, zero broken replays. Known: brains declare one window
+    early (harmless refusal, self-corrects); mixed-owner cascades stay
+    model-priced by design.
+40. **Transport resilience + honest ratings (2026-08-17).** Game 7: one
+    seat's resident session went dark 11 min (upstream 500s), another died
+    MID-COMBO — and a punt answered "no" to its own free copy-cast. Fixes:
+    wedge detection (sustained failure streak, not a blip) → drop --resume,
+    fresh session + rejoin note; nonzero-exit logging includes stdout (the
+    API-error envelope); shape-aware punt defaults; punts/wedges →
+    `transport-events.jsonl` → ratings VOID (recorded, never rated).
+41. **`canPayCost` guard false-positive (2026-08-17, OPEN, self-healing).**
+    The note-29 affordability guard REFUSED Ruby Medallion with an untapped
+    Ancient Tomb and empty pool (stock mana logic conservative about
+    pain-lands?); the brain re-took the window, floated {C}{C} explicitly,
+    and cast successfully — 2 extra decisions. Watch for recurrence; the fix
+    direction is investigating `ComputerUtilMana`'s pain-source treatment,
+    not weakening the guard (the guard exists to prevent note-29 orphaning).
