@@ -280,7 +280,7 @@ cost rails — see `packaging/README.md` §"Other models on the backend".
 
 **Track 1 — loop tightening & action speed**
 - ✅ Lever 2: trivial-subphase gate (empty windows auto-pass to stock).
-- ✅ Terser brain protocol: `{chosenId}` + one-line reason (see `brain-brief-template.md`).
+- ✅ Terser brain protocol: `{chosenId}` + one-line reason (see `seatd/seat-brief.md`).
 - ✅ Whole-turn drain (batch a turn per wake) + a file monitor as the cross-phase backstop.
 - ✅ **Reactive-gate hardening (v2):** only open a `REACT` window when a *real,
   affordable* response exists — drop all mana abilities and any spell the seat
