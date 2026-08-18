@@ -36,19 +36,27 @@ piece in its `requires` zone and choosing a basic land from the pieces' colors
 
 ## Canonical example
 
-`decks/selvala-competitive/dossier/fixtures/fixture-syn-phyrexian-dreadnought-momentous-fall.json`:
+Derived by `ProgramGate` from
+`decks/selvala-heart-of-the-wilds/dossier/combo-program-syn-phyrexian-dreadnought-selvala.json`
+— a `dreadnought_window` line: cast Phyrexian Dreadnought from hand for its
+enter-the-battlefield sacrifice window, with Selvala already in play as the
+exploit payoff:
 
 ```json
 {
   "schema": "arena.program-fixture/1",
-  "combo_id": "syn-phyrexian-dreadnought-momentous-fall",
-  "derived_from": "combo-program-syn-phyrexian-dreadnought-momentous-fall.json",
+  "combo_id": "syn-phyrexian-dreadnought-selvala",
+  "derived_from": "combo-program-syn-phyrexian-dreadnought-selvala.json",
   "apply_turn": 4,
-  "battlefield": [],
-  "hand": [ "Phyrexian Dreadnought", "Momentous Fall" ],
-  "lands": { "Forest": 10 }
+  "battlefield": [ "Selvala, Heart of the Wilds" ],
+  "hand": [ "Phyrexian Dreadnought" ],
+  "lands": { "Forest": 6 }
 }
 ```
+
+This also shows the hand/battlefield split the invariants below call out: the
+`requires:HAND` window body (Phyrexian Dreadnought) goes in `hand[]`, while the
+`requires:BATTLEFIELD` exploit piece (Selvala) is placed in `battlefield[]`.
 
 ## Consumer & invariants
 

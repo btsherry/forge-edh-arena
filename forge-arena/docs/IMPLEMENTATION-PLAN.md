@@ -668,13 +668,13 @@ External DeckCheck.co analyses, one per deck — an input the discovery harnesse
 
 - `forge-arena/docs/IMPLEMENTATION-PLAN.md` — Master specification (v3.3), canonical design document covering mission, acceptance bars, architecture, schemas, execution flow, and roadmap.
 - `forge-arena/docs/PR-LOG.md` — Running PR log mapping each PR to artifacts introduced (Foundation PRs 1–14 and beyond).
-- `forge-arena/docs/PHASE-11-PLAN.md` — Ben-approved plan: one execution path per combo, no fallback tier, full oracle text as compiler input alongside scripts.
+- `forge-arena/docs/archive/PHASE-11-PLAN.md` — Ben-approved plan: one execution path per combo, no fallback tier, full oracle text as compiler input alongside scripts.
 - `forge-arena/docs/WIN-ROUTES.md` — Win Routes spec (v1): closed set of conversion routes, per-deck feature classification rules (cache-first, library-driven).
 - `forge-arena/docs/PROJECT-BRIEF.md` — Canonical project brief (one sentence): drop in ANY deck, prep detects combos, pilot assembles and converts to wins with no hardcoded logic.
 - `forge-arena/docs/T0-VERIFICATION.md` — Forge internals verification (complete) against Plan v3.1 §1: all assumptions confirmed except 4 corrections.
-- `forge-arena/docs/PAIRING-AUDIT-GIADA.md` — Giada pairing audit: two-auditor card-text reconfirmation of the wipe+shield pairs (2026-07-23).
-- `forge-arena/docs/SELVALA-ARC.md` — Selvala mana-loop arc, a living plan (started 2026-07-30).
-- `forge-arena/docs/SELVALA-BUILD-MANIFEST.md` — Selvala win-rate build manifest: synthesis of five surveys.
+- `forge-arena/docs/archive/PAIRING-AUDIT-GIADA.md` — Giada pairing audit: two-auditor card-text reconfirmation of the wipe+shield pairs (2026-07-23).
+- `forge-arena/docs/archive/SELVALA-ARC.md` — Selvala mana-loop arc, a living plan (started 2026-07-30).
+- `forge-arena/docs/archive/SELVALA-BUILD-MANIFEST.md` — Selvala win-rate build manifest: synthesis of five surveys.
 
 ### Documentation rails (Aug-2026 ingestion initiative)
 

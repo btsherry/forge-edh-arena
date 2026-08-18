@@ -15,7 +15,7 @@ shield in response while the wipe is still on the stack — fired once per pair 
 game when opponents present enough of a threat. The archetypal case is a one-sided
 wrath: Doomskar (destroy all creatures) under Teferi's Protection (phase out all
 your permanents until your next turn). The mechanism validity of each pair was
-adjudicated by a two-auditor card-text audit (`docs/PAIRING-AUDIT-GIADA.md`).
+adjudicated by a two-auditor card-text audit (`docs/archive/PAIRING-AUDIT-GIADA.md`).
 
 ## Who generates it, and when
 
@@ -63,7 +63,7 @@ that makes the pair one-sided.
     "paired_plays_entry": "pp-doomskar-teferi-s-protection",
     "script_hashes": { "doomskar": "838042d370feb9a0", "teferi_s_protection": "2aae3a433d13bc43" },
     "mechanism_validity": "VALID per the two-auditor audit (36/36 verdict convergence): phasing vs destroy, coverage all_own_permanents vs scope CREATURES.",
-    "audit": "docs/PAIRING-AUDIT-GIADA.md"
+    "audit": "docs/archive/PAIRING-AUDIT-GIADA.md"
   },
   "wipe": { "card": "Doomskar", "mechanism": "destroy", "scope": "CREATURES", "timing": "sorcery", "cost": "{3}{W}{W}" },
   "protection": { "card": "Teferi's Protection", "mechanism": "phasing", "coverage": "all_own_permanents", "duration": "until_your_next_turn", "timing": "instant", "cost": "{2}{W}" },
@@ -114,7 +114,7 @@ and no ComboTracker readiness — the gate is castability + the threat threshold
 
 ## Validation
 
-- **Audit:** two-auditor card-text audit per pair (`docs/PAIRING-AUDIT-GIADA.md`);
+- **Audit:** two-auditor card-text audit per pair (`docs/archive/PAIRING-AUDIT-GIADA.md`);
   a pair ships only on verdict convergence.
 - **Goldfish + A/B:** as the program family; `verify.own_preserved` /
   `opponents_reduced` are the correctness assertions.
@@ -126,4 +126,4 @@ and no ComboTracker readiness — the gate is castability + the threat threshold
 
 - Runner: [`runner-cat.md`](../runner-cat.md) → `PairingRunner`
 - Sibling artifacts: [combo-program](combo-program.md), [engine-program](engine-program.md)
-- Upstream: `paired-plays.json`, `protection-priorities.json`; audit `docs/PAIRING-AUDIT-GIADA.md`
+- Upstream: `paired-plays.json`, `protection-priorities.json`; audit `docs/archive/PAIRING-AUDIT-GIADA.md`

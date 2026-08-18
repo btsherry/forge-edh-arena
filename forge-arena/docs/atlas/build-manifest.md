@@ -66,4 +66,4 @@ source of truth (the programs on disk are the truth).
 
 - Triage source: [discovered-synergies-wholedeck](discovered-synergies-wholedeck.md)
 - Truth twins (machine-read): the [combo-program](combo-program.md) files + [program-backlog](program-backlog.md)
-- Human narrative: `docs/SELVALA-BUILD-MANIFEST.md`
+- Human narrative: `docs/archive/SELVALA-BUILD-MANIFEST.md`
