@@ -430,14 +430,54 @@ public final class MailboxController extends PlayerControllerAi {
         // getAllCandidates (all GameEntity kinds); multi-target -> stock.
         forge.game.spellability.TargetRestrictions tgt = sa.getTargetRestrictions();
         Card host = sa.getHostCard();
-        if (tgt != null && host != null && tgt.getMinTargets(host, sa) > 0
-                && !sa.isTargetNumberValid()) {
+        boolean requiredTargets = tgt != null && host != null
+                && tgt.getMinTargets(host, sa) > 0;
+        if (requiredTargets && !sa.isTargetNumberValid()) {
             if (!chooseTargetsFor(sa)) {
                 sa.resetTargets();
                 return true;
             }
         }
-        return super.playChosenSpellAbility(sa);
+        boolean played = super.playChosenSpellAbility(sa);
+        // FIZZLE-2 diagnostic (game 7, 2026-08-17): a required-target spell we
+        // pre-targeted reached resolution with EMPTY TargetChoices ("[arena]
+        // FIZZLE ... (none set)"). If the cast path ever swaps the SA object
+        // (addExtraKeywordCost wrapping, splice re-targeting) or drops the
+        // choices between pre-targeting and stack-add, say so AT CAST TIME —
+        // the resolution-side FIZZLE line alone can't distinguish the two.
+        if (requiredTargets && sa.isSpell()) {
+            try {
+                boolean sameSaOnStack = false;
+                forge.game.spellability.SpellAbilityStackInstance swapped = null;
+                for (forge.game.spellability.SpellAbilityStackInstance si
+                        : getGame().getStack()) {
+                    SpellAbility onStack = si.getSpellAbility();
+                    if (onStack == sa) {
+                        sameSaOnStack = true;
+                        if (!onStack.isTargetNumberValid()) {
+                            System.err.println("[arena] TARGETLOSS seat " + seatIndex
+                                    + ": " + host.getName() + " reached the stack with "
+                                    + "invalid/empty targets right after pre-targeting");
+                        }
+                        break;
+                    }
+                    if (onStack != null && onStack.getHostCard() != null
+                            && host.getName().equals(onStack.getHostCard().getName())) {
+                        swapped = si;
+                    }
+                }
+                if (!sameSaOnStack && swapped != null) {
+                    SpellAbility other = swapped.getSpellAbility();
+                    System.err.println("[arena] SA-SWAP seat " + seatIndex + ": stack "
+                            + "instance for " + host.getName() + " holds a DIFFERENT "
+                            + "SpellAbility object than the one the seat targeted "
+                            + "(targetsValid=" + other.isTargetNumberValid() + ")");
+                }
+            } catch (RuntimeException ignore) {
+                // diagnostics must never break the cast path
+            }
+        }
+        return played;
     }
 
     /** True for a spell whose X the card doesn't set itself (mirrors
