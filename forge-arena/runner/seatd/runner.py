@@ -62,6 +62,13 @@ class SeatRunner:
         except (OSError, json.JSONDecodeError):
             self.combos = []
         self.react_seen: set[tuple] = set()
+        # Cycle replay (backlog item 3, 2026-08-17): the brain may declare
+        # "repeat_cycle": N on a decision it has answered identically before
+        # this turn; the runner replays the recorded cycle's answers for
+        # signature-matching windows at zero model calls, breaking to the
+        # model on ANY novelty. self._hist is this turn's decision tape.
+        self.cycle = None          # {steps, ptr, rounds, total}
+        self._hist = []            # [(sig, dtype, shape)] this turn
         self._last_turn: int | None = None
         # Stated intent for the current own turn (brain's `turn_plan`), kept in
         # NORMAL mode purely as an ADVISORY quote-back + deviation reference —
@@ -313,6 +320,152 @@ class SeatRunner:
             return False
         return all(o == self.seat for o in owners) and all(k == "trigger" for k in kinds)
 
+    # ---- cycle replay (brain-declared loop fast-forward) -------------------
+
+    CYCLE_DTYPES = ("CAST_SPELL", "REACT", "CONFIRM", "PAY_UNLESS",
+                    "CHOOSE_ENTITY", "CHOOSE_CARD", "CHOOSE_CARDS",
+                    "CHOOSE_NUMBER")
+    CYCLE_MAX_ROUNDS = 64
+    CYCLE_MAX_HIST = 120
+
+    def _cycle_signature(self, req: dict) -> tuple:
+        """Decision-shape signature for loop replay. Deliberately EXCLUDES
+        life totals and mana pool — a declared loop is expected to move both
+        (Reservoir gain, ping drains, growing pool). Novelty still breaks
+        replay through what IS included: any new/missing stack object, any
+        change in the option list (a drawn card becomes castable, an
+        affordability flip), a phase change, or a change in who is alive."""
+        st = req.get("state", {}) or {}
+        names = list(map(str, st.get("stack", [])))
+        if self._all_own_triggers(req):
+            stack = ("OWN-TRIGGERS", tuple(sorted(set(names))))
+        else:
+            stack = tuple(sorted(names))
+        opts = tuple(sorted(str(o.get("label", "")).split("  ")[0]
+                            for o in req.get("options", []) if o.get("id") != 0))
+        n_opp = len(st.get("opponents", []) or [])
+        return (req.get("decisionType"), req.get("phase"), stack, opts, n_opp)
+
+    @staticmethod
+    def _cycle_shape(req: dict, answer: dict):
+        """Answer -> replayable shape, or None (unsupported: never replayed).
+        Shapes rebind by option LABEL, never by id — ids are per-window."""
+        opts = {o.get("id"): str(o.get("label", ""))
+                for o in req.get("options", []) or []}
+        if not isinstance(answer, dict):
+            return None
+        if "chosenId" in answer:
+            cid = answer.get("chosenId")
+            if cid == 0:
+                return ("id0",)
+            lab = opts.get(cid)
+            return ("label", lab) if lab else None
+        ch = answer.get("chosen")
+        if isinstance(ch, int):
+            return ("number", ch)
+        if isinstance(ch, list):
+            labs = []
+            for cid in ch:
+                lab = opts.get(cid)
+                if lab is None:
+                    return None
+                labs.append(lab)
+            return ("labels", tuple(labs))
+        return None
+
+    @staticmethod
+    def _cycle_rebind(shape, req: dict):
+        """Shape -> concrete answer against THIS request, or None."""
+        def find(lab):
+            exact = [o for o in req.get("options", []) or []
+                     if str(o.get("label", "")) == lab]
+            if len(exact) == 1:
+                return exact[0].get("id")
+            pre = lab.split("  ")[0]
+            close = [o for o in req.get("options", []) or []
+                     if str(o.get("label", "")).split("  ")[0] == pre]
+            return close[0].get("id") if len(close) == 1 else None
+        if shape == ("id0",):
+            return {"chosenId": 0}
+        kind = shape[0]
+        if kind == "label":
+            oid = find(shape[1])
+            return {"chosenId": oid} if oid is not None else None
+        if kind == "number":
+            return {"chosen": shape[1]}
+        if kind == "labels":
+            ids = []
+            for lab in shape[1]:
+                oid = find(lab)
+                if oid is None:
+                    return None
+                ids.append(oid)
+            return {"chosen": ids}
+        return None
+
+    def _cycle_try_arm(self, req: dict, sig: tuple, out: dict) -> None:
+        """Model declared repeat_cycle: N — extract the just-completed cycle
+        from this turn's tape and arm the replay."""
+        n = out.get("repeat_cycle")
+        if not isinstance(n, int) or n < 1:
+            return
+        n = min(n, self.CYCLE_MAX_ROUNDS)
+        if req.get("decisionType") not in self.CYCLE_DTYPES:
+            self._say(f"[seat {self.seat}] repeat_cycle ignored: "
+                      f"{req.get('decisionType')} is not replayable")
+            return
+        prev = None
+        for i in range(len(self._hist) - 1, -1, -1):
+            if self._hist[i][0] == sig:
+                prev = i
+                break
+        if prev is None:
+            self._say(f"[seat {self.seat}] repeat_cycle ignored: no earlier "
+                      f"identical window this turn to bound the cycle")
+            return
+        steps = self._hist[prev:]
+        if any(shape is None or dt not in self.CYCLE_DTYPES
+               for (_, dt, shape) in steps):
+            self._say(f"[seat {self.seat}] repeat_cycle ignored: cycle "
+                      f"contains a non-replayable decision")
+            return
+        self.cycle = {"steps": steps, "ptr": 1 % len(steps),
+                      "rounds": n - (1 if len(steps) == 1 else 0),
+                      "total": n}
+        self._say(f"[seat {self.seat}] CYCLE armed: {len(steps)} step(s) x {n} "
+                  f"round(s) — replaying identical windows without model calls; "
+                  f"ANY novelty breaks out")
+
+    def _cycle_replay(self, req: dict, sig: tuple):
+        """Return (answer, note) replayed from the armed cycle, or None
+        (breaks the cycle on any mismatch)."""
+        if not self.cycle:
+            return None
+        step_sig, dt, shape = self.cycle["steps"][self.cycle["ptr"]]
+        if sig != step_sig or req.get("decisionType") != dt:
+            self._say(f"[seat {self.seat}] CYCLE broken at step "
+                      f"{self.cycle['ptr'] + 1}/{len(self.cycle['steps'])} "
+                      f"(window changed) — model resumes")
+            self.cycle = None
+            return None
+        answer = self._cycle_rebind(shape, req)
+        if answer is None or rules.validate(req, answer) is None:
+            self._say(f"[seat {self.seat}] CYCLE broken: recorded answer no "
+                      f"longer binds/validates — model resumes")
+            self.cycle = None
+            return None
+        self.cycle["ptr"] += 1
+        note = (f"cycle {self.cycle['total'] - self.cycle['rounds'] + 1}"
+                f"/{self.cycle['total']}")
+        if self.cycle["ptr"] >= len(self.cycle["steps"]):
+            self.cycle["ptr"] = 0
+            self.cycle["rounds"] -= 1
+            if self.cycle["rounds"] <= 0:
+                self._say(f"[seat {self.seat}] CYCLE complete "
+                          f"({self.cycle['total']} rounds) — model resumes")
+                self.cycle = None
+        return answer, note
+
     # ---- executable plan (four-part guard) --------------------------------
 
     def _plan_guard(self, req: dict, step: dict) -> int | None:
@@ -396,11 +549,15 @@ class SeatRunner:
             self.plan = None
             self.hold = None
             self.react_seen.clear()
+            self.cycle = None
+            self._hist = []
         if self._last_turn != req.get("turn"):
             self._last_turn = req.get("turn")
             self.react_seen.clear()
             self.hold = None  # hold posture is single-turn
             self.turn_intent = None
+            self.cycle = None   # loops never survive a turn boundary
+            self._hist = []
 
         seq, dtype = req.get("seq"), req.get("decisionType")
 
@@ -412,6 +569,24 @@ class SeatRunner:
             self._say(f"[seat {self.seat}] plan invalidated (opponent interaction)")
             self.plan = None
 
+        # Cycle replay: an armed brain-declared loop answers matching
+        # windows instantly; ANY mismatch falls through to the normal path.
+        cyc_sig = (self._cycle_signature(req)
+                   if (self.cycle or req.get("decisionType") in self.CYCLE_DTYPES)
+                   else None)
+        if self.cycle and cyc_sig is not None:
+            replayed = self._cycle_replay(req, cyc_sig)
+            if replayed is not None:
+                answer, note = replayed
+                ok = self.mb.respond(req, answer)
+                self._say(f"[seat {self.seat}] seq={seq} {dtype} -> "
+                          f"{json.dumps(answer)} [{note}]"
+                          f"{'' if ok else ' WINDOW LOST'}")
+                self._record(req, answer, "cycle", why=note, consumed=ok)
+                self._hist.append((cyc_sig, dtype, self._cycle_shape(req, answer)))
+                del self._hist[:-self.CYCLE_MAX_HIST]
+                return
+
         fast = self._fastpath(req)
         if fast:
             answer, source = fast
@@ -421,6 +596,9 @@ class SeatRunner:
             self._say(f"[seat {self.seat}] seq={seq} {dtype} -> {json.dumps(answer)} "
                       f"[{source}]{'' if ok else ' WINDOW LOST'}")
             self._record(req, answer, source, why=why, consumed=ok)
+            if cyc_sig is not None:
+                self._hist.append((cyc_sig, dtype, self._cycle_shape(req, answer)))
+                del self._hist[:-self.CYCLE_MAX_HIST]
             return
 
         # Guards #1-3: consume an executable plan step for a CAST_SPELL window,
@@ -441,6 +619,9 @@ class SeatRunner:
                           f"{'' if ok else ' WINDOW LOST'}")
                 self._record(req, answer, "plan",
                              why=step.get("why"), consumed=ok)
+                if cyc_sig is not None:
+                    self._hist.append((cyc_sig, dtype, self._cycle_shape(req, answer)))
+                    del self._hist[:-self.CYCLE_MAX_HIST]
                 return
             self._say(f"[seat {self.seat}] plan invalidated (divergence at seq {seq})")
             self.plan = None
@@ -482,6 +663,15 @@ class SeatRunner:
                     fast_eff = "low"
                     self._say(f"[seat {self.seat}] own-trigger REACT -> "
                               f"effort low for this window")
+                elif (dtype == "CONFIRM"
+                        and (req.get("state") or {}).get("confirmMode") == "TRIGGER"
+                        and str((req.get("state") or {}).get("yesCost", "none"))
+                            .lower() in ("none", "", "0", "{0}")):
+                    # your own free "you may" trigger (Scepter copy-cast class):
+                    # full authority, light thinking
+                    fast_eff = "low"
+                    self._say(f"[seat {self.seat}] free own-trigger CONFIRM -> "
+                              f"effort low for this window")
             out, meta = self.brain.decide(prompt, timeout_s=min(budget, 240.0),
                                           effort=fast_eff)
             clean = rules.validate(req, out) if out is not None else None
@@ -520,6 +710,11 @@ class SeatRunner:
                                      "steps": steps[:12], "idx": 0}
                         self._say(f"[seat {self.seat}] plan installed: "
                                   + ", ".join(s["card"] for s in self.plan["steps"]))
+                # Cycle replay arming: the brain declared it just completed an
+                # iteration of a loop it wants fast-forwarded.
+                if isinstance(out, dict) and out.get("repeat_cycle") is not None \
+                        and cyc_sig is not None:
+                    self._cycle_try_arm(req, cyc_sig, out)
                 # #2 hold posture: arm/refresh on a REACT-pass with hold_turn set;
                 # any non-pass react (the seat is interacting) clears it.
                 if self.react_hold and dtype == "REACT":
@@ -553,3 +748,6 @@ class SeatRunner:
                   f"{('  # ' + why) if why else ''}"
                   f"{'' if ok else ' WINDOW LOST'}")
         self._record(req, answer, source, meta, why=why, consumed=ok)
+        if cyc_sig is not None:
+            self._hist.append((cyc_sig, dtype, self._cycle_shape(req, answer)))
+            del self._hist[:-self.CYCLE_MAX_HIST]

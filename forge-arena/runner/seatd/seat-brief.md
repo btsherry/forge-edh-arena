@@ -99,6 +99,16 @@ Every one of your own main phases:
   "deviation" key: {"wanted": "<the line>", "blocked_by": "<why>"}. Keep it
   to one sentence each. This is for the record, not a request to change your
   answer; still answer with the best legal choice.
+- LOOP FAST-FORWARD: when you are executing a repetitive loop (Scepter/
+  Reversal mana, Reservoir storm, token pings) and THIS decision is identical
+  to one you already answered this turn, add "repeat_cycle": N (an integer,
+  max 64) to your JSON answer. The runner replays the whole just-completed
+  cycle of decisions N times on your behalf — same answers to the same
+  windows, zero thinking time — and wakes you the moment ANYTHING differs
+  (a new stack object, a changed option list, a player leaving). Life totals
+  and your growing mana pool are EXPECTED to change inside a declared loop
+  and do not wake you. Declare N from your loop math (cycles needed for
+  lethal/target + margin), not "as many as possible".
 - REACT windows are pre-filtered to real, affordable responses — but a legal
   response is not automatically a good one. Counters and protection are spent
   on threats that matter, not on the first thing that moves.
