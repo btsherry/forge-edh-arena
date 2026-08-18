@@ -148,6 +148,10 @@ JVM launcher), `run-gui.sh`, `arena-add-deck.py` (ingester),
 |---|---|---|---|
 | `mailbox/seat-N/{inbox,outbox}` | engine / seat daemons | each other | deleted per decision; cleared by arena-stop. gitignored. |
 | `mailbox/observer-state.json` | `ObserverSnapshot` (event bus) | seat pre-planning, advisor, dashboards, launch liveness | per-game. gitignored. |
+| `mailbox/seat-0-advisor/inbox/` | `AdvisorFeed` (Java, one-way shadow of the human seat's windows) | `advisor_runner.py` | per-game; cleared at stop. The advisor has NO outbox — read-only by construction. |
+| `runner/logs/control/seat-N.json` | runner (`_init_control` seeds it) + the GUI AI panel (writes re-dials) | runner polls mtime → applies model/effort at next decision | per-game; `control/` cleared at stop. |
+| `runner/logs/control/advisor.json` | the Advisor tab's pause button | `advisor_runner.py` (paused = no scanning, no calls) | cleared at stop → every session starts enabled. |
+| `runner/logs/control/or-models.json` | run_table's keyless OpenRouter `/models` probe (5s cap, warn-and-continue) | backends.py (context/completion limits) + next launch's context preflight | refreshed per launch when any `or/` seat is rostered; cleared at stop. |
 | `runner/logs/seat-N.{log,jsonl}` | seat daemon | humans, forensics, ELO attribution | rotated to `logs/archive/<ts>-stop/` by arena-stop. gitignored. |
 | `runner/logs/game.jsonl` | all seats (append) | ELO attribution, reviews | **preserved across games** (never rotated). gitignored. |
 | `runner/logs/seat-N.usage.json` | brain (atomic snapshot) | crash-restart spend seed, panel | per-game. |
@@ -156,7 +160,8 @@ JVM launcher), `run-gui.sh`, `arena-add-deck.py` (ingester),
 | `runner/logs/{gui,run_table,ratings,react-autopass,advisor_runner}.out` | nohup redirects in arena-play | humans | archived at stop. |
 | `runner/results/game-*.json` (+`.rated/.skipped/.voided`) | `GameResultSpool` (Java) | `ratings.py` | renamed on processing; archived. Spool SKIPS (logged) when no absolute logs/mailbox dir — never writes cwd-relative paths. |
 | `runner/ratings.json`, `ratings-history.jsonl`, `ratings.lock` | `ratings.py` | panel, plots | per-installation state; survives package rebuilds; gitignored, never ships. |
-| `runner/logs/advisor-0.jsonl` | advisor | reviews | archived at stop. |
+| `runner/logs/advisor-0.{log,jsonl}` | advisor (stream + structured twin) | Advisor tab tail / reviews | archived at stop. In an advised human game, `seat-0.usage.json` is the ADVISOR's spend snapshot (seat 0 is the human). |
+| `runner/logs/archive/<ts>-stop/` | `arena-stop.sh` | forensics, later ELO re-sweeps | every finished game's full log set + consumed spools; grows unbounded by design. |
 | `decks/<slug>/dossier/*`, `.cache/`, `.dck`, primers | `arena-add-deck.py` | brains at init | per-deck, tracked (dossier conventions per deck). |
 
 ## 7. Documentation set

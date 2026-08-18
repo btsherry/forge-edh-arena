@@ -291,7 +291,10 @@ Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 | `seat-N.usage.json` | Rolling token/cost snapshot for the seat |
 | `game.jsonl` | **The dataset.** One JSON object per decision, all seats, accumulating across games |
 | `advisor-0.log` / `advisor-0.jsonl` | The Advisor tab's stream, and its structured twin — advice, color commentary, autopass notes, and your actual choices' seq pairing |
-| `gui.out`, `run_table.out` | Engine and runner supervision output |
+| `gui.out`, `run_table.out`, `ratings.out`, `advisor_runner.out` | Engine, runner, ratings-sweep, and advisor supervision output |
+| `transport-events.jsonl` | Punt/wedge events from the seat runners — the ratings sweep voids games contaminated inside their window |
+| `elo/seat-N.json` | Per-seat rating digest the AI panel reads |
+| `control/seat-N.json`, `control/advisor.json` | The GUI↔runner control plane: AI-panel re-dials and the Advisor pause state (cleared at teardown) |
 | `archive/<timestamp>-stop/` | Every finished game's full log set, moved here by `arena-stop.sh` |
 
 Nothing is clobbered: `arena-stop.sh` rolls each game's logs (seat logs +
