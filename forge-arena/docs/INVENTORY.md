@@ -132,7 +132,7 @@ matching anywhere in the body hits card ids in `state.battlefield` (bit twice).
 preflight → teardown → runners → advisor → react-autopass → GUI → liveness),
 `arena-stop.sh` (teardown + ELO sweep + archive), `run-pilot-match.sh` (GUI
 JVM launcher), `run-gui.sh`, `arena-add-deck.py` (ingester),
-`arena-status.py`, `arena-digest.py`, `react-autopass.py` (no-op REACT daemon).
+`arena-status.py`, `arena-digest.py`, `react-autopass.py` (manual-fallback no-op REACT daemon — retired from the standard launch 2026-08-17; the runners' allowlist fastpath covers it).
 
 **Project 1 (stays home):** `batch.sh`, `canary.sh`, `prep.sh`, `smoke.sh`,
 `fidelity.py`, `program-fidelity.py`, `observe-play.py`, `anchors.py`,

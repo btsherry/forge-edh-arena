@@ -8,7 +8,7 @@
 #
 # Usage:  forge-arena/runner/run_table.sh [mailbox-base]
 # Env:    ARENA_MAILBOX_TIMEOUT (must match the engine's; default 90)
-#         SEAT_MODEL (default sonnet)   SEAT_EFFORT (default low; pinned per seat)
+#         SEAT_MODEL (default opus)   SEAT_EFFORT (default medium; pinned per seat)
 #         ARENA_SEAT_MODELS  up to 4 comma-separated per-seat model strings,
 #           entry i binds to seat i (positional, like ARENA_SEAT_DECKS); empty
 #           entries fall back to SEAT_MODEL. Bare names run the Claude CLI;
@@ -29,8 +29,8 @@ AROOT=$(cd "$DIR/.." && pwd)          # forge-arena/
 PREFLIGHT_ONLY=0
 if [ "${1:-}" = "--preflight" ]; then PREFLIGHT_ONLY=1; shift; fi
 BASE="${1:-$DIR/../mailbox}"
-MODEL="${SEAT_MODEL:-sonnet}"
-EFFORT="${SEAT_EFFORT:-low}"
+MODEL="${SEAT_MODEL:-opus}"
+EFFORT="${SEAT_EFFORT:-medium}"
 export ARENA_MAILBOX_TIMEOUT="${ARENA_MAILBOX_TIMEOUT:-90}"
 # SEAT_SPECULATIVE=1 enables executable turn plans; SEAT_REACT_HOLD=1 enables
 # the same-turn reactive hold posture. Both default off.

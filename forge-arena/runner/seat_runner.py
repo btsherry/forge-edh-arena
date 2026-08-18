@@ -55,8 +55,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--seat", type=int, required=True)
     ap.add_argument("--deck", help="deck folder name (required for brain mode)")
-    ap.add_argument("--model", default="sonnet")
-    ap.add_argument("--effort", default="low",
+    ap.add_argument("--model", default="opus")
+    ap.add_argument("--effort", default="medium",
                     help="pinned reasoning effort for the seat session")
     ap.add_argument("--base", default=str(Path(__file__).resolve().parent.parent / "mailbox"))
     ap.add_argument("--timeout", type=float,

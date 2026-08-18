@@ -6,11 +6,12 @@
 #
 # Usage:
 #   arena-play.sh --all-ai [--timeout N] [--model M] [--effort E]
-#   arena-play.sh --human [deck.dck] [--timeout N] [--model M] [--effort E] [--advisor]
+#   arena-play.sh --human [deck.dck] [--timeout N] [--model M] [--effort E] [--no-advisor]
 # Defaults: model=opus effort=medium timeout=90; human deck=selvala-heart-of-the-wilds.dck
-# --advisor (human mode): seat-0 AI Advisor — teaching commentary in the GUI's
-#   Advisor tab + optional autopass (ARENA_AUTOPASS=off|strict|casts, default casts).
-#   Requires the human deck to be ingested (dossier + primer).
+# Human games run the seat-0 AI Advisor BY DEFAULT (2026-08-17, Ben) — teaching
+#   commentary in the GUI's Advisor tab + autopass (ARENA_AUTOPASS=off|strict|casts,
+#   default casts). --no-advisor opts out; a non-ingested human deck auto-disables
+#   it (the game still launches, unadvised). --advisor is accepted as a no-op.
 #
 # Notes:
 #  - max/xhigh effort needs --timeout 300 or the seat punts past the 90s deadline.
@@ -22,7 +23,7 @@ ROOT=$(cd "$DIR/.." && pwd)
 LOGS="$ROOT/runner/logs"
 
 MODE=""; HUMAN_DECK="selvala-heart-of-the-wilds.dck"
-MODEL="opus"; EFFORT="medium"; TIMEOUT="90"; ADVISOR="0"
+MODEL="opus"; EFFORT="medium"; TIMEOUT="90"; ADVISOR=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --all-ai) MODE="all-ai"; shift ;;
@@ -31,10 +32,15 @@ while [ $# -gt 0 ]; do
     --model)  MODEL="$2"; shift 2 ;;
     --effort) EFFORT="$2"; shift 2 ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
-    --advisor) ADVISOR=1; shift ;;
+    --advisor) ADVISOR=1; shift ;;      # explicit on (the default for --human)
+    --no-advisor) ADVISOR=0; shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
+# Advisor default: ON for human games (Ben, 2026-08-17), N/A for all-ai.
+if [ -z "$ADVISOR" ]; then
+  [ "$MODE" = "human" ] && ADVISOR=1 || ADVISOR=0
+fi
 [ "$ADVISOR" = "1" ] && [ "$MODE" != "human" ] && {
   echo "arena: --advisor only applies to --human games; ignoring." >&2; ADVISOR=0; }
 # The advisor brain needs the human deck's dossier + primer (same preflight
@@ -77,12 +83,10 @@ if [ "$ADVISOR" = "1" ]; then
     --model "$MODEL" --effort "$EFFORT" >"$LOGS/advisor_runner.out" 2>&1 &
 fi
 
-# 2.6) react-autopass daemon: answers provably-no-op REACT windows (every
-# non-pass option is the seat's own stack item) in milliseconds, before a
-# brain burns a call. Promoted from manual stopgap 2026-08-13 — it earned it.
-# arena-stop kills it; teardown archives its log.
-nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
-  python3 "$DIR/react-autopass.py" >>"$LOGS/react-autopass.out" 2>&1 &
+# (react-autopass daemon RETIRED from the launch 2026-08-17: its allowlist
+# fastpath lives in the seat runners now — zero windows absorbed across the
+# last three games. scripts/react-autopass.py remains for manual fallback;
+# arena-stop still reaps it if launched by hand.)
 
 # 3) GUI (spectator for all-ai, human seat 0 otherwise)
 if [ "$MODE" = "all-ai" ]; then GUI_ARG="--all-ai"; else GUI_ARG="$HUMAN_DECK"; fi

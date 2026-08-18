@@ -516,7 +516,10 @@ Hard-won from two live sessions; read before optimizing anything.
     instantly (~200ms) passes any REACT whose non-pass options are all on a no-op
     allowlist. Cut those windows from 5-10s (orchestrator round-trip) to engine speed;
     game-2's 20-spell human turn generated 40+ such windows, all absorbed at zero
-    token cost. Retire it when the engine gate lands.
+    token cost. Retire it when the engine gate lands. **RETIRED from the launch
+    2026-08-17 (Ben):** the resident runners' allowlist fastpath subsumed it —
+    zero daemon absorptions across three consecutive games; script kept as a
+    manual fallback.
 13. **GAME-DECIDING GAP — the pre-damage combat instant window is not mailboxed.**
     Game 2, turn 21: Giada's brain planned blocks around **Flare of Fortitude** (free
     total fog: sac a white creature, prevent ALL damage) explicitly expecting a

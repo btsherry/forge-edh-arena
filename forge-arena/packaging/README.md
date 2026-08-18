@@ -103,7 +103,7 @@ opt-in per seat and changes nothing when unused.
 export OPENROUTER_API_KEY=sk-or-...       # or/ seats bill THIS key
 export ARENA_OAI_BASE_URL=http://localhost:11434/v1   # for oai/ seats
 ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1" \
-  forge-arena/scripts/arena-play.sh --human my-deck.dck --advisor
+  forge-arena/scripts/arena-play.sh --human my-deck.dck   # Advisor is ON by default; --no-advisor to opt out
 ```
 
 Model strings: bare names (`haiku|sonnet|opus|fable`) = Claude CLI;
@@ -133,7 +133,7 @@ to safe defaults exactly like a Claude timeout — the game never stalls.
 ## The AI Advisor (human games)
 
 ```sh
-forge-arena/scripts/arena-play.sh --human my-deck.dck --advisor
+forge-arena/scripts/arena-play.sh --human my-deck.dck   # Advisor is ON by default; --no-advisor to opt out
 ```
 
 A fourth brain — loaded exactly like the opponents (your deck's dossier,
@@ -201,7 +201,7 @@ pairwise 1v1s by finish order (simultaneous eliminations tie), starting at
 Advised games get an on/off button at the bottom of the **Advisor tab**:
 pause mid-game (no advice, no model calls) and resume when you want the
 coach back — no teardown. The AI panel's seat-0 row shows `advisor paused`
-while it's off. A game launched with `--advisor` rates as `human+advisor`
+while it's off. An advised game (the `--human` default) rates as `human+advisor`
 on the ladders regardless of mid-game pausing.
 
 ## Ingesting a new deck
@@ -272,13 +272,13 @@ seat before any game starts.
 | `scripts/arena-digest.py` | One compact line per game turn — an ambient "how's it going" feed |
 | `scripts/run-pilot-match.sh` | The underlying GUI launcher (arena-play calls it); direct use for custom setups |
 | `scripts/run-gui.sh` | Plain Forge desktop GUI, no mailbox seats — sanity checks |
-| `scripts/react-autopass.py` | Daemon answering provably-no-op REACT windows in milliseconds (arena-play launches it automatically) |
+| `scripts/react-autopass.py` | Manual-fallback daemon for no-op REACT windows (retired from the standard launch — the seat runners' allowlist fastpath covers it) |
 | `runner/run_table.sh` | Starts the per-seat brain daemons (arena-play calls it); `--preflight` verifies every seat's files |
 | `runner/arena-ctl.py` | Set any seat's model/effort mid-game |
 | `runner/status.py` | seatd health + narrative dashboard ("numbers over vibes") |
 | `runner/usage_report.py` | Per-seat token-burn report, works mid-game |
 | `runner/replay.py` | Offline brain replay against recorded fixtures — no engine, real model calls |
-| `runner/advisor_runner.py` | The AI Advisor brain (arena-play `--advisor` launches it): reads the seat-0 decision shadow feed, streams teaching + color commentary |
+| `runner/advisor_runner.py` | The AI Advisor brain (launched by default in `--human` games; `--no-advisor` opts out): reads the seat-0 decision shadow feed, streams teaching + color commentary |
 
 ## Logs & data out
 
