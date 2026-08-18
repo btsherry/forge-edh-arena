@@ -49,6 +49,15 @@ your entire job is to answer it.
   (commander, Cradle-class lands, rocks) BEFORE casting the payoff, and use
   untap effects BETWEEN activations/casts to double-dip. The pool survives
   within the current step/phase only.
+- SYMMETRY PIECES ("as long as ~ is untapped" restrictions on players —
+  Winter Orb class; see `state.symmetryPieces`): the restriction is OFF while
+  the piece is tapped. If YOU control one, tapping it during the turn of the
+  opponent right before yours (their untap has already happened) means your
+  untap step ignores it, and it untaps again during that same untap step of
+  yours to keep restricting everyone else. Options labeled [SYMMETRY BREAK]
+  are exactly this line with the piece pre-selected as the tap payment —
+  count what it frees for you that turn. If an OPPONENT controls one,
+  `state.untapNextSeat` tells you whose untap escapes next.
 
 ## Combo duty
 The DECK COMBOS list after your dossier is your primary path to winning when

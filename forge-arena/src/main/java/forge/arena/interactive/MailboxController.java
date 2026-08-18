@@ -80,7 +80,8 @@ import forge.util.collect.FCollectionView;
  * to {@code super} on timeout / null / malformed / illegal / wrong-count, so a
  * silent brain never hangs the game.
  */
-public final class MailboxController extends PlayerControllerAi {
+public final class MailboxController extends PlayerControllerAi
+        implements forge.ai.TapCostPreference {
 
     private final MailboxProtocol bus;
     private final int seatIndex;
@@ -91,12 +92,57 @@ public final class MailboxController extends PlayerControllerAi {
         this.seatIndex = p.getId();
     }
 
+    /**
+     * Symmetry-break tap preference (game 7, 2026-08-17): when the seat picks
+     * a [SYMMETRY BREAK] option, the piece to tap is recorded here so that
+     * {@link forge.ai.AiCostDecision}'s CostTapType payment (via
+     * {@link forge.ai.TapCostPreference}) taps THAT card, not a stock pick.
+     * Keyed by SA identity; cleared at every new decision window.
+     */
+    private final Map<SpellAbility, Card> pendingTapPreference =
+            new java.util.IdentityHashMap<>();
+
+    @Override
+    public CardCollection preferredTapCards(SpellAbility ability) {
+        Card piece = pendingTapPreference.get(ability);
+        if (piece == null && ability != null) {
+            piece = pendingTapPreference.get(ability.getRootAbility());
+        }
+        return piece == null ? null : new CardCollection(piece);
+    }
+
+    /**
+     * Symmetry pieces: permanents whose CONTINUOUS static applies only while
+     * the permanent itself is untapped AND affects PLAYERS (Winter Orb,
+     * Static Orb, Storage Matrix class). Detected from script metadata, never
+     * card names — a "while untapped" static that only buffs its own card
+     * (Paradise Druid class) is deliberately NOT a symmetry piece: tapping
+     * those hurts their controller.
+     */
+    static List<Card> symmetryPieces(Player owner) {
+        List<Card> out = new ArrayList<>();
+        for (Card c : owner.getCardsIn(ZoneType.Battlefield)) {
+            for (forge.game.staticability.StaticAbility st : c.getStaticAbilities()) {
+                String present = st.getParam("IsPresent");
+                String affected = st.getParam("Affected");
+                if ("Continuous".equals(st.getParam("Mode"))
+                        && present != null && present.contains("Card.Self+untapped")
+                        && affected != null && affected.contains("Player")) {
+                    out.add(c);
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
     // ---- decision hooks ----------------------------------------------------
 
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
         Game game = getGame();
         Player me = getPlayer();
+        pendingTapPreference.clear(); // one-shot: valid only for the pick below
         // GATE. Two window kinds are worth the brain's time:
         //  - ownMainEmpty: our own main phase with an empty stack (sorcery-speed
         //    development), and
@@ -237,7 +283,85 @@ public final class MailboxController extends PlayerControllerAi {
         // slowness, not eliminated by second-guessing the brain. (playable
         // already excludes trivial land mana; non-trivial mana abilities like
         // Selvala-for-12 remain, so the no-sink Dreadnought float stays live.)
-        if (playable.isEmpty()) {
+        // SYMMETRY BREAK offers (game 7, 2026-08-17): if the seat controls an
+        // untapped symmetry piece (a Continuous static active only while the
+        // piece is untapped, affecting Players — Winter Orb class) and the
+        // seat's untap step is the NEXT one to happen, offer tapping the
+        // piece through any activatable outlet whose CostTapType it can pay
+        // (Urza's "tap an untapped artifact", Clock of Omens, the piece's own
+        // tap ability...). This is the one case where a mana ability IS the
+        // meaningful action, so it bypasses the mana-ability window filter —
+        // the piece is pre-selected as the tap payment via TapCostPreference.
+        List<Object[]> symOffers = new ArrayList<>(); // {SpellAbility, Card piece, String label}
+        try {
+            if (game.getPhaseHandler().getPlayerTurn() != me
+                    && game.getPhaseHandler().getNextTurn() == me) {
+                List<Card> pieces = symmetryPieces(me);
+                for (Card piece : pieces) {
+                    if (!piece.isUntapped()) {
+                        continue;
+                    }
+                    for (SpellAbility osa : enumerated) {
+                        if (symOffers.size() >= 6) {
+                            break;
+                        }
+                        Card oHost = osa != null ? osa.getHostCard() : null;
+                        if (oHost == null || !osa.isActivatedAbility()
+                                || !oHost.isInZone(ZoneType.Battlefield)
+                                || osa.getPayCosts() == null) {
+                            continue;
+                        }
+                        boolean tapsPiece = false;
+                        for (forge.game.cost.CostPart part : osa.getPayCosts().getCostParts()) {
+                            if (part instanceof forge.game.cost.CostTapType) {
+                                forge.game.cost.CostTapType t =
+                                        (forge.game.cost.CostTapType) part;
+                                if ((t.canTapSource || oHost != piece)
+                                        && piece.isValid(t.getType().split(";"),
+                                                me, oHost, osa)) {
+                                    tapsPiece = true;
+                                    break;
+                                }
+                            }
+                            if (part instanceof CostTap && oHost == piece) {
+                                tapsPiece = true; // the piece's own {T} ability
+                                break;
+                            }
+                        }
+                        if (!tapsPiece) {
+                            continue;
+                        }
+                        osa.setActivatingPlayer(me);
+                        boolean usable;
+                        try {
+                            usable = osa.canPlay()
+                                    && ComputerUtilCost.canPayCost(osa, me, false);
+                        } catch (RuntimeException e) {
+                            usable = false;
+                        }
+                        if (!usable) {
+                            continue;
+                        }
+                        String label = "[SYMMETRY BREAK] Tap " + piece.getName()
+                                + " via " + oHost.getName() + " ("
+                                + osa.getPayCosts().toSimpleString() + ") — your "
+                                + "untap step is NEXT: with " + piece.getName()
+                                + " tapped, its 'while untapped' restriction skips "
+                                + "YOUR untap, then it untaps during your untap "
+                                + "step and keeps restricting the other players. "
+                                + (osa.isManaAbility()
+                                    ? "Mana produced now will drain unspent — the "
+                                      + "point is the tap, not the mana."
+                                    : "The ability's normal effect also happens.");
+                        symOffers.add(new Object[] {osa, piece, label});
+                    }
+                }
+            }
+        } catch (RuntimeException e) {
+            symOffers.clear(); // offers must never break the window
+        }
+
+        if (playable.isEmpty() && symOffers.isEmpty()) {
             // Instant windows with nothing real to do are a clean pass (never
             // stock); an empty own-main keeps the v1 stock fallthrough.
             return (reactive || tactical || selfTrigger)
@@ -316,6 +440,17 @@ public final class MailboxController extends PlayerControllerAi {
             byId.put(id, sa);
             id++;
         }
+        Map<Integer, Card> symPieceById = new LinkedHashMap<>();
+        for (Object[] offer : symOffers) {
+            SpellAbility osa = (SpellAbility) offer[0];
+            Card piece = (Card) offer[1];
+            req.option(id, (String) offer[2],
+                    osa.getPayCosts() != null ? osa.getPayCosts().toSimpleString() : null,
+                    "SYMMETRY");
+            byId.put(id, osa);
+            symPieceById.put(id, piece);
+            id++;
+        }
 
         JsonNode resp = bus.exchange(req);
         if (resp == null) {
@@ -334,6 +469,12 @@ public final class MailboxController extends PlayerControllerAi {
         if (pick == null) {
             // unknown id — treat as unparseable and fall back to stock
             return super.chooseSpellAbilityToPlay();
+        }
+        Card symPiece = symPieceById.get(chosenId);
+        if (symPiece != null) {
+            // the upcoming CostTapType payment for this SA taps THIS card
+            pendingTapPreference.put(pick, symPiece);
+            pendingTapPreference.put(pick.getRootAbility(), symPiece);
         }
         return Collections.singletonList(pick);
     }
@@ -1574,6 +1715,33 @@ public final class MailboxController extends PlayerControllerAi {
         }
         if (!ownCmdDmg.isEmpty()) {
             state.put("commanderDamageTaken", ownCmdDmg);
+        }
+        // Symmetry pieces on ANY battlefield (public info): permanents whose
+        // continuous static is active only while the permanent is untapped
+        // and restricts PLAYERS (Winter Orb class), plus whose untap step is
+        // next — the facts a brain needs to see the end-step tap line (or to
+        // see an opponent about to take it).
+        try {
+            Game g = me.getGame();
+            List<Map<String, Object>> pieces = new ArrayList<>();
+            for (Player owner : g.getPlayers()) {
+                for (Card piece : symmetryPieces(owner)) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("name", piece.getName());
+                    row.put("controllerSeat", owner.getId());
+                    row.put("untapped", piece.isUntapped());
+                    pieces.add(row);
+                }
+            }
+            if (!pieces.isEmpty()) {
+                state.put("symmetryPieces", pieces);
+                Player next = g.getPhaseHandler().getNextTurn();
+                if (next != null) {
+                    state.put("untapNextSeat", next.getId());
+                }
+            }
+        } catch (RuntimeException ignore) {
+            // projection extras must never break state building
         }
         // The seat's OWN command zone (opponents' were already serialized;
         // the seat's never was — after a failed recast Selvala's brain wrote

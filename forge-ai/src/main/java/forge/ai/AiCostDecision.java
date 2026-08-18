@@ -476,6 +476,44 @@ public class AiCostDecision extends CostDecisionMakerBase {
             totap = ComputerUtil.chooseTapTypeAccumulatePower(player, type, ability, !cost.canTapSource, Integer.parseInt(totalP), exclude);
         } else {
             int c = cost.getAbilityAmount(ability);
+            // [arena] controller-preferred tap payment (TapCostPreference):
+            // lets a seat name WHICH card pays a tap cost (e.g. tap its own
+            // Winter Orb via Urza at the opponent's end step — the symmetry
+            // break). Preferred cards are validated and tapped first; stock
+            // chooseTapType fills any remainder. No preference (every stock
+            // controller) -> the original path below, untouched.
+            if (player.getController() instanceof TapCostPreference) {
+                CardCollection pref = ((TapCostPreference) player.getController())
+                        .preferredTapCards(ability);
+                if (pref != null && !pref.isEmpty()) {
+                    CardCollection pre = CardLists.getValidCards(
+                            pref, type.split(";"), player, source, ability);
+                    pre = CardLists.filter(pre, CardPredicates.UNTAPPED);
+                    pre.removeAll(exclude);
+                    if (!cost.canTapSource) {
+                        pre.remove(source);
+                    }
+                    while (pre.size() > c) {
+                        pre.remove(pre.size() - 1);
+                    }
+                    if (!pre.isEmpty()) {
+                        if (pre.size() == c) {
+                            tapped.addAll(pre);
+                            return PaymentDecision.card(pre);
+                        }
+                        CardCollection ex2 = new CardCollection(exclude);
+                        ex2.addAll(pre);
+                        CardCollectionView rest = ComputerUtil.chooseTapType(player,
+                                type, source, !cost.canTapSource, c - pre.size(), ex2, ability);
+                        if (rest != null) {
+                            pre.addAll(rest);
+                            tapped.addAll(pre);
+                            return PaymentDecision.card(pre);
+                        }
+                        // preference cannot complete the payment: stock path below
+                    }
+                }
+            }
             totap = ComputerUtil.chooseTapType(player, type, source, !cost.canTapSource, c, exclude, ability);
         }
 
