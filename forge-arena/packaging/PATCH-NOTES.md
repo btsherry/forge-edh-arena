@@ -1,5 +1,37 @@
 # forge-light-llm — Patch Notes
 
+## v3.2 — 2026-08-19
+
+### New: DeckCheck primers without copy/paste
+
+`arena-add-deck.py` can now pull a deck's strategy analysis straight from
+DeckCheck.co. Give it your DeckCheck deck URL or id —
+`arena-add-deck.py my-deck.dck --deckcheck <url-or-id>` — and it fetches the
+structured analysis (analysis prose, bracket, and CRISPI ratings) from
+DeckCheck's public endpoint and renders it as the primer, no manual paste. The
+existing paste and local-fable options are unchanged.
+
+### New: primer generation controls
+
+- `--primer-out PATH` — write the primer to a path you choose instead of
+  `docs/primers/<slug>-deckcheck.md`.
+- `--primer-timeout SECS` (default 2700) — bound the local fable/max primer run.
+- `--no-primer-rules` — skip embedding the MTG rules digests in the local fable
+  prompt for a faster generation, at some cost to loop-precision.
+
+### Improved: local primers reason from the rules corpus
+
+Option B (local `claude` fable/max generation) now feeds the model the two MTG
+rules digests alongside the deck's combos and oracle text, so generated primers
+state loop and timing lines more rules-accurately.
+
+### Fixed: double-faced card ingest
+
+Double-faced / modal (MDFC) card names — e.g. `Bala Ged Recovery // Bala Ged
+Sanctuary` — now resolve during ingest (Scryfall is queried by the front face),
+so those cards land in the dossier with full oracle text instead of the
+unresolved list.
+
 ## v3.1 — 2026-08-17
 
 ### Faster: loops fast-forward, MCP-free decisions stay

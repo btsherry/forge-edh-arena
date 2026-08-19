@@ -230,6 +230,16 @@ a few minutes), **skip** play from dossier + combos only. Re-runs are cheap:
 API responses are cached; `--no-cache` forces a refetch, `--verify` checks an
 existing deck. Then play it: `arena-play.sh --human my-deck.dck`.
 
+**New (v3.2) — option A can auto-fetch, no copy/paste.** Pass your DeckCheck
+deck URL or id with `--deckcheck <url-or-id>` and the tool pulls the structured
+analysis (prose + bracket + CRISPI ratings) straight from DeckCheck's public
+endpoint and renders it as the primer. Related flags: `--primer-out PATH`
+(write the primer somewhere other than `docs/primers/<slug>-deckcheck.md`),
+`--primer-timeout SECS` (default 2700 for the local fable/max run in option B),
+and `--no-primer-rules` (faster option-B generation — omits the rules digests
+from the fable prompt, at some cost to loop-precision). Double-faced (MDFC) card
+names now resolve correctly during ingest.
+
 ## What each agent receives at start-up
 
 At every game launch, each seat's runner opens a fresh `claude` session and
