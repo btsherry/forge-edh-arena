@@ -442,7 +442,7 @@ file is read verbatim by the pilot and anything else is noise in its context."""
 
 
 def make_primer(slug, deck_cards, combos, primer_path, mode, deckcheck,
-                cache_dir, use_cache):
+                cache_dir, use_cache, primer_timeout=2700):
     log("\n" + "=" * 70)
     log(f"STRATEGY PRIMER for {slug} — the pilot plays far better with a good one.")
     log("DeckCheck.co gives the best commander-specific analysis we've seen "
@@ -505,7 +505,7 @@ def make_primer(slug, deck_cards, combos, primer_path, mode, deckcheck,
             # and the model burns its budget hunting for an allowed avenue.
             ["claude", "-p", "-", "--model", "fable", "--effort", "max",
              "--allowedTools", "WebSearch,WebFetch"],
-            input=prompt, capture_output=True, text=True, timeout=1200)
+            input=prompt, capture_output=True, text=True, timeout=primer_timeout)
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         warn(f"fable primer generation failed ({e}); skipping primer")
         return False
@@ -527,6 +527,9 @@ def main():
     ap.add_argument("--deckcheck", metavar="URL_OR_ID",
                     help="DeckCheck deck URL or id; primer mode A fetches its "
                          "analysis automatically (no copy/paste)")
+    ap.add_argument("--primer-timeout", type=int, default=2700,
+                    help="seconds for fable/max primer generation, mode B "
+                         "(default 2700; the rules-context prompt is slow)")
     ap.add_argument("--no-cache", action="store_true")
     args = ap.parse_args()
     use_cache = not args.no_cache
@@ -575,7 +578,8 @@ def main():
     # Passing --deckcheck implies mode A even when --primer wasn't given.
     primer_mode = args.primer or ("a" if args.deckcheck else None)
     have_primer = make_primer(slug, deck_cards, combos, primer_path, primer_mode,
-                              args.deckcheck, cache_dir, use_cache)
+                              args.deckcheck, cache_dir, use_cache,
+                              args.primer_timeout)
     log(f"[5/6] primer: {'written ' + rel(primer_path) if have_primer else 'skipped'}")
 
     log(f"[6/6] done. Deck '{slug}' is ready:")
