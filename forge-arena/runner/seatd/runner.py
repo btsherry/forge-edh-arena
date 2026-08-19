@@ -319,6 +319,20 @@ class SeatRunner:
         pool = st.get("manaPool")
         return (req.get("turn"), stack, opts, lives, pool)
 
+    def _all_own_objects(self, req: dict) -> bool:
+        """True iff the stack is non-empty and EVERY item belongs to this
+        seat — any kind (triggers, spells, copies). Used ONLY by the cycle
+        signature: a brain-declared loop's own engine may interleave its own
+        copy-spells among its triggers (Spiritdancer/Aura Shards, game 12),
+        and the count of own objects is expected loop movement. The REACT
+        memo keeps the stricter trigger-only rule (_all_own_triggers) — it
+        has no brain opt-in. Absent metadata -> False (fail-open)."""
+        st = req.get("state") or {}
+        owners = st.get("stackOwners")
+        if not isinstance(owners, list) or not owners:
+            return False
+        return all(o == self.seat for o in owners)
+
     def _all_own_triggers(self, req: dict) -> bool:
         """True iff the stack is non-empty and EVERY item is a triggered
         ability controlled by this seat (needs the additive stackOwners /
@@ -349,8 +363,16 @@ class SeatRunner:
         affordability flip), a phase change, or a change in who is alive."""
         st = req.get("state", {}) or {}
         names = list(map(str, st.get("stack", [])))
-        if self._all_own_triggers(req):
-            stack = ("OWN-TRIGGERS", tuple(sorted(set(names))))
+        if self._all_own_objects(req):
+            # own-engine collapse: a declared loop's own triggers AND its own
+            # copy-spells shift in count, position, and even PRESENCE between
+            # iterations (game 12 oscillated between {Shards,Spiritdancer} and
+            # {Shards}-only windows) — for an OPT-IN cycle the stable identity
+            # is simply "the stack is all mine". Steps are still gated by
+            # decisionType + the option set, every replayed answer is
+            # re-validated, and any opponent object restores the exact
+            # multiset below (novelty always breaks out).
+            stack = ("OWN-OBJECTS",)
         else:
             stack = tuple(sorted(names))
         opts = tuple(sorted(str(o.get("label", "")).split("  ")[0]

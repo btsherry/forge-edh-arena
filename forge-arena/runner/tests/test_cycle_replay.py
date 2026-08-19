@@ -169,5 +169,82 @@ class CycleReplayTests(unittest.TestCase):
         self.assertIsNone(r.cycle, "a cycle never survives the turn boundary")
 
 
+def own_req(seq, dtype, opts, stack, kinds, turn=7, phase="MAIN1"):
+    """Request whose stack is entirely the seat's own objects (mixed kinds)."""
+    state = {"stack": list(stack), "manaPool": 3, "life": 40,
+             "opponents": [{"life": 40}, {"life": 40}, {"life": 40}],
+             "untappedManaSourceCount": 2,
+             "stackOwners": [3] * len(stack),
+             "stackKinds": list(kinds)}
+    options = [{"id": 0, "label": "Pass (do nothing)"}]
+    options += [{"id": i + 1, "label": lab} for i, lab in enumerate(opts)]
+    return {"seq": seq, "turn": turn, "phase": phase, "decisionType": dtype,
+            "prompt": "t", "state": state, "options": options}
+
+
+class OwnObjectCollapseTests(unittest.TestCase):
+    """Game-12 shape: a declared loop whose OWN trigger pile grows and whose
+    own copy-spell interleaves at varying depth must still replay; an
+    opponent object must still break out."""
+
+    def test_growing_own_stack_replays(self):
+        r = make_runner()
+        stacks = [
+            (["Aura Shards"] * 3 + ["Ondu Spiritdancer"], ["trigger"] * 3 + ["spell"]),
+            (["Ondu Spiritdancer"] + ["Aura Shards"] * 4, ["spell"] + ["trigger"] * 4),
+            (["Aura Shards"] * 5 + ["Ondu Spiritdancer"], ["trigger"] * 5 + ["spell"]),
+            (["Aura Shards"] * 6, ["trigger"] * 6),
+        ]
+        r.brain.script = [
+            {"chosenId": 1},                       # iter 1: confirm copy
+            {"chosenId": 0},                       # iter 1: react pass
+            {"chosenId": 1, "repeat_cycle": 8},    # iter 2 anchor: declare
+        ]
+        st0, k0 = stacks[0]
+        self.assertEqual(r.handle(own_req(1, "CONFIRM", ["Yes"], st0, k0)) or
+                         r.mb.responses[-1][1], {"chosenId": 1})
+        st1, k1 = stacks[1]
+        r.handle(own_req(2, "REACT", ["X  {1} — thing"], st1, k1))
+        # anchor: same shape as seq1 but MORE own triggers — must still match
+        st2, k2 = stacks[2]
+        r.handle(own_req(3, "CONFIRM", ["Yes"], st2, k2))
+        self.assertIsNotNone(r.cycle,
+                             "own-object collapse should make the grown stack match the anchor")
+        calls = r.brain.calls
+        # replayed iteration with yet another stack shape
+        st3, k3 = stacks[3]
+        r.handle(own_req(4, "REACT", ["X  {1} — thing"], st3, k3))
+        r.handle(own_req(5, "CONFIRM", ["Yes"], stacks[0][0], stacks[0][1]))
+        self.assertEqual(r.brain.calls, calls, "replays must cost zero model calls")
+        self.assertEqual(r.mb.responses[-1][1], {"chosenId": 1})
+
+    def test_opponent_object_still_breaks(self):
+        r = make_runner()
+        r.brain.script = [
+            {"chosenId": 1}, {"chosenId": 0}, {"chosenId": 1, "repeat_cycle": 5},
+            {"chosenId": 0},
+        ]
+        own = (["Aura Shards"] * 2, ["trigger"] * 2)
+        r.handle(own_req(1, "CONFIRM", ["Yes"], own[0], own[1]))
+        r.handle(own_req(2, "REACT", ["X"], own[0], own[1]))
+        r.handle(own_req(3, "CONFIRM", ["Yes"], own[0] + ["Aura Shards"], own[1] + ["trigger"]))
+        self.assertIsNotNone(r.cycle)
+        # an OPPONENT spell joins the stack: owners no longer all-3 -> multiset
+        req = own_req(4, "REACT", ["X"], ["Aura Shards", "Swan Song"], ["trigger", "spell"])
+        req["state"]["stackOwners"] = [3, 1]
+        r.handle(req)
+        self.assertIsNone(r.cycle, "an opponent object must break the replay")
+        self.assertEqual(r.brain.calls, 4, "the novel window must reach the model")
+
+    def test_react_memo_signature_unchanged(self):
+        r = make_runner()
+        # memo signature must NOT collapse a mixed-kind own stack
+        req = own_req(9, "REACT", ["X"], ["A", "A", "B"], ["trigger", "trigger", "spell"])
+        sig = r._react_signature(req)
+        self.assertNotIn("OWN-TRIGGERS", str(sig[1]),
+                         "mixed kinds must not trigger the memo's own-collapse")
+        self.assertEqual(sig[1], ("A", "A", "B"), "memo keeps the exact multiset")
+
+
 if __name__ == "__main__":
     unittest.main()
