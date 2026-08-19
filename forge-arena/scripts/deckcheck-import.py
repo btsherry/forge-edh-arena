@@ -165,8 +165,10 @@ def main():
 
     # 6. paid analysis (async job -> poll)
     if not a.no_analyze:
+        # deckList is the 99-card mainboard only; the commander travels in
+        # commanderInput. Including it makes DeckCheck reject "expected 99, got 100".
         deck_list = "\n".join(f"{c.get('quantity',1)} {c['name']}"
-                              for c in commanders + imp.get("cards", []))
+                              for c in imp.get("cards", []))
         body = {"commanderInput": cmd_names, "companionInput": "",
                 "deckList": deck_list, "draftDeckId": did, "deckStateHash": "",
                 "intelligenceLevel": a.tier, "userInput": "", "forceRescan": True}
