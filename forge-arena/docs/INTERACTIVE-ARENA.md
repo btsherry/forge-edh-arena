@@ -18,9 +18,10 @@ their own inboxes). The distilled learnings from both sessions and the next
 architectural step live under **Operational learnings** and **Next architecture**
 below — read those first if you are picking this up.
 
-> Status (2026-08-17): SHIPPED — this seam is the core of the
-> **forge-light-llm** distributable (v1 2026-08-12 → v3.1 2026-08-17, on R2
-> as `-latest`). User-facing docs: `packaging/README.md` + `PATCH-NOTES.md`.
+> Status (2026-08-19): SHIPPED — this seam is the core of the
+> **forge-light-llm** distributable (v1 2026-08-12 → v3.1 2026-08-17 on R2
+> as `-latest`; v3.2 staged — patch notes + README ready, tarball not yet
+> rebuilt). User-facing docs: `packaging/README.md` + `PATCH-NOTES.md`.
 > Engineering inventory: [INVENTORY.md](INVENTORY.md). Upstream-merge safety:
 > [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md). Built on Card-Forge/forge (GPL-3.0);
 > non-commercial fan content under WotC's Fan Content Policy. Any distribution
@@ -316,10 +317,12 @@ cost rails — see `packaging/README.md` §"Other models on the backend".
 - Teacher→student: feed caught misplays into both the agent briefs and the
   deterministic runner.
 
-**Track 4 — packaging & release — ✅ SHIPPED (v1 2026-08-12 → v3.1 2026-08-17)**
-as **forge-light-llm**: zero-setup tarball on R2 (`-latest` alias), 7 bundled
-decks, deck ingestion, README + PATCH-NOTES, GPL-3.0 source-available. Build:
-`../BUILDING.md` + `packaging/build-light-package.sh` (the manifest).
+**Track 4 — packaging & release — ✅ SHIPPED (v1 2026-08-12 → v3.1 2026-08-17;
+v3.2 staged 2026-08-19)** as **forge-light-llm**: zero-setup tarball on R2
+(`-latest` alias), 8 bundled decks (Sythis added for v3.2 — note 45), deck
+ingestion incl. DeckCheck auto-primer (note 44), README + PATCH-NOTES,
+GPL-3.0 source-available. Build: `../BUILDING.md` +
+`packaging/build-light-package.sh` (the manifest).
 
 **Track 5 — autonomous per-seat brains — ✅ SHIPPED as `runner/seatd/`**
 (resident daemons, supervised, warm-cache, self-serving; the design doc
@@ -739,7 +742,8 @@ Hard-won from two live sessions; read before optimizing anything.
 23. **AI Advisor shipped (2026-08-12/13).** Seat-0 shadow feed
     (`AdvisorControllerHuman` → the same `buildState` projection, fairness in
     one place), dedicated coach brain, Advisor dock tab, deliberate cadence
-    (3-5 moments/turn, danger overrides), coach's memory, strictly read-only,
+    (3-5 moments/turn, danger overrides — **leaned to a 1-3/turn range
+    2026-08-19, note 46**), coach's memory, strictly read-only,
     pause button (08-13). Dataset: `advisor-0.jsonl`.
 24. **Smart autopass, stakes-based not heuristic (2026-08-13).** Own mains,
     combat declares, opponent-spell stops, floating-mana stops, and
@@ -858,3 +862,77 @@ Hard-won from two live sessions; read before optimizing anything.
     and cast successfully — 2 extra decisions. Watch for recurrence; the fix
     direction is investigating `ComputerUtilMana`'s pain-source treatment,
     not weakening the guard (the guard exists to prevent note-29 orphaning).
+42. **Launch defaults locked — Ben's four rulings (2026-08-17).** The standard
+    launch is now opinionated, and every entry point agrees: (1) `react-autopass`
+    removed from `arena-play` — zero absorptions across three games, the resident
+    runners' allowlist fastpath subsumed it; the script stays a manual fallback
+    and `arena-stop` still reaps a hand-launched one (see note 12). (2) All model
+    defaults **sonnet → opus** (`run_table` `SEAT_MODEL`, `seat_runner --model`),
+    so a bare `run_table` no longer silently launches sonnet. (3) Effort unified
+    at **medium** everywhere (`SEAT_EFFORT`, `seat_runner --effort`; arena-play
+    was already medium) — closes the low/medium split that depended on entry
+    point. (4) `--human` games enable the **seat-0 Advisor BY DEFAULT**;
+    `--no-advisor` opts out, `--advisor` is an accepted no-op, and a non-ingested
+    deck still auto-disables the advisor with the game launching unadvised.
+    README/INVENTORY updated to match.
+43. **Documentation cleanup pass (2026-08-18/19, Ben-directed).** A careful
+    prune that **protected Project 1** (the research → discover → compile
+    pipeline and its scripts — kept intact; "zero static callers" is not a
+    death test for a manually/skill/Workflow-invoked tool). Moves: retired the
+    `selvala-competitive` experiment deck (raw list + primer tracked-deleted,
+    `.dck`+dossier backed up out-of-repo; never a light-package deck) and
+    repointed `atlas/fixtures.md` onto the live
+    `selvala-heart-of-the-wilds` combo-program example; archived completed-
+    milestone docs under `docs/archive/` (`SELVALA-ARC`,
+    `SELVALA-BUILD-MANIFEST`, `PAIRING-AUDIT-GIADA`, `PHASE-11-PLAN`,
+    `PROJECT-BRIEF`) with attendant references repointed; moved
+    `T0-VERIFICATION.md` and `WIN-ROUTES` into `docs/research/`; removed
+    `brain-brief-template.md` (superseded by `seatd/seat-brief.md`) and the
+    `purphoros-generated-v1.md` primer-pipeline test artifact; tuned
+    `seatd/seat-brief.md`; marked `SPEC-arena-add-deck` **BUILT** (status was
+    stale). `docs/archive/` and `docs/research/` are both excluded from the
+    light package.
+44. **DeckCheck primer integration + repeatable Moxfield import (2026-08-18/19).**
+    Two halves, one shippable. **(a) Shipped, keyless:** `arena-add-deck.py
+    --deckcheck <url-or-id>` auto-fetches a [DeckCheck.co](https://deckcheck.co)
+    analysis (prose + bracket + CRISPI ratings) from the public read endpoint and
+    renders it as the strategy primer — no copy/paste, no credits, no login. Full
+    protocol reference: `docs/research/DECKCHECK-ACCESS.md`. Attendant ingest
+    work: MDFC (double-faced) names now resolve (Scryfall queried by the front
+    face — full "A // B" names 404); `--primer-timeout` (was a hard 1200s);
+    `--primer-out`; `--no-primer-rules`; and the local-fable primer (option B) is
+    now fed the rules digest + summary (A/B'd for the wall-clock cost of that
+    corpus). **(b) Local testing only — NEVER bundled:** `scripts/deckcheck-import.py`
+    does the authenticated round-trip (login → draft → import a
+    Moxfield/Archidekt URL → save-draft → visibility → paid analyze → poll →
+    deckId), giving a repeatable "share a deck URL → `.dck` → dossier + combos +
+    DeckCheck primer" onboarding path. It **spends credits and uses the
+    `hello/deckcheck-hello` login**, so it is deliberately kept off the package
+    allow-list (the distributable path is the keyless read above). deckList is the
+    99-card mainboard only (commander travels in `commanderInput`).
+45. **Sythis, the eighth bundled deck (2026-08-19).** Onboarded via the note-44
+    pipeline; `SLUGS` gains `sythis-harvests-hand` (dossier/combos/primer
+    preflight-green for the full 8-deck set). Updates the count everywhere it
+    was "seven"/"six" (Track 4, `packaging/README.md`); the PATCH-NOTES v1
+    section still reads "seven" as the correct historical record for v1.
+46. **Advisor cadence leaned out (2026-08-19).** Supersedes note 23's cadence.
+    All *in-game* advisor commentary is now tied to a **humanly-random 1-3
+    windows/turn** budget (was 3-5 with guaranteed MAIN1 + combat + danger-pierce
+    stops); only `MULLIGAN` is always answered, and the **end-of-turn recap stays
+    ungoverned** (always fires) so a big mid-turn play a given turn's sampling
+    skipped is still covered. Rationale (Ben): fewer round-trips and tokens, and
+    the range reads as more alive/human than a fixed set of guaranteed stops.
+    `advisor_runner.py` `_admit` rewritten.
+47. **Color-matched seat avatars (2026-08-19).** Each seat gets a built-in Forge
+    avatar (`sprite_avatars.png`, 126 heads) matched to its deck: `SeatAvatars`
+    tallies colored mana pips across the deck, weighted-random picks a color in
+    proportion to that composition, then draws a head from that color's pool
+    (without replacement across the four seats). The color→heads index is the
+    checked-in classpath resource `forge/arena/avatar-colors.json` (built once by
+    an offline vision pass; ships in `target/classes`). Selection uses a fresh
+    `Random` — deliberately **not** `MyRandom` — so avatars vary per launch
+    without touching game determinism; startup-cheap (in-memory tally + pick, no
+    LLM/IO at launch). **Fail-safe:** every path wrapped — any failure leaves
+    `avatarIndex` at -1 and Forge's default applies; never blocks a launch.
+    Assigned from `GuiPilotMatch` before `startMatch`. 40-trial pool-correctness
+    test + a startup log line.
