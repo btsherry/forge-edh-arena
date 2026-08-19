@@ -578,6 +578,21 @@ public class MagicStack /* extends MyObservable */ implements Iterable<SpellAbil
         final Card source = sa.getHostCard();
         curResolvingCard = source;
 
+        // [arena] snapshot the target list BEFORE hasFizzled's cleanup strips
+        // invalid entries — the diagnostic below printed "(none set)" for
+        // stripped targets, which mislabeled legitimate dead-target fizzles
+        // as targetless anomalies (games 7 and 12).
+        final StringBuilder arenaPreFizzleTargets = new StringBuilder();
+        try {
+            for (forge.game.spellability.TargetChoices tc : sa.getAllTargetChoices()) {
+                for (forge.game.GameObject o : tc) {
+                    arenaPreFizzleTargets.append(o)
+                            .append(o instanceof forge.game.card.Card
+                                    ? " [zone=" + ((forge.game.card.Card) o).getZone() + "]" : "")
+                            .append("; ");
+                }
+            }
+        } catch (RuntimeException ignore) { }
         boolean thisHasFizzled = hasFizzled(sa, null);
 
         if (!thisHasFizzled) {
@@ -595,14 +610,24 @@ public class MagicStack /* extends MyObservable */ implements Iterable<SpellAbil
             // and its target survived). Log WHY so the next one is diagnosable
             // from gui.out. One line, no behavior change.
             try {
-                StringBuilder why = new StringBuilder();
-                for (forge.game.spellability.TargetChoices tc : sa.getAllTargetChoices()) {
-                    for (forge.game.GameObject o : tc) {
-                        why.append(o).append(o instanceof forge.game.card.Card
-                                ? " [zone=" + ((forge.game.card.Card) o).getZone() + "]" : "").append("; ");
+                StringBuilder why = arenaPreFizzleTargets;
+                // Label min-0 empty-target resolutions as DECLINED-TRIGGER
+                // (a legal "chose no targets" no-op, game-12 Aura Shards/
+                // Grasp of Fate class) so FIZZLE stays a pure defect signal.
+                boolean anyMinPositive = false;
+                for (SpellAbility part = sa; part != null; part = part.getSubAbility()) {
+                    if (part.usesTargeting() && part.getHostCard() != null
+                            && part.getTargetRestrictions() != null
+                            && part.getTargetRestrictions()
+                                   .getMinTargets(part.getHostCard(), part) > 0) {
+                        anyMinPositive = true;
+                        break;
                     }
                 }
-                System.err.println("[arena] FIZZLE: " + sa.getHostCard() + " by "
+                final String label = (why.length() == 0 && !anyMinPositive)
+                        ? "[arena] DECLINED-TRIGGER (no targets chosen, optional): "
+                        : "[arena] FIZZLE: ";
+                System.err.println(label + sa.getHostCard() + " by "
                         + sa.getActivatingPlayer() + " — targets: "
                         + (why.length() == 0 ? "(none set)" : why) + " stack now: " + this);
             } catch (RuntimeException ignore) {

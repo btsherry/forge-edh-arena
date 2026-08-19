@@ -103,6 +103,21 @@ public final class MailboxController extends PlayerControllerAi
     private final Map<SpellAbility, Card> pendingTapPreference =
             new java.util.IdentityHashMap<>();
 
+    /**
+     * Triggers the seat declined AT AIM TIME (game-12 finding 1): a
+     * required-target optional trigger can't legally stack targetless, so we
+     * auto-aim it and honor the decline here — confirmTrigger answers NO
+     * without a model call. Weak identity set: entries die with their SAs.
+     */
+    private final Set<SpellAbility> pendingTriggerDecline =
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+
+    /** Non-zero while prepareTriggerViaSeat is aiming — trigger-aim windows
+     *  offer an explicit decline (id 0) even for required targets, and
+     *  invalid answers fall back to the CALLER (auto-aim + auto-decline),
+     *  never to stock's silent aiming. */
+    private int triggerAimDepth = 0;
+
     @Override
     public CardCollection preferredTapCards(SpellAbility ability) {
         Card piece = pendingTapPreference.get(ability);
@@ -785,6 +800,12 @@ public final class MailboxController extends PlayerControllerAi
                     .state(state);
             if (minT == 0) {
                 req.option(0, "No target (decline)", null, "NONE");
+            } else if (triggerAimDepth > 0) {
+                // aiming one of the seat's own OPTIONAL triggers: declining is
+                // always legal (the trigger will be auto-aimed to stack legally
+                // and auto-declined at resolution — it does nothing)
+                req.option(0, "DECLINE this optional trigger (it will do nothing)",
+                        null, "NONE");
             }
             Map<Integer, forge.game.GameObject> byId = new LinkedHashMap<>();
             int id = 1;
@@ -830,6 +851,9 @@ public final class MailboxController extends PlayerControllerAi
                     if (cid == 0 && minT == 0) {
                         return true; // legal decline; ability proceeds untargeted
                     }
+                    if (cid == 0 && triggerAimDepth > 0) {
+                        return false; // trigger decline: caller auto-aims + auto-declines
+                    }
                     forge.game.GameObject pick = byId.get(cid);
                     if (pick != null) {
                         currentAbility.resetTargets();
@@ -841,6 +865,11 @@ public final class MailboxController extends PlayerControllerAi
             }
         } catch (RuntimeException anything) {
             // targeting must never crash the seat — stock is the floor
+        }
+        if (triggerAimDepth > 0) {
+            // inside trigger aiming, stock's silent aim would override the
+            // seat's intent — report failure and let the caller handle it
+            return false;
         }
         return super.chooseTargetsFor(currentAbility);
     }
@@ -1822,23 +1851,50 @@ public final class MailboxController extends PlayerControllerAi
         if (!anyTargeting) {
             return getAi().doTrigger(sa, true); // stock setup for non-targeting triggers
         }
+        triggerAimDepth++;
+        try {
         for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
             if (!s.usesTargeting()) {
                 continue;
             }
             s.setActivatingPlayer(getPlayer());
-            if (!chooseTargetsFor(s)) {
-                // no legal/wanted target for a required targeting step: the
-                // trigger cannot go on the stack (same outcome stock produces
-                // when doTrigger declines)
-                Card h = s.getHostCard();
-                forge.game.spellability.TargetRestrictions tr = s.getTargetRestrictions();
-                if (tr != null && h != null && tr.getMinTargets(h, s) > 0) {
+            boolean aimed = chooseTargetsFor(s);
+            Card h = s.getHostCard();
+            forge.game.spellability.TargetRestrictions tr = s.getTargetRestrictions();
+            int minT = (tr != null && h != null) ? tr.getMinTargets(h, s) : 0;
+            if (minT > 0 && !s.isTargetNumberValid()) {
+                // Game-12 finding 1: the brain declined (or the exchange
+                // failed) on a REQUIRED-target trigger. A targetless stack
+                // entry is rules-broken (it resolved as a confusing FIZZLE);
+                // instead: aim the first legal candidate so the trigger
+                // stacks LEGALLY, and honor the decline intent at resolve
+                // time (confirmTrigger auto-answers NO, zero model calls).
+                List<forge.game.GameEntity> cands =
+                        tr.getAllCandidates(s);
+                if (cands == null || cands.isEmpty()) {
+                    return false; // no legal targets: trigger doesn't stack (603.3d)
+                }
+                s.resetTargets();
+                if (!s.getTargets().add(cands.get(0))) {
                     return false;
                 }
+                if (!aimed) {
+                    pendingTriggerDecline.add(sa);
+                    System.err.println("[mailbox seat " + seatIndex + "] trigger "
+                            + (h != null ? h.getName() : "?") + " declined at aim — "
+                            + "auto-aimed " + cands.get(0) + " to stack legally; "
+                            + "will auto-decline at resolve");
+                }
+            } else if (minT == 0 && aimed && !s.isTargetNumberValid()) {
+                // legal targetless decline (min 0): the resolve-time confirm
+                // is a foregone NO — answer it locally, save the call
+                pendingTriggerDecline.add(sa);
             }
         }
         return true;
+        } finally {
+            triggerAimDepth--;
+        }
     }
 
     /**
@@ -1859,6 +1915,12 @@ public final class MailboxController extends PlayerControllerAi
                 return true;
             }
             SpellAbility sa = wrapper.getWrappedAbility();
+            if (pendingTriggerDecline.remove(wrapper)
+                    || pendingTriggerDecline.remove(sa)
+                    || (sa != null && pendingTriggerDecline.remove(sa.getRootAbility()))) {
+                // the seat already declined this trigger at aim time
+                return false;
+            }
             Card host = wrapper.getHostCard();
             Player me = getPlayer();
             Cost yesCost = sa.getPayCosts();

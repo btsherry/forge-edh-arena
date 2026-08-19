@@ -23,7 +23,7 @@ changed lines), 7 new files parked in parent modules, 1 config.
 |---|---|---|---|---|---|
 | `forge-ai/.../ComputerUtil.java` | +12 −9 | **BEHAVIORAL** | `handlePlayingSpellAbility`'s failed-payment path moved the card stack→stack and orphaned it (upstream FIXME; ate a commander). Now rolls back to origin zone. | `[arena]`-class comment ✓ | `UnaffordableCastRollbackTest` |
 | `forge-ai/.../AiCostDecision.java` | +38 | Additive hook | `visit(CostTapType)` consults `TapCostPreference` first (symmetry-break tap pre-selection). No preference → stock path byte-identical. | ✓ | `TapSymmetryBreakTest` |
-| `forge-game/.../MagicStack.java` | +18 | Diagnostic only | `[arena] FIZZLE:` stderr line in the fizzle branch (targets + stack dump). No behavior change. | ✓ | (log-only) |
+| `forge-game/.../MagicStack.java` | ~+45 | Diagnostic only | `[arena] FIZZLE:`/`DECLINED-TRIGGER:` stderr lines in the fizzle branch — targets snapshotted BEFORE the fizzle-check strips them (the old print said "(none set)" for stripped targets, mislabeling legitimate dead-target fizzles). No behavior change. | ✓ | `SiblingTriggerBatchTest` |
 | `forge-core/.../MyRandom.java` | +36 −6 | **BEHAVIORAL** | Seedable RNG (`setSeed`) for reproducible headless batches (Project 1). | ✓ (ARENA-PATCH) | `SeedDeterminismTest` |
 | `forge-game/.../Combat.java` | +6 −1 | Defensive fix | `getAttackers` snapshot vs concurrent modification crash. Upstream-worthy. | ✓ | (crash class) |
 | `forge-game/.../StaticAbilityTurnPhaseReversed.java` | +34 −7 | Defensive fix | Crash guard + value-based pair choice. Upstream-worthy. | ✓ | PR-49 tests |
