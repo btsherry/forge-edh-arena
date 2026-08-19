@@ -251,6 +251,11 @@ public final class GuiPilotMatch {
             players.add(rp);
         }
 
+        // Cosmetic: give each seat a built-in avatar matched to its deck's colors
+        // (proportional to pip composition; fail-safe — Forge's default avatar
+        // applies on any error). Never blocks the launch.
+        SeatAvatars.assign(players);
+
         // A human seat means humanCount >= 1, which avoids the humanCount == 0
         // spectator IndexOutOfBounds path in HostedMatch.startGame.
         HostedMatch hm = GuiBase.getInterface().hostMatch();

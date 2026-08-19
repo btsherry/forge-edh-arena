@@ -1,0 +1,911 @@
+{
+ "schema": "arena.avatar-colors/1",
+ "source": "forge-gui/res/skins/default/sprite_avatars.png (126 heads, avatarIndex 0-125)",
+ "note": "union pick: choose from the union of the commander's color identity; C = neutral filler / fallback",
+ "by_color": {
+  "W": [
+   0,
+   5,
+   8,
+   32,
+   39,
+   48,
+   51,
+   53,
+   61,
+   68,
+   69,
+   74,
+   75,
+   80,
+   101,
+   119
+  ],
+  "U": [
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   29,
+   35,
+   38,
+   44,
+   57,
+   63,
+   68,
+   73,
+   83,
+   88,
+   96,
+   98,
+   105,
+   117
+  ],
+  "B": [
+   4,
+   15,
+   16,
+   17,
+   19,
+   29,
+   55,
+   56,
+   59,
+   66,
+   67,
+   72,
+   76,
+   94,
+   96,
+   100,
+   104,
+   108,
+   110,
+   118
+  ],
+  "R": [
+   3,
+   18,
+   20,
+   21,
+   22,
+   26,
+   31,
+   34,
+   40,
+   50,
+   54,
+   58,
+   60,
+   62,
+   64,
+   71,
+   81,
+   82,
+   84,
+   85,
+   95,
+   97,
+   99,
+   103,
+   106,
+   112,
+   115,
+   116,
+   124
+  ],
+  "G": [
+   24,
+   25,
+   28,
+   41,
+   77,
+   78,
+   79,
+   86,
+   93,
+   114,
+   120,
+   122
+  ],
+  "C": [
+   1,
+   2,
+   6,
+   13,
+   14,
+   23,
+   27,
+   30,
+   33,
+   36,
+   37,
+   42,
+   43,
+   45,
+   46,
+   47,
+   49,
+   52,
+   65,
+   70,
+   87,
+   89,
+   90,
+   91,
+   92,
+   102,
+   107,
+   109,
+   111,
+   113,
+   121,
+   123,
+   125
+  ]
+ },
+ "by_index": {
+  "0": {
+   "colors": [
+    "W"
+   ],
+   "desc": "white tiger"
+  },
+  "1": {
+   "colors": [
+    "C"
+   ],
+   "desc": "man"
+  },
+  "2": {
+   "colors": [
+    "C"
+   ],
+   "desc": "warrior woman"
+  },
+  "3": {
+   "colors": [
+    "R"
+   ],
+   "desc": "fiery man"
+  },
+  "4": {
+   "colors": [
+    "B"
+   ],
+   "desc": "pale gothic woman"
+  },
+  "5": {
+   "colors": [
+    "W"
+   ],
+   "desc": "blonde woman"
+  },
+  "6": {
+   "colors": [
+    "C"
+   ],
+   "desc": "man gold earrings"
+  },
+  "7": {
+   "colors": [
+    "U"
+   ],
+   "desc": "blue-eyed blond"
+  },
+  "8": {
+   "colors": [
+    "U",
+    "W"
+   ],
+   "desc": "feathered-headdress woman"
+  },
+  "9": {
+   "colors": [
+    "U"
+   ],
+   "desc": "hooded blue-glow"
+  },
+  "10": {
+   "colors": [
+    "U"
+   ],
+   "desc": "blue-armor woman"
+  },
+  "11": {
+   "colors": [
+    "U"
+   ],
+   "desc": "blue-tint woman"
+  },
+  "12": {
+   "colors": [
+    "U"
+   ],
+   "desc": "ghostly sorceress"
+  },
+  "13": {
+   "colors": [
+    "C"
+   ],
+   "desc": "smiling man"
+  },
+  "14": {
+   "colors": [
+    "C"
+   ],
+   "desc": "grizzled man"
+  },
+  "15": {
+   "colors": [
+    "B"
+   ],
+   "desc": "demon mask"
+  },
+  "16": {
+   "colors": [
+    "B"
+   ],
+   "desc": "purple-eyed woman"
+  },
+  "17": {
+   "colors": [
+    "B"
+   ],
+   "desc": "scarred dark man"
+  },
+  "18": {
+   "colors": [
+    "R"
+   ],
+   "desc": "magenta red-eyed man"
+  },
+  "19": {
+   "colors": [
+    "B"
+   ],
+   "desc": "dark goblin-elf"
+  },
+  "20": {
+   "colors": [
+    "R"
+   ],
+   "desc": "fire-eyed blonde"
+  },
+  "21": {
+   "colors": [
+    "R"
+   ],
+   "desc": "goggles redhead"
+  },
+  "22": {
+   "colors": [
+    "R"
+   ],
+   "desc": "goblin"
+  },
+  "23": {
+   "colors": [
+    "C"
+   ],
+   "desc": "older woman"
+  },
+  "24": {
+   "colors": [
+    "G"
+   ],
+   "desc": "green-bg woman"
+  },
+  "25": {
+   "colors": [
+    "G"
+   ],
+   "desc": "green-gem woman"
+  },
+  "26": {
+   "colors": [
+    "R"
+   ],
+   "desc": "redhead"
+  },
+  "27": {
+   "colors": [
+    "C"
+   ],
+   "desc": "eyepatch rogue"
+  },
+  "28": {
+   "colors": [
+    "G"
+   ],
+   "desc": "reptilian"
+  },
+  "29": {
+   "colors": [
+    "U",
+    "B"
+   ],
+   "desc": "teal demon woman"
+  },
+  "30": {
+   "colors": [
+    "C"
+   ],
+   "desc": "boy"
+  },
+  "31": {
+   "colors": [
+    "R"
+   ],
+   "desc": "red imp"
+  },
+  "32": {
+   "colors": [
+    "W"
+   ],
+   "desc": "radiant man"
+  },
+  "33": {
+   "colors": [
+    "C"
+   ],
+   "desc": "blond man"
+  },
+  "34": {
+   "colors": [
+    "R"
+   ],
+   "desc": "red-eyed fierce man"
+  },
+  "35": {
+   "colors": [
+    "U"
+   ],
+   "desc": "blue-skinned"
+  },
+  "36": {
+   "colors": [
+    "C"
+   ],
+   "desc": "rugged man"
+  },
+  "37": {
+   "colors": [
+    "C"
+   ],
+   "desc": "scarred man"
+  },
+  "38": {
+   "colors": [
+    "U"
+   ],
+   "desc": "blue-skin red-eye"
+  },
+  "39": {
+   "colors": [
+    "W"
+   ],
+   "desc": "bald pale woman"
+  },
+  "40": {
+   "colors": [
+    "R"
+   ],
+   "desc": "golden fire face"
+  },
+  "41": {
+   "colors": [
+    "G"
+   ],
+   "desc": "centaur"
+  },
+  "42": {
+   "colors": [
+    "C"
+   ],
+   "desc": "hooded figure"
+  },
+  "43": {
+   "colors": [
+    "C"
+   ],
+   "desc": "freckled child"
+  },
+  "44": {
+   "colors": [
+    "U"
+   ],
+   "desc": "blue sage"
+  },
+  "45": {
+   "colors": [
+    "C"
+   ],
+   "desc": "jovial bald man"
+  },
+  "46": {
+   "colors": [
+    "C"
+   ],
+   "desc": "handsome man"
+  },
+  "47": {
+   "colors": [
+    "C"
+   ],
+   "desc": "hooded woman"
+  },
+  "48": {
+   "colors": [
+    "W"
+   ],
+   "desc": "white tiger"
+  },
+  "49": {
+   "colors": [
+    "C"
+   ],
+   "desc": "metallic golem-man"
+  },
+  "50": {
+   "colors": [
+    "R"
+   ],
+   "desc": "fiery demon-man"
+  },
+  "51": {
+   "colors": [
+    "W"
+   ],
+   "desc": "white-haired woman"
+  },
+  "52": {
+   "colors": [
+    "C"
+   ],
+   "desc": "bearded man"
+  },
+  "53": {
+   "colors": [
+    "W"
+   ],
+   "desc": "lion person"
+  },
+  "54": {
+   "colors": [
+    "R"
+   ],
+   "desc": "angry man"
+  },
+  "55": {
+   "colors": [
+    "B"
+   ],
+   "desc": "purple jeweled woman"
+  },
+  "56": {
+   "colors": [
+    "B"
+   ],
+   "desc": "purple intense man"
+  },
+  "57": {
+   "colors": [
+    "U"
+   ],
+   "desc": "warpaint blue man"
+  },
+  "58": {
+   "colors": [
+    "R"
+   ],
+   "desc": "golden serpent"
+  },
+  "59": {
+   "colors": [
+    "B"
+   ],
+   "desc": "dark horned"
+  },
+  "60": {
+   "colors": [
+    "R"
+   ],
+   "desc": "fiery-eyed man"
+  },
+  "61": {
+   "colors": [
+    "W"
+   ],
+   "desc": "ethereal woman"
+  },
+  "62": {
+   "colors": [
+    "R"
+   ],
+   "desc": "red orc-demon"
+  },
+  "63": {
+   "colors": [
+    "U"
+   ],
+   "desc": "pale glowing man"
+  },
+  "64": {
+   "colors": [
+    "R"
+   ],
+   "desc": "warm redhead"
+  },
+  "65": {
+   "colors": [
+    "C"
+   ],
+   "desc": "bald dark man"
+  },
+  "66": {
+   "colors": [
+    "B"
+   ],
+   "desc": "red-eyed tattoo man"
+  },
+  "67": {
+   "colors": [
+    "B"
+   ],
+   "desc": "magenta demon woman"
+  },
+  "68": {
+   "colors": [
+    "U",
+    "W"
+   ],
+   "desc": "blue regal woman"
+  },
+  "69": {
+   "colors": [
+    "W"
+   ],
+   "desc": "blue-armor knight"
+  },
+  "70": {
+   "colors": [
+    "C"
+   ],
+   "desc": "brown-hair man"
+  },
+  "71": {
+   "colors": [
+    "R"
+   ],
+   "desc": "orange-eyed woman"
+  },
+  "72": {
+   "colors": [
+    "B"
+   ],
+   "desc": "pink-glow woman"
+  },
+  "73": {
+   "colors": [
+    "U"
+   ],
+   "desc": "blue-skinned woman"
+  },
+  "74": {
+   "colors": [
+    "W"
+   ],
+   "desc": "fair blonde"
+  },
+  "75": {
+   "colors": [
+    "W"
+   ],
+   "desc": "glowing-eye gold woman"
+  },
+  "76": {
+   "colors": [
+    "B"
+   ],
+   "desc": "purple hooded demon"
+  },
+  "77": {
+   "colors": [
+    "G"
+   ],
+   "desc": "green masked"
+  },
+  "78": {
+   "colors": [
+    "G"
+   ],
+   "desc": "fierce elf"
+  },
+  "79": {
+   "colors": [
+    "G"
+   ],
+   "desc": "green-energy elf"
+  },
+  "80": {
+   "colors": [
+    "W"
+   ],
+   "desc": "white tiger"
+  },
+  "81": {
+   "colors": [
+    "R"
+   ],
+   "desc": "fire minotaur"
+  },
+  "82": {
+   "colors": [
+    "R"
+   ],
+   "desc": "redhead woman"
+  },
+  "83": {
+   "colors": [
+    "U"
+   ],
+   "desc": "hooded blue-glow"
+  },
+  "84": {
+   "colors": [
+    "R"
+   ],
+   "desc": "feral screamer"
+  },
+  "85": {
+   "colors": [
+    "R"
+   ],
+   "desc": "dragon head"
+  },
+  "86": {
+   "colors": [
+    "G"
+   ],
+   "desc": "green-marked elf"
+  },
+  "87": {
+   "colors": [
+    "C"
+   ],
+   "desc": "bearded dark man"
+  },
+  "88": {
+   "colors": [
+    "U"
+   ],
+   "desc": "serene blue man"
+  },
+  "89": {
+   "colors": [
+    "C"
+   ],
+   "desc": "blue-bg man"
+  },
+  "90": {
+   "colors": [
+    "C"
+   ],
+   "desc": "jeweled woman"
+  },
+  "91": {
+   "colors": [
+    "C"
+   ],
+   "desc": "hoop-earring woman"
+  },
+  "92": {
+   "colors": [
+    "C"
+   ],
+   "desc": "mustache man"
+  },
+  "93": {
+   "colors": [
+    "G"
+   ],
+   "desc": "green-tattoo mohawk"
+  },
+  "94": {
+   "colors": [
+    "B"
+   ],
+   "desc": "purple-skin man"
+  },
+  "95": {
+   "colors": [
+    "R"
+   ],
+   "desc": "goggles screamer"
+  },
+  "96": {
+   "colors": [
+    "B",
+    "U"
+   ],
+   "desc": "gaunt undead man"
+  },
+  "97": {
+   "colors": [
+    "R"
+   ],
+   "desc": "red-hair rugged man"
+  },
+  "98": {
+   "colors": [
+    "U"
+   ],
+   "desc": "pale white-eye man"
+  },
+  "99": {
+   "colors": [
+    "R"
+   ],
+   "desc": "fiery wild man"
+  },
+  "100": {
+   "colors": [
+    "B"
+   ],
+   "desc": "vampire woman"
+  },
+  "101": {
+   "colors": [
+    "W"
+   ],
+   "desc": "white lion"
+  },
+  "102": {
+   "colors": [
+    "C"
+   ],
+   "desc": "headband woman"
+  },
+  "103": {
+   "colors": [
+    "R"
+   ],
+   "desc": "orc brute"
+  },
+  "104": {
+   "colors": [
+    "B"
+   ],
+   "desc": "purple-energy man"
+  },
+  "105": {
+   "colors": [
+    "U"
+   ],
+   "desc": "spirit woman"
+  },
+  "106": {
+   "colors": [
+    "R"
+   ],
+   "desc": "red-hair intense"
+  },
+  "107": {
+   "colors": [
+    "C"
+   ],
+   "desc": "young man"
+  },
+  "108": {
+   "colors": [
+    "B"
+   ],
+   "desc": "dark demon"
+  },
+  "109": {
+   "colors": [
+    "C"
+   ],
+   "desc": "rugged man"
+  },
+  "110": {
+   "colors": [
+    "B"
+   ],
+   "desc": "gaunt horned man"
+  },
+  "111": {
+   "colors": [
+    "C"
+   ],
+   "desc": "gaunt pale man"
+  },
+  "112": {
+   "colors": [
+    "R"
+   ],
+   "desc": "dark warrior"
+  },
+  "113": {
+   "colors": [
+    "C"
+   ],
+   "desc": "smiling man"
+  },
+  "114": {
+   "colors": [
+    "G"
+   ],
+   "desc": "green-eye armored"
+  },
+  "115": {
+   "colors": [
+    "R"
+   ],
+   "desc": "orange-eyed man"
+  },
+  "116": {
+   "colors": [
+    "R"
+   ],
+   "desc": "orange-eyed man"
+  },
+  "117": {
+   "colors": [
+    "U"
+   ],
+   "desc": "stern blue woman"
+  },
+  "118": {
+   "colors": [
+    "B"
+   ],
+   "desc": "gothic pale man"
+  },
+  "119": {
+   "colors": [
+    "W"
+   ],
+   "desc": "white lion blue-eye"
+  },
+  "120": {
+   "colors": [
+    "G"
+   ],
+   "desc": "green elf woman"
+  },
+  "121": {
+   "colors": [
+    "C"
+   ],
+   "desc": "blond smiling man"
+  },
+  "122": {
+   "colors": [
+    "G"
+   ],
+   "desc": "green-marked screamer"
+  },
+  "123": {
+   "colors": [
+    "C"
+   ],
+   "desc": "stern bearded man"
+  },
+  "124": {
+   "colors": [
+    "R"
+   ],
+   "desc": "orange-eyed fierce man"
+  },
+  "125": {
+   "colors": [
+    "C"
+   ],
+   "desc": "glowing-eye bearded man"
+  }
+ }
+}
