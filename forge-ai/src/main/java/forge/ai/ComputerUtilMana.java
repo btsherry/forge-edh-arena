@@ -941,6 +941,22 @@ public class ComputerUtilMana {
         }
 
         AbilityManaPart m = ma.getManaPart();
+        // [arena] condition-forked mana scripts (Gemstone Caverns class: root
+        // "Add {C}" gated on no-counter, sub "Add Any" gated on counter>=1 —
+        // the card file carries an upstream TODO for exactly this): the
+        // grouping in groupSourcesByManaColor is tail-aware, but this vetting
+        // read only the ROOT part, so the fork's ACTIVE branch was invisible
+        // at payment time — colored shards went unpaid while explicit floats
+        // worked (six live incidents, games 10-12). Use the first part in the
+        // chain whose conditions are currently met; fall back to the root
+        // when none are (previous behavior).
+        for (SpellAbility tail = ma; tail != null; tail = tail.getSubAbility()) {
+            AbilityManaPart tp = tail.getManaPart();
+            if (tp != null && tail.metConditions()) {
+                m = tp;
+                break;
+            }
+        }
         if (!m.meetsManaRestrictions(sa)) {
             return false;
         }

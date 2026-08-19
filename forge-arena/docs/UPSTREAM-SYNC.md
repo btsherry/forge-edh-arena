@@ -12,9 +12,10 @@ divergence list). Read both before ANY merge from upstream.*
   upstream is very active (daily card-script updates, regular engine work).
 - The early rule "all new code lives in forge-arena, no parent-module
   patches" was **deliberately dropped**. Today the delta outside
-  `forge-arena/` is 16 files: 8 modified upstream files (~150 lines), 7 new
-  files, 1 config (INVENTORY §1). Two of the modifications are
-  **behavioral** (ComputerUtil rollback, MyRandom seeding) — an unmanaged
+  `forge-arena/` is 17 files: 9 modified upstream files (~215 lines), 7 new
+  files, 1 config (INVENTORY §1). Three of the modifications are
+  **behavioral** (ComputerUtil rollback, ComputerUtilMana effective-part
+  payment vetting, MyRandom seeding) — an unmanaged
   merge could silently revert them and re-open closed bugs (a reverted
   rollback patch = vanishing commanders again).
 
@@ -78,7 +79,7 @@ git merge origin/master
 
 | Class | Files | Resolution rule |
 |---|---|---|
-| Behavioral patches | `ComputerUtil.java`, `MyRandom.java` | Take upstream's new shape, **re-apply our behavior by hand** at the marker site; the guarding test is the arbiter. If upstream restructured the whole method, port the *intent* (rollback-to-origin-zone; seedable RNG), not the old lines. |
+| Behavioral patches | `ComputerUtil.java`, `ComputerUtilMana.java`, `MyRandom.java` | Take upstream's new shape, **re-apply our behavior by hand** at the marker site; the guarding test is the arbiter. If upstream restructured the whole method, port the *intent* (rollback-to-origin-zone; seedable RNG), not the old lines. |
 | Additive hooks | `AiCostDecision.java` (+`TapCostPreference`) | Re-insert the hook block ahead of upstream's (possibly new) stock logic. `TapSymmetryBreakTest` arbitrates. |
 | Diagnostics | `MagicStack.java` | Re-add the FIZZLE stderr block wherever the fizzle branch now lives. Cheap; skip only if the branch vanished. |
 | Defensive fixes | `Combat.java`, `StaticAbilityTurnPhaseReversed.java` | Check if upstream fixed it themselves (both are upstream-worthy); if yes, drop ours — divergence shrinks. |
