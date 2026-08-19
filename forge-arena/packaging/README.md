@@ -140,10 +140,12 @@ A fourth brain — loaded exactly like the opponents (your deck's dossier,
 combos, primer, both rules digests) — watches your seat and teaches in the
 **Advisor tab** (lower-left dock, beside the Prompt tab):
 
-- **Advice before you act**: every meaningful decision you're offered
-  (priority windows, attacks, blocks, mulligans, targets, X values) is
-  mirrored to the advisor the moment the prompt opens; its 1–3 sentence
-  read appears in the tab while you're still deciding.
+- **Advice before you act**: a humanly-random handful of your decisions each
+  turn (roughly one to three, spread across the phases and always board-aware,
+  with mulligans always covered) are mirrored to the advisor the moment the
+  prompt opens; its 1–3 sentence read appears in the tab while you're still
+  deciding. It speaks selectively rather than at every window — the end-of-turn
+  recap (below) catches anything a given turn's picks skipped.
 - **Color commentary**: one line per completed turn covering the table's
   public plays — what mattered and what it means for your plan.
 - **It sees your choices** and teaches from the divergence when it matters —
@@ -172,6 +174,14 @@ showing the prompt.
 mana picks (Gemstone Caverns, City of Brass…) auto-answer with your
 commander's color — one receipt in the Advisor tab, then silence.
 Multicolor commanders keep the dialog.
+
+## Seat avatars
+
+Each seat's portrait is a built-in Forge avatar matched to its deck's colors —
+derived from the deck's mana-pip mix (mono-red → a red head, a three-color deck →
+its heaviest color, and so on), with per-color variety so the four seats differ
+and the picks change between launches. Purely cosmetic; falls back to Forge's
+default avatar on any hiccup and never affects the game.
 
 ## Local ELO ladders
 

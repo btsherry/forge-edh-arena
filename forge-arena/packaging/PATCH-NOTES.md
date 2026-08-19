@@ -38,6 +38,23 @@ Sanctuary` — now resolve during ingest (Scryfall is queried by the front face)
 so those cards land in the dossier with full oracle text instead of the
 unresolved list.
 
+### New: color-matched seat avatars
+
+Each seat now gets a built-in Forge avatar matched to its deck's colors — tallied
+from the deck's mana-pip composition, so a mono-red deck always shows a red head,
+a three-color deck leans toward its heaviest color, and so on. Heads are picked
+with per-color variety (different each launch) and are distinct across the four
+seats. New decks get a themed avatar for free; anything unexpected falls back to
+Forge's default avatar, and it never touches gameplay.
+
+### Changed: leaner, more human Advisor cadence
+
+The Advisor now speaks at a humanly-random handful of moments per turn (roughly
+one to three) instead of at nearly every window — spread across the phases and
+still fully board-aware — plus the always-on end-of-turn recap, and it always
+weighs in on mulligans. Fewer, better-timed interruptions and a lighter token
+footprint; the turn recap covers anything a given turn's picks skipped.
+
 ## v3.1 — 2026-08-17
 
 ### Faster: loops fast-forward, MCP-free decisions stay
