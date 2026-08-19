@@ -17,6 +17,12 @@ Selesnya (GW) enchantress built through the new DeckCheck import pipeline:
 full dossier, combo list, and DeckCheck primer. The AI table roster and
 `ARENA_SEAT_DECKS` accept it like any bundled deck.
 
+### New: ninth bundled deck — Liberator, Urza's Battlethopter
+
+A colorless cEDH build, also onboarded through the DeckCheck import pipeline
+(full dossier, combo list, and DeckCheck primer) — the first colorless deck in
+the bundle. Sits at any seat via the roster or `ARENA_SEAT_DECKS`.
+
 ### New: primer generation controls
 
 - `--primer-out PATH` — write the primer to a path you choose instead of

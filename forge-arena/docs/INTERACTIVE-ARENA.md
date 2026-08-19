@@ -319,8 +319,9 @@ cost rails — see `packaging/README.md` §"Other models on the backend".
 
 **Track 4 — packaging & release — ✅ SHIPPED (v1 2026-08-12 → v3.1 2026-08-17;
 v3.2 staged 2026-08-19)** as **forge-light-llm**: zero-setup tarball on R2
-(`-latest` alias), 8 bundled decks (Sythis added for v3.2 — note 45), deck
-ingestion incl. DeckCheck auto-primer (note 44), README + PATCH-NOTES,
+(`-latest` alias), 9 bundled decks (Sythis + Liberator added for v3.2 —
+notes 45, 48), deck ingestion incl. DeckCheck auto-primer (note 44),
+README + PATCH-NOTES,
 GPL-3.0 source-available. Build: `../BUILDING.md` +
 `packaging/build-light-package.sh` (the manifest).
 
@@ -936,3 +937,10 @@ Hard-won from two live sessions; read before optimizing anything.
     `avatarIndex` at -1 and Forge's default applies; never blocks a launch.
     Assigned from `GuiPilotMatch` before `startMatch`. 40-trial pool-correctness
     test + a startup log line.
+48. **Liberator, the ninth bundled deck (2026-08-19).** A **colorless** cEDH
+    build (commander: Liberator, Urza's Battlethopter) — the first colorless
+    deck in the bundle — onboarded through the note-44 DeckCheck pipeline;
+    `SLUGS` gains `liberator-urzas-battlethopter` (dossier/combos/primer all
+    present, the four per-slug package inputs the build requires). Exercises the
+    avatar path's colorless branch (note 47: no colored pips → the `C` head
+    pool). Track 4's count updated to 9.
