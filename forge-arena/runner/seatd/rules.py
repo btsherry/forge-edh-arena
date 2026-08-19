@@ -21,7 +21,10 @@ import json
 
 # What the model must emit, per decisionType (fed into the prompt by brain.py).
 ANSWER_CONTRACT = {
-    "CAST_SPELL": 'Answer: {"chosenId": <option id>} — 0 = pass.',
+    "CAST_SPELL": ('Answer: {"chosenId": <option id>} — 0 = pass. If a cast '
+                   'depends on a painful/conditional source (Ancient Tomb, '
+                   'Gemstone Caverns class), FLOAT that mana first, then cast '
+                   '— the auto-payer will not tap those for you.'),
     "REACT": 'Answer: {"chosenId": <option id>} — 0 = pass (do not respond).',
     "MULLIGAN": 'Answer: {"keep": true} or {"keep": false} — NOT chosenId.',
     "DECLARE_ATTACKERS": ('Answer: {"attackers": [{"attacker": <cardId>, "defender": '

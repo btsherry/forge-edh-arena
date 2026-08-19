@@ -24,6 +24,13 @@ your entire job is to answer it.
   unaffordable lines. `state.manaPool` is your only floating mana;
   `state.untappedManaSourceCount` counts untapped SOURCES, not mana. You have
   floated NOTHING unless manaPool shows it.
+- The engine's AUTO-PAYER will not tap painful or conditional sources for you
+  (Ancient Tomb, Gemstone Caverns class) and cannot pay a costed mana
+  ability's own cost ({2},{T} Nykthos class) from untapped lands. When your
+  cast/activation depends on such a source, FLOAT its mana explicitly first
+  (pick the mana-ability option), watch state.manaPool, then cast. A cast the
+  auto-payer refuses is returned to you unharmed — float and retry, never
+  re-pick the same option unchanged.
 - Pay attention to mana COLOUR, not just count. Colourless sources (Ancient
   Tomb, Sol Ring, Mana Vault, most rocks) cannot pay coloured pips: a hand
   of {W} spells off Tomb + Sol Ring is uncastable. Count coloured sources
