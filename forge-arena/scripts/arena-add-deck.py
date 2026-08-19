@@ -135,18 +135,29 @@ def _normname(name):
     return re.sub(r"[^a-z0-9]+", "", name.lower())
 
 
+def _front_face(name):
+    """DFC front face for Scryfall lookup ("A // B" -> "A"): Scryfall's collection
+    {"name"} can't match the combined name but resolves the whole card from the
+    front (canonical name stays "A // B", both faces populate card_faces)."""
+    return name.split(" // ")[0].strip() if " // " in name else name
+
+
 def fetch_scryfall(names, cache_dir, use_cache):
     """Return {name_lower: card_json} and a list of not-found names."""
     uniq = sorted({n for n in names})
     found, not_found = {}, []
     for i in range(0, len(uniq), 75):
         batch = uniq[i:i + 75]
-        payload = {"identifiers": [{"name": n} for n in batch]}
+        # Scryfall's collection {"name"} lookup misses a full DFC "Front // Back"
+        # name; querying the FRONT face returns the whole card (both faces in
+        # card_faces, canonical name unchanged), which _oracle/build_deck_cards
+        # already index by full name + face names.
+        payload = {"identifiers": [{"name": _front_face(n)} for n in batch]}
         # Content-addressed cache: keyed by the batch's actual names, so editing
         # the deck invalidates stale batches. (An index-keyed cache — scryfall-0,
         # scryfall-1 — silently served the pre-edit cards, dropping swapped-in
-        # cards into 'unresolved' on any re-run.)
-        key = hashlib.sha1("\x1f".join(batch).encode("utf-8")).hexdigest()[:16]
+        # cards into 'unresolved' on any re-run.) 'v2' busts pre-DFC-fix caches.
+        key = hashlib.sha1(("v2\x1f" + "\x1f".join(batch)).encode("utf-8")).hexdigest()[:16]
         cache = os.path.join(cache_dir, f"scryfall-{key}.json")
         try:
             data = _post("https://api.scryfall.com/cards/collection", payload,
@@ -411,9 +422,13 @@ that dictate sequencing.
 - Primary win line(s) and backups, plus what to protect and when.
 Be specific and concrete; prefer card names and real lines over generalities.
 State execution lines rules-accurately (timing/priority, and announce finite \
-loop counts rather than claiming "infinite" where a loop is bounded). Do NOT \
-restate general game rules — the pilot reading this already holds \
-comprehensive rules digests; cite a rule only where a line hinges on it.
+loop counts rather than claiming "infinite" where a loop is bounded). Use the \
+MTG RULES REFERENCE below for YOUR reasoning so every line is rules-exact; do \
+NOT restate general rules in the primer (the pilot already holds these digests) \
+— cite a rule only where a line hinges on it.
+
+## MTG RULES REFERENCE (for your reasoning only — do NOT copy into the primer)
+{rules}
 
 ## DECK COMBOS (CommanderSpellbook)
 {combos}
@@ -465,7 +480,20 @@ def make_primer(slug, deck_cards, combos, primer_path, mode, deckcheck,
     # mode b — fable / max effort, tools enabled so it can research EDHREC.
     log("  Generating with fable/max (this researches EDHREC and can take a "
         "few minutes)...")
+    # Rules reference for the generator's reasoning (loop legality, timing,
+    # priority) — the same corpus the seat brains load at runtime. Kept out of
+    # the primer output; it only makes the stated lines rules-exact.
+    rules_parts = []
+    for rf in ("mtg-rules-digest-conversion.md", "mtg-rules-summary.md"):
+        rp = os.path.join(ROOT, "docs", "research", rf)
+        if os.path.exists(rp):
+            rules_parts.append(f"### {rf}\n"
+                               + open(rp, encoding="utf-8", errors="replace").read())
+        else:
+            warn(f"rules reference {rf} not found; primer reasoning will lack it")
+    rules_text = "\n\n".join(rules_parts) or "(no rules reference available)"
     prompt = PRIMER_PROMPT.format(
+        rules=rules_text,
         combos=json.dumps(combos["combos"], indent=1),
         cards=json.dumps([{k: c[k] for k in ("name", "mana_cost", "type_line",
                                              "oracle_text")}
