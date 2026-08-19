@@ -93,13 +93,14 @@ class AdvisorRunner:
         self.pending_context: list[str] = []  # chosen/digest lines awaiting a call
         self._init_control(model, effort)
         # ---- frequency governor state (the charm patch) ----------------------
-        # Advice is deliberately sparse: 3-5 moments per turn — first main and
-        # combat guaranteed, the rest admitted by seeded dice. Danger (an
-        # opponent's spell on the stack) pierces the budget unconditionally.
+        # Advice is deliberately sparse and humanly random: every in-game window
+        # (priority, combat, danger, targets/X) is tied to a per-turn range of
+        # 1-3 admitted by seeded dice — no guaranteed main/combat/danger stops.
+        # Only the once-a-game mulligan is always answered; a big mid-turn play
+        # the dice miss is covered by the always-on end-of-turn digest.
         self.rng = random.Random()
         self.gov_turn = -1
         self.gov_budget = 0
-        self.gov_main1_done = False
         try:
             own = json.loads((arena_root / "decks" / deck / "dossier"
                               / "deck-cards.json").read_text())
@@ -115,41 +116,26 @@ class AdvisorRunner:
         seed = f"{self.brain.session_id or 'warmup'}:{turn}"
         self.rng.seed(seed)
         self.gov_turn = turn
-        self.gov_budget = self.rng.randint(3, 5)
-        self.gov_main1_done = False
+        self.gov_budget = self.rng.randint(1, 3)
         self._record("governor", {"turn": turn, "budget": self.gov_budget,
                                   "seed": seed})
 
     def _admit(self, req: dict) -> tuple[bool, str]:
-        """Governor verdict for one request: (advise?, reason)."""
+        """Governor verdict for one request: (advise?, reason). Every in-game
+        window obeys the per-turn range; only the once-a-game mulligan is always
+        answered. A big mid-turn play the dice miss is still covered by the
+        always-on end-of-turn digest."""
         turn = int(req.get("turn") or 0)
         if turn > self.gov_turn:
             self._gov_new_turn(turn)
-        dtype = req.get("decisionType") or ""
-        if dtype != "PRIORITY":
-            # Explicit questions (targets, X, mulligans, declares) are always
-            # answered; combat declares are the guaranteed combat slots.
-            if self.gov_budget > 0:
-                self.gov_budget -= 1
-            return True, "question"
-        # Danger pierces the budget: an opponent's spell is on the stack.
-        state = req.get("state") or {}
-        stack = state.get("stack") or []
-        if self.own_card_names and any(s not in self.own_card_names for s in stack):
-            if self.gov_budget > 0:
-                self.gov_budget -= 1
-            return True, "danger"
-        # Guaranteed slot: the first main-phase stop of the turn.
-        phase = str(req.get("phase") or "")
-        if not self.gov_main1_done and "MAIN1" in phase:
-            self.gov_main1_done = True
-            if self.gov_budget > 0:
-                self.gov_budget -= 1
-            return True, "main1"
-        # The sprinkle: seeded dice while budget remains.
+        if (req.get("decisionType") or "") == "MULLIGAN":
+            return True, "mulligan"
+        # Everything else — priority windows, combat declares, danger (opponent
+        # spell on the stack), targets/X — is tied to the range: seeded dice
+        # while the per-turn budget remains. No guaranteed main/combat/danger.
         if self.gov_budget > 0 and self.rng.random() < self.RANDOM_ADMIT_P:
             self.gov_budget -= 1
-            return True, "sprinkle"
+            return True, "range"
         return False, "budget"
 
     # ---- output --------------------------------------------------------------
