@@ -29,7 +29,7 @@ for a in "$@"; do
   esac
 done
 
-# The eight decks that ship.
+# The nine decks that ship.
 SLUGS="giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds
 urza-lord-high-artificer swords-plunder swords-plunder-gc
 y-shtola-night-s-blessed sythis-harvests-hand liberator-urzas-battlethopter"
