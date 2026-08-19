@@ -144,14 +144,36 @@ deckview/analysis id (hex), distinct from the builder `deckId`.
 **5. (Optional) read back** — `GET /builder/api/public/deck/{deckId}` (§1), once the
 deck is saved + unlisted/public.
 
-### Persisting imported cards (only if you want a saved, readable deck)
-`POST /builder/api/save-draft` with `buildPersistableDraftPayload()`:
-`{id, name, deck_format, deck_roles, commander, commander2, companion, cards,
-sideboard, notes, considering, deck_metadata}` — where `cards`/`sideboard` are
-**dicts keyed by card name** (`{cardName: {printings:[…], details:{…}}}`), not lists.
-`POST /builder/api/update-deck-visibility` `{deck_id, visibility}` flips
-private/unlisted/public. We skipped both — `evaluate-deck` analyzes the passed
-`deckList` directly.
+### Persisting imported cards (VERIFIED) — makes a complete, readable deck
+`POST /builder/api/save-draft` with `{id, name, deck_format, commander,
+commander2, companion, cards, sideboard, considering, notes, deck_roles,
+deck_metadata}`. `cards`/`sideboard` are **dicts keyed by card name**, each
+`{"printings": [{quantity, finish, card_scryfall_id, set_code, collector_number}]}`
+(built from the import card list). A minimal payload (empty
+`deck_roles`/`deck_metadata`/`considering`, no `details`) is accepted — **verified:
+92 cards persisted** (read-back `cards` 0 → 92; `→ {"message":"Draft saved
+successfully"}`). `POST /builder/api/update-deck-visibility` `{deck_id, visibility}`
+→ `unlisted`/`public`/`private` (**verified** → `{"status":"success"}`). This is
+optional for the primer (the analysis is keyless-readable without it) but makes the
+DeckCheck deck coherent (cards + analysis) for re-analysis/reuse.
+
+### Tooling + repeatable pattern
+- **`scripts/deckcheck-import.py`** (LOCAL TESTING TOOL, never bundled) chains the
+  whole authenticated flow: `<moxfield-url> [--tier pro] [--visibility unlisted]
+  [--dck-out PATH]` → login → draft → import → save-draft → visibility → analyze →
+  poll → prints the `deckId` (and optionally emits the `.dck`). Spends credits.
+- **`scripts/arena-add-deck.py <deck.dck> --slug <slug> --deckcheck <deckId>`**
+  (bundle-safe, keyless) then builds the dossier and pulls the primer.
+- Verified end-to-end on the Sythis deck: import → pro analysis → `.dck` +
+  `docs/primers/sythis-harvests-hand-deckcheck.md` (bracket 4 + CRISPI + prose).
+
+### Known gaps
+- **MDFC card names:** Scryfall's `{"name":"A // B"}` lookup fails on full
+  double-faced names (e.g. `Bala Ged Recovery // Bala Ged Sanctuary`) — 5 such
+  cards landed in `deck-cards.json`'s `unresolved` on the Sythis run. `arena-add-deck`
+  should retry the front face / use a `scryfall_id` when available.
+- **No delete-deck endpoint** located yet — test drafts accumulate (kept `unlisted`).
+- `parse_deckcheck_id` originally rejected ids with `_` (fixed → `[A-Za-z0-9_-]{6,}`).
 
 ### Live test result (2026-08-11)
 Moxfield `…/decks/Nykf4L0i_Uu7R9TXOX3naQ` → imported as **"Green White Cushion

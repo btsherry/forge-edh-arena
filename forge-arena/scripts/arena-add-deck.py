@@ -269,13 +269,13 @@ def parse_deckcheck_id(s):
     """Pull the deck id from a DeckCheck URL (builder/deck/app/api forms) or a
     bare id. Ids are >=6 alphanumerics, so 'api'/'app' path words don't match."""
     s = (s or "").strip()
-    for pat in (r"/public/deck/([A-Za-z0-9]{6,})",
-                r"/app/(?:builder|deck)/([A-Za-z0-9]{6,})",
-                r"/(?:builder|deck)/([A-Za-z0-9]{6,})"):
+    for pat in (r"/public/deck/([A-Za-z0-9_-]{6,})",
+                r"/app/(?:builder|deck)/([A-Za-z0-9_-]{6,})",
+                r"/(?:builder|deck)/([A-Za-z0-9_-]{6,})"):
         m = re.search(pat, s)
         if m:
             return m.group(1)
-    return s if re.fullmatch(r"[A-Za-z0-9]{6,}", s) else None
+    return s if re.fullmatch(r"[A-Za-z0-9_-]{6,}", s) else None
 
 
 def _get(url, cache_path=None, use_cache=True):
