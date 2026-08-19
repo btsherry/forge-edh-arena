@@ -442,7 +442,7 @@ file is read verbatim by the pilot and anything else is noise in its context."""
 
 
 def make_primer(slug, deck_cards, combos, primer_path, mode, deckcheck,
-                cache_dir, use_cache, primer_timeout=2700):
+                cache_dir, use_cache, primer_timeout=2700, include_rules=True):
     log("\n" + "=" * 70)
     log(f"STRATEGY PRIMER for {slug} — the pilot plays far better with a good one.")
     log("DeckCheck.co gives the best commander-specific analysis we've seen "
@@ -482,16 +482,20 @@ def make_primer(slug, deck_cards, combos, primer_path, mode, deckcheck,
         "few minutes)...")
     # Rules reference for the generator's reasoning (loop legality, timing,
     # priority) — the same corpus the seat brains load at runtime. Kept out of
-    # the primer output; it only makes the stated lines rules-exact.
-    rules_parts = []
-    for rf in ("mtg-rules-digest-conversion.md", "mtg-rules-summary.md"):
-        rp = os.path.join(ROOT, "docs", "research", rf)
-        if os.path.exists(rp):
-            rules_parts.append(f"### {rf}\n"
-                               + open(rp, encoding="utf-8", errors="replace").read())
-        else:
-            warn(f"rules reference {rf} not found; primer reasoning will lack it")
-    rules_text = "\n\n".join(rules_parts) or "(no rules reference available)"
+    # the primer output; it only makes the stated lines rules-exact. Toggle with
+    # --no-primer-rules to A/B the wall-clock/accuracy cost of the ~57KB corpus.
+    if include_rules:
+        rules_parts = []
+        for rf in ("mtg-rules-digest-conversion.md", "mtg-rules-summary.md"):
+            rp = os.path.join(ROOT, "docs", "research", rf)
+            if os.path.exists(rp):
+                rules_parts.append(f"### {rf}\n"
+                                   + open(rp, encoding="utf-8", errors="replace").read())
+            else:
+                warn(f"rules reference {rf} not found; primer reasoning will lack it")
+        rules_text = "\n\n".join(rules_parts) or "(no rules reference available)"
+    else:
+        rules_text = "(omitted for this run — rely on your own MTG rules knowledge)"
     prompt = PRIMER_PROMPT.format(
         rules=rules_text,
         combos=json.dumps(combos["combos"], indent=1),
@@ -530,6 +534,12 @@ def main():
     ap.add_argument("--primer-timeout", type=int, default=2700,
                     help="seconds for fable/max primer generation, mode B "
                          "(default 2700; the rules-context prompt is slow)")
+    ap.add_argument("--no-primer-rules", action="store_true",
+                    help="mode B: omit the MTG rules digest+summary from the fable "
+                         "prompt (faster; relies on the model's own rules knowledge)")
+    ap.add_argument("--primer-out", metavar="PATH",
+                    help="write the primer to PATH instead of "
+                         "docs/primers/<slug>-deckcheck.md")
     ap.add_argument("--no-cache", action="store_true")
     args = ap.parse_args()
     use_cache = not args.no_cache
@@ -574,12 +584,13 @@ def main():
         open(dst_dck, "w").write(open(args.dck, encoding="utf-8",
                                       errors="replace").read())
 
-    primer_path = os.path.join(PRIMERS, f"{slug}-deckcheck.md")
+    primer_path = args.primer_out or os.path.join(PRIMERS, f"{slug}-deckcheck.md")
     # Passing --deckcheck implies mode A even when --primer wasn't given.
     primer_mode = args.primer or ("a" if args.deckcheck else None)
     have_primer = make_primer(slug, deck_cards, combos, primer_path, primer_mode,
                               args.deckcheck, cache_dir, use_cache,
-                              args.primer_timeout)
+                              args.primer_timeout,
+                              include_rules=not args.no_primer_rules)
     log(f"[5/6] primer: {'written ' + rel(primer_path) if have_primer else 'skipped'}")
 
     log(f"[6/6] done. Deck '{slug}' is ready:")
