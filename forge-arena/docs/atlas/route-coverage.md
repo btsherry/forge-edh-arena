@@ -75,6 +75,6 @@ payoff/enabler card in the deck.
 
 ## Related
 
-- Loader: `RoutePlan`; win-routes rules: `docs/WIN-ROUTES.md`
+- Loader: `RoutePlan`; win-routes rules: `docs/research/WIN-ROUTES.md`
 - Seeds: [tutor-priorities](tutor-priorities.md) (payoff weighting)
 - Per-combo features from: [combos](combos.md)
