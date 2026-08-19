@@ -97,7 +97,7 @@ falls back to stock, so a dead brain never hangs a game.
 
 | Package | Project | Contents |
 |---|---|---|
-| `interactive/` | 2 | The seam: `MailboxProtocol` (file bus), `MailboxController` (all overrides above), `MailboxLobbyPlayer` (controller injection), `GuiPilotMatch` (launcher, roster via `arena.seat.decks`), `ObserverSnapshot` (public event-bus state), `GameResultSpool` (ELO result writer), `AdvisorControllerHuman`/`AdvisorFeed`/`AdvisorLobbyPlayer` (seat-0 shadow feed). |
+| `interactive/` | 2 | The seam: `MailboxProtocol` (file bus), `MailboxController` (all overrides above), `MailboxLobbyPlayer` (controller injection), `GuiPilotMatch` (launcher, roster via `arena.seat.decks`), `ObserverSnapshot` (public event-bus state), `GameResultSpool` (ELO result writer), `AdvisorControllerHuman`/`AdvisorFeed`/`AdvisorLobbyPlayer` (seat-0 shadow feed), `SeatAvatars` (cosmetic color-matched seat portraits from deck pip mix; resource `src/main/resources/forge/arena/avatar-colors.json`, 126 heads; fail-safe, fresh-Random — never touches game determinism; assignment logged as `[arena] seat avatars:` in gui.out). |
 | `bootstrap/` | shared | `ArenaBootstrap` (headless/GUI init, RNG seeding). |
 | `engine/` | 1 (+SeatViews shared) | `EngineFacade`, `SeatView`/`SeatViews` (hidden-info-safe read model — the fairness boundary, ArchUnit-guarded). |
 | `harness/`, `combo/`, `prep/`, `bindgen/`, `report/` | 1 | Headless batch stack (BatchMain, combo programs, dossier prep, pilot floors). Not shipped in forge-light-llm. |

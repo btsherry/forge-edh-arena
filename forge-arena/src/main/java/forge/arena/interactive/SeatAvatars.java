@@ -46,6 +46,11 @@ final class SeatAvatars {
 
     private SeatAvatars() { }
 
+    /** Test seam: the parsed color->heads pools (null on failure). */
+    static Map<Character, int[]> loadPoolsForTest() {
+        return loadPools();
+    }
+
     /** Assign a color-matched, distinct avatar to each seat. Never throws. */
     static void assign(final List<RegisteredPlayer> players) {
         try {
@@ -59,6 +64,8 @@ final class SeatAvatars {
             }
             final Random rng = new Random();
             final java.util.Set<Integer> used = new HashSet<>();
+            final StringBuilder log = new StringBuilder("[arena] seat avatars:");
+            int seat = 0;
             for (RegisteredPlayer rp : players) {
                 try {
                     final int idx = pickForDeck(rp.getDeck(), pools, rng, used, maxIdx + 1);
@@ -66,10 +73,15 @@ final class SeatAvatars {
                         rp.getPlayer().setAvatarIndex(idx);
                         used.add(idx);
                     }
+                    log.append(" seat").append(seat).append('=').append(idx)
+                       .append('(').append(rp.getDeck() != null
+                               ? rp.getDeck().getName() : "?").append(')');
                 } catch (Throwable perSeat) {
-                    // one seat's failure must not cost the others their avatar
+                    log.append(" seat").append(seat).append("=ERR");
                 }
+                seat++;
             }
+            System.err.println(log);
         } catch (Throwable t) {
             System.err.println("[arena] seat-avatar assignment skipped: " + t);
         }
