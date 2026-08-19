@@ -19,9 +19,9 @@ architectural step live under **Operational learnings** and **Next architecture*
 below — read those first if you are picking this up.
 
 > Status (2026-08-19): SHIPPED — this seam is the core of the
-> **forge-light-llm** distributable (v1 2026-08-12 → v3.1 2026-08-17 on R2
-> as `-latest`; v3.2 staged — patch notes + README ready, tarball not yet
-> rebuilt). User-facing docs: `packaging/README.md` + `PATCH-NOTES.md`.
+> **forge-light-llm** distributable (v1 2026-08-12 → v3.2 2026-08-19 on R2
+> as `-latest`, dated key `forge-light-llm-20260819.tar.gz`, source
+> `d9302fbf178`). User-facing docs: `packaging/README.md` + `PATCH-NOTES.md`.
 > Engineering inventory: [INVENTORY.md](INVENTORY.md). Upstream-merge safety:
 > [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md). Built on Card-Forge/forge (GPL-3.0);
 > non-commercial fan content under WotC's Fan Content Policy. Any distribution
@@ -317,8 +317,8 @@ cost rails — see `packaging/README.md` §"Other models on the backend".
 - Teacher→student: feed caught misplays into both the agent briefs and the
   deterministic runner.
 
-**Track 4 — packaging & release — ✅ SHIPPED (v1 2026-08-12 → v3.1 2026-08-17;
-v3.2 staged 2026-08-19)** as **forge-light-llm**: zero-setup tarball on R2
+**Track 4 — packaging & release — ✅ SHIPPED (v1 2026-08-12 → v3.2 2026-08-19)**
+as **forge-light-llm**: zero-setup tarball on R2
 (`-latest` alias), 9 bundled decks (Sythis + Liberator added for v3.2 —
 notes 45, 48), deck ingestion incl. DeckCheck auto-primer (note 44),
 README + PATCH-NOTES,
