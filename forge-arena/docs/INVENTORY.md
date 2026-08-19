@@ -180,8 +180,7 @@ JVM launcher), `run-gui.sh`, `arena-add-deck.py` (ingester),
 
 ## 8. Known strays / cleanup candidates
 
-- `decks/selvala-competitive.dck` — untracked on disk, deliberately excluded
-  from the package; commit or remove.
+- ~~`decks/selvala-competitive.dck`~~ — removed 2026-08-19 (cleanup round).
 - `scripts/selvala-wholedeck-ingestion-wf_*.js` — tracked one-off; candidate
   for deletion.
 - `scripts/__pycache__/`, `runner/__pycache__/` — should be gitignored if not.

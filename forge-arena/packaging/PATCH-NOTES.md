@@ -11,6 +11,12 @@ structured analysis (analysis prose, bracket, and CRISPI ratings) from
 DeckCheck's public endpoint and renders it as the primer, no manual paste. The
 existing paste and local-fable options are unchanged.
 
+### New: eighth bundled deck — Sythis, Harvest's Hand
+
+Selesnya (GW) enchantress built through the new DeckCheck import pipeline:
+full dossier, combo list, and DeckCheck primer. The AI table roster and
+`ARENA_SEAT_DECKS` accept it like any bundled deck.
+
 ### New: primer generation controls
 
 - `--primer-out PATH` — write the primer to a path you choose instead of
