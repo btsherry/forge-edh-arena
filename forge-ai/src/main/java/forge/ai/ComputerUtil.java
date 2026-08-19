@@ -140,7 +140,24 @@ public class ComputerUtil {
         System.out.println("[" + sa.getActivatingPlayer() + "] AI failed to play " + sa.getHostCard()
                 + " [" + sa.getHostCard().getZone() + "] — rolling back to " + originZone);
         game.getStack().unfreezeStack();
-        GameActionUtil.rollbackAbility(sa, originZone, originPos, pay, source);
+        if (sa.isSpell() && !source.isCopiedSpell()) {
+            // the cast moved the card to the stack above — undo the move
+            GameActionUtil.rollbackAbility(sa, originZone, originPos, pay, source);
+        } else {
+            // [arena] ACTIVATED ability: the host never left its zone, and
+            // rollbackAbility's zone surgery is UNSAFE here — for an ability
+            // GRANTED by an attachment, ability.getCardState().getCard() is
+            // the GRANTOR, so the rollback removed the HOST from the
+            // battlefield and re-added the grantor: the host vanished from
+            // every zone (Sanctum Weaver + Gauntlets of Light untap loop,
+            // 2026-08-19). Refund the payment and reset the ability in
+            // place; the card never moved, so nothing else needs undoing.
+            sa.clearTargets();
+            sa.resetOnceResolved();
+            pay.refundPayment();
+            game.getStack().clearFrozen();
+            game.getTriggerHandler().clearWaitingTriggers();
+        }
         return false;
     }
 
