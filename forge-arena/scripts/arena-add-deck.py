@@ -5,11 +5,11 @@ distributed package needs no pip installs.
 
 Usage:
   arena-add-deck.py path/to/deck.dck [--slug NAME] [--strict]
-                    [--primer a|b|skip] [--no-cache] [--verify]
+                    [--primer a|b|skip] [--deckcheck URL_OR_ID] [--no-cache]
 
 Steps: (1) parse .dck  (2) Scryfall oracle text  (3) CommanderSpellbook combos
-(4) implementability lint vs Forge's card DB  (5) primer (DeckCheck paste or
-fable/max)  (6) write + summary.
+(4) implementability lint vs Forge's card DB  (5) primer (DeckCheck auto-fetch
+or fable/max)  (6) write + summary.
 """
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ import time
 import unicodedata
 import urllib.error
 import urllib.request
+from html.parser import HTMLParser
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))          # forge-arena/
 REPO = os.path.dirname(ROOT)                                                 # repo root
@@ -257,6 +258,142 @@ def lint(all_names):
 
 # ---- step 5: primer ----------------------------------------------------------
 
+# --- 5A: DeckCheck.co structured analysis (keyless public read endpoint) ------
+# Anthony (DeckCheck owner) opened /builder/api/public/deck/<id> keyless (~10/s)
+# with the AI data (analysis prose + bracket + CRISPI), so mode A fetches and
+# renders it as the primer — no copy/paste. See docs/research/DECKCHECK-ACCESS.md.
+DECKCHECK_API = "https://deckcheck.co/builder/api/public/deck/{}"
+
+
+def parse_deckcheck_id(s):
+    """Pull the deck id from a DeckCheck URL (builder/deck/app/api forms) or a
+    bare id. Ids are >=6 alphanumerics, so 'api'/'app' path words don't match."""
+    s = (s or "").strip()
+    for pat in (r"/public/deck/([A-Za-z0-9]{6,})",
+                r"/app/(?:builder|deck)/([A-Za-z0-9]{6,})",
+                r"/(?:builder|deck)/([A-Za-z0-9]{6,})"):
+        m = re.search(pat, s)
+        if m:
+            return m.group(1)
+    return s if re.fullmatch(r"[A-Za-z0-9]{6,}", s) else None
+
+
+def _get(url, cache_path=None, use_cache=True):
+    if cache_path and use_cache and os.path.exists(cache_path):
+        return json.load(open(cache_path))
+    req = urllib.request.Request(
+        url, method="GET",
+        headers={"User-Agent": UA["User-Agent"], "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        data = json.loads(r.read().decode())
+    if cache_path:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        json.dump(data, open(cache_path, "w"))
+    return data
+
+
+class _HTMLToMarkdown(HTMLParser):
+    """Minimal HTML -> Markdown for DeckCheck's analysis prose (h2/p/ul/li/span/
+    strong/em). Unknown tags are dropped but their text is kept, so the card-name
+    <span> content survives."""
+    def __init__(self):
+        super().__init__()
+        self.out = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "h1":
+            self.out.append("\n\n# ")
+        elif tag == "h2":
+            self.out.append("\n\n## ")
+        elif tag in ("h3", "h4"):
+            self.out.append("\n\n### ")
+        elif tag == "li":
+            self.out.append("\n- ")
+        elif tag in ("p", "div", "ul", "ol"):
+            self.out.append("\n\n")
+        elif tag == "br":
+            self.out.append("\n")
+        elif tag in ("strong", "b"):
+            self.out.append("**")
+        elif tag in ("em", "i"):
+            self.out.append("*")
+
+    def handle_endtag(self, tag):
+        if tag in ("h1", "h2", "h3", "h4", "p", "li", "div"):
+            self.out.append("\n")
+        elif tag in ("strong", "b"):
+            self.out.append("**")
+        elif tag in ("em", "i"):
+            self.out.append("*")
+
+    def handle_data(self, data):
+        self.out.append(data)
+
+    def text(self):
+        t = "".join(self.out)
+        t = re.sub(r"[ \t]+", " ", t)
+        t = re.sub(r" *\n *", "\n", t)
+        t = re.sub(r"\n{3,}", "\n\n", t)
+        return t.strip()
+
+
+def _html_to_md(h):
+    p = _HTMLToMarkdown()
+    p.feed(h)
+    return p.text()
+
+
+def deckcheck_primer_markdown(d):
+    """Render the DeckCheck deck JSON as a primer: a header (commander, bracket,
+    CRISPI) + the full analysis prose (HTML converted to Markdown)."""
+    md = d.get("metadata") or {}
+    ar = d.get("attribute_ratings") or {}
+    lines = [f"# {d.get('name') or 'Deck'} — DeckCheck analysis", ""]
+    if d.get("commander"):
+        c2 = d.get("commander2")
+        lines.append(f"- **Commander:** {d['commander']}" + (f" // {c2}" if c2 else ""))
+    if md.get("bracketLevel") is not None:
+        lines.append(f"- **Bracket:** {md['bracketLevel']}")
+    if ar:
+        crispi = " · ".join(f"{k} {v}" for k, v in ar.items())
+        perf = md.get("performanceIndex")
+        lines.append(f"- **CRISPI:** {crispi}"
+                     + (f" · performance {perf}" if perf is not None else ""))
+    if len(lines) > 2:
+        lines.append("")
+    body = d.get("full_analysis") or d.get("analysis_preview") or ""
+    if "<" in body and ">" in body:
+        body = _html_to_md(body)
+    lines.append(body.strip())
+    lines.append("")
+    lines.append(f"*Source: DeckCheck.co — deck `{d.get('id') or d.get('deckview_id')}`.*")
+    return "\n".join(lines) + "\n"
+
+
+def fetch_deckcheck_primer(url_or_id, cache_dir, use_cache):
+    """Fetch DeckCheck's structured analysis and render a primer.
+    Returns (markdown, deck_name) on success, or (None, reason) on failure."""
+    deck_id = parse_deckcheck_id(url_or_id)
+    if not deck_id:
+        return None, "couldn't read a DeckCheck deck id from that input"
+    cache = os.path.join(cache_dir, f"deckcheck-{deck_id}.json")
+    try:
+        d = _get(DECKCHECK_API.format(deck_id), cache, use_cache)
+    except urllib.error.HTTPError as e:
+        return None, (f"DeckCheck returned HTTP {e.code} for id {deck_id} "
+                      "(is the deck public or unlisted?)")
+    except urllib.error.URLError as e:
+        return None, f"DeckCheck request failed: {e}"
+    except ValueError:
+        return None, "DeckCheck returned a non-JSON response"
+    if not isinstance(d, dict):
+        return None, "unexpected DeckCheck response shape"
+    if not (d.get("full_analysis") or d.get("analysis_preview")):
+        return None, ("that deck has no analysis yet — run 'Analyze' on DeckCheck "
+                      "first, then re-run this")
+    return deckcheck_primer_markdown(d), d.get("name", deck_id)
+
+
 PRIMER_PROMPT = """You are writing a STRATEGY PRIMER for an AI that will pilot \
 this Commander (EDH) deck in real games. The primer is read verbatim by the \
 pilot, so make it a dense, actionable field guide — NOT marketing copy.
@@ -289,25 +426,42 @@ commentary, session/operator notes, apologies, or remarks about tooling; the
 file is read verbatim by the pilot and anything else is noise in its context."""
 
 
-def make_primer(slug, deck_cards, combos, primer_path, mode):
+def make_primer(slug, deck_cards, combos, primer_path, mode, deckcheck,
+                cache_dir, use_cache):
     log("\n" + "=" * 70)
     log(f"STRATEGY PRIMER for {slug} — the pilot plays far better with a good one.")
     log("DeckCheck.co gives the best commander-specific analysis we've seen "
         "(subthemes,\nsac loops, keyword overlaps, synergy lines). Options:")
-    log(f"  (A) Paste a DeckCheck review (recommended). Open https://deckcheck.co,")
-    log(f"      run this deck, copy the review, save it to (under the package root):"
-        f"\n        {rel(primer_path)}")
-    log(f"  (B) Generate locally with the top model (fable, max effort) from your")
-    log(f"      dossier + combos + live EDHREC/web research.")
-    log(f"  (skip) Play off the dossier + combos only.")
-    if mode is None:
-        mode = (input("Choose [A/b/skip]: ").strip().lower() or "a")
-    if mode in ("a", "A"):
-        input(f"  Save the DeckCheck review to {rel(primer_path)}, then press ENTER "
-              "(or Ctrl-C to skip)... ")
-        return os.path.exists(primer_path)
+    log("  (A) DeckCheck (recommended). Give your DeckCheck deck URL or id and this")
+    log("      fetches the analysis (prose + bracket + CRISPI) automatically — no")
+    log("      copy/paste. Create + analyze the deck once at https://deckcheck.co first.")
+    log("  (B) Generate locally with the top model (fable, max effort) from your")
+    log("      dossier + combos + live EDHREC/web research.")
+    log("  (skip) Play off the dossier + combos only.")
+    interactive = mode is None
+    if interactive:
+        mode = input("Choose [A/b/skip]: ").strip().lower() or "a"
     if mode == "skip":
         return False
+    if mode == "a":
+        url = deckcheck
+        if not url and interactive:
+            url = input("  DeckCheck deck URL or id (ENTER to skip): ").strip()
+        if url:
+            log("  Fetching analysis from DeckCheck (keyless public endpoint)...")
+            primer, res = fetch_deckcheck_primer(url, cache_dir, use_cache)
+            if primer:
+                open(primer_path, "w").write(primer)
+                log(f"  DeckCheck analysis for '{res}' saved.")
+                return True
+            warn(f"DeckCheck fetch failed: {res}")
+        else:
+            warn("no DeckCheck URL/id given")
+        if interactive and input(
+                "  Fall back to local fable generation? [y/N]: ").strip().lower() == "y":
+            mode = "b"
+        else:
+            return False
     # mode b — fable / max effort, tools enabled so it can research EDHREC.
     log("  Generating with fable/max (this researches EDHREC and can take a "
         "few minutes)...")
@@ -342,6 +496,9 @@ def main():
     ap.add_argument("--slug")
     ap.add_argument("--strict", action="store_true")
     ap.add_argument("--primer", choices=["a", "b", "skip"])
+    ap.add_argument("--deckcheck", metavar="URL_OR_ID",
+                    help="DeckCheck deck URL or id; primer mode A fetches its "
+                         "analysis automatically (no copy/paste)")
     ap.add_argument("--no-cache", action="store_true")
     args = ap.parse_args()
     use_cache = not args.no_cache
@@ -387,7 +544,10 @@ def main():
                                       errors="replace").read())
 
     primer_path = os.path.join(PRIMERS, f"{slug}-deckcheck.md")
-    have_primer = make_primer(slug, deck_cards, combos, primer_path, args.primer)
+    # Passing --deckcheck implies mode A even when --primer wasn't given.
+    primer_mode = args.primer or ("a" if args.deckcheck else None)
+    have_primer = make_primer(slug, deck_cards, combos, primer_path, primer_mode,
+                              args.deckcheck, cache_dir, use_cache)
     log(f"[5/6] primer: {'written ' + rel(primer_path) if have_primer else 'skipped'}")
 
     log(f"[6/6] done. Deck '{slug}' is ready:")
