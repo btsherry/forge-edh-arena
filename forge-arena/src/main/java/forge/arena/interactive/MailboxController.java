@@ -1898,6 +1898,85 @@ public final class MailboxController extends PlayerControllerAi
     }
 
     /**
+     * "May cast/play from effect" (validation game, 2026-08-19): Isochron
+     * Scepter copies, cascade, discover, and impulse-style "you may cast"
+     * effects route through {@code playSaFromPlayEffect} — stock decided
+     * BOTH the yes/no and the targeting via canPlayFromEffectAI/doTrigger,
+     * and silently declined a Scepter-copied Counterspell the seat had spent
+     * its turn setting up. Now: optional plays reach the seat as CONFIRM
+     * (mode PLAY_FROM_EFFECT); on yes (and for mandatory plays) required
+     * targets are aimed by the SEAT before the cast. Fail-safe to stock.
+     */
+    @Override
+    public boolean playSaFromPlayEffect(SpellAbility tgtSA) {
+        try {
+            if (!(tgtSA instanceof forge.game.spellability.Spell)) {
+                return super.playSaFromPlayEffect(tgtSA);
+            }
+            final boolean optional = !tgtSA.getPayCosts().isMandatory();
+            final Card host = tgtSA.getHostCard();
+            final boolean free = tgtSA.hasParam("WithoutManaCost");
+            if (optional) {
+                Game game = getGame();
+                int turn = game.getPhaseHandler().getTurn();
+                Map<String, Object> state = buildState(turn);
+                state.put("min", 1);
+                state.put("max", 1);
+                state.put("confirmMode", "PLAY_FROM_EFFECT");
+                state.put("spell", host != null ? host.getName() : String.valueOf(tgtSA));
+                state.put("free", free);
+                String desc;
+                try {
+                    desc = tgtSA.getStackDescription();
+                } catch (RuntimeException ignore) {
+                    desc = String.valueOf(tgtSA);
+                }
+                String prompt = "PLAY FROM EFFECT (yours to accept or decline): cast "
+                        + (host != null ? host.getName() : "the copy")
+                        + (free ? " WITHOUT paying its mana cost"
+                                : " (cost: " + (tgtSA.getPayCosts() != null
+                                    ? tgtSA.getPayCosts().toSimpleString() : "?") + ")")
+                        + " — " + (desc.length() > 140 ? desc.substring(0, 140) : desc)
+                        + "  1 = cast it, 0 = decline.";
+                MailboxProtocol.Request req = new MailboxProtocol.Request(
+                        seatIndex, turn, phaseName(game), "CONFIRM", prompt)
+                        .state(state)
+                        .option(0, "No — decline the play", null, "NO")
+                        .option(1, free ? "Yes — cast it for free" : "Yes — cast it", null, "YES");
+                JsonNode resp = bus.exchange(req);
+                if (resp == null || resp.get("chosenId") == null
+                        || !resp.get("chosenId").isInt()) {
+                    return super.playSaFromPlayEffect(tgtSA);
+                }
+                if (resp.get("chosenId").asInt() != 1) {
+                    return false;
+                }
+            }
+            // the SEAT aims every required-target part before the cast — the
+            // stock path's targeting lived inside the yes/no heuristic we
+            // just bypassed, and an untargeted copy fizzles
+            for (SpellAbility s = tgtSA; s != null; s = s.getSubAbility()) {
+                if (!s.usesTargeting() || s.isTargetNumberValid()) {
+                    continue;
+                }
+                Card h = s.getHostCard();
+                forge.game.spellability.TargetRestrictions tr = s.getTargetRestrictions();
+                int minT = (tr != null && h != null) ? tr.getMinTargets(h, s) : 0;
+                s.setActivatingPlayer(getPlayer());
+                if (!chooseTargetsFor(s) && minT > 0) {
+                    if (optional) {
+                        return false;     // no target the seat wants: decline cleanly
+                    }
+                    return super.playSaFromPlayEffect(tgtSA);  // mandatory: stock floor
+                }
+            }
+            return ComputerUtil.playStack(tgtSA, getPlayer(), getGame());
+        } catch (RuntimeException e) {
+            return super.playSaFromPlayEffect(tgtSA);
+        }
+    }
+
+    /**
      * Optional-trigger CONFIRM (game 7, 2026-08-17). "You may [pay X to] ..."
      * triggers resolve through WrappedAbility -> confirmTrigger, which stock
      * routes to brains.doTrigger — e.g. CopySpellAbilityAi NEVER pays for a

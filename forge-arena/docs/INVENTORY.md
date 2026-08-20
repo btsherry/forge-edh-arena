@@ -79,6 +79,7 @@ falls back to stock, so a dead brain never hangs a game.
 | Card state/side pick | `CHOOSE_CARD` | 08-17 |
 | Generic choose-N-cards-for-effect | `CHOOSE_CARDS` | 08-17 |
 | Symmetry-break offers (tap own Winter-Orb-class piece, pre-selected payment) | option class in `REACT`/window | 08-17 |
+| **Cast-from-effect offers** (Isochron Scepter copies, Discover, "may cast it without paying"-class) | `CONFIRM` (mode PLAY_FROM_EFFECT) + seat pre-aims the chain's targets | 08-19 |
 
 ### Still stock (deliberate, with rationale)
 

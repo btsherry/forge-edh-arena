@@ -944,3 +944,23 @@ Hard-won from two live sessions; read before optimizing anything.
     present, the four per-slug package inputs the build requires). Exercises the
     avatar path's colorless branch (note 47: no colored pips → the `C` head
     pool). Track 4's count updated to 9.
+49. **`playSaFromPlayEffect` seat-owned (2026-08-19).** The last un-overridden
+    cast surface: engine effects that hand the AI a ready-to-cast SA
+    (`PlayEffect` — Isochron Scepter copies, `DiscoverEffect`,
+    `ChangeZoneEffect` play-from-exile) went to stock
+    `brains.canPlayFromEffectAI`, whose doTrigger heuristics silently declined
+    a copied Counterspell the seat had set up its whole turn for (validation
+    game, Urza seat). Now: optional plays surface as `CONFIRM` (mode
+    `PLAY_FROM_EFFECT`, `state.spell`/`state.free`); on yes (or when
+    mandatory) the seat pre-aims every min>0 targeting part of the SA chain
+    through `chooseTargetsFor` before `ComputerUtil.playStack` casts it.
+    `rules.py` safe-default: free → yes. Guarded by `ScepterCopyCastTest`
+    (untargeted Dramatic Reversal copy untaps rocks; targeted Counterspell
+    copy is seat-aimed at a stack spell and actually counters). Test-fixture
+    trap for the record: `ExiledWithSource` requires
+    `source.addExiledCard(c)` **in addition to** `c.setExiledWith(source)` —
+    without both, PlayEffect's Valid filter comes up empty and the whole
+    resolution silently no-ops (which is also what an unlinked live Scepter
+    would do). Bonus finding: the one-activation test brain, left unclamped,
+    comboed Scepter+Dramatic Reversal indefinitely — the seat pipeline now
+    executes the classic combo end-to-end.

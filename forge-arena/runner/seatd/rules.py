@@ -59,7 +59,9 @@ ANSWER_CONTRACT = {
                 'sources when it resolves), state.chosenTargets is what it will '
                 'affect. Loops live here (Rings of Brighthearth copies, "may pay '
                 'to copy/untap/draw"): if the yes-cost is part of a line you are '
-                'executing, say yes.'),
+                'executing, say yes. confirmMode PLAY_FROM_EFFECT = your own '
+                '"may cast" from an effect (Scepter copy, cascade, impulse) — '
+                'state.spell names it, state.free says it costs nothing.'),
     "CHOOSE_NUMBER": ('Answer: {"chosen": <integer>} within state.min..state.max '
                       '— typically an X value; max is your affordable ceiling '
                       'RIGHT NOW (it counts your floating pool), so bigger is '
@@ -257,6 +259,9 @@ def safe_default(req: dict) -> dict:
         if mode == "TRIGGER":
             free = str(st.get("yesCost", "none")).lower() in ("none", "", "0", "{0}")
             return {"chosenId": 1 if free else 0}
+        if mode == "PLAY_FROM_EFFECT":
+            # your own "may cast" (Scepter copy, cascade, impulse): free -> yes
+            return {"chosenId": 1 if st.get("free") else 0}
         if mode in ("untyped", "OptionalChoose") and any(
                 w in prompt for w in ("play", "cast", "copy")) and not any(
                 w in prompt for w in ("sacrifice", "pay life", "exile", "discard")):
