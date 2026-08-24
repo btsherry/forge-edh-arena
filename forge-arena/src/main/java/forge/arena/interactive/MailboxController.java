@@ -2665,9 +2665,21 @@ public final class MailboxController extends PlayerControllerAi
         if (cost != null && !cost.isEmpty()) {
             sb.append("  ").append(cost);
         }
-        String desc = sa.getStackDescription();
+        // Stack descriptions render CHOSEN targets; at offer time a targeted
+        // ability has none yet and the text collapses to "Exile ." / "Untap ."
+        // (2026-08-24 game). Prefer the printed rules text whenever any part
+        // of the chain still wants targets it doesn't have; either source
+        // falls back to the other when empty.
+        boolean wantsUnchosenTargets = false;
+        for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
+            if (s.usesTargeting() && s.getTargets().size() == 0) {
+                wantsUnchosenTargets = true;
+                break;
+            }
+        }
+        String desc = wantsUnchosenTargets ? sa.getDescription() : sa.getStackDescription();
         if (desc == null || desc.isEmpty()) {
-            desc = sa.getDescription();
+            desc = wantsUnchosenTargets ? sa.getStackDescription() : sa.getDescription();
         }
         if (desc != null && !desc.isEmpty()) {
             sb.append(" — ").append(desc.length() > 120 ? desc.substring(0, 120) : desc);

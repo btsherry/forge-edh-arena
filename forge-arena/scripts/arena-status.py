@@ -12,7 +12,31 @@ import json, glob, sys, os
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mailbox")
-DECKS = {0: "Selvala (YOU/human)", 1: "Purphoros", 2: "Giada", 3: "Urza"}
+
+
+def _seat_labels():
+    """Live seat labels from the observer snapshot (2026-08-24: the old
+    hardcoded default-roster map mislabeled any non-default table). AI seats
+    are named mailbox-seat<N>-<Deck>; anything else is the human/advisor
+    seat. Missing snapshot -> generic seat N."""
+    import re
+    labels = {}
+    try:
+        snap = json.load(open(os.path.join(BASE, "observer-state.json")))
+        for seat in snap.get("seats", []):
+            n, name = seat.get("seat"), seat.get("name") or ""
+            m = re.match(r"mailbox-seat\d+-(.+)", name)
+            labels[n] = m.group(1) if m else f"{name} (YOU/human)"
+    except (OSError, ValueError):
+        pass
+    return labels
+
+
+_LABELS = _seat_labels()
+
+
+def _label(seat):
+    return _LABELS.get(seat, f"seat {seat}")
 
 
 def print_seatd_narrative(tail_n=6):
@@ -57,13 +81,13 @@ def print_observer_snapshot(path):
     win = f"  winner: {d['winner']}" if d.get("winner") else ""
     print("== TABLE  (from observer snapshot) ==")
     print(f"  turn {d.get('turn')}  |  {d.get('phase','')}  |  "
-          f"active seat {active} [{DECKS.get(active,'?')}]{over}{win}")
+          f"active seat {active} [{_label(active)}]{over}{win}")
     print()
     for s in d.get("seats", []):
         seat = s.get("seat")
         tag = "  <-- active turn" if seat == active else ""
         poison = f"  poison {s['poison']}" if s.get("poison") else ""
-        print(f"  seat {seat} [{DECKS.get(seat,'?')}]  life {s.get('life')}  "
+        print(f"  seat {seat} [{_label(seat)}]  life {s.get('life')}  "
               f"hand {s.get('handSize')} (count)  lib {s.get('librarySize')}"
               f"{poison}{tag}")
         board = s.get("battlefield", [])
@@ -110,7 +134,7 @@ for f in reqs:
     except Exception:
         continue
     seat = d.get("seat")
-    print(f"  seat {seat} [{DECKS.get(seat,'?')}]: {d.get('decisionType')} | "
+    print(f"  seat {seat} [{_label(seat)}]: {d.get('decisionType')} | "
           f"turn {d.get('turn')} | {d.get('phase','')} | seq {d.get('seq')}")
     if state_src is None:
         state_src = d
@@ -127,12 +151,12 @@ for o in st.get("opponents", []):
                             "hand": "?", "cpow": o.get("creaturePower"), "own": False}
 
 print(f"== TABLE  (turn {state_src.get('turn')}, {state_src.get('phase','')}, "
-      f"active decision: seat {me} [{DECKS.get(me,'?')}]) ==")
+      f"active decision: seat {me} [{_label(me)}]) ==")
 for s in sorted(k for k in seats if k is not None):
     i = seats[s]
     tag = "  <-- deciding now" if s == me else ""
     hand = f"hand {i['hand']}" if i["own"] else f"hand {i['hand']} (hidden)"
-    print(f"  seat {s} [{DECKS.get(s,'?')}]  life {i['life']}  {hand}{tag}")
+    print(f"  seat {s} [{_label(s)}]  life {i['life']}  {hand}{tag}")
     print(f"       board: {i['board']}")
     if i["own"]:
         for z in ("command", "graveyard", "exile"):
