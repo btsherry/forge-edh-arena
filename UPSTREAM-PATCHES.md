@@ -1,8 +1,17 @@
-# UPSTREAM-PATCHES
+# UPSTREAM-PATCHES (historical deep-dives)
 
-Log of every modification to upstream Card-Forge files in this fork, per the
-forge-arena plan (all are tagged `ARENA-PATCH` at the edit site). Keep this list
-current — it is the rebase checklist.
+> **2026-08-24: this file is NOT the rebase checklist anymore.** The
+> authoritative divergence list is `forge-arena/docs/INVENTORY.md` §1 and the
+> merge procedure is `forge-arena/docs/UPSTREAM-SYNC.md` — the parent-module
+> delta has grown well past the three infrastructure patches logged here
+> (AiCostDecision hooks, ComputerUtil rollback, ComputerUtilMana payment walk,
+> MagicStack diagnostics, GUI wiring, and more). This file remains as the
+> detailed why/measured/merge-risk write-ups for the FIRST three patches.
+> Note: the Combat.java patch below (§3) is still unmarked in-file — add its
+> `ARENA-PATCH` comment on the next touch.
+
+Log of the first modifications to upstream Card-Forge files in this fork, per
+the forge-arena plan.
 
 | # | File | Change | Reason | Since |
 |---|---|---|---|---|

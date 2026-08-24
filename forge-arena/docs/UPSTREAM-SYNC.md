@@ -1,6 +1,7 @@
 # UPSTREAM-SYNC — taking Card-Forge updates without harm
 
-*2026-08-17. Companion to [INVENTORY.md](INVENTORY.md) §1 (the authoritative
+*2026-08-17; re-audited 2026-08-24 against the full `git diff 0eec0a16d0a..HEAD`
+delta. Companion to [INVENTORY.md](INVENTORY.md) §1 (the authoritative
 divergence list). Read both before ANY merge from upstream.*
 
 ## The situation, plainly
@@ -8,16 +9,29 @@ divergence list). Read both before ANY merge from upstream.*
 - We are a fork of [Card-Forge/forge](https://github.com/Card-Forge/forge)
   (`origin`), working on branch `arena`, pushed to `private`
   (btsherry/forge-edh-arena). **Never push to `origin`.**
-- Upstream base: `0eec0a16d0a` (2026-07-15). We are ~360 commits ahead;
-  upstream is very active (daily card-script updates, regular engine work).
+- Upstream base: `0eec0a16d0a` (2026-07-15). We are ~396 commits ahead
+  (2026-08-24 count); upstream is very active (daily card-script updates,
+  regular engine work).
 - The early rule "all new code lives in forge-arena, no parent-module
-  patches" was **deliberately dropped**. Today the delta outside
-  `forge-arena/` is 17 files: 9 modified upstream files (~215 lines), 7 new
-  files, 1 config (INVENTORY §1). Three of the modifications are
-  **behavioral** (ComputerUtil rollback, ComputerUtilMana effective-part
-  payment vetting, MyRandom seeding) — an unmanaged
-  merge could silently revert them and re-open closed bugs (a reverted
-  rollback patch = vanishing commanders again).
+  patches" was **deliberately dropped**. The full delta outside
+  `forge-arena/` (2026-08-24 re-audit) is **31 files**:
+  - **12 modified**: 9 upstream Java files (~263 changed lines —
+    ComputerUtil, ComputerUtilMana, AiCostDecision, MyRandom, Combat,
+    StaticAbilityTurnPhaseReversed, MagicStack, EDocID, CMatchUI), plus
+    `forge-gui/res/defaults/match.xml`, root `pom.xml` (the
+    `<module>forge-arena</module>` reactor line), and root `.gitignore`
+    (arena transient-output block). pom.xml is a REAL conflict surface —
+    upstream edits it routinely.
+  - **19 new (ours, zero conflict)**: 8 parent-module code files (2
+    forge-ai hook interfaces, 6 gui-desktop advisor/AI-panel files — see
+    INVENTORY §1b), 10 `runs/*.json` batch templates, and the historical
+    `UPSTREAM-PATCHES.md` deep-dive log at root.
+  Three of the modifications are **behavioral** (ComputerUtil rollback,
+  ComputerUtilMana effective-part payment vetting, MyRandom seeding) — an
+  unmanaged merge could silently revert them and re-open closed bugs (a
+  reverted rollback patch = vanishing commanders again). AiCostDecision
+  carries two additive hooks (tap + sacrifice payment) that must survive
+  any reshape of its visit methods.
 
 ## Why blind merging is dangerous — the three failure modes
 
@@ -32,7 +46,7 @@ divergence list). Read both before ANY merge from upstream.*
    `orderAndPlaySimultaneousSa` is a modified copy). Upstream can change the
    *originals'* semantics (new parameters, new call sites, new decision
    surfaces) without touching our files — compiles clean, behaves wrong.
-   *Defense: the 308-test arena suite exercises the seams end-to-end through
+   *Defense: the 318-test arena suite exercises the seams end-to-end through
    real games; plus the mirror-audit step below.*
 3. **Card-script behavior shifts.** `forge-gui/res/cardsfolder` changes daily
    upstream. Our brains read live oracle text (fine), but the
@@ -45,10 +59,13 @@ divergence list). Read both before ANY merge from upstream.*
 ## Standing discipline (do these NOW and always)
 
 - **Marker rule:** every edit to an upstream file carries an
-  `[arena]`/`ARENA-PATCH` comment at the edit site. 6/8 comply; `EDocID.java`
-  and `CMatchUI.java` do not — add markers on the next touch.
-  `git grep -ln "arena" -- forge-ai forge-game forge-core forge-gui-desktop`
-  must enumerate every modified upstream file.
+  `[arena]`/`ARENA-PATCH` comment at the edit site. 6/9 comply;
+  `Combat.java`, `EDocID.java` and `CMatchUI.java` do not — add markers on
+  the next touch (Combat's edit is logged in UPSTREAM-PATCHES.md §3 but
+  unmarked in-file). Verification:
+  `git grep -lE "\[arena\]|ARENA-PATCH" -- forge-ai/src forge-core/src forge-game/src forge-gui-desktop/src pom.xml`
+  must enumerate every modified upstream file (a bare `grep -ln "arena"`
+  false-positives on `GameFormat.java`'s "Arena" format name).
 - **Test-per-divergence rule:** a behavioral upstream patch does not land
   without a test that fails when the patch is absent.
 - **INVENTORY §1 is maintained:** any new parent-module edit updates that
@@ -64,7 +81,7 @@ session; never mix a sync with feature work.
 ```sh
 # 0) preconditions: clean tree, all tests green, tag the pre-sync point
 git status --porcelain            # must be empty
-mvn -o -pl forge-arena -am package   # 308 green, checkstyle on
+mvn -o -pl forge-arena -am package   # 318 green, checkstyle on
 git tag pre-sync-$(date +%Y%m%d)
 
 # 1) fetch and branch — NEVER merge into arena directly
@@ -84,21 +101,31 @@ git merge origin/master
 | Diagnostics | `MagicStack.java` | Re-add the FIZZLE stderr block wherever the fizzle branch now lives. Cheap; skip only if the branch vanished. |
 | Defensive fixes | `Combat.java`, `StaticAbilityTurnPhaseReversed.java` | Check if upstream fixed it themselves (both are upstream-worthy); if yes, drop ours — divergence shrinks. |
 | GUI wiring | `EDocID.java`, `CMatchUI.java` | Re-add the 2+6 registration lines. Mechanical. |
-| New files (ours) | everything in 1b | No conflicts possible; verify they still compile against changed APIs. |
+| Root build/infra | `pom.xml`, `.gitignore` | Union-merge: keep upstream's changes AND our one `<module>forge-arena</module>` line (ARENA-PATCH-marked) / our arena transient-output ignore block. |
+| New files (ours) | everything in 1b, plus `runs/*.json` + `UPSTREAM-PATCHES.md` at root | No conflicts possible; verify the code files still compile against changed APIs. |
 | res/ | everything except `defaults/match.xml` | **Take upstream wholesale.** Keep our match.xml (re-apply if the schema moved). |
 
 **4) Mirror-audit (the silent-drift defense):** diff upstream's new
 `PlayerControllerAi.prepareSingleSa` / `orderAndPlaySimultaneousSa` /
-`handlePlayingSpellAbility` / `chooseTargetsFor` against our
-`MailboxController` mirrors and the assumptions in `INTERACTIVE-ARENA.md`
-field notes 14/15/21; port semantic changes. Also re-check that no NEW
-`PlayerController` decision methods appeared that should be seat-owned
-(anything user-facing upstream added → candidate mailbox surface).
+`handlePlayingSpellAbility` / `chooseTargetsFor` /
+`playSaFromPlayEffect` (and its callers in `PlayEffect`/`DiscoverEffect`/
+`ChangeZoneEffect`) / `choosePermanentsToSacrifice`+`Destroy` (callers in
+`SacrificeEffect`/`BalanceEffect`) against our `MailboxController`
+mirrors and the assumptions in `INTERACTIVE-ARENA.md` field notes
+14/15/21/49/50; port semantic changes. In `AiCostDecision`, re-verify the
+two hook consults (`visit(CostTapType)` → `TapCostPreference`,
+`visit(CostSacrifice)` → `SacCostPreference`) still run BEFORE stock
+heuristics and that `visit(CostSacrifice)` is still reached only at
+actual payment time (never affordability scans) — the live mailbox
+exchange in `preferredSacCards` depends on that. Also re-check that no
+NEW `PlayerController` decision methods appeared that should be
+seat-owned (anything user-facing upstream added → candidate mailbox
+surface).
 
 **5) Gates, in order — all must pass before touching `arena`:**
 ```sh
-mvn -pl forge-arena -am package         # full build + 308 tests + checkstyle, ONLINE first time
-( cd forge-arena/runner && python3 -m unittest discover -s tests )   # 110 py tests
+mvn -pl forge-arena -am package         # full build + 318 tests + checkstyle, ONLINE first time
+( cd forge-arena/runner && python3 -m unittest discover -s tests )   # 113 py tests
 forge-arena/runner/run_table.sh --preflight
 forge-arena/scripts/arena-play.sh --all-ai   # one live smoke game, watch for
                                              # FIZZLE/TARGETLOSS/SA-SWAP/REFUSED/vanish language
@@ -129,4 +156,5 @@ Candidates to offer upstream as PRs (each removes a conflict row forever):
 `Combat.getAttackers` snapshot fix; `StaticAbilityTurnPhaseReversed` crash
 guard; arguably the `ComputerUtil` rollback (it fixes their own FIXME).
 `MyRandom` seeding could go upstream behind a system property. The
-TapCostPreference hook and the GUI tabs are arena-specific; they stay ours.
+TapCostPreference/SacCostPreference hooks and the GUI tabs are
+arena-specific; they stay ours.
