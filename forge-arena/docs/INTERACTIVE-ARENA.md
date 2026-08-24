@@ -14,14 +14,15 @@ won by the human via a Selvala + Umbral Mantle + Craterhoof combo turn.
 Second session 2026-08-06 (v2, "fast loop"): validated `REACT`, `CHOOSE_CARD`,
 and deck-aware casting live; **hardened the reactive gate**; and cut end-to-end
 latency (75ms outbox poll, 0.5s monitor, ~2s brain drain, brains self-serving
-their own inboxes). The distilled learnings from both sessions and the next
-architectural step live under **Operational learnings** and **Next architecture**
-below — read those first if you are picking this up.
+their own inboxes). The distilled learnings from both sessions
+live under **Operational learnings** below — read that and the **protocol
+contract** first if you are picking this up. (**Next architecture** further
+down is the retained PRE-SHIP design — historical, not a roadmap.)
 
 > Status (2026-08-19): SHIPPED — this seam is the core of the
 > **forge-light-llm** distributable (v1 2026-08-12 → v3.2 2026-08-19 on R2
 > as `-latest`, dated key `forge-light-llm-20260819.tar.gz`, source
-> `d9302fbf178`). User-facing docs: `packaging/README.md` + `PATCH-NOTES.md`.
+> `d9302fbf178`). User-facing docs: `packaging/README.md` + `packaging/PATCH-NOTES.md`.
 > Engineering inventory: [INVENTORY.md](INVENTORY.md). Upstream-merge safety:
 > [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md). Built on Card-Forge/forge (GPL-3.0);
 > non-commercial fan content under WotC's Fan Content Policy. Any distribution
@@ -42,12 +43,10 @@ The seam's core lives in `forge-arena/src/main/java/forge/arena/interactive/`
 and rides the same controller-injection seam the headless arena uses.
 **The original "no parent-module patches" rule was deliberately dropped**
 (2026-08-17, first for the vanished-commander engine fix): the fork now
-diverges from upstream in 16 files outside forge-arena — 8 surgical patches
-(~150 lines, `[arena]`-marked), 7 new files (the forge-ai TapCostPreference
-hook and the gui-desktop Advisor/AI-panel tabs), 1 layout default. The
-authoritative list, with per-file rationale and guarding tests, is
-[INVENTORY.md §1](INVENTORY.md); the merge-safety plan is
-[UPSTREAM-SYNC.md](UPSTREAM-SYNC.md).
+carries deliberate patches outside forge-arena. The counts are NOT restated
+here — they drifted every time they were; the authoritative list, with
+per-file rationale and guarding tests, is [INVENTORY.md §1](INVENTORY.md);
+the merge-safety plan is [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md).
 
 | File | Role |
 |---|---|
@@ -86,7 +85,9 @@ Consequences:
 - The agent plays **sorcery-speed strategy AND its own instant-speed responses**
   to opponents' spells (counter, protect, removal-in-response), at agent quality.
   Still on stock (bounded out to avoid flooding): proactively flashing into an
-  empty stack, and responding to interaction *during the agent's own turn*.
+  empty stack outside the tactical windows (opponents' main/upkeep/draw with
+  nothing on the stack). Responding during the agent's own turn IS mailboxed —
+  the reactive gate keys on who owns the stack object, not whose turn it is.
 - **Sub-choices now the agent's:** which creature to copy / choose (Glasspool
   Mimic, Clone, "choose target creature" resolution effects → `CHOOSE_ENTITY` /
   `CHOOSE_ENTITIES`), which mode of a charm/modal spell (`CHOOSE_MODE`), and
@@ -119,7 +120,9 @@ decklists. Enforced structurally by SeatView (ArchUnit-guarded, W8).
 ```
 Base dir: system property `arena.mailbox.dir` (default `forge-arena/mailbox`).
 Timeout: `arena.mailbox.timeout.sec` (default 300) — on timeout the seat uses
-stock AI. The engine deletes both files once the response is read.
+stock AI. The launcher overrides the 300s engine default to **90s** (via
+`ARENA_MAILBOX_TIMEOUT` in `arena-play.sh`); both numbers below are that one
+knob seen from two places. The engine deletes both files once the response is read.
 
 **Request** (`req-<n>.json`):
 ```json
@@ -144,6 +147,7 @@ stock AI. The engine deletes both files once the response is read.
     /* + "symmetryPieces":[{name,controllerSeat,untapped}], "untapNextSeat" — Winter-Orb-class facts */
     /* + effective keywords per card (indestructible/hexproof/ward/protection/evergreens, incl. granted) */
     /* + "confirmMode","triggerText","yesCost","chosenTargets" on CONFIRM(TRIGGER) */
+    /* + "confirmMode":"PLAY_FROM_EFFECT" with "spell","free" on may-cast offers (note 49) */
   },
   "options": [ {"id":0,"label":"Pass (do nothing)","cost":null,"type":"PASS"}, … ]
 }
@@ -192,7 +196,10 @@ and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists
   choice is optional an extra `{"id":0,"label":"Choose none","type":"NONE"}`
   option is offered; `{"chosenId":0}` = choose none.
 - `CHOOSE_ENTITIES` → `{"chosen":[<cardId>, …]}` — a subset satisfying the
-  request's `min`/`max`, no duplicates.
+  request's `min`/`max`, no duplicates. Also carries sacrifice/destroy
+  choices (note 50): prompts starting `SACRIFICE`/`DESTROY` (edicts,
+  Balance-class) and `SACRIFICE PAYMENT` (which card pays an outlet
+  activation or additional-cost cast) — you pick what YOU lose.
 - `CHOOSE_MODE` → `{"chosen":[<modeIndex>, …]}` — mode option ids are **indices**
   into `options`; must satisfy `min`/`max`; may repeat an index only when
   `allowRepeat` is true.
@@ -208,7 +215,10 @@ and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists
   counter-unless, pay-the-difference tutors, sacrifice-unless upkeeps).
 - `CONFIRM` → `{"chosenId": 0|1}` — yes/no confirms; `state.confirmMode ==
   "TRIGGER"` marks the seat's own optional "you may [pay X to]…" trigger
-  (Rings-class), with `triggerText`/`yesCost`/`chosenTargets` in state.
+  (Rings-class), with `triggerText`/`yesCost`/`chosenTargets` in state;
+  `state.confirmMode == "PLAY_FROM_EFFECT"` marks a may-cast offer (Isochron
+  Scepter copies, Discover-class), with the offered `spell` text and whether
+  it is `free` in state — on yes the seat also aims its targets (note 49).
 
 **Extra answer keys** (all optional, stripped before the wire): `turn_plan`
 (first own-main decision — quoted back later as advisory), `deviation`
@@ -226,18 +236,20 @@ attacker or blocker; a forced single sub-choice; a non-card entity option) are
 
 ```sh
 # THE launcher (one-shot: preflight -> teardown -> seat runners -> advisor ->
-# react-autopass -> GUI -> waits for liveness, prints one status line):
+# GUI -> waits for liveness, prints one status line; react-autopass was
+# retired from launch 2026-08-17 — note 42):
 forge-arena/scripts/arena-play.sh --all-ai                       # 4 AI seats, spectator GUI
 forge-arena/scripts/arena-play.sh --human [deck.dck] [--advisor] # you at seat 0
 #   knobs: --model haiku|sonnet|opus|fable  --effort low|medium|high|xhigh|max
 #          --timeout N   (defaults: opus / medium / 90s)
 forge-arena/scripts/arena-stop.sh    # teardown + ELO sweep + log archive
 
-# Ground-truth dashboard / live decision stream:
-python3 forge-arena/runner/status.py
-tail -f forge-arena/runner/logs/game.jsonl
+# Ground-truth dashboards (two DIFFERENT tools):
+python3 forge-arena/runner/status.py        # seatd health/decisions (log-based)
+python3 forge-arena/scripts/arena-status.py # pending-mailbox board snapshot
+tail -f forge-arena/runner/logs/game.jsonl  # live decision stream
 
-# Low-level (what arena-play wraps): run_table.sh (seat daemons),
+# Low-level (what arena-play wraps): runner/run_table.sh (seat daemons),
 # run-pilot-match.sh (GUI JVM), run-gui.sh (plain GUI, no mailbox).
 ```
 The launcher runs from `forge-gui/` (Forge resolves `res/` from cwd) and pulls
@@ -258,7 +270,7 @@ Any seat can instead run an **OpenRouter or OpenAI-compatible backend model**
 (`ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1"`) with $-and-call
 cost rails — see `packaging/README.md` §"Other models on the backend".
 
-## Known limitations (current, 2026-08-17)
+## Known limitations (current, 2026-08-24)
 
 1. **Deliberately-stock surfaces** — multi-target spells, whole-DB card
    naming, trigger ordering, combat damage assignment, mana auto-tap source
@@ -309,11 +321,11 @@ cost rails — see `packaging/README.md` §"Other models on the backend".
 
 **Track 3 — deeper capability**
 - ✅ Sub-choice mailboxing (copy/choose, modes, tutor fetch → `CHOOSE_ENTITY`/
-  `CHOOSE_ENTITIES`/`CHOOSE_MODE`/`CHOOSE_CARD`). Remaining: normal spell
-  targeting (`chooseTargetsFor`).
-- ✅ v2 reactive windows (`REACT`): agent responds at instant speed to opponents'
-  stack objects. Remaining: proactive empty-stack flash, own-turn responses,
-  and normal spell targeting (`chooseTargetsFor`).
+  `CHOOSE_ENTITIES`/`CHOOSE_MODE`/`CHOOSE_CARD`). ✅ Normal spell targeting
+  (`chooseTargetsFor`) became seat-owned in v3 (notes 14/14b/14c).
+- ✅ v2 reactive windows (`REACT`): agent responds at instant speed to
+  opponents' stack objects — own-turn responses included (the gate keys on
+  stack ownership, not turn). Remaining: proactive empty-stack flash.
 - Teacher→student: feed caught misplays into both the agent briefs and the
   deterministic runner.
 
@@ -336,6 +348,11 @@ Original sketch follows —
   "four autonomous seats" experience and the shape the shareable release should take.
 
 ## Next architecture — autonomous Agent-SDK seats
+
+> **HISTORICAL (pre-ship).** This design SHIPPED as `runner/seatd/`
+> (Track 5); [AGENT-SDK-SEATS.md](AGENT-SDK-SEATS.md) is the retained plan
+> doc. Present-tense claims below describe the pre-2026-08-06 world. Kept
+> for the reasoning; do not read as a roadmap.
 
 **Why change anything.** Today each "brain" is a *subagent of one interactive
 (mainline) session*. Subagents are **sleep/wake**: they run, idle out, and stop.
@@ -662,6 +679,8 @@ Hard-won from two live sessions; read before optimizing anything.
     opus/medium game: 1 CHOOSE_NUMBER wake (Genesis Wave X=9, deployed a
     9->17-permanent board), 12 CHOOSE_ENTITY (targeting across all 3 decks),
     0 failed-to-target, 0 punts. See also notes 14b, 15b-correction, and 21.
+    *(Numbering note: 18-20 are deliberately absent — the original notes
+    17-20 were retracted and folded into this rewrite.)*
 21. **Self-trigger response windows aren't mailboxed — you can't respond to
     your OWN trigger during your OWN turn** (2026-08-10, confirmed at stakes:
     Selvala tried the Phyrexian Dreadnought + Greater Good line and whiffed).
@@ -720,7 +739,7 @@ Hard-won from two live sessions; read before optimizing anything.
     but a new decision is correct" hole. Cross-turn adaptive suppression was
     considered and REJECTED (most state can change across turns; too likely to
     eat a line).
-22 — COMBAT BLOCK/ATTACK LEGALITY: aggregate rules were bypassed (2026-08-11,
+22. **COMBAT BLOCK/ATTACK LEGALITY: aggregate rules were bypassed** (2026-08-11,
     caught live by Ben: Urza blocked a menace Snarling Gorehound with ONE
     creature and it resolved — Gorehound died, Urza took 0). Root cause:
     `MailboxController.declareBlockers` / `declareAttackers` validated each
@@ -746,7 +765,9 @@ Hard-won from two live sessions; read before optimizing anything.
     (3-5 moments/turn, danger overrides — **leaned to a 1-3/turn range
     2026-08-19, note 46**), coach's memory, strictly read-only,
     pause button (08-13). Dataset: `advisor-0.jsonl`.
-24. **Smart autopass, stakes-based not heuristic (2026-08-13).** Own mains,
+24. **Smart autopass, stakes-based not heuristic (2026-08-13; SUPERSEDED
+    by note 42 — react-autopass retired from launch 08-17; the stakes rules
+    survive in the runner fastpaths).** Own mains,
     combat declares, opponent-spell stops, floating-mana stops, and
     post-equip windows are NEVER auto-passed by any layer; everything else
     defaults to `casts` mode with ⏭ receipts. `react-autopass.py` promoted to
