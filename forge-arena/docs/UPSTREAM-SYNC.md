@@ -80,7 +80,7 @@ git merge origin/master
 | Class | Files | Resolution rule |
 |---|---|---|
 | Behavioral patches | `ComputerUtil.java`, `ComputerUtilMana.java`, `MyRandom.java` | Take upstream's new shape, **re-apply our behavior by hand** at the marker site; the guarding test is the arbiter. If upstream restructured the whole method, port the *intent* (rollback-to-origin-zone; seedable RNG), not the old lines. |
-| Additive hooks | `AiCostDecision.java` (+`TapCostPreference`) | Re-insert the hook block ahead of upstream's (possibly new) stock logic. `TapSymmetryBreakTest` arbitrates. |
+| Additive hooks | `AiCostDecision.java` (+`TapCostPreference`, `SacCostPreference`) | Re-insert the hook blocks ahead of upstream's (possibly new) stock logic. `TapSymmetryBreakTest` / `SacrificeSeatChoiceTest` arbitrate. |
 | Diagnostics | `MagicStack.java` | Re-add the FIZZLE stderr block wherever the fizzle branch now lives. Cheap; skip only if the branch vanished. |
 | Defensive fixes | `Combat.java`, `StaticAbilityTurnPhaseReversed.java` | Check if upstream fixed it themselves (both are upstream-worthy); if yes, drop ours — divergence shrinks. |
 | GUI wiring | `EDocID.java`, `CMatchUI.java` | Re-add the 2+6 registration lines. Mechanical. |

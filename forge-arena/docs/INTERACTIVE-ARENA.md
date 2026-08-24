@@ -964,3 +964,23 @@ Hard-won from two live sessions; read before optimizing anything.
     would do). Bonus finding: the one-activation test brain, left unclamped,
     comboed Scepter+Dramatic Reversal indefinitely — the seat pipeline now
     executes the classic combo end-to-end.
+50. **Sacrifice choices are seat-owned (2026-08-24).** Two stock fall-throughs
+    thwarted play lines: (a) EFFECT path — edicts / symmetrical sacrifices /
+    Balance resolve via `choosePermanentsToSacrifice` (and its twin
+    `choosePermanentsToDestroy`), which went to
+    `ComputerUtil.choosePermanentsToSacrifice` worst-card heuristics; both are
+    now overridden → `CHOOSE_ENTITIES` (forced take-alls answered locally,
+    min==0 keeps the decline with the seat, invalid answers → stock). (b)
+    COST path — `AiCostDecision.visit(CostSacrifice)` picked WHICH card pays
+    an outlet activation or additional-cost cast, and blanket-refused
+    `Amount$ All`; a new `SacCostPreference` hook (TapCostPreference pattern:
+    additive, vetted, no-preference → stock byte-identical) lets the seat
+    name the payment via a live `CHOOSE_ENTITIES` exchange — safe because
+    `visit(CostSacrifice)` only runs at actual payment time, never in
+    affordability scans (`ComputerUtilCost` only visits counter costs).
+    Guarded by `SacrificeSeatChoiceTest`: four scenarios across two card
+    classes per path (Innocent Blood, Diabolic Edict; Viscera Seer, Altar's
+    Reap), each proving seat authority by sacrificing the BIG creature stock
+    would never pick while the stock pick survives. Brief gains a
+    "sacrifices are yours to aim" bullet; the CHOOSE_ENTITIES hint names the
+    surface.

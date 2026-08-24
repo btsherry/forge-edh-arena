@@ -534,11 +534,43 @@ public class AiCostDecision extends CostDecisionMakerBase {
             return PaymentDecision.card(ability.getOriginalHost());
         }
         if (cost.getAmount().equals("All")) {
+            // [arena] a seat that deliberately chose this ability consents to
+            // sacrificing all (SacCostPreference) — the stock blanket refusal
+            // below silently aborts an activation the controller asked for.
+            if (player.getController() instanceof SacCostPreference) {
+                CardCollection all = CardLists.getValidCards(player.getCardsIn(ZoneType.Battlefield),
+                        cost.getType().split(";"), player, source, ability);
+                return PaymentDecision.card(all);
+            }
             // Does the AI want to use Sacrifice All?
             return null;
         }
 
         int c = cost.getAbilityAmount(ability);
+
+        // [arena] controller-preferred sacrifice payment (SacCostPreference):
+        // lets a seat name WHICH card pays a sacrifice cost (the token, the
+        // death-trigger body — the play line), instead of stock's worst-card
+        // heuristics. The answer is vetted against the cost's valid filter;
+        // anything invalid or wrong-sized falls through to the stock path
+        // below, and controllers without the hook are untouched.
+        if (player.getController() instanceof SacCostPreference) {
+            CardCollection valid = CardLists.getValidCards(player.getCardsIn(ZoneType.Battlefield),
+                    cost.getType().split(";"), player, source, ability);
+            CardCollection pref = ((SacCostPreference) player.getController())
+                    .preferredSacCards(ability, cost.getType(), c);
+            if (pref != null) {
+                CardCollection vetted = new CardCollection();
+                for (Card p : pref) {
+                    if (valid.contains(p) && !vetted.contains(p)) {
+                        vetted.add(p);
+                    }
+                }
+                if (vetted.size() == c) {
+                    return PaymentDecision.card(vetted);
+                }
+            }
+        }
 
         final AiController aic = ((PlayerControllerAi)player.getController()).getAi();
         CardCollectionView list = aic.chooseSacrificeType(cost.getType(), ability, isEffect(), c, null);

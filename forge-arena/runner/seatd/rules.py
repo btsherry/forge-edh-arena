@@ -35,7 +35,10 @@ ANSWER_CONTRACT = {
     "CHOOSE_ENTITY": ('Answer: {"chosenId": <option id>} — 0 (choose none) only if '
                       'offered in options.'),
     "CHOOSE_ENTITIES": ('Answer: {"chosen": [<option id>, ...]} — unique ids, count '
-                        'within state.min..state.max.'),
+                        'within state.min..state.max. SACRIFICE/DESTROY prompts '
+                        '(edicts, sac-outlet payments) pick what YOU lose: feed '
+                        'expendable bodies (tokens, spent pieces) unless your line '
+                        'wants a death trigger to fire.'),
     "CHOOSE_MODE": ('Answer: {"chosen": [<mode index>, ...]} — indices are 0-BASED '
                     'positions in options (0 is a real mode), count within '
                     'state.min..state.max; repeats only if state.allowRepeat.'),

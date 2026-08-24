@@ -26,6 +26,7 @@ import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardCollectionView;
+import forge.game.card.CardLists;
 import forge.game.player.PlayerActionConfirmMode;
 import forge.game.card.CounterType;
 import forge.game.combat.Combat;
@@ -82,7 +83,7 @@ import forge.util.collect.FCollectionView;
  * silent brain never hangs the game.
  */
 public final class MailboxController extends PlayerControllerAi
-        implements forge.ai.TapCostPreference {
+        implements forge.ai.TapCostPreference, forge.ai.SacCostPreference {
 
     private final MailboxProtocol bus;
     private final int seatIndex;
@@ -1191,6 +1192,141 @@ public final class MailboxController extends PlayerControllerAi
             return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
         }
         return picks;
+    }
+
+    // ---- sacrifice: the seat picks what dies (2026-08-24) -------------------
+
+    /**
+     * Sacrifice COST payment ({@link forge.ai.SacCostPreference}, consulted by
+     * {@code AiCostDecision.visit(CostSacrifice)} at actual payment time —
+     * never during affordability scans). The seat already chose the outlet
+     * activation or sacrifice-cost cast in its window; this names WHICH
+     * card(s) pay, instead of stock's worst-card heuristics. When the valid
+     * set is exactly the required amount the payment is forced — answer
+     * locally, no model call. {@code null} on anything odd → stock decides,
+     * exactly as before the hook existed.
+     */
+    @Override
+    public CardCollection preferredSacCards(SpellAbility ability, String type, int amount) {
+        try {
+            Player me = getPlayer();
+            Card host = ability != null ? ability.getHostCard() : null;
+            CardCollection valid = CardLists.getValidCards(
+                    me.getCardsIn(ZoneType.Battlefield), type.split(";"), me, host, ability);
+            if (amount <= 0 || valid.size() < amount) {
+                return null;
+            }
+            if (valid.size() == amount) {
+                return valid; // forced payment — nothing to decide
+            }
+            List<Card> picked = cardChoiceViaSeat(
+                    "SACRIFICE PAYMENT for " + (host != null ? host.getName() : "an ability")
+                            + (ability != null ? " (" + ability.toString() + ")" : "")
+                            + " — choose exactly " + amount,
+                    valid, amount, amount);
+            return picked == null ? null : new CardCollection(picked);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Sacrifice by EFFECT (edicts, Innocent-Blood-class symmetrical
+     * sacrifices, Balance): stock sent these to
+     * {@code ComputerUtil.choosePermanentsToSacrifice} worst-card heuristics
+     * — the seat could never keep the death-trigger body or feed the token
+     * it wanted gone. Same discipline as every surface: a genuine choice is
+     * mailboxed, a forced/degenerate one is not, and any invalid answer or
+     * error falls back to stock.
+     */
+    @Override
+    public CardCollectionView choosePermanentsToSacrifice(SpellAbility sa, int min, int max,
+            CardCollectionView validTargets, String message) {
+        List<Card> picked = permanentsChoiceViaSeat("SACRIFICE", sa, min, max, validTargets, message);
+        return picked != null ? new CardCollection(picked)
+                : super.choosePermanentsToSacrifice(sa, min, max, validTargets, message);
+    }
+
+    /** Same seam as {@link #choosePermanentsToSacrifice} — stock routes both
+     *  through the same heuristic chooser. */
+    @Override
+    public CardCollectionView choosePermanentsToDestroy(SpellAbility sa, int min, int max,
+            CardCollectionView validTargets, String message) {
+        List<Card> picked = permanentsChoiceViaSeat("DESTROY", sa, min, max, validTargets, message);
+        return picked != null ? new CardCollection(picked)
+                : super.choosePermanentsToDestroy(sa, min, max, validTargets, message);
+    }
+
+    /** Shared body for the two permanent-choice effects: null → caller falls
+     *  back to stock. min==0 keeps the decline in the seat's hands (empty
+     *  {@code chosen} is a legal answer). */
+    private List<Card> permanentsChoiceViaSeat(String kind, SpellAbility sa, int min, int max,
+            CardCollectionView validTargets, String message) {
+        try {
+            List<Card> opts = validTargets == null
+                    ? Collections.<Card>emptyList() : new ArrayList<>(validTargets);
+            int lo = Math.max(0, min);
+            int hi = Math.min(max, opts.size());
+            if (opts.isEmpty() || hi <= 0) {
+                return null;
+            }
+            if (lo >= opts.size()) {
+                return opts; // forced — everything valid must go; no model call
+            }
+            Card host = sa != null ? sa.getHostCard() : null;
+            return cardChoiceViaSeat(
+                    kind + " " + lo + "-" + hi
+                            + (message != null && !message.isEmpty() ? " [" + message + "]" : "")
+                            + (host != null ? " (source: " + host.getName() + ")" : ""),
+                    opts, lo, hi);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** One bounded pick-cards exchange: CHOOSE_ENTITIES over {@code opts},
+     *  answer must be {@code lo..hi} distinct known ids; anything else →
+     *  {@code null} (caller falls back). */
+    private List<Card> cardChoiceViaSeat(String prompt, List<Card> opts, int lo, int hi) {
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", lo);
+        state.put("max", hi);
+        MailboxProtocol.Request req = new MailboxProtocol.Request(
+                seatIndex, turn, phaseName(game), "CHOOSE_ENTITIES",
+                prompt + " (answer {\"chosen\": [ids]})")
+                .state(state);
+        Map<Integer, Card> byId = new LinkedHashMap<>();
+        for (Card c : opts) {
+            int oid = c.getId();
+            if (oid <= 0 || byId.containsKey(oid)) {
+                return null;
+            }
+            req.option(oid, cardChoiceLabel(c),
+                    c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
+            byId.put(oid, c);
+        }
+        JsonNode resp = bus.exchange(req);
+        if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+            return null;
+        }
+        List<Card> picked = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        for (JsonNode n : resp.get("chosen")) {
+            if (n == null || !n.isInt()) {
+                return null;
+            }
+            Card c = byId.get(n.asInt());
+            if (c == null || !seen.add(n.asInt())) {
+                return null;
+            }
+            picked.add(c);
+        }
+        if (picked.size() < lo || picked.size() > hi) {
+            return null;
+        }
+        return picked;
     }
 
     /**

@@ -69,6 +69,12 @@ your entire job is to answer it.
   answer held for a future threat while a present one strangles you is
   paying full price for nothing (observed: a removal spell held 13 turns
   while its holder reasoned around the lock it answered).
+- SACRIFICES ARE YOURS TO AIM: when an edict resolves against you or you pay
+  a sacrifice cost (outlet activation, additional-cost spell), the
+  CHOOSE_ENTITIES window picks what dies. Feed the expendable body — a
+  token, a spent piece, the creature about to be exiled anyway — and keep
+  the line's engine alive; sacrifice a real piece only when its death
+  trigger IS the line.
 - SYMMETRY PIECES ("as long as ~ is untapped" restrictions on players —
   Winter Orb class; see `state.symmetryPieces`): the restriction is OFF while
   the piece is tapped. If YOU control one, tapping it during the turn of the
