@@ -144,6 +144,7 @@ knob seen from two places. The engine deletes both files once the response is re
     /* + "allowRepeat":bool for CHOOSE_MODE; "destination":<zone> for CHOOSE_CARD(S) */
     /* + "commandZone":[{name,timesCast,nextCastTax}] — own commanders */
     /* + "stackOwners":[seat...], "stackKinds":["trigger"|"spell"|...] — additive stack metadata */
+    /* + "stackTargets":[["Name (id)"|"seat N",...],...] — each item's CHOSEN targets, whole chain (note 51) */
     /* + "symmetryPieces":[{name,controllerSeat,untapped}], "untapNextSeat" — Winter-Orb-class facts */
     /* + effective keywords per card (indestructible/hexproof/ward/protection/evergreens, incl. granted) */
     /* + "confirmMode","triggerText","yesCost","chosenTargets" on CONFIRM(TRIGGER) */
@@ -1005,3 +1006,21 @@ Hard-won from two live sessions; read before optimizing anything.
     would never pick while the stock pick survives. Brief gains a
     "sacrifices are yours to aim" bullet; the CHOOSE_ENTITIES hint names the
     surface.
+51. **Stack targets announced + advisor keyword discipline (2026-08-28, game
+    15).** Ben cast Beast Within at Purphoros; Urza's seat countered it with
+    the REACT "why" *"Beast Within likely kills Urza"* — the brain GUESSED
+    the target because stack serialization carried source/owner/kind but not
+    chosen targets, which are public at any real table. `state.stackTargets`
+    now announces every stack item's chain targets ("Name (id)" / "seat N";
+    `StackTargetsVisibleTest`, card + player shapes). Compounding it, the
+    opus advisor had twice told the pilot to hold Beast Within "for
+    Purphoros" — a destroy spell against an always-indestructible god,
+    violating the brief's own check-card-text rule; the rule is now a
+    verification step (read the target's serialized `keywords`, say why the
+    spell beats its protections) with the incident as the example. Bright
+    side, same game: Y'shtola answered a Power Artifact/Grim Monolith
+    infinite-mana assembly by bouncing the Monolith AT AIM on the stack —
+    the aura fizzled (textbook TARGETLOSS diagnostic capture) — and all
+    three seats no-blocked a lethal 190-power trample alpha with honest
+    arithmetic. 289 decisions, 0 punts/lost/wedges. Sacrifice surfaces:
+    still zero live windows after two hunts (test-guarded only).

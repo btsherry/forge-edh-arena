@@ -2422,6 +2422,13 @@ public final class MailboxController extends PlayerControllerAi
         // MANY identical own-triggers remain in a cascade.
         List<Integer> stackOwners = new ArrayList<>();
         List<String> stackKinds = new ArrayList<>();
+        // Additive (2026-08-28, game 15): each item's CHOSEN TARGETS — public
+        // information at any real table (everyone hears "Beast Within, targeting
+        // Purphoros"). Without it a REACT brain guesses who a spell is aimed at
+        // and misreads follow (Urza countered a Beast Within it believed was
+        // aimed at itself; the real target was an indestructible god). Whole
+        // chain walked — sub-ability targets are announced too.
+        List<List<String>> stackTargets = new ArrayList<>();
         for (forge.game.spellability.SpellAbilityStackInstance si : me.getGame().getStack()) {
             SpellAbility sa = si.getSpellAbility();
             Card host = sa != null ? sa.getHostCard() : null;
@@ -2430,10 +2437,28 @@ public final class MailboxController extends PlayerControllerAi
             stackOwners.add(ctl != null ? ctl.getId() : -1);
             stackKinds.add(sa == null ? "?" : sa.isTrigger() ? "trigger"
                     : sa.isSpell() ? "spell" : "ability");
+            List<String> tgts = new ArrayList<>();
+            for (SpellAbility part = sa; part != null; part = part.getSubAbility()) {
+                if (part.getTargets() == null) {
+                    continue;
+                }
+                for (forge.game.GameObject t : part.getTargets()) {
+                    if (t instanceof Card) {
+                        Card tc = (Card) t;
+                        tgts.add(tc.getName() + " (" + tc.getId() + ")");
+                    } else if (t instanceof Player) {
+                        tgts.add("seat " + ((Player) t).getId());
+                    } else {
+                        tgts.add(String.valueOf(t));
+                    }
+                }
+            }
+            stackTargets.add(tgts);
         }
         state.put("stack", stack);
         state.put("stackOwners", stackOwners);
         state.put("stackKinds", stackKinds);
+        state.put("stackTargets", stackTargets);
         return state;
     }
 
