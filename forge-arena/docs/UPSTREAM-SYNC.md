@@ -97,7 +97,7 @@ git merge origin/master
 | Class | Files | Resolution rule |
 |---|---|---|
 | Behavioral patches | `ComputerUtil.java`, `ComputerUtilMana.java`, `MyRandom.java` | Take upstream's new shape, **re-apply our behavior by hand** at the marker site; the guarding test is the arbiter. If upstream restructured the whole method, port the *intent* (rollback-to-origin-zone; seedable RNG), not the old lines. |
-| Additive hooks | `AiCostDecision.java` (+`TapCostPreference`, `SacCostPreference`) | Re-insert the hook blocks ahead of upstream's (possibly new) stock logic. `TapSymmetryBreakTest` / `SacrificeSeatChoiceTest` arbitrate. |
+| Additive hooks | `AiCostDecision.java` (+`TapCostPreference`, `SacCostPreference`, `PaymentPickPreference`) | Re-insert the hook blocks ahead of upstream's (possibly new) stock logic. `TapSymmetryBreakTest` / `SacrificeSeatChoiceTest` / `PaymentPickPreferenceTest` arbitrate. |
 | Diagnostics | `MagicStack.java` | Re-add the FIZZLE stderr block wherever the fizzle branch now lives. Cheap; skip only if the branch vanished. |
 | Defensive fixes | `Combat.java`, `StaticAbilityTurnPhaseReversed.java` | Check if upstream fixed it themselves (both are upstream-worthy); if yes, drop ours — divergence shrinks. |
 | GUI wiring | `EDocID.java`, `CMatchUI.java` | Re-add the 2+6 registration lines. Mechanical. |
@@ -110,7 +110,13 @@ git merge origin/master
 `handlePlayingSpellAbility` / `chooseTargetsFor` /
 `playSaFromPlayEffect` (and its callers in `PlayEffect`/`DiscoverEffect`/
 `ChangeZoneEffect`) / `choosePermanentsToSacrifice`+`Destroy` (callers in
-`SacrificeEffect`/`BalanceEffect`) against our `MailboxController`
+`SacrificeEffect`/`BalanceEffect`) / the wave-2 set — `chooseNewTargetsFor`
+(caller `ChangeTargetsEffect`), `chooseCardsToDiscardToMaximumHandSize`,
+`tuckCardsViaMulligan`, `arrangeForScry`/`Surveil`, `orderMoveToZoneList`,
+`willPutCardOnTop`, `chooseNumber` x2, `announceRequirements`,
+`chooseOptionalCosts`, `chooseProtectionType`, `vote`, `chooseCardsPile`
+(check `TwoPilesEffect`'s FaceDown domain: False/One/True) —
+against our `MailboxController`
 mirrors and the assumptions in `INTERACTIVE-ARENA.md` field notes
 14/15/21/49/50; port semantic changes. In `AiCostDecision`, re-verify the
 two hook consults (`visit(CostTapType)` → `TapCostPreference`,

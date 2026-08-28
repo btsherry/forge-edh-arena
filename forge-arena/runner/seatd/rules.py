@@ -41,12 +41,16 @@ ANSWER_CONTRACT = {
                         'wants a death trigger to fire.'),
     "CHOOSE_MODE": ('Answer: {"chosen": [<mode index>, ...]} — indices are 0-BASED '
                     'positions in options (0 is a real mode), count within '
-                    'state.min..state.max; repeats only if state.allowRepeat.'),
+                    'state.min..state.max; repeats only if state.allowRepeat. '
+                    'Also carries generic indexed choices: OPTIONAL COSTS (pay '
+                    'Buyback/Kicker when your line needs it), PROTECTION, VOTE, '
+                    'CHOOSE A PILE, CHOOSE A VALUE.'),
     "CHOOSE_CARD": ('Answer: {"chosenId": <option id>} — 0 (choose none) only if '
                     'offered in options.'),
     "CHOOSE_CARDS": ('Answer: {"chosen": [<option id>, ...]} — unique ids, count '
                      'within state.min..state.max (a multi-card search: e.g. '
-                     'Cultivate\'s two basics, "up to two"). [] only if min is 0.'),
+                     'Cultivate\'s two basics, "up to two"). [] only if min is 0.'
+                     ' PAYMENT prompts (EXILE/DISCARD/RETURN/PUT TO LIBRARY) pick what a cost eats — protect your line. SCRY/SURVEIL prompts choose what leaves the top. ORDER prompts: list ALL ids, FIRST = closest to TOP. Cleanup DISCARD and mulligan BOTTOM prompts shape your next turns.'),
     "PAY_UNLESS": ('Answer: {"chosenId": 1} to PAY state.unlessCost now (uses '
                    'floating mana first, then untapped sources), or {"chosenId": 0} '
                    'to decline and let the effect happen. If state.effectIsMine is '

@@ -241,9 +241,10 @@ class OwnObjectCollapseTests(unittest.TestCase):
         # memo signature must NOT collapse a mixed-kind own stack
         req = own_req(9, "REACT", ["X"], ["A", "A", "B"], ["trigger", "trigger", "spell"])
         sig = r._react_signature(req)
-        self.assertNotIn("OWN-TRIGGERS", str(sig[1]),
+        # wave-2 inserted phase at sig[1]; the stack digest is sig[2]
+        self.assertNotIn("OWN-TRIGGERS", str(sig[2]),
                          "mixed kinds must not trigger the memo's own-collapse")
-        self.assertEqual(sig[1], ("A", "A", "B"), "memo keeps the exact multiset")
+        self.assertEqual(sig[2], ("A", "A", "B"), "memo keeps the exact multiset")
 
 
 if __name__ == "__main__":

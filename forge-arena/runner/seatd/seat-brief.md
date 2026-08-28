@@ -69,6 +69,12 @@ your entire job is to answer it.
   answer held for a future threat while a present one strangles you is
   paying full price for nothing (observed: a removal spell held 13 turns
   while its holder reasoned around the lock it answered).
+- COST PAYMENTS ARE YOURS TOO: EXILE/DISCARD/RETURN/PUT-TO-LIBRARY PAYMENT
+  windows pick what an alternative or additional cost eats (which blue card
+  Force of Will pitches, which creature bounces). The same discipline as
+  sacrifices: feed what the line can spare. Cleanup DISCARD (over hand
+  size), mulligan BOTTOM, SCRY/SURVEIL and library-ORDER windows (first
+  listed = top) are card selection, not ceremony — they shape your draws.
 - SACRIFICES ARE YOURS TO AIM: when an edict resolves against you or you pay
   a sacrifice cost (outlet activation, additional-cost spell), the
   CHOOSE_ENTITIES window picks what dies. Feed the expendable body — a

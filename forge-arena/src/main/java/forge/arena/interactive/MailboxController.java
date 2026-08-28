@@ -83,7 +83,8 @@ import forge.util.collect.FCollectionView;
  * silent brain never hangs the game.
  */
 public final class MailboxController extends PlayerControllerAi
-        implements forge.ai.TapCostPreference, forge.ai.SacCostPreference {
+        implements forge.ai.TapCostPreference, forge.ai.SacCostPreference,
+        forge.ai.PaymentPickPreference {
 
     private final MailboxProtocol bus;
     private final int seatIndex;
@@ -719,6 +720,24 @@ public final class MailboxController extends PlayerControllerAi
             Integer x = mailboxManaX(ability, min, max);
             return x == null ? max + 1000 : x;
         }
+        // Non-mana announce vars (Multikicker, Pledge, generic ChooseNumber —
+        // wave-2, note 52): stock's heuristics silently picked these on the AI
+        // cast path (a mailbox-cast Everflowing Chalice entered with 0
+        // counters — note 15b's sibling). Bounded announces go to the seat;
+        // degenerate or unbounded ranges keep stock.
+        try {
+            if (max > min && max - min <= 1000) {
+                Integer n = numberViaSeat("ANNOUNCE " + announce
+                        + (ability != null && ability.getHostCard() != null
+                            ? " for " + ability.getHostCard().getName() : "")
+                        + " (" + min + "-" + max + ")", min, max);
+                if (n != null) {
+                    return n;
+                }
+            }
+        } catch (RuntimeException e) {
+            // fall through to stock
+        }
         return super.announceRequirements(ability, min, max, announce);
     }
 
@@ -1086,9 +1105,14 @@ public final class MailboxController extends PlayerControllerAi
         // Gate to a genuine, card-only choice. A lone forced option or a
         // non-card entity (e.g. a player) is not worth mailboxing.
         boolean meaningful = opts.size() > 1 || (isOptional && opts.size() == 1);
-        if (!meaningful || !allCards(opts)) {
+        if (!meaningful || !cardsOrPlayers(opts)) {
             return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, relatedPlayer, params);
         }
+        // Card-only lists keep their card-id encoding (unchanged wire shape);
+        // a list containing PLAYERS switches to sequential synthetic ids —
+        // player ids collide with the reserved 0 and with card ids, and the
+        // targeting window already proved the sequential pattern (wave-2).
+        boolean cardIds = allCards(opts);
         Game game = getGame();
         int turn = game.getPhaseHandler().getTurn();
         Map<String, Object> state = buildState(turn);
@@ -1103,8 +1127,9 @@ public final class MailboxController extends PlayerControllerAi
             req.option(0, "Choose none", null, "NONE"); // id 0 reserved for "none"
         }
         Map<Integer, T> byId = new LinkedHashMap<>();
+        int seq = 1;
         for (T e : opts) {
-            int oid = e.getId();
+            int oid = cardIds ? e.getId() : seq++;
             if (oid <= 0 || byId.containsKey(oid)) {
                 // 0 is reserved for "none"; a collision means an ambiguous id
                 // space we can't safely round-trip — let stock decide.
@@ -1149,9 +1174,10 @@ public final class MailboxController extends PlayerControllerAi
         int lo = Math.max(0, min);
         // Nothing to decide when empty, max<=0, forced "take all" (lo>=size), or
         // any option is not a Card.
-        if (opts.isEmpty() || max <= 0 || lo >= opts.size() || !allCards(opts)) {
+        if (opts.isEmpty() || max <= 0 || lo >= opts.size() || !cardsOrPlayers(opts)) {
             return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
         }
+        boolean cardIds = allCards(opts); // see the single chooser's id note
         int hi = Math.min(max, opts.size());
         Game game = getGame();
         int turn = game.getPhaseHandler().getTurn();
@@ -1164,8 +1190,9 @@ public final class MailboxController extends PlayerControllerAi
                         + " (" + lo + "-" + hi + ")")
                 .state(state);
         Map<Integer, T> byId = new LinkedHashMap<>();
+        int seq = 1;
         for (T e : opts) {
-            int oid = e.getId();
+            int oid = cardIds ? e.getId() : seq++;
             if (oid <= 0 || byId.containsKey(oid)) {
                 return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
             }
@@ -1613,29 +1640,489 @@ public final class MailboxController extends PlayerControllerAi
             if (max <= min) {
                 return super.chooseNumberForCostReduction(sa, min, max);
             }
-            Game game = getGame();
-            int turn = game.getPhaseHandler().getTurn();
-            Map<String, Object> state = buildState(turn);
-            state.put("min", min);
-            state.put("max", max);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_NUMBER",
-                    "COST REDUCTION: choose a number " + min + "-" + max
-                            + (sa != null && sa.getHostCard() != null
-                                ? " for " + sa.getHostCard().getName() : "")
-                            + " (answer {\"chosen\": <n>})")
-                    .state(state);
-            JsonNode resp = bus.exchange(req);
-            if (resp != null && resp.get("chosen") != null && resp.get("chosen").isInt()) {
-                int n = resp.get("chosen").asInt();
-                if (n >= min && n <= max) {
-                    return n;
-                }
-            }
-            return super.chooseNumberForCostReduction(sa, min, max);
+            Integer n = numberViaSeat("COST REDUCTION: choose a number " + min + "-" + max
+                    + (sa != null && sa.getHostCard() != null
+                        ? " for " + sa.getHostCard().getName() : ""), min, max);
+            return n != null ? n : super.chooseNumberForCostReduction(sa, min, max);
         } catch (RuntimeException e) {
             return super.chooseNumberForCostReduction(sa, min, max);
         }
+    }
+
+    // ---- wave-2 (2026-08-28 dual audit, note 52): the missed-surface sweep ---
+
+    /** One bounded CHOOSE_NUMBER exchange; null → caller falls back. */
+    private Integer numberViaSeat(String prompt, int min, int max) {
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", min);
+        state.put("max", max);
+        MailboxProtocol.Request req = new MailboxProtocol.Request(
+                seatIndex, turn, phaseName(game), "CHOOSE_NUMBER",
+                prompt + " (answer {\"chosen\": <n>})")
+                .state(state);
+        JsonNode resp = bus.exchange(req);
+        if (resp != null && resp.get("chosen") != null && resp.get("chosen").isInt()) {
+            int n = resp.get("chosen").asInt();
+            if (n >= min && n <= max) {
+                return n;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * One bounded pick-indices exchange over a finite label list (the
+     * CHOOSE_MODE wire shape: option ids are 0-based INDICES). Returns the
+     * chosen indices (distinct, in answer order, count within min..max) or
+     * null → caller falls back to stock.
+     */
+    private List<Integer> indexChoiceViaSeat(String prompt, List<String> labels,
+            int min, int max) {
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", min);
+        state.put("max", max);
+        state.put("allowRepeat", false);
+        MailboxProtocol.Request req = new MailboxProtocol.Request(
+                seatIndex, turn, phaseName(game), "CHOOSE_MODE",
+                prompt + " (" + min + "-" + max + ")")
+                .state(state);
+        for (int i = 0; i < labels.size(); i++) {
+            String l = labels.get(i);
+            req.option(i, l != null && !l.isEmpty() ? l : ("choice " + i), null, "CHOICE");
+        }
+        JsonNode resp = bus.exchange(req);
+        if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+            return null;
+        }
+        List<Integer> picks = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        for (JsonNode idn : resp.get("chosen")) {
+            if (idn == null || !idn.isInt()) {
+                return null;
+            }
+            int idx = idn.asInt();
+            if (idx < 0 || idx >= labels.size() || !seen.add(idx)) {
+                return null;
+            }
+            picks.add(idx);
+        }
+        if (picks.size() < min || picks.size() > max) {
+            return null;
+        }
+        return picks;
+    }
+
+    /**
+     * Pitch/return/put-to-library COST payments ({@link forge.ai.PaymentPickPreference},
+     * consulted by {@code AiCostDecision} at actual payment time). The seat
+     * already chose the alt-cost cast or activation; this names WHICH card
+     * pays (which blue card Force of Will eats, which creature Temur
+     * Sabertooth bounces) instead of stock's power-sort heuristics. Forced
+     * payments answer locally; null → stock, exactly as before the hook.
+     */
+    @Override
+    public CardCollection preferredPaymentCards(SpellAbility ability, String kind,
+            List<Card> valid, int amount) {
+        try {
+            if (valid == null || amount <= 0 || valid.size() < amount) {
+                return null;
+            }
+            if (valid.size() == amount) {
+                return new CardCollection(valid); // forced — nothing to decide
+            }
+            Card host = ability != null ? ability.getHostCard() : null;
+            List<Card> picked = cardChoiceViaSeat(
+                    kind + " PAYMENT for " + (host != null ? host.getName() : "a cost")
+                            + (ability != null ? " (" + ability + ")" : "")
+                            + " — choose exactly " + amount,
+                    valid, amount, amount);
+            return picked == null ? null : new CardCollection(picked);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Cleanup-step discard to maximum hand size (dual-audit consensus #1):
+     * stock binned the sculpted Necropotence/wheel hand by worst-card
+     * heuristic with zero mailbox records. Own hand — hidden-info-safe.
+     */
+    @Override
+    public CardCollectionView chooseCardsToDiscardToMaximumHandSize(int numDiscard) {
+        try {
+            List<Card> hand = new ArrayList<>(getPlayer().getCardsIn(ZoneType.Hand));
+            if (numDiscard <= 0 || hand.size() <= numDiscard) {
+                return super.chooseCardsToDiscardToMaximumHandSize(numDiscard);
+            }
+            List<Card> picked = cardChoiceViaSeat(
+                    "DISCARD to maximum hand size (cleanup) — choose exactly " + numDiscard,
+                    hand, numDiscard, numDiscard);
+            return picked != null ? new CardCollection(picked)
+                    : super.chooseCardsToDiscardToMaximumHandSize(numDiscard);
+        } catch (RuntimeException e) {
+            return super.chooseCardsToDiscardToMaximumHandSize(numDiscard);
+        }
+    }
+
+    /**
+     * London-mulligan bottoming: the MULLIGAN request already told the brain
+     * N cards go under — the seat now picks WHICH N (stock's max-CMC rule
+     * bottomed exactly the payoff the keep was built around).
+     */
+    @Override
+    public CardCollectionView tuckCardsViaMulligan(CardCollectionView hand, int cardsToReturn) {
+        try {
+            List<Card> opts = new ArrayList<>(hand);
+            if (cardsToReturn <= 0 || opts.size() <= cardsToReturn) {
+                return super.tuckCardsViaMulligan(hand, cardsToReturn);
+            }
+            List<Card> picked = cardChoiceViaSeat(
+                    "BOTTOM for London mulligan — choose exactly " + cardsToReturn
+                            + " to put under your library",
+                    opts, cardsToReturn, cardsToReturn);
+            return picked != null ? new CardCollection(picked)
+                    : super.tuckCardsViaMulligan(hand, cardsToReturn);
+        } catch (RuntimeException e) {
+            return super.tuckCardsViaMulligan(hand, cardsToReturn);
+        }
+    }
+
+    /**
+     * Scry (own peek — the looked-at cards are exactly the request options).
+     * The seat picks what goes to the BOTTOM; the kept cards stay on top in
+     * the shown order (v1 simplification: the keep/bottom split is the
+     * decision that wins games; reordering the kept 2 is a later refinement).
+     */
+    @Override
+    public org.apache.commons.lang3.tuple.ImmutablePair<CardCollection, CardCollection>
+            arrangeForScry(CardCollection topN) {
+        try {
+            if (topN == null || topN.isEmpty()) {
+                return super.arrangeForScry(topN);
+            }
+            List<Card> opts = new ArrayList<>(topN);
+            List<Card> bottom = cardChoiceViaSeat(
+                    "SCRY — choose cards to put on the BOTTOM of your library "
+                            + "(the rest stay on TOP in the shown order)",
+                    opts, 0, opts.size());
+            if (bottom == null) {
+                return super.arrangeForScry(topN);
+            }
+            CardCollection toTop = new CardCollection();
+            for (Card c : topN) {
+                if (!bottom.contains(c)) {
+                    toTop.add(c);
+                }
+            }
+            return org.apache.commons.lang3.tuple.ImmutablePair.of(
+                    toTop, new CardCollection(bottom));
+        } catch (RuntimeException e) {
+            return super.arrangeForScry(topN);
+        }
+    }
+
+    /** Surveil — same shape as scry, graveyard instead of bottom. */
+    @Override
+    public org.apache.commons.lang3.tuple.ImmutablePair<CardCollection, CardCollection>
+            arrangeForSurveil(CardCollection topN) {
+        try {
+            if (topN == null || topN.isEmpty()) {
+                return super.arrangeForSurveil(topN);
+            }
+            List<Card> opts = new ArrayList<>(topN);
+            List<Card> grave = cardChoiceViaSeat(
+                    "SURVEIL — choose cards to put into your GRAVEYARD "
+                            + "(the rest stay on TOP in the shown order)",
+                    opts, 0, opts.size());
+            if (grave == null) {
+                return super.arrangeForSurveil(topN);
+            }
+            CardCollection toTop = new CardCollection();
+            for (Card c : topN) {
+                if (!grave.contains(c)) {
+                    toTop.add(c);
+                }
+            }
+            return org.apache.commons.lang3.tuple.ImmutablePair.of(
+                    toTop, new CardCollection(grave));
+        } catch (RuntimeException e) {
+            return super.arrangeForSurveil(topN);
+        }
+    }
+
+    /**
+     * Ordering own cards onto the LIBRARY (Sensei's Top spins, Scroll Rack
+     * put-backs, Brainstorm-class): the answer's order IS the final order,
+     * FIRST = closest to TOP (the human dialog's convention). Only library
+     * moves of 2+ own-visible cards are mailboxed; graveyard ordering keeps
+     * stock's Volrath logic.
+     */
+    @Override
+    public CardCollectionView orderMoveToZoneList(CardCollectionView cards,
+            ZoneType destinationZone, SpellAbility source) {
+        try {
+            if (destinationZone != ZoneType.Library || cards == null || cards.size() < 2) {
+                return super.orderMoveToZoneList(cards, destinationZone, source);
+            }
+            List<Card> opts = new ArrayList<>(cards);
+            List<Card> ordered = cardChoiceViaSeat(
+                    "ORDER for your library — answer must list ALL " + opts.size()
+                            + " ids; FIRST = closest to TOP",
+                    opts, opts.size(), opts.size());
+            return ordered != null ? new CardCollection(ordered)
+                    : super.orderMoveToZoneList(cards, destinationZone, source);
+        } catch (RuntimeException e) {
+            return super.orderMoveToZoneList(cards, destinationZone, source);
+        }
+    }
+
+    /** Clash / top-or-bottom singles: a yes/no the seat should own. */
+    @Override
+    public boolean willPutCardOnTop(Card c) {
+        try {
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", 1);
+            state.put("max", 1);
+            String otext = c != null && c.getRules() != null ? c.getRules().getOracleText() : "";
+            state.put("spell", (c != null ? c.getName() : "?") + " — "
+                    + (otext.length() > 200 ? otext.substring(0, 200) : otext));
+            MailboxProtocol.Request req = new MailboxProtocol.Request(
+                    seatIndex, turn, phaseName(game), "CONFIRM",
+                    "TOP OR BOTTOM: put " + (c != null ? c.getName() : "the card")
+                            + " on TOP of your library? (No = bottom)")
+                    .state(state)
+                    .option(0, "No (bottom)", null, "NO")
+                    .option(1, "Yes (top)", null, "YES");
+            JsonNode resp = bus.exchange(req);
+            if (resp != null && resp.get("chosenId") != null && resp.get("chosenId").isInt()
+                    && (resp.get("chosenId").asInt() == 0 || resp.get("chosenId").asInt() == 1)) {
+                return resp.get("chosenId").asInt() == 1;
+            }
+            return super.willPutCardOnTop(c);
+        } catch (RuntimeException e) {
+            return super.willPutCardOnTop(c);
+        }
+    }
+
+    /** Generic number choice (Wheel of Misfortune class) — the seam only
+     *  hooked cost-reduction and mana-X announce before wave-2. */
+    @Override
+    public int chooseNumber(SpellAbility sa, String title, int min, int max) {
+        try {
+            if (max <= min) {
+                return super.chooseNumber(sa, title, min, max);
+            }
+            Integer n = numberViaSeat("CHOOSE A NUMBER"
+                    + (sa != null && sa.getHostCard() != null
+                        ? " for " + sa.getHostCard().getName() : "")
+                    + (title != null && !title.isEmpty() ? " — " + title : "")
+                    + " (" + min + "-" + max + ")", min, max);
+            return n != null ? n : super.chooseNumber(sa, title, min, max);
+        } catch (RuntimeException e) {
+            return super.chooseNumber(sa, title, min, max);
+        }
+    }
+
+    /** Number choice from a discrete value list (non-contiguous). */
+    @Override
+    public int chooseNumber(SpellAbility sa, String title, List<Integer> values,
+            Player relatedPlayer) {
+        try {
+            if (values == null || values.size() <= 1) {
+                return super.chooseNumber(sa, title, values, relatedPlayer);
+            }
+            List<String> labels = new ArrayList<>();
+            for (Integer v : values) {
+                labels.add(String.valueOf(v));
+            }
+            List<Integer> picks = indexChoiceViaSeat("CHOOSE A VALUE"
+                    + (sa != null && sa.getHostCard() != null
+                        ? " for " + sa.getHostCard().getName() : "")
+                    + (title != null && !title.isEmpty() ? " — " + title : ""),
+                    labels, 1, 1);
+            return picks != null ? values.get(picks.get(0))
+                    : super.chooseNumber(sa, title, values, relatedPlayer);
+        } catch (RuntimeException e) {
+            return super.chooseNumber(sa, title, values, relatedPlayer);
+        }
+    }
+
+    /**
+     * Retargeting spells (Deflecting Swat / Misdirection class — dual-audit
+     * finding 2): stock literally cannot do this ({@code return null}), so a
+     * seat-cast redirect resolved as a silent no-op. Single-target,
+     * non-divided changes are seat-aimed through the existing targeting
+     * window; multi-target/divided keep today's behavior (targets unchanged).
+     * Contract per the engine: mutate the SA's targets on success and return
+     * them; restore and return null otherwise.
+     */
+    @Override
+    public forge.game.spellability.TargetChoices chooseNewTargetsFor(SpellAbility ability,
+            java.util.function.Predicate<forge.game.GameObject> filter, boolean optional) {
+        forge.game.spellability.TargetChoices old = null;
+        SpellAbility sa = ability;
+        try {
+            if (ability != null && ability.isWrapper()) {
+                sa = ((forge.game.trigger.WrappedAbility) ability).getWrappedAbility();
+            }
+            if (sa == null || !sa.usesTargeting()) {
+                return super.chooseNewTargetsFor(ability, filter, optional);
+            }
+            old = sa.getTargets();
+            if (old == null || old.size() != 1 || sa.isDividedAsYouChoose()) {
+                return super.chooseNewTargetsFor(ability, filter, optional);
+            }
+            sa.clearTargets();
+            if (chooseTargetsFor(sa)) {
+                forge.game.spellability.TargetChoices next = sa.getTargets();
+                boolean legal = next != null && next.size() == 1;
+                if (legal && filter != null) {
+                    for (forge.game.GameObject t : next) {
+                        legal &= filter.test(t);
+                    }
+                }
+                if (legal) {
+                    return next;
+                }
+            }
+            sa.setTargets(old);
+            return null; // keep the original targets (= stock's outcome)
+        } catch (RuntimeException e) {
+            if (old != null && sa != null) {
+                sa.setTargets(old);
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Optional add-on costs at cast (Buyback / Kicker / Cleave — the audit's
+     * Reiterate loop): stock's heuristics declined the Buyback an infinite
+     * line depended on. Always mailboxed (even one option is a real yes/no).
+     */
+    @Override
+    public List<forge.game.spellability.OptionalCostValue> chooseOptionalCosts(
+            SpellAbility choosen, List<forge.game.spellability.OptionalCostValue> optionalCostValues) {
+        try {
+            if (optionalCostValues == null || optionalCostValues.isEmpty()) {
+                return super.chooseOptionalCosts(choosen, optionalCostValues);
+            }
+            List<String> labels = new ArrayList<>();
+            for (forge.game.spellability.OptionalCostValue v : optionalCostValues) {
+                labels.add(v.getType().name() + ": "
+                        + (v.getCost() != null ? v.getCost().toSimpleString() : "?"));
+            }
+            List<Integer> picks = indexChoiceViaSeat(
+                    "OPTIONAL COSTS for "
+                            + (choosen != null && choosen.getHostCard() != null
+                                ? choosen.getHostCard().getName() : "the spell")
+                            + " — choose which to pay (none is legal)",
+                    labels, 0, labels.size());
+            if (picks == null) {
+                return super.chooseOptionalCosts(choosen, optionalCostValues);
+            }
+            List<forge.game.spellability.OptionalCostValue> chosen = new ArrayList<>();
+            for (int idx : picks) {
+                chosen.add(optionalCostValues.get(idx));
+            }
+            return chosen;
+        } catch (RuntimeException e) {
+            return super.chooseOptionalCosts(choosen, optionalCostValues);
+        }
+    }
+
+    /** Protection color/type on resolution (Mother of Runes' second half). */
+    @Override
+    public String chooseProtectionType(SpellAbility sa, List<String> choices) {
+        try {
+            if (choices == null || choices.size() <= 1) {
+                return super.chooseProtectionType(sa, choices);
+            }
+            List<Integer> picks = indexChoiceViaSeat(
+                    "PROTECTION for "
+                            + (sa != null && sa.getHostCard() != null
+                                ? sa.getHostCard().getName() : "the ability")
+                            + " — choose what to protect from (see state.stack/stackTargets)",
+                    choices, 1, 1);
+            return picks != null ? choices.get(picks.get(0))
+                    : super.chooseProtectionType(sa, choices);
+        } catch (RuntimeException e) {
+            return super.chooseProtectionType(sa, choices);
+        }
+    }
+
+    /** Council's-dilemma votes: table politics belong to the seat. */
+    @Override
+    public Object vote(SpellAbility sa, String prompt, List<Object> options,
+            com.google.common.collect.ListMultimap<Object, Player> votes,
+            Player forPlayer, boolean optional) {
+        try {
+            if (options == null || options.size() <= 1) {
+                return super.vote(sa, prompt, options, votes, forPlayer, optional);
+            }
+            List<String> labels = new ArrayList<>();
+            for (Object o : options) {
+                labels.add(String.valueOf(o));
+            }
+            List<Integer> picks = indexChoiceViaSeat(
+                    "VOTE" + (prompt != null && !prompt.isEmpty() ? " — " + prompt : "")
+                            + (sa != null && sa.getHostCard() != null
+                                ? " (" + sa.getHostCard().getName() + ")" : ""),
+                    labels, 1, 1);
+            return picks != null ? options.get(picks.get(0))
+                    : super.vote(sa, prompt, options, votes, forPlayer, optional);
+        } catch (RuntimeException e) {
+            return super.vote(sa, prompt, options, votes, forPlayer, optional);
+        }
+    }
+
+    /** Fact-or-Fiction pile splits: true = pile 1. */
+    @Override
+    public boolean chooseCardsPile(SpellAbility sa, CardCollectionView pile1,
+            CardCollectionView pile2, String faceUp) {
+        try {
+            // The parameter is named faceUp but carries the script's FaceDown
+            // value (TwoPilesEffect): "False" (default) = both piles public,
+            // "One" = pile 1 is the face-DOWN pile, "True" = both face down.
+            // Review catch (Gemini, wave-2): the first cut leaked the hidden
+            // pile's contents to the chooser.
+            List<String> labels = new ArrayList<>();
+            labels.add("Pile 1: " + pileLabel(pile1, "False".equals(faceUp)));
+            labels.add("Pile 2: " + pileLabel(pile2,
+                    "False".equals(faceUp) || "One".equals(faceUp)));
+            List<Integer> picks = indexChoiceViaSeat(
+                    "CHOOSE A PILE for "
+                            + (sa != null && sa.getHostCard() != null
+                                ? sa.getHostCard().getName() : "the effect"),
+                    labels, 1, 1);
+            return picks != null ? picks.get(0) == 0
+                    : super.chooseCardsPile(sa, pile1, pile2, faceUp);
+        } catch (RuntimeException e) {
+            return super.chooseCardsPile(sa, pile1, pile2, faceUp);
+        }
+    }
+
+    private static String pileLabel(CardCollectionView pile, boolean visible) {
+        if (pile == null || pile.isEmpty()) {
+            return "(empty)";
+        }
+        if (!visible) {
+            return pile.size() + " face-down card" + (pile.size() == 1 ? "" : "s");
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Card c : pile) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(c.getName());
+        }
+        return sb.toString();
     }
 
     /**
@@ -1875,8 +2362,11 @@ public final class MailboxController extends PlayerControllerAi
                     && mode != null) {
                 return super.confirmAction(sa, mode, message, options, cardToShow, params);
             }
-            if (mode == null && (message == null || !message.toLowerCase().contains("play"))) {
-                // untyped confirms other than "do you want to play X" stay stock
+            if (mode == null && (message == null
+                    || (!message.toLowerCase().contains("play")
+                        && !message.toLowerCase().contains("target")))) {
+                // untyped confirms other than "do you want to play X" or
+                // "change the target(s) of X" (wave-2, note 52) stay stock
                 return super.confirmAction(sa, mode, message, options, cardToShow, params);
             }
             Game game = getGame();
@@ -2429,10 +2919,21 @@ public final class MailboxController extends PlayerControllerAi
         // aimed at itself; the real target was an indestructible god). Whole
         // chain walked — sub-ability targets are announced too.
         List<List<String>> stackTargets = new ArrayList<>();
+        // Additive (wave-2, note 52): per-item ORACLE TEXT (<=300 chars) — REACT
+        // valuation of an unfamiliar card ran on model recall, the documented
+        // hallucination trigger. Public information (the card is on the stack).
+        List<String> stackOracle = new ArrayList<>();
         for (forge.game.spellability.SpellAbilityStackInstance si : me.getGame().getStack()) {
             SpellAbility sa = si.getSpellAbility();
             Card host = sa != null ? sa.getHostCard() : null;
             stack.add(host != null ? host.getName() : String.valueOf(si));
+            String otext = host != null && host.getRules() != null
+                    ? host.getRules().getOracleText() : "";
+            if (otext == null) {
+                otext = "";
+            }
+            otext = otext.replace("\r\n", " / ").replace("\n", " / ");
+            stackOracle.add(otext.length() > 300 ? otext.substring(0, 300) : otext);
             Player ctl = sa != null ? sa.getActivatingPlayer() : null;
             stackOwners.add(ctl != null ? ctl.getId() : -1);
             stackKinds.add(sa == null ? "?" : sa.isTrigger() ? "trigger"
@@ -2465,6 +2966,7 @@ public final class MailboxController extends PlayerControllerAi
         state.put("stackOwners", stackOwners);
         state.put("stackKinds", stackKinds);
         state.put("stackTargets", stackTargets);
+        state.put("stackOracle", stackOracle);
         return state;
     }
 
@@ -2724,6 +3226,17 @@ public final class MailboxController extends PlayerControllerAi
 
     private static String creatureLabel(Card c) {
         return c.getName() + " (" + c.getNetPower() + "/" + c.getNetToughness() + ")";
+    }
+
+    /** True iff every entity is a {@link Card} or a {@link Player} — the two
+     *  kinds the entity choosers can label and round-trip (wave-2). */
+    private static boolean cardsOrPlayers(List<? extends GameEntity> opts) {
+        for (GameEntity e : opts) {
+            if (!(e instanceof Card) && !(e instanceof Player)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** True iff every entity in {@code opts} is a {@link Card} (id space = card ids). */

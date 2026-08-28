@@ -25,7 +25,7 @@ outside `forge-arena/` (2026-08-24 re-audit) is **31 files**: 12 modified
 | File | Δ | Kind | Why | Marker | Guarding test |
 |---|---|---|---|---|---|
 | `forge-ai/.../ComputerUtil.java` | ~+30 −9 | **BEHAVIORAL** | `handlePlayingSpellAbility`'s failed-payment path: (a) spells roll back to origin zone (upstream FIXME orphaned commanders); (b) ACTIVATED abilities refund-in-place — rollbackAbility's zone surgery resolves a GRANTED ability's card-state to the GRANTOR and vanished the host (Sanctum Weaver + Gauntlets, 2026-08-19). | ✓ | `UnaffordableCastRollbackTest`, `GrantedAbilityRollbackTest` |
-| `forge-ai/.../AiCostDecision.java` | +38/+35 | Additive hooks | `visit(CostTapType)` consults `TapCostPreference` first (symmetry-break tap pre-selection); `visit(CostSacrifice)` consults `SacCostPreference` first (seat names the sacrifice payment; `Amount$ All` no longer blanket-refused for hook controllers). No preference → stock paths byte-identical. | ✓ | `TapSymmetryBreakTest`, `SacrificeSeatChoiceTest` |
+| `forge-ai/.../AiCostDecision.java` | ~+120 | Additive hooks | `visit(CostTapType)` → `TapCostPreference`; `visit(CostSacrifice)` → `SacCostPreference` (+ `Amount$ All` consent); `visit(CostExile/CostDiscard/CostReturn/CostPutCardToLib)` → one shared `PaymentPickPreference` consult (wave-2: which card a pitch/return cost eats), all with vet-else-stock. No preference → stock paths byte-identical. | ✓ | `TapSymmetryBreakTest`, `SacrificeSeatChoiceTest`, `PaymentPickPreferenceTest` |
 | `forge-ai/.../ComputerUtilMana.java` | +15 | **BEHAVIORAL** | `canPayShardWithSpellAbility` vetted candidates by the ROOT mana part only — condition-forked scripts (Gemstone Caverns' luck-counter Any-branch; upstream TODO in the card file) were invisible at payment time, so colored shards went unpaid while explicit floats worked (six live incidents). Now uses the first chain part whose conditions are met; root fallback preserves old behavior when none are. | ✓ | `PainSourcePaymentTest` |
 | `forge-game/.../MagicStack.java` | ~+45 | Diagnostic only | `[arena] FIZZLE:`/`DECLINED-TRIGGER:` stderr lines in the fizzle branch — targets snapshotted BEFORE the fizzle-check strips them (the old print said "(none set)" for stripped targets, mislabeling legitimate dead-target fizzles). No behavior change. | ✓ | `SiblingTriggerBatchTest` |
 | `forge-core/.../MyRandom.java` | +36 −6 | **BEHAVIORAL** | Seedable RNG (`setSeed`) for reproducible headless batches (Project 1). | ✓ (ARENA-PATCH) | `SeedDeterminismTest` |
@@ -40,6 +40,7 @@ outside `forge-arena/` (2026-08-24 re-audit) is **31 files**: 12 modified
 |---|---|---|
 | `forge-ai/.../TapCostPreference.java` | forge-ai | The AiCostDecision hook interface must be visible to forge-ai. |
 | `forge-ai/.../SacCostPreference.java` | forge-ai | Sacrifice-payment hook interface (same pattern/reason). |
+| `forge-ai/.../PaymentPickPreference.java` | forge-ai | One hook interface for exile/discard/return/put-to-library payments (wave-2). |
 | `forge-gui-desktop/.../forge/arena/interactive/AiControlFile.java` | gui-desktop | AI-panel file protocol (per-seat model/effort dials, ELO line). Moved here 2026-08-12 so the desktop reactor builds it. |
 | `forge-gui-desktop/.../forge/arena/interactive/AdvisorLogTail.java` | gui-desktop | Advisor tab's log tailer. |
 | `forge-gui-desktop/.../controllers/CAiControl.java` + `views/VAiControl.java` | gui-desktop | AI dock tab (steppers, telemetry, ELO). |
@@ -86,6 +87,13 @@ falls back to stock, so a dead brain never hangs a game.
 | **Cast-from-effect offers** (Isochron Scepter copies, Discover, "may cast it without paying"-class) | `CONFIRM` (mode PLAY_FROM_EFFECT) + seat pre-aims the chain's targets | 08-19 |
 | **Sacrifice by effect** (edicts, Innocent-Blood symmetrical, Balance; also `choosePermanentsToDestroy`) | `CHOOSE_ENTITIES` | 08-24 |
 | **Sacrifice cost payment** (outlet activations, additional-cost casts — which card pays) | `CHOOSE_ENTITIES` via `SacCostPreference` hook | 08-24 |
+| **Pitch-cost payments** (Force-of-Will exile, discard/return/put-to-library costs) | `CHOOSE_ENTITIES` via `PaymentPickPreference` hook | 08-28 |
+| **Cleanup discard to hand size; London mulligan bottoming** | `CHOOSE_CARDS` | 08-28 |
+| **Scry / surveil / library ORDER (first = top) / clash top-or-bottom** | `CHOOSE_CARDS` / `CONFIRM` | 08-28 |
+| **Generic numbers + non-mana announces** (Wheel-of-Misfortune class, Multikicker) | `CHOOSE_NUMBER` / `CHOOSE_MODE` indices | 08-28 |
+| **Retargeting spells** (Deflecting Swat class; single-target changes) | `CHOOSE_ENTITY` via `chooseNewTargetsFor` | 08-28 |
+| **Optional costs (Buyback/Kicker), protection type, votes, pile splits** | `CHOOSE_MODE` indices | 08-28 |
+| **Creature-or-player choices** (mixed Card+Player lists, sequential ids) | `CHOOSE_ENTITY`/`ENTITIES` | 08-28 |
 
 ### Still stock (deliberate, with rationale)
 
@@ -94,6 +102,8 @@ falls back to stock, so a dead brain never hangs a game.
 | Multi-target spells (max targets > 1) | Falls back; never worse than status quo. Rare at stakes so far. |
 | "Name a card" from the whole DB (`chooseSingleCardFace` predicate overload) | Unbounded option list — the mailbox never ships one. |
 | Trigger ORDERING (simultaneous triggers) | Small surface, not yet observed at stakes. |
+| `chooseSingleReplacementEffect` | Fires on every replaced event — window-spam risk; needs frequency data first (wave-2 deferral). |
+| Routine tap-cost payment picks | `TapCostPreference` stays symmetry-armed only — a live exchange sits inside the mana-payment inner loop (pacing risk; wave-2 deferral). |
 | Combat damage assignment/ordering | Never overridden; stock was never broken here. |
 | Mana payment source selection | `TapCostPreference` covers the symmetry case; full auto-tap reimplementation deferred (#15). Known quirk: `canPayCost` can be conservative (Ancient Tomb refusal, note 41) — the guard refusal returns the window and brains adapt by floating first. |
 | Mana-color choice | Auto-answered for mono-color commanders (v2 QoL); multicolor → GUI default. |

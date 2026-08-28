@@ -146,6 +146,8 @@ knob seen from two places. The engine deletes both files once the response is re
     /* + "stackOwners":[seat...], "stackKinds":["trigger"|"spell"|...] — additive stack metadata */
     /* + "stackTargets":[["Name (id)"|"seat N",...],...] — each item's CHOSEN targets, whole chain incl.
        chained multi-target parts and charm-chosen modes; divided amounts appended as " [n]" (note 51) */
+    /* + "stackOracle":["<=300-char oracle text",...] — per stack item (note 52: REACT valuation off
+       ground truth, not model recall) */
     /* + "symmetryPieces":[{name,controllerSeat,untapped}], "untapNextSeat" — Winter-Orb-class facts */
     /* + effective keywords per card (indestructible/hexproof/ward/protection/evergreens, incl. granted) */
     /* + "confirmMode","triggerText","yesCost","chosenTargets" on CONFIRM(TRIGGER) */
@@ -204,7 +206,9 @@ and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists
   activation or additional-cost cast) — you pick what YOU lose.
 - `CHOOSE_MODE` → `{"chosen":[<modeIndex>, …]}` — mode option ids are **indices**
   into `options`; must satisfy `min`/`max`; may repeat an index only when
-  `allowRepeat` is true.
+  `allowRepeat` is true. Since wave-2 (note 52) the same wire shape carries
+  every bounded indexed choice: `OPTIONAL COSTS` (Buyback/Kicker — min 0),
+  `PROTECTION`, `VOTE`, `CHOOSE A PILE`, `CHOOSE A VALUE`.
 - `CHOOSE_CARD` → `{"chosenId": <cardId>}` — the tutored/searched card (id `0` =
   choose none, offered only when optional). Also used for face/state picks
   (sequential ids).
@@ -1028,3 +1032,30 @@ Hard-won from two live sessions; read before optimizing anything.
     three seats no-blocked a lethal 190-power trample alpha with honest
     arithmetic. 289 decisions, 0 punts/lost/wedges. Sacrifice surfaces:
     still zero live windows after two hunts (test-guarded only).
+52. **Wave-2: the dual-audit sweep lands (2026-08-28).** All ten audit
+    findings (SEAM-AUDIT-2026-08-28.md) fixed in one rationalized change-set
+    on three shared mechanisms — `cardChoiceViaSeat`, `CHOOSE_NUMBER`, and
+    the `CHOOSE_MODE` index shape — plus ONE new forge-ai interface
+    (`PaymentPickPreference`) covering all four pitch-cost types. Now
+    seat-owned: cleanup discard + mulligan bottoming; scry/surveil/library
+    ORDER (answer order = final order, FIRST = top)/clash; generic numbers +
+    non-mana announces; retargeting spells (`chooseNewTargetsFor` — stock
+    returns null, a seat-cast Deflecting Swat was a silent no-op; single-
+    target changes seat-aimed, restore-on-decline mirrors the human
+    controller); optional costs (always mailboxed — one option is still a
+    real yes/no); protection type, votes, pile splits (FaceDown domain
+    False/One/True — review catch: the first cut leaked the hidden pile's
+    contents; fixed + regression-asserted); mixed Card+Player choices
+    (sequential synthetic ids); `stackOracle` serialization. Runner:
+    `_react_signature` gains phase + combat + stackTargets digests (a
+    correct early-combat pass no longer eats the post-blocks fog window —
+    audit finding 1), and the autopass allowlist skips any window whose
+    stackTargets name our stuff (note 12's dropped clause restored).
+    Deferred with rationale: `chooseSingleReplacementEffect` (spam risk),
+    routine tap-pick generalization (mana-loop pacing). Process: full diffs
+    side-by-side reviewed by Gemini pre-finalize — 1 BLOCKER refuted by code
+    inspection (`clearTargets()` REASSIGNS `targetChosen`, so save/restore
+    of the old TargetChoices is sound — the human controller's own pattern),
+    1 real FIX applied (pile visibility), 4 risk spots confirmed OK, verdict
+    SHIP. Tests: shared `MailboxTestKit` harness (direct-call style — the
+    fixture six older files each copy-pasted); 17 new Java + 7 new Python.

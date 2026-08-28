@@ -317,7 +317,17 @@ class SeatRunner:
         lives = (st.get("life"),) + tuple(o.get("life")
                                           for o in st.get("opponents", []) or [])
         pool = st.get("manaPool")
-        return (req.get("turn"), stack, opts, lives, pool)
+        # Wave-2 (2026-08-28 audit finding 1): the signature was blind to
+        # phase, combat and stack TARGETS — one correct pass at "beginning of
+        # combat, nothing declared" fast-passed every later window that turn
+        # (post-attackers, post-blocks, end step: the game-2 fog death one
+        # layer up), and a same-named spell at a different target collided.
+        # json digests are shape-agnostic and deterministic; memo fires
+        # strictly less often, never more.
+        combat = json.dumps(st.get("combat"), sort_keys=True, default=str)
+        tgts = json.dumps(st.get("stackTargets"), sort_keys=True, default=str)
+        return (req.get("turn"), req.get("phase"), stack, opts, lives, pool,
+                combat, tgts)
 
     def _all_own_objects(self, req: dict) -> bool:
         """True iff the stack is non-empty and EVERY item belongs to this
@@ -536,13 +546,34 @@ class SeatRunner:
     def _stack_names(req: dict) -> list[str]:
         return [str(x) for x in (req.get("state", {}) or {}).get("stack", [])]
 
+    def _threatens_own(self, req: dict) -> bool:
+        """True iff any stack item's announced targets (state.stackTargets)
+        point at this seat or its battlefield — the protect-window shape the
+        autopass allowlist must never eat."""
+        st = req.get("state", {}) or {}
+        entries = [str(t) for grp in (st.get("stackTargets") or []) for t in (grp or [])]
+        if not entries:
+            return False
+        me = f"seat {self.seat}"
+        own_ids = {f"({c.get('id')})" for c in (st.get("battlefield") or [])
+                   if isinstance(c, dict) and c.get("id") is not None}
+        for t in entries:
+            if t == me or any(t.endswith(oid) for oid in own_ids):
+                return True
+        return False
+
     def _fastpath(self, req: dict) -> tuple[dict, str] | None:
         if req.get("decisionType") != "REACT":
             return None
         non_pass = [o for o in req.get("options", []) if o.get("id") != 0]
         if non_pass and all(any(str(o.get("label", "")).startswith(p)
                                 for p in self.autopass) for o in non_pass):
-            return {"chosenId": 0}, "autopass"
+            # Wave-2 (audit finding 5, restoring note 12's dropped clause): the
+            # ONE window where a Mother-of-Runes-class option is the right play
+            # is an opponent object aimed at OUR stuff — never autopass those.
+            # state.stackTargets (note 51) names every stack item's targets.
+            if not self._threatens_own(req):
+                return {"chosenId": 0}, "autopass"
         if self._react_signature(req) in self.react_seen:
             return {"chosenId": 0}, "memo"
         # #2 reactive hold: brain armed a same-turn hold; auto-pass only when the

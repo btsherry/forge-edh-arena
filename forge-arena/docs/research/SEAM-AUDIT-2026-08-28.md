@@ -235,3 +235,68 @@ Five findings, ranked by likelihood x impact. For each:
 5. **Fix shape**: minimal-footprint remedy consistent with our fail-safe
    contract and "minimize parent-project edits" policy.
 Then a short "honorable mentions" list (max 5 one-liners). No preamble.
+
+## §4 Wave-2 outcome (2026-08-28, same day)
+
+All ten findings fixed in one rationalized change-set (field note 52):
+one new hook interface (PaymentPickPreference) + three shared wire
+mechanisms; two deferrals with rationale (replacement-effect ordering,
+routine tap picks). Pre-finalize review: the full diffs went back to
+Gemini side-by-side — 1 BLOCKER refuted by code inspection
+(clearTargets() reassigns targetChosen; save/restore sound), 1 real FIX
+applied (chooseCardsPile hid-pile visibility leak), 4 risk spots
+confirmed, verdict SHIP. Gates: 338 Java + checkstyle, 120 Python.
+
+### Reviewer output (verbatim)
+```
+Here is the review of the Wave-2 seam audit fixes, evaluated against the fail-safe contract, MTG rules, and Forge API constraints.
+
+**1. [BLOCKER] `MailboxController.chooseNewTargetsFor` — Forge API Mutation Hole**
+*Reason:* In Forge, `SpellAbility.clearTargets()` does not reassign the internal `TargetChoices` object; it calls `.clearTargets()` *on* it, emptying its internal lists. Because `old = sa.getTargets()` just holds a reference to that exact same object, calling `sa.clearTargets()` empties `old` as well. When the seat declines or fails the retarget, the restore path `sa.setTargets(old)` sets the spell's targets to the now-empty object, permanently breaking the spell on the stack and violating the fail-safe contract.
+*Suggested Change:* Back up the actual target entities into a new list, and restore them by re-adding them to the cleared `TargetChoices` object.
+```java
+    TargetChoices old = sa.getTargets();
+    if (old == null || old.size() != 1 || sa.isDividedAsYouChoose()) {
+        return super.chooseNewTargetsFor(ability, filter, optional);
+    }
+    // Deep copy the actual target entities
+    List<forge.game.GameObject> oldTargets = new java.util.ArrayList<>(old.getTargets());
+    sa.clearTargets();
+    if (chooseTargetsFor(sa)) {
+        forge.game.spellability.TargetChoices next = sa.getTargets();
+        boolean legal = next != null && next.size() == 1;
+        if (legal && filter != null) {
+            for (forge.game.GameObject t : next) {
+                legal &= filter.test(t);
+            }
+        }
+        if (legal) {
+            return next;
+        }
+    }
+    // Restore path
+    sa.clearTargets();
+    for (forge.game.GameObject t : oldTargets) {
+        sa.getTargets().add(t);
+    }
+    return null;
+```
+
+**2. [OK-NOTE] `MailboxController.arrangeForScry` / `arrangeFor
+--- continuation ---
+2. [FIX] `MailboxController.java` / `chooseCardsPile`
+The visibility logic `!"False".equals(faceUp)` and `"True".equals(faceUp)` mishandles asymmetric splits (e.g., Fortune's Favor, where `faceUp` is `"Pile1"` or `"Pile2"`). If `faceUp` is `"Pile2"`, Pile 1 incorrectly evaluates as visible to the LLM and Pile 2 as hidden. Change Pile 1 visibility to `"True".equals(faceUp) || "Pile1".equals(faceUp)` and Pile 2 to `"True".equals(faceUp) || "Pile2".equals(faceUp)`.
+
+3. [OK-NOTE] `MailboxController.java` / `orderMoveToZoneList` & `arrangeForScry`
+Risk spots [a] and [h] are correctly implemented. Forge's library insertion expects index 0 to be the top, matching the `FIRST=top` prompt convention, and iterating over `topN` to populate `toTop` inherently preserves the original relative order of kept cards. No change required.
+
+4. [OK-NOTE] `MailboxController.java` / `announceRequirements` & `chooseOptionalCosts`
+Risk spots [c] and [g] are safe. The `announceRequirements` branch correctly falls through to stock for unbounded ranges (`max - min > 1000`), and always opening a window for optional costs with a `min=0` bound correctly allows the LLM to decline all costs by returning an empty array. No change required.
+
+5. [OK-NOTE] `runner.py` / `_runner` & `_threatens_own`
+Risk spots [d] and [e] are robust. `json.dumps(..., sort_keys=True)` is deterministic and cheap for the memo signature, and the threat clause correctly identifies both direct seat targeting and permanent targeting via the `(id)` suffix in `stackTargets`. No change required.
+
+6. [OK-NOTE] `AiCostDecision.java` & `MailboxController.java` / Entity IDs & CostDiscard
+Risk spot [f] correctly uses `validD.removeAll(discarded)` to prevent duplicate payments. Furthermore, falling back to sequential IDs (`seq++`) when `opts` contains a mix of Cards and Players is a brilliant, collision-free way to round-trip mixed entities. No change required.
+
+SHIP```

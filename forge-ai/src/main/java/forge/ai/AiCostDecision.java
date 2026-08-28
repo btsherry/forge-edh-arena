@@ -139,6 +139,16 @@ public class AiCostDecision extends CostDecisionMakerBase {
             }
             return PaymentDecision.card(differentNames);
         } else {
+            // [arena] controller-preferred discard payment (PaymentPickPreference)
+            CardCollection validD = CardLists.getValidCards(
+                    hand, type.split(";"), player, source, ability);
+            validD.removeAll(discarded);
+            PaymentDecision pd = preferredPayment(PaymentPickPreference.KIND_DISCARD, validD, c);
+            if (pd != null) {
+                discarded.addAll(pd.cards);
+                return pd;
+            }
+
             final AiController aic = ((PlayerControllerAi)player.getController()).getAi();
 
             CardCollection result = aic.getCardsToDiscard(c, type.split(";"), ability, discarded);
@@ -224,6 +234,17 @@ public class AiCostDecision extends CostDecisionMakerBase {
             // TODO Determine exile from same zone for AI
             return null;
         } else {
+            // [arena] controller-preferred exile payment (PaymentPickPreference):
+            // the Force-of-Will pitch class — stock chooseExileFromList sorts by
+            // power ascending, meaningless for a hand of instants.
+            CardCollection validE = CardLists.getValidCards(
+                    player.getCardsIn(cost.getFrom()), type.split(";"),
+                    player, source, ability);
+            PaymentDecision pd = preferredPayment(PaymentPickPreference.KIND_EXILE, validE, c);
+            if (pd != null) {
+                return pd;
+            }
+
             CardCollectionView chosen = ComputerUtil.chooseExileFrom(player, cost, source, c, ability, isEffect());
             return null == chosen ? null : PaymentDecision.card(chosen);
         }
@@ -422,6 +443,12 @@ public class AiCostDecision extends CostDecisionMakerBase {
             }
             chosen = chosen.subList(0, c);
         } else {
+            // [arena] controller-preferred put-to-library payment (PaymentPickPreference)
+            PaymentDecision pd = preferredPayment(
+                    PaymentPickPreference.KIND_PUT_TO_LIBRARY, list, c);
+            if (pd != null) {
+                return pd;
+            }
             chosen = ComputerUtil.choosePutToLibraryFrom(player, cost.getFrom(), cost.getType(), source, ability.getTargetCard(), c, ability);
         }
         return chosen.isEmpty() ? null : PaymentDecision.card(chosen);
@@ -577,12 +604,45 @@ public class AiCostDecision extends CostDecisionMakerBase {
         return list == null ? null : PaymentDecision.card(list);
     }
 
+    /**
+     * [arena] shared consult for {@link PaymentPickPreference} (exile /
+     * discard / return / put-to-library payments): vet the controller's
+     * preferred cards against the cost's valid pool; any mismatch or absent
+     * preference returns null and the caller keeps the stock path untouched.
+     */
+    private PaymentDecision preferredPayment(String kind, CardCollectionView valid, int c) {
+        if (c <= 0 || !(player.getController() instanceof PaymentPickPreference)) {
+            return null;
+        }
+        CardCollection pref = ((PaymentPickPreference) player.getController())
+                .preferredPaymentCards(ability, kind, new CardCollection(valid), c);
+        if (pref == null) {
+            return null;
+        }
+        CardCollection vetted = new CardCollection();
+        for (Card card : pref) {
+            if (valid.contains(card) && !vetted.contains(card)) {
+                vetted.add(card);
+            }
+        }
+        return vetted.size() == c ? PaymentDecision.card(vetted) : null;
+    }
+
     @Override
     public PaymentDecision visit(CostReturn cost) {
         if (cost.payCostFromSource())
             return PaymentDecision.card(source);
 
         int c = cost.getAbilityAmount(ability);
+
+        // [arena] controller-preferred return payment (PaymentPickPreference)
+        CardCollectionView validR = CardLists.getValidCards(
+                player.getCardsIn(ZoneType.Battlefield), cost.getType().split(";"),
+                player, source, ability);
+        PaymentDecision pd = preferredPayment(PaymentPickPreference.KIND_RETURN, validR, c);
+        if (pd != null) {
+            return pd;
+        }
 
         CardCollectionView res = ComputerUtil.chooseReturnType(player, cost.getType(), source, ability.getTargetCard(), c, ability);
         return res.isEmpty() ? null : PaymentDecision.card(res);
