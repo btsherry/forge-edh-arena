@@ -144,7 +144,8 @@ knob seen from two places. The engine deletes both files once the response is re
     /* + "allowRepeat":bool for CHOOSE_MODE; "destination":<zone> for CHOOSE_CARD(S) */
     /* + "commandZone":[{name,timesCast,nextCastTax}] — own commanders */
     /* + "stackOwners":[seat...], "stackKinds":["trigger"|"spell"|...] — additive stack metadata */
-    /* + "stackTargets":[["Name (id)"|"seat N",...],...] — each item's CHOSEN targets, whole chain (note 51) */
+    /* + "stackTargets":[["Name (id)"|"seat N",...],...] — each item's CHOSEN targets, whole chain incl.
+       chained multi-target parts and charm-chosen modes; divided amounts appended as " [n]" (note 51) */
     /* + "symmetryPieces":[{name,controllerSeat,untapped}], "untapNextSeat" — Winter-Orb-class facts */
     /* + effective keywords per card (indestructible/hexproof/ward/protection/evergreens, incl. granted) */
     /* + "confirmMode","triggerText","yesCost","chosenTargets" on CONFIRM(TRIGGER) */
@@ -1012,7 +1013,10 @@ Hard-won from two live sessions; read before optimizing anything.
     the target because stack serialization carried source/owner/kind but not
     chosen targets, which are public at any real table. `state.stackTargets`
     now announces every stack item's chain targets ("Name (id)" / "seat N";
-    `StackTargetsVisibleTest`, card + player shapes). Compounding it, the
+    `StackTargetsVisibleTest`, card + player + chained multi-target shapes —
+    Arc Trail's second target rides the SubAbility chain; charm modes are
+    covered because `CharmEffect.chainAbilities` stitches chosen modes into
+    that same chain at cast; divided amounts are appended as " [n]"). Compounding it, the
     opus advisor had twice told the pilot to hold Beast Within "for
     Purphoros" — a destroy spell against an always-indestructible god,
     violating the brief's own check-card-text rule; the rule is now a

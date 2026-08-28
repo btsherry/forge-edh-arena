@@ -49,9 +49,12 @@ public class StackTargetsVisibleTest {
         return c;
     }
 
-    /** Opp shocks either the seat's bear or the seat's face; the seat (holding
-     *  a live Counterspell so the reactive gate opens) must see the target. */
-    private String runShock(boolean targetCreature) throws Exception {
+    /** Opp casts {@code spellName} at the seat's bear and/or the seat's face;
+     *  the seat (holding a live Counterspell so the reactive gate opens) must
+     *  see every chosen target. {@code aimBears}: root part targets the bear;
+     *  {@code aimFaceOnSub}: (root if !aimBears else the SubAbility part)
+     *  targets the seat player — exercises the chained multi-target shape. */
+    private String runSpell(String spellName, boolean aimBears, boolean aimFaceOnSub) throws Exception {
         ArenaBootstrap.initialize(new java.io.File("..", "forge-gui"));
         Path base = Files.createTempDirectory("stacktgt");
         List<RegisteredPlayer> players = Lists.newArrayList();
@@ -73,11 +76,18 @@ public class StackTargetsVisibleTest {
         for (int i = 0; i < 2; i++) put("Mountain", opp, ZoneType.Battlefield);
         for (int i = 0; i < 2; i++) put("Mountain", opp, ZoneType.Library);
 
-        Card shock = put("Shock", opp, ZoneType.Hand);
-        SpellAbility sa = shock.getFirstSpellAbility();
+        Card spell = put(spellName, opp, ZoneType.Hand);
+        SpellAbility sa = spell.getFirstSpellAbility();
         sa.setActivatingPlayer(opp);
-        sa.getTargets().add(targetCreature ? bears : seat);
-        game.getAction().moveToStack(shock, sa);
+        if (aimBears) {
+            sa.getTargets().add(bears);
+            if (aimFaceOnSub) {
+                sa.getSubAbility().getTargets().add(seat); // chained second target
+            }
+        } else {
+            sa.getTargets().add(seat);
+        }
+        game.getAction().moveToStack(spell, sa);
         game.getStack().add(sa);
 
         Path in = base.resolve("seat-" + seat.getId()).resolve("inbox");
@@ -110,18 +120,18 @@ public class StackTargetsVisibleTest {
         int steps = 0;
         while (steps++ < 200 && !game.isGameOver()) {
             game.getPhaseHandler().mainLoopStep();
-            boolean sawShockWindow = seen.stream().anyMatch(s -> s.contains("Shock"));
-            if (sawShockWindow && steps > 5) break;
+            boolean sawWindow = seen.stream().anyMatch(s -> s.contains(spellName));
+            if (sawWindow && steps > 5) break;
         }
         for (String s : seen) {
-            if (s.contains("Shock") && s.contains("stackTargets")) return s;
+            if (s.contains(spellName) && s.contains("stackTargets")) return s;
         }
-        return seen.stream().filter(s -> s.contains("Shock")).findFirst().orElse("");
+        return seen.stream().filter(s -> s.contains(spellName)).findFirst().orElse("");
     }
 
     @Test(timeOut = 240_000)
     public void cardTargetIsAnnounced() throws Exception {
-        String body = runShock(true);
+        String body = runSpell("Shock", true, false);
         boolean has = body.contains("\"stackTargets\"") && body.contains("Grizzly Bears");
         System.out.println("STACKTGT-CARD: announced=" + has);
         Assert.assertTrue(has,
@@ -130,10 +140,24 @@ public class StackTargetsVisibleTest {
 
     @Test(timeOut = 240_000)
     public void playerTargetIsAnnounced() throws Exception {
-        String body = runShock(false);
+        String body = runSpell("Shock", false, false);
         boolean has = body.contains("\"stackTargets\"") && body.contains("seat ");
         System.out.println("STACKTGT-PLAYER: announced=" + has);
         Assert.assertTrue(has,
                 "REACT state must name the Shock's player target (public info)");
+    }
+
+    /** Arc Trail: "2 damage to any target AND 1 damage to any other target" —
+     *  root part aims the bear, the chained SubAbility part aims the face.
+     *  BOTH must be announced (the game-15 gap was per-item; this guards the
+     *  per-PART chain walk). */
+    @Test(timeOut = 240_000)
+    public void multiTargetChainIsFullyAnnounced() throws Exception {
+        String body = runSpell("Arc Trail", true, true);
+        boolean both = body.contains("\"stackTargets\"")
+                && body.contains("Grizzly Bears") && body.contains("seat ");
+        System.out.println("STACKTGT-MULTI: bothAnnounced=" + both);
+        Assert.assertTrue(both,
+                "a chained multi-target spell must announce EVERY chosen target");
     }
 }

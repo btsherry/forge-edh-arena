@@ -2443,14 +2443,20 @@ public final class MailboxController extends PlayerControllerAi
                     continue;
                 }
                 for (forge.game.GameObject t : part.getTargets()) {
+                    String label;
                     if (t instanceof Card) {
                         Card tc = (Card) t;
-                        tgts.add(tc.getName() + " (" + tc.getId() + ")");
+                        label = tc.getName() + " (" + tc.getId() + ")";
                     } else if (t instanceof Player) {
-                        tgts.add("seat " + ((Player) t).getId());
+                        label = "seat " + ((Player) t).getId();
                     } else {
-                        tgts.add(String.valueOf(t));
+                        label = String.valueOf(t);
                     }
+                    Integer div = part.getTargets().getDividedValue(t);
+                    if (div != null) {
+                        label += " [" + div + "]"; // divided damage/counters share
+                    }
+                    tgts.add(label);
                 }
             }
             stackTargets.add(tgts);
