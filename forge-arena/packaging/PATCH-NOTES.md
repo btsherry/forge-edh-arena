@@ -1,5 +1,69 @@
 # forge-light-llm — Patch Notes
 
+## v3.3 — 2026-08-28
+
+### The seats now own nearly every decision
+
+The largest play-quality release since the interactive seam shipped. A
+dual-model audit of the engine/AI boundary found every remaining place a
+stock heuristic silently decided FOR the seat — all of them are now the
+seat's own choice, with the same fail-safe as always (an invalid or late
+answer falls back to stock, never worse than before):
+
+- **Sacrifices** — edicts and "each player sacrifices" effects, AND which
+  card pays a sacrifice cost (Viscera-Seer-class outlets, additional-cost
+  spells). The seat feeds the token, not the win condition.
+- **Pitch costs** — which blue card Force of Will exiles, which card a
+  discard/return/put-to-library cost eats.
+- **Cleanup & mulligans** — discarding to hand size at end of turn and
+  choosing which cards go under the library on a London mulligan.
+- **Library control** — scry, surveil, reorder-on-library effects
+  (Sensei's Top / Scroll Rack class), and clash top-or-bottom calls.
+- **Casts with options** — Buyback/Kicker-class optional costs, non-X
+  announced values (Multikicker), "choose a number" effects (Wheel of
+  Misfortune class), and may-cast offers (Isochron Scepter copies) with the
+  seat aiming the copy's targets.
+- **Redirects** — Deflecting-Swat-class retargeting actually retargets
+  (stock AI literally could not do this and the spell fizzled silently).
+- **Table politics** — votes, Fact-or-Fiction pile splits, protection
+  color choices (Mother of Runes picks the RIGHT color from the stack),
+  and creature-or-player choices.
+
+### Brains see more of the table
+
+Every stack item now announces its **chosen targets** (public information —
+"Beast Within, targeting Purphoros") and carries a compact **oracle-text
+line**, so reactive decisions run on ground truth instead of model recall.
+The reactive fastpaths were rekeyed on phase, combat state, and targets, so
+a held Fog or Flawless Maneuver can no longer be auto-passed after an
+earlier quiet window that merely looked identical — and protective
+abilities (Mother of Runes / Giver of Runes) are never fast-passed while
+removal is pointed at your board.
+
+### Advisor discipline
+
+The seat-0 Advisor now verifies a target's effective keywords before
+recommending removal — no more "hold Beast Within for the indestructible
+god" advice.
+
+### Fixed
+
+- **Y'shtola's deck file** shipped in a raw export format that the game
+  refused to load (the deck had never actually hit a table); rebuilt as a
+  legal 100-card Commander deck. If your v3.2 install won't seat Y'shtola,
+  this is why.
+- Ability option labels no longer render as "Exile ." / "Untap ." before
+  targets are chosen — they show the card's rules text.
+- `arena-status.py` shows the live table's real deck names instead of a
+  default roster.
+
+### Under the hood
+
+Faster test/gate tooling for contributors (project-classified suite,
+documented gate policy and revert flags — see `BUILDING.md`), a shared test
+harness, and regression tests for every surface above (355+ Java/Python
+tests, all green).
+
 ## v3.2 — 2026-08-19
 
 ### New: DeckCheck primers without copy/paste

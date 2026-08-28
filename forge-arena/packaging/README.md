@@ -7,6 +7,13 @@ decision is logged with the board state the model saw, the options it was
 given, what it chose, and why: a growing dataset for deck analysis and for
 crafting deterministic game AI.
 
+As of v3.3 the seats own essentially every in-game decision — casting,
+targeting (including retargets and copy aiming), triggers, sacrifices and
+all cost payments, scry/surveil/library order, mulligan bottoming, cleanup
+discards, optional costs, votes and pile splits — each with a fail-safe:
+an invalid or late answer falls back to the stock game AI, never worse
+than a normal Forge opponent. See `PATCH-NOTES.md` for the full list.
+
 Built on [Forge](https://github.com/Card-Forge/forge) (GPL-3.0); the engine
 ships prebuilt — see `LICENSE`. Non-commercial fan project. Magic: The
 Gathering is © Wizards of the Coast.
