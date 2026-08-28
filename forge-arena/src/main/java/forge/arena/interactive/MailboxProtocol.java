@@ -56,7 +56,10 @@ public final class MailboxProtocol {
     // Outbox pickup latency: how soon the engine notices the brain's written
     // response and unblocks. 75ms keeps the game feeling responsive without
     // meaningful CPU cost (the poll is a single file stat on a tiny dir).
-    private final long pollMillis = 75L;
+    // Overridable via -Darena.mailbox.poll.ms (harness-boil B1, 2026-08-28):
+    // the test suite sets 5ms so every mailbox exchange in an E2E test stops
+    // paying live-game pacing; live launches never set it and keep 75.
+    private final long pollMillis = Long.getLong("arena.mailbox.poll.ms", 75L);
     private final AtomicLong seq = new AtomicLong();
 
     private MailboxProtocol(Path seatDir, long timeoutMillis) {

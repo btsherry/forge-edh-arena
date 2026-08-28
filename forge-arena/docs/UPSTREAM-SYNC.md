@@ -130,7 +130,9 @@ surface).
 
 **5) Gates, in order — all must pass before touching `arena`:**
 ```sh
-mvn -pl forge-arena -am package         # full build + 318 tests + checkstyle, ONLINE first time
+mvn -pl forge-arena -am package         # FULL gate: no -DskipTests here — sync
+                                        # imports must re-run upstream module
+                                        # tests (BUILDING.md gate policy)
 ( cd forge-arena/runner && python3 -m unittest discover -s tests )   # 113 py tests
 forge-arena/runner/run_table.sh --preflight
 forge-arena/scripts/arena-play.sh --all-ai   # one live smoke game, watch for

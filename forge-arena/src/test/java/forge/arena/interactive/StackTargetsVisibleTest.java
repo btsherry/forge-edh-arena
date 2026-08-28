@@ -129,35 +129,22 @@ public class StackTargetsVisibleTest {
         return seen.stream().filter(s -> s.contains(spellName)).findFirst().orElse("");
     }
 
-    @Test(timeOut = 240_000)
-    public void cardTargetIsAnnounced() throws Exception {
-        String body = runSpell("Shock", true, false);
-        boolean has = body.contains("\"stackTargets\"") && body.contains("Grizzly Bears");
-        System.out.println("STACKTGT-CARD: announced=" + has);
-        Assert.assertTrue(has,
-                "REACT state must name the Shock's card target (public info)");
-    }
-
-    @Test(timeOut = 240_000)
-    public void playerTargetIsAnnounced() throws Exception {
-        String body = runSpell("Shock", false, false);
-        boolean has = body.contains("\"stackTargets\"") && body.contains("seat ");
-        System.out.println("STACKTGT-PLAYER: announced=" + has);
-        Assert.assertTrue(has,
-                "REACT state must name the Shock's player target (public info)");
-    }
-
     /** Arc Trail: "2 damage to any target AND 1 damage to any other target" —
      *  root part aims the bear, the chained SubAbility part aims the face.
-     *  BOTH must be announced (the game-15 gap was per-item; this guards the
-     *  per-PART chain walk). */
+     *  One game proves the whole surface (harness boil: this scenario
+     *  strictly subsumes the former single-target Shock card/player pair):
+     *  stackTargets present, CARD target named, PLAYER target named, and the
+     *  per-PART chain walk covered. */
     @Test(timeOut = 240_000)
-    public void multiTargetChainIsFullyAnnounced() throws Exception {
+    public void targetsAnnouncedCardPlayerAndChain() throws Exception {
         String body = runSpell("Arc Trail", true, true);
-        boolean both = body.contains("\"stackTargets\"")
-                && body.contains("Grizzly Bears") && body.contains("seat ");
-        System.out.println("STACKTGT-MULTI: bothAnnounced=" + both);
-        Assert.assertTrue(both,
-                "a chained multi-target spell must announce EVERY chosen target");
+        boolean present = body.contains("\"stackTargets\"");
+        boolean card = body.contains("Grizzly Bears");
+        boolean player = body.contains("seat ");
+        System.out.println("STACKTGT: present=" + present
+                + " card=" + card + " player=" + player);
+        Assert.assertTrue(present && card && player,
+                "every chosen target — card and player, root and chained part — "
+                + "must be announced (public info)");
     }
 }

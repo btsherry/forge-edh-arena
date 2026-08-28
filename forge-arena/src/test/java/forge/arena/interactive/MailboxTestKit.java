@@ -26,13 +26,19 @@ import forge.model.FModel;
 
 /**
  * Shared fixture for mailbox-seam tests (wave-2 cleanup, 2026-08-28): one
+ * kit == one game == one controller. NEVER build a second Game against the
+ * same {@code base} dir: the controller's request sequence restarts and the
+ * brain's processed-file set would skip the reused names (review catch,
+ * harness boil). Consolidated test classes share ONE kit instead.
+ *
+ * <p>Original doc: one
  * two-player Commander game (stock {@code opp} at seat A, mailbox {@code seat}
  * at seat B), a scripted brain thread, and the card-placement helper every
  * older test copy-pasted. New tests prefer DIRECT CALLS on the seat's
  * controller (cheap, no phase machinery) and use {@link #run} only when the
  * engine call-site itself is under test.
  */
-final class MailboxTestKit {
+final class MailboxTestKit implements AutoCloseable {
 
     final Game game;
     final Player opp;
@@ -109,7 +115,7 @@ final class MailboxTestKit {
                             Files.move(tmp, out.resolve(n.replace("req-", "resp-")));
                         }
                     }
-                    Thread.sleep(20);
+                    Thread.sleep(5);
                 } catch (Exception e) { /* keep polling */ }
             }
         }, "mbkit-brain");
@@ -119,6 +125,13 @@ final class MailboxTestKit {
 
     void stopBrain() {
         brainAlive = false;
+    }
+
+    /** try-with-resources support (review catch: brains must not outlive
+     *  their test — legacy fixtures' pollers lingered up to 150s). */
+    @Override
+    public void close() {
+        stopBrain();
     }
 
     /** Step the phase loop until {@code done} (or {@code maxSteps}). */

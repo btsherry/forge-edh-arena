@@ -26,9 +26,29 @@ From the **repository root**:
 # First build (online — populates ~/.m2):
 mvn -pl forge-arena -am package
 
-# Subsequent builds can go offline:
+# STANDARD gate (harness boil, 2026-08-28) — parents build, their tests skip,
+# the arena suite still runs (arena's surefire deliberately ignores
+# -DskipTests via its own arena.skip.tests property):
+mvn -o -pl forge-arena -am package -DskipTests
+
+# FULL gate — required whenever the change-set touches a parent module
+# (forge-ai / forge-game / forge-core / forge-gui*) and on every
+# UPSTREAM-SYNC import; otherwise upstream tests re-verify nothing:
 mvn -o -pl forge-arena -am package
 ```
+
+Yes, `-DskipTests` running the arena tests looks paradoxical — it is
+deliberate (see the surefire comment in `forge-arena/pom.xml`): upstream
+modules honor the flag, the arena suite ignores it. `-Darena.skip.tests=true`
+is the explicit arena opt-out (used by `batch.sh`).
+
+Test-suite knobs (both revertible, see docs/IMPLEMENTATION-PLAN.md §8):
+- `arena.mailbox.poll.ms` — surefire pins 5ms so E2E mailbox tests skip
+  live-game pacing (live default 75ms; never set outside tests).
+- `arena.test.divergence.simTurnCap` (default 5; REVERT with `=8`) and
+  `arena.test.divergence.seedTries` — AiAssignmentDivergenceTest knobs;
+  measured 2026-08-28: profile divergence at seed 5, sim divergence at
+  seed 1, cap 8→5 cut the sim game 114s→15s with the invariant intact.
 
 Two flags are load-bearing:
 

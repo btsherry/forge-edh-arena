@@ -1059,3 +1059,17 @@ Hard-won from two live sessions; read before optimizing anything.
     1 real FIX applied (pile visibility), 4 risk spots confirmed OK, verdict
     SHIP. Tests: shared `MailboxTestKit` harness (direct-call style — the
     fixture six older files each copy-pasted); 17 new Java + 7 new Python.
+53. **Harness boil (2026-08-28, Ben-approved A–D).** Full-gate census: P1
+    owned 73% of suite time (the full game IS those tests' oracle — hands
+    off); P2's cost was game-boots + poll pacing, not assertions. Landed:
+    (A) standard gate = `-DskipTests` (parents build, tests skip, arena
+    suite runs anyway — the pom's arena.skip.tests design); FULL gate on
+    parent-touching change-sets + syncs. (B) `arena.mailbox.poll.ms=5` in
+    surefire; interactive consolidations (12→1, 5→1, 3→1, 4→3, ~9→1 games)
+    — one merge (Blood+Edict) tried, timed out against the fixture's tiny
+    libraries, and was REVERTED per the anti-contortion rule. (C) measured,
+    revertible divergence-test knobs: sim turn cap 8→5 = 114s→15s with
+    divergence intact at seed 1 (`-Darena.test.divergence.simTurnCap=8`
+    reverts); profile divergence sits at seed 5, so seedTries stays ≥5.
+    (D) AiTabHarness relic deleted. Full policy: IMPLEMENTATION-PLAN §8 +
+    BUILDING.md.

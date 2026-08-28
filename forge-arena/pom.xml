@@ -103,6 +103,12 @@
                       memory beats a heap that can grow until the GC folds.
                     -->
                     <argLine>-Xmx4g -XX:+UseParallelGC</argLine>
+                    <systemPropertyVariables>
+                        <!-- harness-boil B1 (2026-08-28): E2E mailbox tests
+                             stop paying live-game pacing. Live launches never
+                             set this property and keep the 75ms default. -->
+                        <arena.mailbox.poll.ms>5</arena.mailbox.poll.ms>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>

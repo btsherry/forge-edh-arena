@@ -552,6 +552,35 @@ All computed from the JSONL streams by report/ reducers (report.py reference imp
 
 ## 8. Test suite (write alongside each module)
 
+> **Harness-boil amendment (2026-08-28, Ben-approved A–D; Gemini-reviewed):**
+> the suite serves BOTH projects and is boiled by the metric *games booted*,
+> never test count, under a project-classification rule: P1 test content
+> (combo/engine/harness/prep/report — full game = the oracle) is hands-off;
+> P2 (interactive) tests consolidate freely onto the shared MailboxTestKit
+> when oracles stay identical.
+> **(A) Gate policy:** the STANDARD gate is
+> `mvn -o -pl forge-arena -am package -DskipTests` — parents build, their
+> tests skip, the arena suite still runs (arena surefire ignores the flag by
+> design). The FULL gate (no -DskipTests) is MANDATORY when the change-set
+> touches a parent module and on every UPSTREAM-SYNC import.
+> **(B) Test pacing:** surefire pins `arena.mailbox.poll.ms=5` (live default
+> 75); interactive tests consolidated (SeatWave 12→1 game, PaymentPick 5→1,
+> StackTargets 3→1, Sacrifice 4→3 — the Blood+Edict merge was tried and
+> REVERTED per the anti-contortion rule, PainSource ~9→1 via read-only
+> battlefield swaps).
+> **(C) Divergence-test knobs (REVERTIBLE — this is the flag):**
+> `AiAssignmentDivergenceTest` sim game turn cap is
+> `-Darena.test.divergence.simTurnCap` (measured 2026-08-28: divergence at
+> seed 1 either way; cap 8→5 cut 114s→15s). **Revert C entirely with
+> `-Darena.test.divergence.simTurnCap=8`.** Seed budget is
+> `-Darena.test.divergence.seedTries` (profiles diverge at seed 5 — do not
+> set below 5); the search early-exits, so tries are headroom, not cost.
+> If a future deck/AI change pushes divergence past a cap the test FAILS
+> loudly — it can never silently pass.
+> **(D)** `runner/tests/AiTabHarness.java` deleted (manual relic).
+> P1 content untouched throughout; SelvalaManaLoopTest et al. stay as-is —
+> per review: "no redundancy: cost is the guarantee."
+
 **Unit tests** (JUnit 5; names indicate the assertion): *[T0 correction: repo convention is TestNG — see T0-VERIFICATION.md §2.4]*
 
 - **NameMapperTest:** oracle→Forge for split cards, DFCs, adventures, apostrophes/accents; unmapped names reported not dropped.
