@@ -49,6 +49,11 @@ tail -f forge-arena/runner/logs/game.jsonl
 forge-arena/scripts/arena-stop.sh
 ```
 
+**Bring your own deck:** one command turns any Commander list into a
+fully-briefed AI pilot — see [Ingesting a new deck](#ingesting-a-new-deck).
+Pilot it yourself with an AI table, or hand it to a brain and watch it play
+its own game plan.
+
 Defaults: `--model opus --effort medium`, 90 s decision timeout. Knobs:
 `--model haiku|sonnet|opus|fable`, `--effort low|medium|high|xhigh|max`,
 `--timeout N` (use `--timeout 300` at xhigh/max effort or seats will punt
@@ -79,10 +84,13 @@ bundled or ingested — can sit at any seat.
 python3 forge-arena/scripts/arena-add-deck.py path/to/my-deck.dck
 ```
 
-Six steps, all visible: parse the `.dck` → resolve oracle text (Scryfall) →
-fetch real combos (Commander Spellbook) → implementability lint against
-Forge's card database (warns on cards the engine may not fully script;
-`--strict` refuses them) → strategy primer → write. Outputs, per deck:
+Six steps, all visible, no API keys needed: parse the `.dck` → resolve
+oracle text (Scryfall) → fetch real combos (Commander Spellbook) →
+implementability lint against Forge's card database (warns on cards the
+engine may not fully script; `--strict` refuses them) → strategy primer →
+write. The pilot ends up knowing YOUR deck's actual game plan — its real
+loops, what to tutor for, how to close — not a generic archetype read.
+Outputs, per deck:
 
 ```
 forge-light-llm/forge-arena/decks/<slug>.dck                       playable deck registration
