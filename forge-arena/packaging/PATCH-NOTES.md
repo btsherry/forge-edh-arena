@@ -1,5 +1,28 @@
 # forge-light-llm — Patch Notes
 
+## v3.3.1 — 2026-08-31
+
+Fix release: a two-model adversarial review of v3.3's new decision surfaces
+found ten defects; all are fixed and every fix is proven end-to-end.
+
+- **Optional costs work properly now**: Buyback/Kicker appear as separate
+  "[+ cost]" options in the seat's cast list (affordability-checked; the
+  base spell is always offered). v3.3 could hide the base spell and opened
+  redundant prompts.
+- **Multikicker actually kicks**: Everflowing-Chalice-class spells enter
+  with the number of kicks the seat chooses (v3.3's fix was on a code path
+  the AI never reached).
+- **Library ordering is no longer inverted**: Sensei's Top / Scroll Rack
+  put-backs land in exactly the order the seat states.
+- **No more phantom payment prompts**: cost-payment questions only appear
+  while a cast is actually happening, never during the AI's own planning.
+- **Safer timeouts**: a timed-out brain now bids LOW on Wheel-of-
+  Misfortune-class effects (it used to bid the maximum and take the
+  damage); X-spells still default to the affordable maximum.
+- Protective abilities are never auto-passed while divided-damage spells
+  (Arc Trail class) point at your board; a seat's own spells no longer
+  count as threats against itself.
+
 ## v3.3 — 2026-08-28
 
 ### The seats now own nearly every decision
