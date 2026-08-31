@@ -87,8 +87,10 @@ python3 forge-arena/scripts/arena-add-deck.py path/to/my-deck.dck
 Six steps, all visible, no API keys needed: parse the `.dck` → resolve
 oracle text (Scryfall) → fetch real combos (Commander Spellbook) →
 implementability lint against Forge's card database (warns on cards the
-engine may not fully script; `--strict` refuses them) → strategy primer →
-write. The pilot ends up knowing YOUR deck's actual game plan — its real
+engine may not fully script; `--strict` refuses them) → a load probe
+through Forge's REAL deck loader (catches format and double-faced-name
+defects before they can ruin a launch; the registered `.dck` is rewritten
+with Forge's own card names) → strategy primer → write. The pilot ends up knowing YOUR deck's actual game plan — its real
 loops, what to tutor for, how to close — not a generic archetype read.
 Outputs, per deck:
 

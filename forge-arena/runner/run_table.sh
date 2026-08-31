@@ -104,6 +104,30 @@ preflight_decks() {
     [ -f "$AROOT/decks/$d/dossier/deck-cards.json" ] || miss="$miss\n  [$d]  MISSING deck text  (decks/$d/dossier/deck-cards.json)"
     [ -f "$AROOT/decks/$d/dossier/combos.json" ]     || miss="$miss\n  [$d]  MISSING combos     (decks/$d/dossier/combos.json)"
     [ -f "$AROOT/docs/primers/$d-deckcheck.md" ]     || miss="$miss\n  [$d]  MISSING strategy   (docs/primers/$d-deckcheck.md)"
+    # Static .dck sanity (2026-09-01): two decks reached a live launch
+    # unloadable; catch the cheap-to-see defects (sections, 100 cards) at
+    # every launch. The authoritative loader probe runs at ingest time.
+    err=$(python3 - "$AROOT/decks/$d.dck" <<'PYCHK'
+import sys
+try:
+    lines = [l.strip() for l in open(sys.argv[1], encoding="utf-8") if l.strip()]
+except OSError:
+    print("dck file missing"); sys.exit(0)
+if "[Commander]" not in lines or "[metadata]" not in lines:
+    print("not a sectioned Commander .dck (raw export?)"); sys.exit(0)
+ci = lines.index("[Commander]")
+if ci + 1 >= len(lines) or lines[ci + 1].startswith("["):
+    print("empty [Commander] section"); sys.exit(0)
+n = 0
+for l in lines:
+    parts = l.split(None, 1)
+    if parts and parts[0].isdigit():
+        n += int(parts[0])
+if n != 100:
+    print(f"{n} cards, expected 100"); sys.exit(0)
+PYCHK
+)
+    [ -z "$err" ] || miss="$miss\n  [$d]  BAD .dck            ($err)"
   done
   if [ -n "$miss" ]; then
     printf '%b\n' "[run_table] PREFLIGHT FAILED — required files missing:$miss" >&2

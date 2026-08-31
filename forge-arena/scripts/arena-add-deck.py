@@ -199,6 +199,7 @@ def build_deck_cards(parsed, scry, slug):
                 continue
             cards.append({
                 "name": c["name"], "qty": qty, "zone": zone,
+                "layout": c.get("layout", ""),
                 "mana_cost": c.get("mana_cost")
                 or (c.get("card_faces", [{}])[0].get("mana_cost", "")),
                 "type_line": c.get("type_line", ""),
@@ -207,6 +208,36 @@ def build_deck_cards(parsed, scry, slug):
             })
     return {"schema": "arena.deck-cards/1", "deck_id": slug,
             "cards": cards, "unresolved": unresolved}
+
+
+def forge_card_name(card):
+    """Forge's loader name for a resolved Scryfall card (2026-09-01, the
+    Sheoldred bug): split cards (Scryfall layout 'split', which includes
+    aftermath) keep the full "A // B" name; every other multi-face layout
+    (transform, modal_dfc, adventure, flip, meld) is named by its FRONT
+    face in Forge — the loader silently fails on their "A // B" forms."""
+    name = card["name"]
+    if " // " in name and card.get("layout") != "split":
+        return name.split(" // ")[0].strip()
+    return name
+
+
+def write_registered_dck(path, deck_name, deck_cards, parsed):
+    """Regenerate the registered .dck with Forge-loader names (instead of
+    byte-copying the input): proper sections, layout-aware DFC naming,
+    quantities preserved. Unresolved names pass through as written."""
+    resolved = {}
+    for c in deck_cards["cards"]:
+        resolved.setdefault(_normname(c["name"]), c)
+        resolved.setdefault(_normname(c["name"].split(" // ")[0]), c)
+    def line(name, qty):
+        c = resolved.get(_normname(name))
+        return f"{qty} {forge_card_name(c) if c else name}"
+    lines = ["[metadata]", f"Name={deck_name}", "[Commander]"]
+    lines += [line(n, q) for n, q in parsed["commanders"]]
+    lines.append("[Main]")
+    lines += [line(n, q) for n, q in parsed["main"]]
+    open(path, "w").write("\n".join(lines) + "\n")
 
 
 # ---- step 3: CommanderSpellbook combos --------------------------------------
@@ -576,13 +607,43 @@ def main():
     else:
         log(f"[4/6] lint: all {lint_res['checked']} cards implemented in Forge")
 
-    # write dossier + combos + copy the .dck
+    # write dossier + combos + REGENERATE the registered .dck with Forge-loader
+    # names (2026-09-01: byte-copying preserved import-source naming, and a
+    # transform commander's "A // B" form made the deck unloadable at launch)
     json.dump(deck_cards, open(os.path.join(dossier, "deck-cards.json"), "w"), indent=1)
     json.dump(combos, open(os.path.join(dossier, "combos.json"), "w"), indent=1)
     dst_dck = os.path.join(DECKS, slug + ".dck")
-    if os.path.abspath(args.dck) != os.path.abspath(dst_dck):
-        open(dst_dck, "w").write(open(args.dck, encoding="utf-8",
-                                      errors="replace").read())
+    write_registered_dck(dst_dck, parsed["name"], deck_cards, parsed)
+
+    # step 4.5: load the deck through Forge's REAL loader (DeckLoadProbe) —
+    # the authoritative gate the two live-launch failures earned. Skipped
+    # with a warning when the compiled classes are not present.
+    # step 4.5 marker printed below with the verdict
+    probe_cp = None
+    classes = os.path.join(ROOT, "target", "classes")
+    cp_txt = os.path.join(ROOT, "target", "classpath.txt")
+    if os.path.isdir(classes) and os.path.exists(cp_txt):
+        probe_cp = classes + os.pathsep + open(cp_txt).read().strip()
+    if probe_cp:
+        import subprocess
+        pr = subprocess.run(
+            ["java", "-cp", probe_cp, "forge.arena.interactive.DeckLoadProbe",
+             dst_dck, os.path.join(os.path.dirname(ROOT), "forge-gui")],
+            capture_output=True, text=True, timeout=300)
+        # The JVM's card-DB bootstrap spams stderr; surface only the PROBE
+        # verdict lines (plus stderr context on failure).
+        verdict = [ln for ln in (pr.stdout + pr.stderr).splitlines()
+                   if ln.startswith("PROBE")]
+        for ln in verdict:
+            log("[4.5/6] " + ln)
+        if pr.returncode != 0:
+            for ln in pr.stderr.strip().splitlines()[-4:]:
+                log("      " + ln)
+            raise SystemExit("ERROR: Forge load probe FAILED — the deck would "
+                             "not launch. Fix the names above and re-run.")
+    else:
+        warn("      load probe skipped (no compiled classes — run the arena "
+             "build for the authoritative loader check)")
 
     primer_path = args.primer_out or os.path.join(PRIMERS, f"{slug}-deckcheck.md")
     # Passing --deckcheck implies mode A even when --primer wasn't given.

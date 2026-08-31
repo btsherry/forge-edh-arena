@@ -1100,6 +1100,25 @@ Hard-won from two live sessions; read before optimizing anything.
     now also deny during stock-fallback casts and unless-cost payments
     (stock pays stock — fail-safe preserved, agency narrower; revisit if
     live games show it mattering).
+55. **Deck loadability becomes a gated pipeline concern (2026-09-01).** Two
+    consecutive new decks failed at their FIRST live launch on `.dck`
+    defects invisible to the file-presence preflight: Y'shtola's raw
+    Moxfield export (no sections) and Sheoldred's transform commander
+    written as "A // B" (Forge names transform/MDFC/adventure cards by the
+    FRONT face; only split-layout cards keep the full name — the loader
+    silently resolves nothing, or worse, silently DROPS unresolvable main
+    cards). Three-tier fix: (1) `arena-add-deck` now REGENERATES the
+    registered .dck with layout-aware Forge names (Scryfall layout data)
+    and runs `DeckLoadProbe` — a real-DeckSerializer load asserting
+    commanders present and exactly 100 cards resolved — as step 4.5;
+    (2) launch preflight gains a cheap static check (sections, non-empty
+    [Commander], 100 copies) on every AI deck at every launch; (3)
+    `DeckLoadProbeTest` loads every shipped .dck in the suite — the net
+    that would have caught both bugs. `deckcheck-import` also writes
+    commander lines front-face. ArchUnit note: the probe lives in
+    `forge.arena.interactive` (it predicts GuiPilotMatch loadability) —
+    `prep` may not touch `forge.deck` per the EngineFacade boundary, and
+    the boundary test caught exactly that on the first draft.
 53. **Harness boil (2026-08-28, Ben-approved A–D).** Full-gate census: P1
     owned 73% of suite time (the full game IS those tests' oracle — hands
     off); P2's cost was game-boots + poll pacing, not assertions. Landed:
