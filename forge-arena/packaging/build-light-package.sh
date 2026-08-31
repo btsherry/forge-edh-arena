@@ -32,7 +32,8 @@ done
 # The nine decks that ship.
 SLUGS="giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds
 urza-lord-high-artificer swords-plunder swords-plunder-gc
-y-shtola-night-s-blessed sythis-harvests-hand liberator-urzas-battlethopter"
+y-shtola-night-s-blessed sythis-harvests-hand liberator-urzas-battlethopter
+sheoldreds-sacrifice"
 
 FATJAR=$(ls "$REPO"/forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)
 CP_TXT="$REPO/forge-arena/target/classpath.txt"

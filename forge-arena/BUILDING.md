@@ -101,7 +101,7 @@ COPYFILE_DISABLE=1 tar -czf forge-light-llm-YYYYMMDD.tar.gz -C <repo>/.. forge-l
 
 `build-light-package.sh` is self-documenting (its header is the package
 manifest) and refuses to clobber an existing dest without `--force`. It ships
-compiled classes + the fat jar + the nine bundled decks; no source, no Maven,
+compiled classes + the fat jar + the ten bundled decks; no source, no Maven,
 so the recipient never builds anything — they run it directly.
 
 ## Runtime notes

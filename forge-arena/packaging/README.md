@@ -27,7 +27,7 @@ Gathering is © Wizards of the Coast.
   subscription. *Optional:* without it every seat times out per decision and
   falls back to Forge's built-in AI; the game still plays, just not LLM-driven.
 - Network: only for ingesting **new** decks (Scryfall + Commander Spellbook)
-  and primer generation. The nine bundled decks play offline.
+  and primer generation. The ten bundled decks play offline.
 
 No install or setup step: unpack, run.
 
@@ -75,7 +75,7 @@ ARENA_SEAT_DECKS="swords-plunder purphoros-god-of-the-forge giada-font-of-hope u
   forge-arena/scripts/arena-play.sh --all-ai
 ```
 
-Nine decks ship in `forge-light-llm/forge-arena/decks/`; every deck there —
+Ten decks ship in `forge-light-llm/forge-arena/decks/`; every deck there —
 bundled or ingested — can sit at any seat.
 
 ## Ingesting a new deck
