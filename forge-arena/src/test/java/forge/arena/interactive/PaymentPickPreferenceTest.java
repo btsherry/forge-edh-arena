@@ -37,6 +37,10 @@ public class PaymentPickPreferenceTest {
     @BeforeClass
     public static void boot() throws Exception {
         k = new MailboxTestKit(false);
+        // Wave-3 (F2): payment hooks are default-deny outside an executing
+        // cast; these direct-visit vetting tests opt in explicitly. The
+        // planning-scan test flips it off to prove the deny path.
+        k.controller().paymentContextForTest(true);
         k.startBrain(body -> {
             if (body.contains("EXILE PAYMENT")) {
                 String id = MailboxTestKit.idOf(body, "Brainstorm");
@@ -145,6 +149,28 @@ public class PaymentPickPreferenceTest {
         long after = k.seen.stream().filter(s2 -> s2.contains("RETURN PAYMENT")).count();
         Assert.assertEquals(pd.cards.get(0), only);
         Assert.assertEquals(after, before, "a forced payment must not burn a model call");
+    }
+
+    /** Wave-3 (F2): a planning scan (DrawAi.willPayCosts class) must get a
+     *  SILENT stock decision — no window, no model call, ever. */
+    @Test(timeOut = 240_000)
+    public void planningScanIsSilent() throws Exception {
+        k.controller().paymentContextForTest(false);
+        try {
+            SpellAbility host = sa("Shock", ZoneType.Hand);
+            MailboxTestKit.put("Swamp", k.seat, ZoneType.Hand);
+            MailboxTestKit.put("Ghalta, Primal Hunger", k.seat, ZoneType.Hand);
+            Cost cost = new Cost("Discard<1/Card>", true);
+            CostDiscard part = (CostDiscard) cost.getCostParts().get(0);
+            long before = k.seen.stream().filter(s2 -> s2.contains("DISCARD PAYMENT")).count();
+            PaymentDecision pd = new AiCostDecision(k.seat, host, false).visit(part);
+            long after = k.seen.stream().filter(s2 -> s2.contains("DISCARD PAYMENT")).count();
+            Assert.assertNotNull(pd, "stock still answers the scan");
+            Assert.assertEquals(after, before,
+                    "a planning scan must NEVER open a payment window");
+        } finally {
+            k.controller().paymentContextForTest(true);
+        }
     }
 
     /** No-hook players keep the stock path byte-identical (contract). */

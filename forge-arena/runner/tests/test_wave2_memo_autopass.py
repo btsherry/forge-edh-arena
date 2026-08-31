@@ -17,13 +17,13 @@ FIX = Path(__file__).parent / "fixtures"
 
 
 def react(seq, turn=9, phase="MAIN1", stack=(), combat=None, targets=None,
-          options=None, battlefield=None):
+          options=None, battlefield=None, owners=None):
     r = json.loads((FIX / "react.json").read_text())
     r["seq"] = seq
     r["turn"] = turn
     r["phase"] = phase
     r["state"]["stack"] = list(stack)
-    r["state"]["stackOwners"] = [1] * len(stack)
+    r["state"]["stackOwners"] = list(owners) if owners is not None else [1] * len(stack)
     r["state"]["stackKinds"] = ["spell"] * len(stack)
     if combat is not None:
         r["state"]["combat"] = combat
@@ -99,6 +99,31 @@ class AutopassThreatClause(unittest.TestCase):
                     options=self.MOTHER, battlefield=[])
         self.assertIsNone(r._fastpath(req))
 
+    def test_divided_damage_label_still_threatens(self):
+        # Wave-3 F7: divided spells append " [n]" to the target label — the
+        # clause must strip it, or Arc Trail at the protected creature is
+        # auto-passed with Mother untapped.
+        r = runner()
+        req = react(1, stack=["Arc Trail"],
+                    targets=[["Serra Ascendant (55) [2]", "seat 0 [1]"]],
+                    options=self.MOTHER,
+                    battlefield=[{"id": 55, "name": "Serra Ascendant"}])
+        self.assertIsNone(r._fastpath(req),
+                          "divided-damage suffixes must not hide a threat")
+
+    def test_own_spell_at_own_creature_is_not_a_threat(self):
+        # Wave-3 F9: the seat's own pump on its own attacker must not burn
+        # the allowlist (stackOwners already says whose item it is).
+        r = runner()
+        req = react(1, stack=["Giant Growth"],
+                    targets=[["Serra Ascendant (55)"]],
+                    owners=[0],  # the seat's own item
+                    options=self.MOTHER,
+                    battlefield=[{"id": 55, "name": "Serra Ascendant"}])
+        got = r._fastpath(req)
+        self.assertIsNotNone(got, "own spell aiming own stuff is a plan, not a threat")
+        self.assertEqual(got[1], "autopass")
+
     def test_unthreatening_window_still_autopasses(self):
         r = runner()
         req = react(1, stack=["Divination"], targets=[[]],
@@ -107,6 +132,23 @@ class AutopassThreatClause(unittest.TestCase):
         got = r._fastpath(req)
         self.assertIsNotNone(got, "no threat -> the allowlist still saves the call")
         self.assertEqual(got[1], "autopass")
+
+
+class ChooseNumberPuntShape(unittest.TestCase):
+    # Wave-3 F3: a timeout on a BID (Wheel of Misfortune, 0-99) must punt
+    # LOW; only X-like costs (state.puntHigh from the Java side, max
+    # affordability-capped) punt high.
+    def test_bid_punts_low(self):
+        from seatd.rules import safe_default
+        req = {"decisionType": "CHOOSE_NUMBER",
+               "state": {"min": 0, "max": 99}}
+        self.assertEqual(safe_default(req), {"chosen": 0})
+
+    def test_x_cost_punts_high(self):
+        from seatd.rules import safe_default
+        req = {"decisionType": "CHOOSE_NUMBER",
+               "state": {"min": 0, "max": 9, "puntHigh": True}}
+        self.assertEqual(safe_default(req), {"chosen": 9})
 
 
 if __name__ == "__main__":

@@ -12,9 +12,6 @@ import forge.game.GameEntity;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardCollectionView;
-import forge.game.cost.Cost;
-import forge.game.spellability.OptionalCost;
-import forge.game.spellability.OptionalCostValue;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.TargetChoices;
 import forge.game.zone.ZoneType;
@@ -89,9 +86,6 @@ public class SeatWaveSurfacesTest {
         if (body.contains("Choose the TARGET for Shock")) {
             String id = MailboxTestKit.idOf(body, "Gray Ogre");
             return id != null ? "{\"chosenId\": " + id + "}" : null;
-        }
-        if (body.contains("OPTIONAL COSTS")) {
-            return "{\"chosen\": [0]}";
         }
         if (body.contains("PROTECTION")) {
             return "{\"chosen\": [2]}";
@@ -169,9 +163,13 @@ public class SeatWaveSurfacesTest {
         }
         CardCollectionView ordered =
                 k.controller().orderMoveToZoneList(cards, ZoneType.Library, null);
+        // Wave-3 (F4): the controller now returns ENGINE order — reversed for
+        // top-of-library, because consumers stack one card at a time and the
+        // LAST element ends on top (stock parity). The seat's stated order is
+        // proven end-to-end in CastPathReachabilityTest.topOrderLandsAsStated.
         Assert.assertEquals(names(ordered),
-                List.of("Wall of Wood", "Pearled Unicorn", "Scathe Zombies"),
-                "answer order must be preserved verbatim (first = top)");
+                List.of("Scathe Zombies", "Pearled Unicorn", "Wall of Wood"),
+                "top-of-library answers must be reversed to engine order");
     }
 
     @Test(timeOut = 240_000)
@@ -211,18 +209,6 @@ public class SeatWaveSurfacesTest {
                 + "redirect silently no-ops");
         Assert.assertEquals(sa.getTargetCard(), ogre,
                 "the changing SA must now aim at the seat's pick");
-    }
-
-    @Test(timeOut = 240_000)
-    public void optionalCostsAreSeatChosen() throws Exception {
-        Card host = MailboxTestKit.put("Shock", k.seat, ZoneType.Hand);
-        SpellAbility sa = host.getFirstSpellAbility();
-        List<OptionalCostValue> offers = new ArrayList<>();
-        offers.add(new OptionalCostValue(OptionalCost.Buyback, new Cost("3", false)));
-        List<OptionalCostValue> chosen = k.controller().chooseOptionalCosts(sa, offers);
-        Assert.assertEquals(chosen.size(), 1);
-        Assert.assertEquals(chosen.get(0).getType(), OptionalCost.Buyback,
-                "the Reiterate loop's Buyback is the seat's call, not a heuristic's");
     }
 
     @Test(timeOut = 240_000)

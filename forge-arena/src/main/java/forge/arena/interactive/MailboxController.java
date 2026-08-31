@@ -105,6 +105,19 @@ public final class MailboxController extends PlayerControllerAi
     private final Map<SpellAbility, Card> pendingTapPreference =
             new java.util.IdentityHashMap<>();
 
+    /** Wave-3 (adversarial review F2): payment hooks are DEFAULT-DENY — they
+     *  open windows only while this seat's own cast/activation is actually
+     *  EXECUTING. The engine constructs AiCostDecision during planning scans
+     *  too (DrawAi.willPayCosts, and any caller we have not audited); without
+     *  this flag those scans opened phantom payment windows. */
+    private boolean inPaymentContext = false;
+
+    /** Wave-3 (F1): true while OUR window enumeration runs — the
+     *  chooseOptionalCosts consult inside getOriginalAndAltCostAbilities
+     *  returns empty then (base spell always enumerates; affordable
+     *  optional-cost variants become separate cast-window options). */
+    private boolean enumeratingOwnWindow = false;
+
     /**
      * Triggers the seat declined AT AIM TIME (game-12 finding 1): a
      * required-target optional trigger can't legally stack targetless, so we
@@ -245,12 +258,15 @@ public final class MailboxController extends PlayerControllerAi
         // does when it casts.
         List<SpellAbility> enumerated;
         try {
+            enumeratingOwnWindow = true; // F1: suppress optional-cost windows here
             enumerated = ComputerUtilAbility.getOriginalAndAltCostAbilities(
                     ComputerUtilAbility.getSpellAbilities(
                             ComputerUtilAbility.getAvailableCards(game, me), me), me);
         } catch (RuntimeException e) {
             enumerated = ComputerUtilAbility.getSpellAbilities(
                     ComputerUtilAbility.getAvailableCards(game, me), me);
+        } finally {
+            enumeratingOwnWindow = false;
         }
         for (SpellAbility sa : enumerated) {
             Card host = sa != null ? sa.getHostCard() : null;
@@ -457,6 +473,41 @@ public final class MailboxController extends PlayerControllerAi
             req.option(id, lab, cost, typeHint(host));
             byId.put(id, sa);
             id++;
+            // Wave-3 (F1/F5): offer affordable optional-cost VARIANTS as their
+            // own options ("Whispers of the Muse [+ Buyback: {5}]") — the seat
+            // picks the variant directly; no extra window ever opens, and
+            // affordability is vetted here so an unpayable kicker is simply
+            // not offered.
+            if (sa.isSpell()) {
+                try {
+                    List<forge.game.spellability.OptionalCostValue> ocvs =
+                            forge.game.GameActionUtil.getOptionalCostValues(sa);
+                    int variants = 0;
+                    for (forge.game.spellability.OptionalCostValue v : ocvs) {
+                        if (variants >= 3) {
+                            break;
+                        }
+                        SpellAbility variant = forge.game.GameActionUtil.addOptionalCosts(
+                                sa, java.util.Collections.singletonList(v));
+                        variant.setActivatingPlayer(me);
+                        if (!variant.canPlay()
+                                || !ComputerUtilCost.canPayCost(variant, me, false)) {
+                            continue;
+                        }
+                        String vcost = variant.getPayCosts() != null
+                                ? variant.getPayCosts().toSimpleString() : null;
+                        req.option(id, label(variant, host) + " [+ " + v.getType().name()
+                                + ": " + (v.getCost() != null
+                                    ? v.getCost().toSimpleString() : "?") + "]",
+                                vcost, typeHint(host));
+                        byId.put(id, variant);
+                        id++;
+                        variants++;
+                    }
+                } catch (RuntimeException ignore) {
+                    // variant expansion must never break option building
+                }
+            }
         }
         Map<Integer, Card> symPieceById = new LinkedHashMap<>();
         for (Object[] offer : symOffers) {
@@ -546,6 +597,38 @@ public final class MailboxController extends PlayerControllerAi
             }
             sa.setXManaCostPaid(x);
         }
+        // (1b) NON-mana announce vars (Multikicker / Pledge class — wave-3 F6):
+        // the AI cast path never calls announceRequirements (that is a
+        // human-only choke point), so announced vars silently stayed unset and
+        // a mailbox-cast Everflowing Chalice entered with 0 counters. Mirror
+        // PlaySpellAbility here: ask the seat, then set the SVar on BOTH the
+        // ability and its host card. Null/timeout leaves stock behavior.
+        try {
+            String announce = sa.getParam("Announce");
+            if (announce != null) {
+                for (String varName : announce.split(",")) {
+                    String v = varName.trim();
+                    if ("X".equalsIgnoreCase(v) || "Y".equalsIgnoreCase(v)) {
+                        continue; // mana X handled above
+                    }
+                    org.apache.commons.lang3.Range<Integer> r2 =
+                            AbilityUtils.getAnnouncementBounds(sa, v);
+                    Integer n = numberViaSeat("ANNOUNCE " + v + " for "
+                            + (sa.getHostCard() != null
+                                ? sa.getHostCard().getName() : "?")
+                            + " (" + r2.getMinimum() + "-" + r2.getMaximum() + ")",
+                            r2.getMinimum(), r2.getMaximum(), false);
+                    if (n != null) {
+                        sa.setSVar(v, n.toString());
+                        if (sa.getHostCard() != null) {
+                            sa.getHostCard().setSVar(v, n.toString());
+                        }
+                    }
+                }
+            }
+        } catch (RuntimeException ignore) {
+            // announce must never break the cast; stock default applies
+        }
         // (2) MODAL (Charm) spells choose their mode INSIDE the cast
         // (CharmEffect.makeChoices runs within handlePlayingSpellAbility), which
         // is AFTER any pre-targeting — so the chosen mode's target was never set
@@ -556,6 +639,8 @@ public final class MailboxController extends PlayerControllerAi
         // mode's target is set at the right moment. (Stock's deferred runnable
         // only handled TargetingPlayer, which is why modal targets were lost.)
         if (sa.getApi() == ApiType.Charm) {
+            inPaymentContext = true;
+            try {
             ComputerUtil.handlePlayingSpellAbility(getPlayer(), sa, () -> {
                 // Target the CHAINED MODES, never the Charm shell. Calling
                 // chooseTargetsFor(sa) on the shell fell through to stock
@@ -578,6 +663,9 @@ public final class MailboxController extends PlayerControllerAi
                     }
                 }
             });
+            } finally {
+                inPaymentContext = false;
+            }
             return true;
         }
         // (3) NON-modal targeted spell: pre-set targets BEFORE the cast so we
@@ -597,7 +685,13 @@ public final class MailboxController extends PlayerControllerAi
                 return true;
             }
         }
-        boolean played = super.playChosenSpellAbility(sa);
+        inPaymentContext = true;
+        boolean played;
+        try {
+            played = super.playChosenSpellAbility(sa);
+        } finally {
+            inPaymentContext = false;
+        }
         // FIZZLE-2 diagnostic (game 7, 2026-08-17): a required-target spell we
         // pre-targeted reached resolution with EMPTY TargetChoices ("[arena]
         // FIZZLE ... (none set)"). If the cast path ever swaps the SA object
@@ -677,6 +771,7 @@ public final class MailboxController extends PlayerControllerAi
         state.put("min", min);
         state.put("max", hi);
         state.put("cancelable", true);
+        state.put("puntHigh", true); // X: max is affordability-capped (F3)
         Card host = ability.getHostCard();
         String what = host != null ? host.getName() : String.valueOf(ability);
         String prompt = "Announce 'X' for " + what + " — pick a number in ["
@@ -730,7 +825,7 @@ public final class MailboxController extends PlayerControllerAi
                 Integer n = numberViaSeat("ANNOUNCE " + announce
                         + (ability != null && ability.getHostCard() != null
                             ? " for " + ability.getHostCard().getName() : "")
-                        + " (" + min + "-" + max + ")", min, max);
+                        + " (" + min + "-" + max + ")", min, max, false);
                 if (n != null) {
                     return n;
                 }
@@ -1235,6 +1330,9 @@ public final class MailboxController extends PlayerControllerAi
      */
     @Override
     public CardCollection preferredSacCards(SpellAbility ability, String type, int amount) {
+        if (!inPaymentContext) {
+            return null; // planning scan (F2): stock decides, no window
+        }
         try {
             Player me = getPlayer();
             Card host = ability != null ? ability.getHostCard() : null;
@@ -1642,7 +1740,7 @@ public final class MailboxController extends PlayerControllerAi
             }
             Integer n = numberViaSeat("COST REDUCTION: choose a number " + min + "-" + max
                     + (sa != null && sa.getHostCard() != null
-                        ? " for " + sa.getHostCard().getName() : ""), min, max);
+                        ? " for " + sa.getHostCard().getName() : ""), min, max, true);
             return n != null ? n : super.chooseNumberForCostReduction(sa, min, max);
         } catch (RuntimeException e) {
             return super.chooseNumberForCostReduction(sa, min, max);
@@ -1651,13 +1749,17 @@ public final class MailboxController extends PlayerControllerAi
 
     // ---- wave-2 (2026-08-28 dual audit, note 52): the missed-surface sweep ---
 
-    /** One bounded CHOOSE_NUMBER exchange; null → caller falls back. */
-    private Integer numberViaSeat(String prompt, int min, int max) {
+    /** One bounded CHOOSE_NUMBER exchange; null → caller falls back.
+     *  {@code puntHigh}: whether a runner TIMEOUT should answer max (true
+     *  only for X-like costs where max is affordability-capped — wave-3 F3:
+     *  a punt of 99 on Wheel of Misfortune's bid was game-losing). */
+    private Integer numberViaSeat(String prompt, int min, int max, boolean puntHigh) {
         Game game = getGame();
         int turn = game.getPhaseHandler().getTurn();
         Map<String, Object> state = buildState(turn);
         state.put("min", min);
         state.put("max", max);
+        state.put("puntHigh", puntHigh);
         MailboxProtocol.Request req = new MailboxProtocol.Request(
                 seatIndex, turn, phaseName(game), "CHOOSE_NUMBER",
                 prompt + " (answer {\"chosen\": <n>})")
@@ -1727,6 +1829,9 @@ public final class MailboxController extends PlayerControllerAi
     @Override
     public CardCollection preferredPaymentCards(SpellAbility ability, String kind,
             List<Card> valid, int amount) {
+        if (!inPaymentContext) {
+            return null; // planning scan (F2): stock decides, no window
+        }
         try {
             if (valid == null || amount <= 0 || valid.size() < amount) {
                 return null;
@@ -1868,13 +1973,25 @@ public final class MailboxController extends PlayerControllerAi
             if (destinationZone != ZoneType.Library || cards == null || cards.size() < 2) {
                 return super.orderMoveToZoneList(cards, destinationZone, source);
             }
+            // Adversarial review F4: consumers place these one at a time via
+            // moveToLibrary(next, 0), so for TOP-of-library moves the LAST
+            // element ends on top — both stock controllers reverse before
+            // returning. Mirror them exactly (bottom moves are not reversed
+            // and the prompt flips accordingly).
+            boolean top = orderedMoveToTopOfLibrary(destinationZone, source);
             List<Card> opts = new ArrayList<>(cards);
             List<Card> ordered = cardChoiceViaSeat(
                     "ORDER for your library — answer must list ALL " + opts.size()
-                            + " ids; FIRST = closest to TOP",
+                            + " ids; FIRST = closest to " + (top ? "TOP" : "BOTTOM"),
                     opts, opts.size(), opts.size());
-            return ordered != null ? new CardCollection(ordered)
-                    : super.orderMoveToZoneList(cards, destinationZone, source);
+            if (ordered == null) {
+                return super.orderMoveToZoneList(cards, destinationZone, source);
+            }
+            CardCollection res = new CardCollection(ordered);
+            if (top) {
+                java.util.Collections.reverse(res);
+            }
+            return res;
         } catch (RuntimeException e) {
             return super.orderMoveToZoneList(cards, destinationZone, source);
         }
@@ -1922,7 +2039,7 @@ public final class MailboxController extends PlayerControllerAi
                     + (sa != null && sa.getHostCard() != null
                         ? " for " + sa.getHostCard().getName() : "")
                     + (title != null && !title.isEmpty() ? " — " + title : "")
-                    + " (" + min + "-" + max + ")", min, max);
+                    + " (" + min + "-" + max + ")", min, max, false);
             return n != null ? n : super.chooseNumber(sa, title, min, max);
         } catch (RuntimeException e) {
             return super.chooseNumber(sa, title, min, max);
@@ -2002,39 +2119,24 @@ public final class MailboxController extends PlayerControllerAi
     }
 
     /**
-     * Optional add-on costs at cast (Buyback / Kicker / Cleave — the audit's
-     * Reiterate loop): stock's heuristics declined the Buyback an infinite
-     * line depended on. Always mailboxed (even one option is a real yes/no).
+     * Optional add-on costs (Buyback / Kicker / Cleave). Wave-3 rework
+     * (adversarial review F1/F5): this surface is consulted by
+     * {@code ComputerUtilAbility.getOriginalAndAltCostAbilities} at option
+     * ENUMERATION time — on every priority window, for every such spell in
+     * hand — so mailboxing it here spammed windows and a "yes" hid the base
+     * spell. During OUR enumeration it now returns empty (base always
+     * enumerates; affordable variants are offered as separate cast-window
+     * options — see the variant expansion in the window builder). Everywhere
+     * else (stock-fallback windows, simulations) stock's vetted heuristics
+     * run unchanged.
      */
     @Override
     public List<forge.game.spellability.OptionalCostValue> chooseOptionalCosts(
             SpellAbility choosen, List<forge.game.spellability.OptionalCostValue> optionalCostValues) {
-        try {
-            if (optionalCostValues == null || optionalCostValues.isEmpty()) {
-                return super.chooseOptionalCosts(choosen, optionalCostValues);
-            }
-            List<String> labels = new ArrayList<>();
-            for (forge.game.spellability.OptionalCostValue v : optionalCostValues) {
-                labels.add(v.getType().name() + ": "
-                        + (v.getCost() != null ? v.getCost().toSimpleString() : "?"));
-            }
-            List<Integer> picks = indexChoiceViaSeat(
-                    "OPTIONAL COSTS for "
-                            + (choosen != null && choosen.getHostCard() != null
-                                ? choosen.getHostCard().getName() : "the spell")
-                            + " — choose which to pay (none is legal)",
-                    labels, 0, labels.size());
-            if (picks == null) {
-                return super.chooseOptionalCosts(choosen, optionalCostValues);
-            }
-            List<forge.game.spellability.OptionalCostValue> chosen = new ArrayList<>();
-            for (int idx : picks) {
-                chosen.add(optionalCostValues.get(idx));
-            }
-            return chosen;
-        } catch (RuntimeException e) {
-            return super.chooseOptionalCosts(choosen, optionalCostValues);
+        if (enumeratingOwnWindow) {
+            return java.util.Collections.emptyList();
         }
+        return super.chooseOptionalCosts(choosen, optionalCostValues);
     }
 
     /** Protection color/type on resolution (Mother of Runes' second half). */
@@ -2106,6 +2208,49 @@ public final class MailboxController extends PlayerControllerAi
         } catch (RuntimeException e) {
             return super.chooseCardsPile(sa, pile1, pile2, faceUp);
         }
+    }
+
+    /**
+     * Multikicker / Replicate / Casualty-class "pay N times" keyword costs
+     * (wave-3, the REAL Everflowing Chalice surface: `addExtraKeywordCost`
+     * calls this at EXECUTION time on the AI cast path — the Announce
+     * machinery never fires there). Stock pays greedy-max; the seat now
+     * chooses 0..affordable-cap. Timeout/invalid → stock's greedy answer.
+     */
+    @Override
+    public int chooseNumberForKeywordCost(SpellAbility sa, forge.game.cost.Cost cost,
+            forge.game.keyword.KeywordInterface keyword, String prompt, int max) {
+        try {
+            int cap = 0;
+            forge.game.cost.Cost costSoFar = sa.getPayCosts().copy();
+            for (int i = 0; i < Math.min(max, 20); i++) {
+                costSoFar.add(cost);
+                SpellAbility fullCostSa = sa.copyWithDefinedCost(costSoFar);
+                if (ComputerUtilCost.canPayCost(fullCostSa, getPlayer(), sa.isTrigger())) {
+                    cap++;
+                } else {
+                    break;
+                }
+            }
+            if (cap <= 0) {
+                return 0; // nothing affordable — same as stock
+            }
+            Integer n = numberViaSeat("KEYWORD COST — "
+                    + (prompt != null && !prompt.isEmpty() ? prompt : "pay how many times?")
+                    + " [" + keyword.getKeyword() + ", each: " + cost.toSimpleString()
+                    + "; affordable max " + cap + "]", 0, cap, false);
+            return n != null ? n
+                    : super.chooseNumberForKeywordCost(sa, cost, keyword, prompt, max);
+        } catch (RuntimeException e) {
+            return super.chooseNumberForKeywordCost(sa, cost, keyword, prompt, max);
+        }
+    }
+
+    /** TEST-ONLY: lets payment-vetting unit tests run their direct
+     *  AiCostDecision visits inside a payment context. Production callers
+     *  are the execution wrappers above. */
+    void paymentContextForTest(boolean v) {
+        inPaymentContext = v;
     }
 
     private static String pileLabel(CardCollectionView pile, boolean visible) {
@@ -2362,11 +2507,12 @@ public final class MailboxController extends PlayerControllerAi
                     && mode != null) {
                 return super.confirmAction(sa, mode, message, options, cardToShow, params);
             }
-            if (mode == null && (message == null
-                    || (!message.toLowerCase().contains("play")
-                        && !message.toLowerCase().contains("target")))) {
-                // untyped confirms other than "do you want to play X" or
-                // "change the target(s) of X" (wave-2, note 52) stay stock
+            boolean changeTargets = sa != null
+                    && sa.getApi() == ApiType.ChangeTargets; // F10: API, not text
+            if (mode == null && !changeTargets && (message == null
+                    || !message.toLowerCase().contains("play"))) {
+                // untyped confirms other than "do you want to play X" or a
+                // ChangeTargets redirect (wave-2/3) stay stock
                 return super.confirmAction(sa, mode, message, options, cardToShow, params);
             }
             Game game = getGame();
@@ -2424,7 +2570,12 @@ public final class MailboxController extends PlayerControllerAi
                     ready = getAi().doTrigger(sa, true);
                 }
                 if (ready) {
-                    ComputerUtil.playStack(sa, me, game);
+                    inPaymentContext = true;
+                    try {
+                        ComputerUtil.playStack(sa, me, game);
+                    } finally {
+                        inPaymentContext = false;
+                    }
                 }
             } else {
                 if (sa.isCopied()) {
@@ -2596,7 +2747,12 @@ public final class MailboxController extends PlayerControllerAi
                     return super.playSaFromPlayEffect(tgtSA);  // mandatory: stock floor
                 }
             }
-            return ComputerUtil.playStack(tgtSA, getPlayer(), getGame());
+            inPaymentContext = true;
+            try {
+                return ComputerUtil.playStack(tgtSA, getPlayer(), getGame());
+            } finally {
+                inPaymentContext = false;
+            }
         } catch (RuntimeException e) {
             return super.playSaFromPlayEffect(tgtSA);
         }

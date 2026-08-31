@@ -87,12 +87,14 @@ falls back to stock, so a dead brain never hangs a game.
 | **Cast-from-effect offers** (Isochron Scepter copies, Discover, "may cast it without paying"-class) | `CONFIRM` (mode PLAY_FROM_EFFECT) + seat pre-aims the chain's targets | 08-19 |
 | **Sacrifice by effect** (edicts, Innocent-Blood symmetrical, Balance; also `choosePermanentsToDestroy`) | `CHOOSE_ENTITIES` | 08-24 |
 | **Sacrifice cost payment** (outlet activations, additional-cost casts — which card pays) | `CHOOSE_ENTITIES` via `SacCostPreference` hook | 08-24 |
-| **Pitch-cost payments** (Force-of-Will exile, discard/return/put-to-library costs) | `CHOOSE_ENTITIES` via `PaymentPickPreference` hook | 08-28 |
+| **Pitch-cost payments** (Force-of-Will exile, discard/return/put-to-library costs) | `CHOOSE_ENTITIES` via `PaymentPickPreference` hook — DEFAULT-DENY outside an executing cast (planning scans get stock, silently) | 08-28/31 |
 | **Cleanup discard to hand size; London mulligan bottoming** | `CHOOSE_CARDS` | 08-28 |
 | **Scry / surveil / library ORDER (first = top) / clash top-or-bottom** | `CHOOSE_CARDS` / `CONFIRM` | 08-28 |
 | **Generic numbers + non-mana announces** (Wheel-of-Misfortune class, Multikicker) | `CHOOSE_NUMBER` / `CHOOSE_MODE` indices | 08-28 |
 | **Retargeting spells** (Deflecting Swat class; single-target changes) | `CHOOSE_ENTITY` via `chooseNewTargetsFor` | 08-28 |
-| **Optional costs (Buyback/Kicker), protection type, votes, pile splits** | `CHOOSE_MODE` indices | 08-28 |
+| **Optional costs (Buyback/Kicker)** | cast-window `[+ cost]` VARIANTS (no window; affordability-vetted at offer) | 08-31 |
+| **Keyword pay-N-times costs (Multikicker-class)** | `CHOOSE_NUMBER` via `chooseNumberForKeywordCost` (execution-time, affordable cap) | 08-31 |
+| **Protection type, votes, pile splits** | `CHOOSE_MODE` indices | 08-28 |
 | **Creature-or-player choices** (mixed Card+Player lists, sequential ids) | `CHOOSE_ENTITY`/`ENTITIES` | 08-28 |
 
 ### Still stock (deliberate, with rationale)

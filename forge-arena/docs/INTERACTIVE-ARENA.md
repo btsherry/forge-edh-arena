@@ -216,7 +216,11 @@ and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists
   (Cultivate-class), discard selection, choose-N-for-effect; must satisfy
   `min`/`max`, no duplicates.
 - `CHOOSE_NUMBER` → `{"chosen": <int>}` within `min`..`max` — X announcements
-  on the cast path, cost-reduction amounts.
+  on the cast path, cost-reduction amounts, generic number choices, and
+  KEYWORD COST prompts (Multikicker-class: how many times to pay; max is
+  the affordable cap). `state.puntHigh` marks X-like requests whose TIMEOUT
+  default is max; unmarked requests (bids, Wheel of Misfortune class) time
+  out to MIN (wave-3: a punt of 99 on a bid was game-losing).
 - `PAY_UNLESS` → `{"chosenId": 0|1}` — 1 = pay (taxes like Rhystic/Sentinel,
   counter-unless, pay-the-difference tutors, sacrifice-unless upkeeps).
 - `CONFIRM` → `{"chosenId": 0|1}` — yes/no confirms; `state.confirmMode ==
@@ -225,6 +229,10 @@ and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists
   `state.confirmMode == "PLAY_FROM_EFFECT"` marks a may-cast offer (Isochron
   Scepter copies, Discover-class), with the offered `spell` text and whether
   it is `free` in state — on yes the seat also aims its targets (note 49).
+- Optional costs (Buyback/Kicker/Entwine) are NOT a window: affordable
+  variants appear as separate `[+ cost]` options in the CAST_SPELL list
+  (wave-3 — mailboxing chooseOptionalCosts spammed windows at
+  option-enumeration time and could hide the base spell).
 
 **Extra answer keys** (all optional, stripped before the wire): `turn_plan`
 (first own-main decision — quoted back later as advisory), `deviation`
@@ -1059,6 +1067,39 @@ Hard-won from two live sessions; read before optimizing anything.
     1 real FIX applied (pile visibility), 4 risk spots confirmed OK, verdict
     SHIP. Tests: shared `MailboxTestKit` harness (direct-call style — the
     fixture six older files each copy-pasted); 17 new Java + 7 new Python.
+54. **Wave-3: adversarial validation of wave-2, all ten findings fixed
+    (2026-08-31).** Ben's mandated second pass — the wave-2 change-set plus
+    my ten local-review findings went to Gemini with FULL context (whole
+    seam + runner + every upstream call-site + repo map + explicit
+    context-request protocol). Verdict: 10/10 VALIDATED, zero context
+    requests, zero new findings, REJECT until fixed. Root-cause classes:
+    (1) planning/execution leakage — the engine reuses decision surfaces to
+    EVALUATE moves (getOriginalAndAltCostAbilities consults
+    chooseOptionalCosts at enumeration; DrawAi.willPayCosts visits cost
+    parts during scans); (2) human/AI path divergence (announceRequirements
+    is human-only; Multikicker actually flows through
+    chooseNumberForKeywordCost at execution time); (3) string-matching
+    fragility. Fixes: optional costs became CAST-WINDOW VARIANTS (override
+    returns empty during own enumeration, stock elsewhere; affordability
+    vetted at offer); payment hooks are DEFAULT-DENY outside an executing
+    cast (inPaymentContext — kills DrawAi and every unaudited planning
+    caller); shape-aware number punts (puntHigh); top-of-library order
+    reversed to engine parity (consumers stack one card at a time, LAST
+    ends on top — Gemini's wave-2 OK-note on this was WRONG);
+    chooseNumberForKeywordCost override (the real Chalice surface) with an
+    affordable cap; threat clause strips divided-damage suffixes and skips
+    own-owned stack items; kit DirectoryStream in try-with-resources;
+    redirect confirm keyed on ApiType.ChangeTargets, not localized text.
+    Proven by CastPathReachabilityTest: four END-TO-END casts through the
+    real window flow asserting RESULTING STATE (buyback returns to hand,
+    the discard payment takes the named card, Top's order physically
+    lands, Chalice enters with the chosen kicks). Debugging lesson: ZONE
+    MOVES CAN CREATE NEW CARD INSTANCES (sa.setHostCard(moveToStack(...)))
+    — a pre-cast test reference goes stale at cast; assert final state by
+    name+zone lookup, never by held reference. Honest scope note: hooks
+    now also deny during stock-fallback casts and unless-cost payments
+    (stock pays stock — fail-safe preserved, agency narrower; revisit if
+    live games show it mattering).
 53. **Harness boil (2026-08-28, Ben-approved A–D).** Full-gate census: P1
     owned 73% of suite time (the full game IS those tests' oracle — hands
     off); P2's cost was game-boots + poll pacing, not assertions. Landed:

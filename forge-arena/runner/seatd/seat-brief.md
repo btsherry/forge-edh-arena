@@ -69,6 +69,9 @@ your entire job is to answer it.
   answer held for a future threat while a present one strangles you is
   paying full price for nothing (observed: a removal spell held 13 turns
   while its holder reasoned around the lock it answered).
+- OPTIONAL COSTS (Buyback/Kicker) appear as separate "[+ ...]" options in
+  your cast window — pick the variant when the line wants it; there is no
+  separate confirm.
 - COST PAYMENTS ARE YOURS TOO: EXILE/DISCARD/RETURN/PUT-TO-LIBRARY PAYMENT
   windows pick what an alternative or additional cost eats (which blue card
   Force of Will pitches, which creature bounces). The same discipline as

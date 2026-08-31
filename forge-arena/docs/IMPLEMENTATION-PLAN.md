@@ -580,6 +580,16 @@ All computed from the JSONL streams by report/ reducers (report.py reference imp
 > **(D)** `runner/tests/AiTabHarness.java` deleted (manual relic).
 > P1 content untouched throughout; SelvalaManaLoopTest et al. stay as-is —
 > per review: "no redundancy: cost is the guarantee."
+>
+> **Reachability rule (2026-08-31, wave-3):** a direct-call test proves an
+> override's LOGIC, never that the engine REACHES it — every new decision
+> surface ships with ONE end-to-end proof through the real engine path
+> asserting RESULTING STATE (see CastPathReachabilityTest; an unreachable
+> announce branch and an inverted library order both hid behind
+> direct-call/return-value tests). Corollaries: engine surfaces are called
+> at PLANNING time too (hooks must be default-deny outside execution), and
+> zone moves can create NEW Card instances (assert by name+zone lookup,
+> never by held reference).
 
 **Unit tests** (JUnit 5; names indicate the assertion): *[T0 correction: repo convention is TestNG — see T0-VERIFICATION.md §2.4]*
 

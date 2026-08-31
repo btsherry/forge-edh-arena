@@ -42,9 +42,10 @@ ANSWER_CONTRACT = {
     "CHOOSE_MODE": ('Answer: {"chosen": [<mode index>, ...]} — indices are 0-BASED '
                     'positions in options (0 is a real mode), count within '
                     'state.min..state.max; repeats only if state.allowRepeat. '
-                    'Also carries generic indexed choices: OPTIONAL COSTS (pay '
-                    'Buyback/Kicker when your line needs it), PROTECTION, VOTE, '
-                    'CHOOSE A PILE, CHOOSE A VALUE.'),
+                    'Also carries generic indexed choices: PROTECTION, VOTE, '
+                    'CHOOSE A PILE, CHOOSE A VALUE. (Optional costs are NOT a '
+                    'window: Buyback/Kicker variants appear as separate '
+                    '"[+ ...]" options in your cast list.)'),
     "CHOOSE_CARD": ('Answer: {"chosenId": <option id>} — 0 (choose none) only if '
                     'offered in options.'),
     "CHOOSE_CARDS": ('Answer: {"chosen": [<option id>, ...]} — unique ids, count '
@@ -283,8 +284,12 @@ def safe_default(req: dict) -> dict:
         return {"chosenId": pool[0] if pool else 0}  # mandatory: first legal
     if dtype == "CHOOSE_NUMBER":
         lo, hi = _bounds(req, 0, 0)
-        return {"chosen": hi}  # punt HIGH: for X costs, min would re-create the
-                               # Ballista-at-0 death; max is affordability-capped
+        st = req.get("state", {}) or {}
+        if st.get("puntHigh"):
+            return {"chosen": hi}  # X costs: max is affordability-capped; min
+                                   # would re-create the Ballista-at-0 death
+        return {"chosen": lo}      # bids/generic numbers (Wheel of Misfortune
+                                   # class): LOW is the safe side of a timeout
     return {"chosenId": 0}                        # CAST_SPELL / REACT / unknown
 
 

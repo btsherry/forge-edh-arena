@@ -547,19 +547,27 @@ class SeatRunner:
         return [str(x) for x in (req.get("state", {}) or {}).get("stack", [])]
 
     def _threatens_own(self, req: dict) -> bool:
-        """True iff any stack item's announced targets (state.stackTargets)
-        point at this seat or its battlefield — the protect-window shape the
-        autopass allowlist must never eat."""
+        """True iff any OPPONENT stack item's announced targets
+        (state.stackTargets) point at this seat or its battlefield — the
+        protect-window shape the autopass allowlist must never eat.
+        Wave-3 (adversarial review F7/F9): divided-damage labels carry a
+        trailing " [n]" that must be stripped before matching, and the
+        seat's OWN items (pump on own attacker) are not threats."""
         st = req.get("state", {}) or {}
-        entries = [str(t) for grp in (st.get("stackTargets") or []) for t in (grp or [])]
-        if not entries:
+        groups = st.get("stackTargets") or []
+        if not groups:
             return False
+        owners = st.get("stackOwners") or []
         me = f"seat {self.seat}"
         own_ids = {f"({c.get('id')})" for c in (st.get("battlefield") or [])
                    if isinstance(c, dict) and c.get("id") is not None}
-        for t in entries:
-            if t == me or any(t.endswith(oid) for oid in own_ids):
-                return True
+        for i, grp in enumerate(groups):
+            if i < len(owners) and owners[i] == self.seat:
+                continue  # own spell aiming own stuff is a plan, not a threat
+            for raw in (grp or []):
+                t = str(raw).split(" [")[0]  # strip divided-amount suffix
+                if t == me or any(t.endswith(oid) for oid in own_ids):
+                    return True
         return False
 
     def _fastpath(self, req: dict) -> tuple[dict, str] | None:

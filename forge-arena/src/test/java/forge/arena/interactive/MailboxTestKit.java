@@ -99,20 +99,25 @@ final class MailboxTestKit implements AutoCloseable {
             while (brainAlive) {
                 try {
                     if (Files.isDirectory(in)) {
-                        for (Path f : Files.newDirectoryStream(in, "req-*.json")) {
-                            String n = f.getFileName().toString();
-                            if (done.contains(n)) continue;
-                            String body = new String(Files.readAllBytes(f));
-                            seen.add(body);
-                            done.add(n);
-                            String resp = responder.apply(body);
-                            if (resp == null) {
-                                resp = "{\"chosenId\": 0}";
+                        // try-with-resources (adversarial review F8): at a 5ms
+                        // poll an unclosed stream leaks an fd per iteration
+                        try (java.nio.file.DirectoryStream<Path> reqs =
+                                Files.newDirectoryStream(in, "req-*.json")) {
+                            for (Path f : reqs) {
+                                String n = f.getFileName().toString();
+                                if (done.contains(n)) continue;
+                                String body = new String(Files.readAllBytes(f));
+                                seen.add(body);
+                                done.add(n);
+                                String resp = responder.apply(body);
+                                if (resp == null) {
+                                    resp = "{\"chosenId\": 0}";
+                                }
+                                Files.createDirectories(out);
+                                Path tmp = out.resolve(n.replace("req-", "resp-") + ".tmp");
+                                Files.write(tmp, resp.getBytes());
+                                Files.move(tmp, out.resolve(n.replace("req-", "resp-")));
                             }
-                            Files.createDirectories(out);
-                            Path tmp = out.resolve(n.replace("req-", "resp-") + ".tmp");
-                            Files.write(tmp, resp.getBytes());
-                            Files.move(tmp, out.resolve(n.replace("req-", "resp-")));
                         }
                     }
                     Thread.sleep(5);
