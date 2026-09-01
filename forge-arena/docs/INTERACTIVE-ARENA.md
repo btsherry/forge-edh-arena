@@ -1119,6 +1119,33 @@ Hard-won from two live sessions; read before optimizing anything.
     `forge.arena.interactive` (it predicts GuiPilotMatch loadability) —
     `prep` may not touch `forge.deck` per the EngineFacade boundary, and
     the boundary test caught exactly that on the first draft.
+56. **Counting is not resolving — the 95-card game (2026-08-31, game 18).**
+    A live four-AI table (Giada/Sheoldred/Selvala/Sythis) showed Sythis
+    opening at library 88 + hand 7 = 95, and gui.out carried four
+    `An unsupported card was requested` lines: Katilda, Strength of the
+    Harvest, Bala Ged Recovery, Branchloft Pathway — modal-DFC / disturb
+    lines still written "A // B" in a deck ingested before note 55's
+    front-face rule. Urza's list had the same defect (Wandering Archaic; it
+    won game 17 playing 98). Why note 55's nets missed it: the loader does
+    NOT drop an unresolvable name — `CardPool.add` inserts CardDb's
+    UNSUPPORTED PLACEHOLDER (`CardRules.isUnsupported()`), so
+    `countAll()` still says 100 and only the match drops the card. Fix:
+    (1) `DeckLoadProbe.unsupportedNames()` scans the resolved pool and the
+    probe + `DeckLoadProbeTest` fail on any placeholder, naming it; (2) the
+    launch preflight's static check now resolves every "A // B" line
+    against the card scripts — `AlternateMode:Split` keeps the full name,
+    anything else must be the front face — no JVM, runs on every AI deck
+    every launch; (3) the five lines fixed, plus Sythis's `[metadata]`
+    Name (it still carried the Moxfield title). Also landed from the same
+    session: `scripts/arena-cardwatch.py`, a card-conservation watcher
+    that polls the transient seat requests (the only feed carrying every
+    zone) and prints per-seat nontoken totals on change — Sythis's 97
+    baseline (95 + commander + "Commander Effect") was the tell; its notes
+    explain the benign GAIN/DROP pairs from mid-resolution transit
+    snapshots. Advisor tab: the pause button now has three states (OFF —
+    not attached / ON / PAUSED) via `AiControlFile.advisorAttached()`; it
+    read "ON — click to pause" in advisor-less games because
+    `advisorEnabled()` is only the pause flag and defaults true.
 53. **Harness boil (2026-08-28, Ben-approved A–D).** Full-gate census: P1
     owned 73% of suite time (the full game IS those tests' oracle — hands
     off); P2's cost was game-boots + poll pacing, not assertions. Landed:

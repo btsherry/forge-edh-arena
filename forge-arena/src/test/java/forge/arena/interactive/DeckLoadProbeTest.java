@@ -14,7 +14,8 @@ import forge.deck.DeckSection;
  * y-shtola raw-export and the Sheoldred transform-name bugs each reached a
  * live launch because nothing loaded the decks before the GUI did. This is
  * the net: commanders resolve, and exactly 100 cards survive resolution
- * (the loader silently DROPS unresolvable names).
+ * and none of them is CardDb's unsupported placeholder (the loader
+ * counts placeholders; the match drops them — game 18, Sythis at 95).
  */
 public class DeckLoadProbeTest {
 
@@ -31,10 +32,15 @@ public class DeckLoadProbeTest {
             int commanders = deck != null ? deck.getCommanders().size() : 0;
             int main = deck != null && deck.get(DeckSection.Main) != null
                     ? deck.get(DeckSection.Main).countAll() : 0;
-            if (deck == null || commanders < 1 || commanders + main != 100) {
+            // Placeholders count toward the 100 but are DROPPED by the match
+            // (game 18: Sythis played 95) — the resolution scan is the real net.
+            String unsupported = deck != null ? DeckLoadProbe.unsupportedNames(deck) : "";
+            if (deck == null || commanders < 1 || commanders + main != 100
+                    || !unsupported.isEmpty()) {
                 bad.append("\n  ").append(f.getName())
                         .append(": commanders=").append(commanders)
-                        .append(" total=").append(commanders + main);
+                        .append(" total=").append(commanders + main)
+                        .append(unsupported.isEmpty() ? "" : " unresolvable=" + unsupported);
             }
         }
         Assert.assertEquals(bad.length(), 0,

@@ -1,5 +1,25 @@
 # forge-light-llm — Patch Notes
 
+## Unreleased — after v3.3.1
+
+- **Two shipped decks were playing short.** Sythis ran 95 cards and Urza 98:
+  five double-faced cards (Bala Ged Recovery, Branchloft Pathway, Katilda,
+  Strength of the Harvest, Wandering Archaic) were written "A // B", which
+  Forge only accepts for split cards — everything else must use the front
+  face. The loader counted them and the match dropped them silently. All
+  five lines are fixed, and three nets now catch the class: the ingestion
+  probe and the shipped-deck test fail on any unresolvable name (they
+  previously counted placeholders), and the launch preflight checks every
+  "A // B" line against the card scripts before a game starts.
+- **Advisor pause button** no longer reads "ON" in games with no advisor
+  (all-AI, or `--no-advisor`); it shows OFF and is disabled.
+- New `scripts/arena-cardwatch.py`: a live card-conservation watcher that
+  prints per-seat card totals across all zones whenever they change — the
+  quickest way to spot a card that vanished.
+- Two decks are now named for their commanders in the GUI — "Sythis,
+  Harvest's Hand" and "Liberator, Urza's Battlethopter" — instead of the
+  Moxfield export titles they still carried.
+
 ## v3.3.1 — 2026-08-31
 
 Fix release: a two-model adversarial review of v3.3's new decision surfaces

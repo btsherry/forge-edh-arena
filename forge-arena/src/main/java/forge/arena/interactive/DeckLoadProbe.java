@@ -24,6 +24,21 @@ public final class DeckLoadProbe {
     private DeckLoadProbe() {
     }
 
+    /** Names in the deck that resolved only to CardDb's unsupported placeholder
+     *  ({@code CardRules.isUnsupported()}); empty string when the deck is clean. */
+    public static String unsupportedNames(Deck deck) {
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<forge.item.PaperCard, Integer> e : deck.getAllCardsInASinglePool()) {
+            if (e.getKey().getRules() != null && e.getKey().getRules().isUnsupported()) {
+                if (sb.length() > 0) {
+                    sb.append(", ");
+                }
+                sb.append('\'').append(e.getKey().getName()).append('\'');
+            }
+        }
+        return sb.toString();
+    }
+
     public static void main(String[] args) {
         if (args.length < 2) {
             System.err.println("usage: DeckLoadProbe <deck.dck> <forge-gui-dir>");
@@ -51,6 +66,19 @@ public final class DeckLoadProbe {
             System.err.println("PROBE FAIL: " + total + " cards resolved, expected 100 "
                     + "— unresolvable names are silently DROPPED by the loader; "
                     + "check spelling / DFC naming against Forge's card scripts");
+            System.exit(1);
+        }
+        // 2026-08-31 (game 18): counting is NOT resolving. CardPool.add() keeps
+        // the count honest by inserting an UNSUPPORTED PLACEHOLDER for any name
+        // the card DB can't find — so a modal-DFC line written "A // B" passed
+        // this 100-card check and then the match silently dropped it (Sythis
+        // played 95 cards; Urza 98). Scan the resolved pool for placeholders.
+        String unsupported = unsupportedNames(deck);
+        if (!unsupported.isEmpty()) {
+            System.err.println("PROBE FAIL: unresolvable card names (the match would DROP "
+                    + "them): " + unsupported + " — double-faced cards (transform / "
+                    + "modal DFC / adventure / disturb) must use Forge's FRONT-FACE name; "
+                    + "only true split cards keep 'A // B'");
             System.exit(1);
         }
         System.out.println("PROBE OK");

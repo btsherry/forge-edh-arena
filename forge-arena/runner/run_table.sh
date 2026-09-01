@@ -105,9 +105,9 @@ preflight_decks() {
     [ -f "$AROOT/decks/$d/dossier/combos.json" ]     || miss="$miss\n  [$d]  MISSING combos     (decks/$d/dossier/combos.json)"
     [ -f "$AROOT/docs/primers/$d-deckcheck.md" ]     || miss="$miss\n  [$d]  MISSING strategy   (docs/primers/$d-deckcheck.md)"
     # Static .dck sanity (2026-09-01): two decks reached a live launch
-    # unloadable; catch the cheap-to-see defects (sections, 100 cards) at
-    # every launch. The authoritative loader probe runs at ingest time.
-    err=$(python3 - "$AROOT/decks/$d.dck" <<'PYCHK'
+    # unloadable; catch the cheap-to-see defects (sections, 100 cards, DFC
+    # naming) at every launch. The authoritative loader probe runs at ingest.
+    err=$(python3 - "$AROOT/decks/$d.dck" "$AROOT/../forge-gui/res/cardsfolder" <<'PYCHK'
 import sys
 try:
     lines = [l.strip() for l in open(sys.argv[1], encoding="utf-8") if l.strip()]
@@ -125,6 +125,31 @@ for l in lines:
         n += int(parts[0])
 if n != 100:
     print(f"{n} cards, expected 100"); sys.exit(0)
+# DFC naming (2026-08-31, game 18): Forge names transform / modal-DFC /
+# adventure / disturb cards by their FRONT face; only true split cards keep
+# "A // B". A wrong form isn't a load error — CardPool inserts an UNSUPPORTED
+# placeholder, the count stays 100, and the match silently drops the card
+# (Sythis played 95). Resolve each "A // B" line against the card scripts.
+import os, glob, re
+folder = sys.argv[2] if len(sys.argv) > 2 else ""
+def slug(name):
+    name = name.lower().replace("'", "")
+    return re.sub(r"[^a-z0-9]+", "_", name).strip("_")
+if os.path.isdir(folder):
+    for l in lines:
+        parts = l.split(None, 1)
+        if len(parts) < 2 or not parts[0].isdigit():
+            continue
+        name = parts[1].split("|")[0].strip()
+        if " // " not in name:
+            continue
+        a, b = [x.strip() for x in name.split(" // ", 1)]
+        hits = glob.glob(os.path.join(folder, "*", slug(a) + "_" + slug(b) + ".txt"))
+        if not hits:
+            print(f"no card script for '{name}'"); sys.exit(0)
+        if "AlternateMode:Split" not in open(hits[0], encoding="utf-8", errors="replace").read():
+            print(f"'{name}' is a double-faced card: write its FRONT face '{a}' "
+                  f"(only split cards keep 'A // B'); the match would DROP it"); sys.exit(0)
 PYCHK
 )
     [ -z "$err" ] || miss="$miss\n  [$d]  BAD .dck            ($err)"

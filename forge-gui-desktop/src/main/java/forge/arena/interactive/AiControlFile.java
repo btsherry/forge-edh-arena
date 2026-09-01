@@ -157,6 +157,15 @@ public final class AiControlFile {
         return new File(logsDir(), "control/advisor.json");
     }
 
+    /** True when this GUI JVM was launched WITH the seat-0 advisor
+     *  ({@code -Darena.advisor=1}, i.e. an advised human game). All-AI and
+     *  {@code --no-advisor} games have no advisor to pause — the in-game
+     *  toggle must render OFF rather than "ON" (Ben, 2026-08-31). Distinct
+     *  from {@link #advisorEnabled()}, which is only the pause state. */
+    public static boolean advisorAttached() {
+        return "1".equals(System.getProperty("arena.advisor"));
+    }
+
     public static boolean advisorEnabled() {
         final File f = advisorToggleFile();
         if (!f.exists()) {

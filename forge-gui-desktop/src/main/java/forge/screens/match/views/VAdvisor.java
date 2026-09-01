@@ -82,9 +82,18 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     }
 
     private final javax.swing.JButton toggle =
-            new javax.swing.JButton("Advisor: ON");
+            new javax.swing.JButton("Advisor: OFF");
 
     private void syncToggle() {
+        // Three states, not two: an all-AI or --no-advisor game has no advisor
+        // to pause, and advisorEnabled() (the pause flag) defaults to true —
+        // so without this gate the button read "ON" in advisor-less games.
+        if (!forge.arena.interactive.AiControlFile.advisorAttached()) {
+            toggle.setText("Advisor: OFF — not attached this game");
+            toggle.setEnabled(false);
+            return;
+        }
+        toggle.setEnabled(true);
         final boolean on = forge.arena.interactive.AiControlFile.advisorEnabled();
         toggle.setText(on ? "Advisor: ON — click to pause"
                           : "Advisor: PAUSED — click to resume");

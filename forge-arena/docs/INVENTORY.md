@@ -41,10 +41,10 @@ outside `forge-arena/` (2026-08-24 re-audit) is **31 files**: 12 modified
 | `forge-ai/.../TapCostPreference.java` | forge-ai | The AiCostDecision hook interface must be visible to forge-ai. |
 | `forge-ai/.../SacCostPreference.java` | forge-ai | Sacrifice-payment hook interface (same pattern/reason). |
 | `forge-ai/.../PaymentPickPreference.java` | forge-ai | One hook interface for exile/discard/return/put-to-library payments (wave-2). |
-| `forge-gui-desktop/.../forge/arena/interactive/AiControlFile.java` | gui-desktop | AI-panel file protocol (per-seat model/effort dials, ELO line). Moved here 2026-08-12 so the desktop reactor builds it. |
+| `forge-gui-desktop/.../forge/arena/interactive/AiControlFile.java` | gui-desktop | AI-panel file protocol (per-seat model/effort dials, ELO line). Moved here 2026-08-12 so the desktop reactor builds it. `advisorAttached()` (2026-08-31) distinguishes no-advisor games from a paused advisor. |
 | `forge-gui-desktop/.../forge/arena/interactive/AdvisorLogTail.java` | gui-desktop | Advisor tab's log tailer. |
 | `forge-gui-desktop/.../controllers/CAiControl.java` + `views/VAiControl.java` | gui-desktop | AI dock tab (steppers, telemetry, ELO). |
-| `forge-gui-desktop/.../controllers/CAdvisor.java` + `views/VAdvisor.java` | gui-desktop | Advisor dock tab (+ pause button). |
+| `forge-gui-desktop/.../controllers/CAdvisor.java` + `views/VAdvisor.java` | gui-desktop | Advisor dock tab (+ three-state pause button: OFF-not-attached / ON / PAUSED, 2026-08-31). |
 | `forge-gui/res/defaults/match.xml` | forge-gui res | Pilot-tuned default match layout (the only res/ divergence). |
 
 ### 1c. ArchUnit boundary
@@ -152,7 +152,7 @@ matching anywhere in the body hits card ids in `state.battlefield` (bit twice).
 preflight → teardown → runners → advisor → react-autopass → GUI → liveness),
 `arena-stop.sh` (teardown + ELO sweep + archive), `run-pilot-match.sh` (GUI
 JVM launcher), `run-gui.sh`, `arena-add-deck.py` (ingester),
-`arena-status.py`, `arena-digest.py`, `react-autopass.py` (manual-fallback no-op REACT daemon — retired from the standard launch 2026-08-17; the runners' allowlist fastpath covers it).
+`arena-status.py`, `arena-cardwatch.py` (live card-conservation watcher — per-seat nontoken totals across zones, 2026-08-31), `arena-digest.py`, `react-autopass.py` (manual-fallback no-op REACT daemon — retired from the standard launch 2026-08-17; the runners' allowlist fastpath covers it).
 
 **Project 1 (stays home):** `batch.sh`, `canary.sh`, `prep.sh`, `smoke.sh`,
 `fidelity.py`, `program-fidelity.py`, `observe-play.py`, `anchors.py`,
