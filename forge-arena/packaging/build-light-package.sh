@@ -29,7 +29,7 @@ for a in "$@"; do
   esac
 done
 
-# The nine decks that ship.
+# The ten decks that ship.
 SLUGS="giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds
 urza-lord-high-artificer swords-plunder swords-plunder-gc
 y-shtola-night-s-blessed sythis-harvests-hand liberator-urzas-battlethopter
@@ -129,11 +129,12 @@ if [ -n "$KEEP" ]; then
   echo "[preserve] ELO ratings restored into the rebuilt tree"
 fi
 
-echo "[8/9] scripts — play/stop/launch/ingest/observe (batch, canary, prep,"
+echo "[8/9] scripts — play/stop/launch/ingest/observe/cardwatch (batch, canary, prep,"
 echo "      smoke, discovery harnesses, react-autopass stay home)"
 mkdir -p "$DEST/forge-arena/scripts"
 for f in arena-play.sh arena-stop.sh run-pilot-match.sh run-gui.sh \
-         arena-add-deck.py arena-status.py arena-digest.py react-autopass.py; do
+         arena-add-deck.py arena-status.py arena-digest.py arena-cardwatch.py \
+         react-autopass.py; do
   cp "$REPO/forge-arena/scripts/$f" "$DEST/forge-arena/scripts/"
 done
 

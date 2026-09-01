@@ -1,7 +1,15 @@
 # forge-light-llm — Patch Notes
 
-## Unreleased — after v3.3.1
+## v3.3.2 — 2026-09-01
 
+Deck-integrity release: two bundled decks were quietly short; the fix ships
+with new nets so it cannot recur, plus a tenth deck.
+
+- **Tenth bundled deck: Sheoldred's Sacrifice** — a mono-black sacrifice
+  list piloting Sheoldred, the Apocalypse's Praetor side (Sheoldred // The
+  True Scriptures), with its dossier, combos and DeckCheck primer. The
+  default four-seat table is unchanged; seat it with `ARENA_SEAT_DECKS`
+  (slug `sheoldreds-sacrifice`) or play it yourself with `--human`.
 - **Two shipped decks were playing short.** Sythis ran 95 cards and Urza 98:
   five double-faced cards (Bala Ged Recovery, Branchloft Pathway, Katilda,
   Strength of the Harvest, Wandering Archaic) were written "A // B", which
