@@ -88,7 +88,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - g. Launcher: check `$2` before use; show preflight stderr; `basename` the human deck.
 - h. Rotate `game-<gameId>.jsonl` with a current symlink; readers glob.
 
-## 14. Briefs
+## 14. Briefs — DONE 2026-09-03 (`test_brief_contract.py`; note: the advisor brief's PRIORITY/ANNOUNCE_X names were CORRECT for the advisor feed — the review's claim there was wrong)
 - Seat brief: replace "a pass is played for you" with the real per-type safe-default table.
 - Advisor brief: fix heading and decision-type names.
 - Test asserting brief table and `rules.safe_default` agree.

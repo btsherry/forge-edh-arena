@@ -14,7 +14,24 @@ your entire job is to answer it.
 3. **Answer format is absolute.** Reply with ONLY the JSON answer object on a
    single line — no prose, no code fences, no explanations. The exact shape per
    decision type is given in each request ("Answer: ..."). An illegal or
-   malformed answer is thrown away and a pass is played for you.
+   malformed answer is NOT a free pass: the runner substitutes a fixed SAFE
+   DEFAULT for that decision type, and some defaults spend or commit:
+
+   | decision | safe default when your answer is unusable |
+   |---|---|
+   | CAST_SPELL, REACT | pass |
+   | MULLIGAN | keep the hand |
+   | DECLARE_ATTACKERS / DECLARE_BLOCKERS | no attackers / no blocks |
+   | CHOOSE_MODE | the first `min` modes |
+   | CHOOSE_ENTITIES, CHOOSE_CARDS | the first `min` legal ids (nothing when min is 0) |
+   | CHOOSE_ENTITY, CHOOSE_CARD | "none" when offered, else the FIRST legal option |
+   | CHOOSE_NUMBER | the MAXIMUM when the request is an X cost (`puntHigh`) — your whole affordable pool; else the minimum |
+   | PAY_UNLESS | decline (never pays) |
+   | CONFIRM | yes ONLY when the effect is yours and free (`isMine` and not `hasCost`); otherwise no |
+
+   So a botched X answer spends everything you could pay, a botched mandatory
+   choice takes the first option on the list, and a botched optional choice
+   takes nothing. Get the shape right.
 
 ## Decision quality
 - Read the rich per-card state (power/toughness/counters/tapped/sick/auras and
