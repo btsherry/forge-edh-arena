@@ -191,8 +191,30 @@ class ConfirmDefaultShapeTests(unittest.TestCase):
         return {"decisionType": "CONFIRM", "prompt": prompt, "state": state,
                 "options": [{"id": 0, "label": "No"}, {"id": 1, "label": "Yes"}]}
 
-    def test_free_copy_play_defaults_yes(self):
+    def test_free_own_effect_defaults_yes(self):
+        # engine facts (item 10): free AND mine -> yes, whatever the words say
+        r = self._req("Return it to your hand?", "untyped", hasCost=False, isMine=True)
+        self.assertEqual(rules.safe_default(r), {"chosenId": 1})
+
+    def test_player_in_prompt_no_longer_means_yes(self):
+        # "play" ⊂ "player" used to default-ACCEPT an opponent's effect
+        r = self._req("Each player may draw a card?", "OptionalChoose",
+                      hasCost=False, isMine=False)
+        self.assertEqual(rules.safe_default(r), {"chosenId": 0})
+
+    def test_own_but_costed_defaults_no(self):
+        # a punt never spends new mana, however much is in the pool
+        r = self._req("Pay {2} to copy it?", "OptionalChoose", hasCost=True, isMine=True)
+        self.assertEqual(rules.safe_default(r), {"chosenId": 0})
+
+    def test_legacy_engine_without_facts_defaults_no(self):
+        # no hasCost/isMine (pre-item-10 engine): the word heuristic is GONE
         r = self._req("Do you want to play Dramatic Reversal (copy) without paying?", "untyped")
+        self.assertEqual(rules.safe_default(r), {"chosenId": 0})
+
+    def test_play_from_effect_free_still_yes(self):
+        r = self._req("PLAY FROM EFFECT: cast Dramatic Reversal WITHOUT paying", "PLAY_FROM_EFFECT",
+                      free=True)
         self.assertEqual(rules.safe_default(r), {"chosenId": 1})
 
     def test_trigger_with_cost_defaults_no(self):

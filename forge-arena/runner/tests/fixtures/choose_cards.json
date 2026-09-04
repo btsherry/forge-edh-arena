@@ -1,0 +1,55 @@
+{
+ "seq": 33,
+ "gameId": "1756950000123-48211",
+ "timeoutSec": 90,
+ "seat": 2,
+ "turn": 7,
+ "phase": "MAIN1",
+ "decisionType": "CHOOSE_CARDS",
+ "prompt": "DISCARD 1-1 from YOUR hand [source: Faithless Looting] (answer {\"chosen\": [ids]})",
+ "state": {
+  "seat": 2,
+  "turn": 7,
+  "phase": "MAIN1",
+  "life": 38,
+  "manaPool": "",
+  "untappedManaSourceCount": 3,
+  "handSize": 5,
+  "handLands": 2,
+  "librarySize": 88,
+  "ownBoardPower": 4,
+  "battlefield": [],
+  "hand": [],
+  "command": [],
+  "graveyard": [],
+  "exile": [],
+  "opponents": [],
+  "stack": [],
+  "stackOwners": [],
+  "stackKinds": [],
+  "stackTargets": [],
+  "stackOracle": [],
+  "min": 1,
+  "max": 1
+ },
+ "options": [
+  {
+   "id": 410,
+   "label": "Lightning Bolt [Instant]",
+   "cost": "{R}",
+   "type": "Instant"
+  },
+  {
+   "id": 412,
+   "label": "Mountain [Basic Land - Mountain]",
+   "cost": "",
+   "type": "Basic Land - Mountain"
+  },
+  {
+   "id": 415,
+   "label": "Grizzly Bears (2/2) [Creature - Bear]",
+   "cost": "{1}{G}",
+   "type": "Creature - Bear"
+  }
+ ]
+}

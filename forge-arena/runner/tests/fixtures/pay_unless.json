@@ -1,0 +1,52 @@
+{
+ "seq": 32,
+ "gameId": "1756950000123-48211",
+ "timeoutSec": 90,
+ "seat": 2,
+ "turn": 7,
+ "phase": "MAIN1",
+ "decisionType": "PAY_UNLESS",
+ "prompt": "PAY OR ELSE: pay {1} now, or Rhystic Study does: draw a card (an OPPONENT's effect taxing you).",
+ "state": {
+  "seat": 2,
+  "turn": 7,
+  "phase": "MAIN1",
+  "life": 38,
+  "manaPool": "",
+  "untappedManaSourceCount": 3,
+  "handSize": 5,
+  "handLands": 2,
+  "librarySize": 88,
+  "ownBoardPower": 4,
+  "battlefield": [],
+  "hand": [],
+  "command": [],
+  "graveyard": [],
+  "exile": [],
+  "opponents": [],
+  "stack": [],
+  "stackOwners": [],
+  "stackKinds": [],
+  "stackTargets": [],
+  "stackOracle": [],
+  "min": 0,
+  "max": 1,
+  "unlessCost": "{1}",
+  "effectSource": "Rhystic Study",
+  "effectIsMine": false
+ },
+ "options": [
+  {
+   "id": 0,
+   "label": "Decline \u2014 do not pay; let the effect happen",
+   "cost": null,
+   "type": "NONE"
+  },
+  {
+   "id": 1,
+   "label": "Pay {1}",
+   "cost": "{1}",
+   "type": "PAY"
+  }
+ ]
+}

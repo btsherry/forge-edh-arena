@@ -255,25 +255,25 @@ def safe_default(req: dict) -> dict:
         lo, _ = _bounds(req, 0, len(ids))
         return {"chosen": [i for i in ids if i != 0][:lo]}
     if dtype == "CONFIRM":
-        # Shape-aware (game 7, 2026-08-17): a punt answered NO to "cast your
-        # free Dramatic Reversal copy?" and Urza's loop unwound at 72s a step.
-        # Confirms about the seat's OWN free play/copy default to YES (they
-        # spend nothing and are what the seat was doing); everything else —
-        # trigger yes-costs, sacrifice/pay-life/exile confirms — stays NO,
-        # the answer that spends nothing.
+        # Item 10 (2026-09-03): a punt never spends and never acts for anyone
+        # but the seat. The engine states the two facts that decide it —
+        # `hasCost` (does saying yes pay anything) and `isMine` (is the effect
+        # the seat's own) — so the rule is structural: YES only when free AND
+        # mine, NO otherwise. The old prompt-word heuristic ("play" in prompt
+        # matched "player") could default-ACCEPT an opponent's costed effect.
+        # Legacy engines without the fields: TRIGGER/PLAY_FROM_EFFECT keep
+        # their own free-and-mine facts (yesCost / free); everything else NO.
         st = req.get("state", {}) or {}
         mode = str(st.get("confirmMode", "") or "")
-        prompt = str(req.get("prompt", "") or "").lower()
+        has_cost, is_mine = st.get("hasCost"), st.get("isMine")
+        if isinstance(has_cost, bool) and isinstance(is_mine, bool):
+            return {"chosenId": 1 if (is_mine and not has_cost) else 0}
         if mode == "TRIGGER":
             free = str(st.get("yesCost", "none")).lower() in ("none", "", "0", "{0}")
             return {"chosenId": 1 if free else 0}
         if mode == "PLAY_FROM_EFFECT":
             # your own "may cast" (Scepter copy, cascade, impulse): free -> yes
             return {"chosenId": 1 if st.get("free") else 0}
-        if mode in ("untyped", "OptionalChoose") and any(
-                w in prompt for w in ("play", "cast", "copy")) and not any(
-                w in prompt for w in ("sacrifice", "pay life", "exile", "discard")):
-            return {"chosenId": 1}
         return {"chosenId": 0}
     if dtype == "PAY_UNLESS":
         return {"chosenId": 0}                   # decline: legal, spends nothing
