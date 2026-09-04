@@ -48,7 +48,7 @@ if ls "$LOGS"/seat-*.log "$LOGS"/gui.out >/dev/null 2>&1; then
      "$ROOT"/runner/results/*.skipped "$ROOT"/runner/results/*.voided "$A/" 2>/dev/null
   archived=$(ls "$A" 2>/dev/null | wc -l | tr -d ' ')
 fi
-rm -rf "$ROOT"/mailbox/seat-* "$ROOT"/mailbox/observer-state.json "$LOGS"/control/* 2>/dev/null
+rm -rf "$ROOT"/mailbox/seat-* "$ROOT"/mailbox/observer-state.json "$ROOT"/mailbox/launch-status.json "$LOGS"/control/* 2>/dev/null
 
 runners=$(pgrep -f "seat_runner.py --seat" | wc -l | tr -d ' ')
 gui=$(pgrep -f GuiPilotMatch >/dev/null && echo up || echo down)

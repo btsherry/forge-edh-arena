@@ -103,9 +103,17 @@ ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" \
   "$DIR/run-pilot-match.sh" "$GUI_ARG" >"$LOGS/gui.out" 2>&1 &
 echo $! > "$LOGS/pids/gui.pid"   # run-pilot-match execs java, so this IS the JVM
 
-# 4) wait until the match is actually live
+# 4) wait until the match is actually live — or until the engine refuses the
+# launch (item 7: a seat short of 100 real cards writes launch-status.json
+# with ok:false and exits; say so at once instead of after the 150 s wait)
 i=0
 while [ ! -f "$ROOT/mailbox/observer-state.json" ] && [ $i -lt 50 ]; do
+  if [ -f "$ROOT/mailbox/launch-status.json" ] && grep -q '"ok": false' "$ROOT/mailbox/launch-status.json"; then
+    echo "arena launch REFUSED by the engine:" >&2
+    python3 -c 'import json,sys; print("   ", json.load(open(sys.argv[1]))["detail"])' "$ROOT/mailbox/launch-status.json" >&2
+    "$DIR/arena-stop.sh" >/dev/null 2>&1
+    exit 1
+  fi
   sleep 3; i=$((i+1))
 done
 

@@ -1166,6 +1166,35 @@ Hard-won from two live sessions; read before optimizing anything.
     not attached / ON / PAUSED) via `AiControlFile.advisorAttached()`; it
     read "ON — click to pause" in advisor-less games because
     `advisorEnabled()` is only the pause flag and defaults true.
+59. **Scryfall canonical, Forge at the boundary, 400 cards or no game
+    (2026-09-03, plan item 7).** The 09-01 DFC rule in arena-add-deck (layout
+    'split' keeps "A // B", everything else front face) was a whitelist, and
+    it already missed Rooms (layout 'room'; Forge keeps the combined name) —
+    the next ingest would have rewritten Sythis's correct Secret Arcade line
+    into a placeholder. Now: (a) Scryfall is canonical in every built file
+    (`deck-cards.json` entries carry `scryfall_id`, `set`,
+    `collector_number`; `name` stays Scryfall's); (b) Forge's name is looked
+    up in Forge's OWN database by `DeckLoadProbe --resolve` — the PRINTING
+    first (Scryfall set + collector number → edition entry → card DB), name
+    forms second (combined, then front face) — and stored as `forge_name`,
+    the only thing the .dck writer reads; (c) anything unresolved is a NAMED
+    failure before a single file is written (Forge lacks the newest sets and
+    some cards forever — the game must not start short, so neither may the
+    ingest); (d) ingest writes `dossier/manifest.json` (.dck SHA-256, card
+    count, a card-DB stamp, every resolution) and the launch preflight
+    compares the hash in milliseconds — missing manifest or changed .dck
+    refuses with the fix named, a changed DB stamp only warns; NO JVM at
+    launch, ever (Ben: "15 s at startup is way too long"); (e) start
+    invariant — GuiPilotMatch runs `playabilityProblems` on every loaded deck
+    and refuses a seat short of 100 real cards, writing
+    `mailbox/launch-status.json` so arena-play reports it at once; (f) end
+    invariant — GameResultSpool counts every owned card across all zones
+    (tokens/copies/emblems/effects excluded) and logs `CARD-CHECK` per seat or
+    `CARD-VANISH` on a shortfall, with `cards`/`deckSize` in the spool.
+    `--manifest-only` writes the manifest for a deck whose dossier another
+    tool built (the four Java-prepped decks), touching nothing else. Tests:
+    `DeckLoadProbeResolveTest` (Room + MDFC by printing, name-form fallback,
+    unresolved, placeholder named), `CardConservationTest`.
 58. **Liveness, identity and budget as protocol facts (2026-09-03, plan
     items 2, 3, 8, 10, 12).** Three things the runner used to GUESS are now
     stated by the engine. (a) `gameId` on every request and feed file: a

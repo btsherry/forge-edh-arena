@@ -1,5 +1,53 @@
 # forge-light-llm — Patch Notes
 
+## Unreleased — after v3.3.2
+
+Reliability release in progress: the 2026-09-03 full review's interactive
+findings, fixed one at a time.
+
+- **A seat's own triggers are aimed correctly.** A mandatory trigger can no
+  longer be "declined" (the option was offered for every trigger; the code
+  then aimed it at an arbitrary legal target), and a brain that fails to
+  answer while aiming falls to stock like every other surface instead of
+  silently throwing the trigger away.
+- **Refused casts are explained.** When the engine refuses an unaffordable
+  cast, the next window says so — the spell, what it needed, what the seat
+  can pay right now, and to float first if a sequence was intended — and
+  omits that card for one window. Modal casts report a failed cast the same
+  way instead of claiming "played".
+- **Mana tables.** The state now lists every untapped mana source with its
+  yield on the live board, colors and restricted/sick/cost flags, the sum the
+  engine itself uses (`manaAvailableNow`), and the rituals and mana
+  multipliers in hand — the brain no longer counts lands.
+- **One clock per decision.** Session re-init and the decision call share the
+  engine's deadline; a slow init punts on time instead of blocking the seat
+  for twice the window. `--timeout` is the only timeout knob; nothing is
+  derived from effort.
+- **Punts are honest.** A transport failure is never memoized as a real pass;
+  the CONFIRM punt says yes only to the seat's own free effects (engine
+  facts, not prompt words); the ratings void counter sees every punt.
+- **Game identity.** Every request and advisor-feed file carries a `gameId`;
+  the seat runner and the advisor reset on an id change only. The advisor no
+  longer drops its session on ordinary file interleaving or on pause/resume,
+  and re-arms its per-turn budget for a second game.
+- **Dead brains cost seconds, not minutes.** Runners write a heartbeat; the
+  engine skips the wait for a seat whose runner is gone and says so once.
+  The dashboard shows `brainAlive`; the ELO spool records `stockDecisions`.
+- **Mindslaver-class control goes to the master's brain** (CR 721), and
+  pay-or-else payments are chosen by the seat.
+- **Ingestion verifies against Forge once; launch checks a hash.** Scryfall
+  is canonical in every built file (`scryfall_id`, `set`,
+  `collector_number`); Forge's name comes from Forge's own database by
+  printing, then by name form — no layout whitelist. Anything Forge cannot
+  play is a named failure before a file is written. A `manifest.json` per
+  deck lets the launch preflight refuse an edited or never-verified deck in
+  milliseconds. The engine refuses to seat a deck short of 100 real cards
+  and, at game end, counts every owned card across all zones (`CARD-VANISH`
+  on a shortfall).
+- **Packaging can no longer ship an incomplete `lib/`**; `react-autopass.py`
+  no longer ships; teardown kills by PID file; the shared decision log is one
+  file per game with `game.jsonl` pointing at the current one.
+
 ## v3.3.2 — 2026-09-01
 
 Deck-integrity release: two bundled decks were quietly short; the fix ships

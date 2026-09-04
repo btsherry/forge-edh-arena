@@ -37,7 +37,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - `ritualsInHand`: spells whose chain has a Mana part — cost, projected yield on current board, net, colors. Multipliers/modifiers (mana-event triggers or replacements) listed with `kind: "multiplier"` and no number.
 - Detection by mechanics only. Brief paragraph. Test across a scaling land, a restricted source, a sick creature, a ritual, a multiplier.
 
-## 7. Ingestion, naming, and the 400-card invariant (extended rigor: edge cases, error handling, observability, correctness)
+## 7. Ingestion, naming, and the 400-card invariant (extended rigor: edge cases, error handling, observability, correctness) — DONE 2026-09-03 (field note 59; `DeckLoadProbeResolveTest`, `CardConservationTest`; live: Sythis re-ingested at 100 with the Room line intact, manifests for all ten decks, preflight refuses an edited .dck). Found live and fixed: `getScryfallCode()` NPEs on editions without a code; a resolver failure is reported as a tooling fault, never as "Forge lacks the card".
 - Scryfall is canonical for authored and built files; Forge's name is a runtime encoding at the `.dck`/live-state boundary.
 - Translate by printing: Scryfall (set, collector number) joined to Forge edition data; fall back to name forms (combined, then front face); nothing resolves → named failure at ingest, before any write. Verify at fix time that Forge edition data carries collector numbers for the deck's printings; use Scryfall reprint data to find a Forge-known printing when it does not.
 - `deck-cards.json` entries gain `forge_name`, `scryfall_id`, `set`, `collector_number`; `name` stays Scryfall's.
@@ -101,7 +101,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - Widen single-card seam tests to two cards as their seams are touched.
 - Refresh INVENTORY from the tree; fix JDK line and the 0.15 s poll figure.
 
-## 16. Decision surfaces still on stock (backlog)
+## 16. Decision surfaces still on stock (backlog) — MEASURING since 2026-09-03: the six surfaces log `STOCK-SURFACE` lines (no behavior change); open the frequent ones after a few games
 - Candidates: `chooseSomeType`, `orderSimultaneousSa`, `assignCombatDamage`, `chooseColor*`, `chooseCardsForConvokeOrImprovise`, `chooseSingleSpellForEffect`.
 - Measure firing frequency in recent logs first; open the top one or two under the existing discipline (genuine choice only, vetted, fail to stock, added to the wire schema). Rest stay listed.
 

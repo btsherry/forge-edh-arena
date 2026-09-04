@@ -154,6 +154,34 @@ if os.path.isdir(folder):
         if "AlternateMode:Split" not in open(hits[0], encoding="utf-8", errors="replace").read():
             print(f"'{name}' is a double-faced card: write its FRONT face '{a}' "
                   f"(only split cards keep 'A // B'); the match would DROP it"); sys.exit(0)
+# Launch manifest (plan item 7, 2026-09-03): ingestion verified every card
+# against Forge ONCE and recorded the .dck's SHA-256 + a card-DB stamp. Here
+# we compare hashes in milliseconds — no JVM at launch, ever. Missing manifest
+# = never verified; changed .dck = verified deck is not the one on disk.
+import hashlib, json
+slugdir = os.path.dirname(sys.argv[1]); slug = os.path.splitext(os.path.basename(sys.argv[1]))[0]
+mpath = os.path.join(slugdir, slug, "dossier", "manifest.json")
+if not os.path.exists(mpath):
+    print("no launch manifest — run arena-add-deck.py (or --manifest-only) so the deck is "
+          "verified against Forge once"); sys.exit(0)
+try:
+    m = json.load(open(mpath))
+except (OSError, ValueError) as e:
+    print(f"unreadable launch manifest ({e}) — re-run arena-add-deck.py"); sys.exit(0)
+sha = hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest()
+if m.get("dck_sha256") != sha:
+    print("deck changed since ingest (sha mismatch) — re-run arena-add-deck.py so the "
+          "new list is verified"); sys.exit(0)
+if os.path.isdir(folder) and m.get("db_stamp"):
+    n_cards = sum(1 for _r, _d, fs in os.walk(folder) for f in fs if f.endswith(".txt"))
+    eds = os.path.join(os.path.dirname(folder), "editions")
+    try:
+        n_eds = sum(1 for f in os.listdir(eds) if f.endswith(".txt"))
+    except OSError:
+        n_eds = 0
+    if m["db_stamp"] != f"{n_cards}:{n_eds}":
+        print(f"WARN card database changed since ingest ({m['db_stamp']} -> {n_cards}:{n_eds}); "
+              f"re-ingest when convenient", file=sys.stderr)
 PYCHK
 )
     [ -z "$err" ] || miss="$miss\n  [$d]  BAD .dck            ($err)"

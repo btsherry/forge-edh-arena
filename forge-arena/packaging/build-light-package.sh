@@ -118,7 +118,8 @@ for s in $SLUGS; do
   mkdir -p "$DEST/forge-arena/decks/$s/dossier"
   cp "$REPO/forge-arena/decks/$s.dck" "$DEST/forge-arena/decks/"
   cp "$src/dossier/deck-cards.json" "$src/dossier/combos.json" \
-     "$DEST/forge-arena/decks/$s/dossier/"
+     "$src/dossier/manifest.json" \
+     "$DEST/forge-arena/decks/$s/dossier/"   # manifest: the launch preflight's hash check (item 7)
   [ -d "$src/dossier/.cache" ] && rsync -a "$src/dossier/.cache/" \
      "$DEST/forge-arena/decks/$s/dossier/.cache/"
 done

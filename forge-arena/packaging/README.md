@@ -98,6 +98,7 @@ Outputs, per deck:
 forge-light-llm/forge-arena/decks/<slug>.dck                       playable deck registration
 forge-light-llm/forge-arena/decks/<slug>/dossier/deck-cards.json   full oracle text (the brain's card knowledge)
 forge-light-llm/forge-arena/decks/<slug>/dossier/combos.json       the deck's real combo lines
+forge-light-llm/forge-arena/decks/<slug>/dossier/manifest.json     launch manifest: .dck hash + every Scryfall→Forge name resolution
 forge-light-llm/forge-arena/decks/<slug>/dossier/.cache/           content-addressed API caches
 forge-light-llm/forge-arena/docs/primers/<slug>-deckcheck.md       strategy primer (see below)
 ```

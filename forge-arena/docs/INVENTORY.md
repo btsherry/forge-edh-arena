@@ -182,7 +182,7 @@ JVM launcher), `run-gui.sh`, `arena-add-deck.py` (ingester),
 | `runner/ratings.json`, `ratings-history.jsonl`, `ratings.lock` | `ratings.py` | panel, plots | per-installation state; survives package rebuilds; gitignored, never ships. |
 | `runner/logs/advisor-0.{log,jsonl}` | advisor (stream + structured twin) | Advisor tab tail / reviews | archived at stop. In an advised human game, `seat-0.usage.json` is the ADVISOR's spend snapshot (seat 0 is the human). |
 | `runner/logs/archive/<ts>-stop/` | `arena-stop.sh` | forensics, later ELO re-sweeps | every finished game's full log set + consumed spools; grows unbounded by design. |
-| `decks/<slug>/dossier/*`, `.cache/`, `.dck`, primers | `arena-add-deck.py` | brains at init | per-deck, tracked (dossier conventions per deck). |
+| `decks/<slug>/dossier/*`, `.cache/`, `.dck`, primers | `arena-add-deck.py` | brains at init | per-deck; dossiers are disk-only (`decks/*/` is gitignored — the package carries them). `dossier/manifest.json` (2026-09-03, plan item 7): the registered `.dck`'s SHA-256, card count, card-DB stamp and every Scryfall→Forge name resolution; the launch preflight compares the hash in ms, no JVM. `deck-cards.json` entries carry `scryfall_id`/`set`/`collector_number` (Scryfall canonical) and `forge_name` (the loader's name, from `DeckLoadProbe --resolve`). |
 
 ## 7. Documentation set
 

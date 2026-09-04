@@ -228,12 +228,22 @@ public final class GuiPilotMatch {
 
         List<RegisteredPlayer> players = new ArrayList<>();
         Map<RegisteredPlayer, IGuiGame> guis = new LinkedHashMap<>();
+        final java.nio.file.Path statusFile = MailboxProtocol.baseDir().resolve("launch-status.json");
         for (int seat = 0; seat < ordered.size(); seat++) {
             File deckFile = new File(decksDir, ordered.get(seat));
             Deck deck = DeckSerializer.fromFile(deckFile);
-            if (deck == null || deck.getCommanders().isEmpty()) {
-                throw new IllegalArgumentException(
-                        "not a loadable Commander deck: " + deckFile.getAbsolutePath());
+            // Plan item 7, the start invariant: a game never starts with a
+            // seat short of 100 REAL cards. The loader counts placeholders for
+            // unresolvable names and the match drops them (Sythis played 95,
+            // game 18); the preflight's manifest check catches an edited .dck,
+            // this catches everything else, with the deck and the names.
+            List<String> problems = DeckLoadProbe.playabilityProblems(deck);
+            if (!problems.isEmpty()) {
+                String msg = "seat " + seat + " deck " + deckFile.getName() + ": "
+                        + String.join("; ", problems);
+                writeLaunchStatus(statusFile, false, msg);
+                System.err.println("[arena] LAUNCH REFUSED — " + msg);
+                throw new IllegalStateException("launch refused: " + msg);
             }
             RegisteredPlayer rp = RegisteredPlayer.forCommander(deck);
             if (seat == 0 && !allAi) {
@@ -250,6 +260,8 @@ public final class GuiPilotMatch {
             }
             players.add(rp);
         }
+
+        writeLaunchStatus(statusFile, true, ordered.size() + " decks verified at 100 real cards each");
 
         // Cosmetic: give each seat a built-in avatar matched to its deck's colors
         // (proportional to pip composition; fail-safe — Forge's default avatar
@@ -268,5 +280,23 @@ public final class GuiPilotMatch {
         GameRules rules = new GameRules(GameType.Commander);
         rules.setGamesPerMatch(1);
         hm.startMatch(rules, EnumSet.of(GameType.Commander), players, guis, null);
+    }
+
+    /** {@code <mailbox>/launch-status.json}: {@code {"ok":bool,"detail":…,"ts":…}}
+     *  — arena-play.sh reads it so a refused launch reports at once instead of
+     *  after the 150 s liveness wait. Best effort; never blocks the launch. */
+    private static void writeLaunchStatus(java.nio.file.Path file, boolean ok, String detail) {
+        try {
+            java.nio.file.Files.createDirectories(file.getParent());
+            String json = "{\"ok\": " + ok + ", \"detail\": \""
+                    + detail.replace("\\", "\\\\").replace("\"", "\\\"") + "\", \"ts\": "
+                    + System.currentTimeMillis() + "}";
+            java.nio.file.Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
+            java.nio.file.Files.write(tmp, json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            java.nio.file.Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.io.IOException | RuntimeException e) {
+            System.err.println("GuiPilotMatch: could not write launch status: " + e);
+        }
     }
 }
