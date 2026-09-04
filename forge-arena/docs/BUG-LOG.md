@@ -10,7 +10,6 @@ Conventions still in force: seam fixes are general (mechanics, never card names)
 |---|---|---|---|---|---|
 | BL-04 | P2 | mailbox surfaces | Combat damage assignment (multi-block splits), convoke/improvise payment, spell-for-effect choice stay on stock. | Game 19: `assignCombatDamage` 1×, convoke 9× (repeated planning consultations per window), spell-for-effect 0×. | Open by evidence after a few more games; convoke needs the payment-context gate (item 10's F2 lesson) so planning scans don't open windows. |
 | BL-06 | P2 | mailbox | Timeout on a silent brain still costs one full wait per decision once (the heartbeat gate only helps when the runner PROCESS is gone). | Design decision (item 12 simplified); item 2 makes wedged models punt on time, so exposure is one window. | Leave unless measured; revisit with the surfaces above. |
-| BL-17 | P2 | release | **v3.3.3 cut in progress (2026-09-04).** `PATCH-NOTES.md` "Unreleased — after v3.3.2" is written; the shipped `-latest` on R2 predates every fix in this log's closed section. | — | Standard pipeline when Ben says go: fresh gate → `build-light-package.sh --force` → tar → REST-R2 PUT dated + `-latest` → verify hashes. |
 
 ## Interactive — watch items (not bugs yet)
 
@@ -54,6 +53,7 @@ Ben removed these from planning. Listed so they are not lost; details and line n
 
 Commits: 91cc85d9292 (P), 2bc78d92188 (J1), d1a03910f25 (J2 payer), c2e7e5ee1da (docs), 1fb8413ebcb (ratings dedupe), 7bf14c2fcad (review follow-ups), 95e8c34c18a (extended tests), 51e98b931f4. Standard gate green (363 tests), FULL gate green with the `extended` group (429 arena tests + parent modules). Live validation: game 20 (2026-09-04 02:50) was invalidated by the Claude subscription's session limit — every seat's model call failed from 02:56 and the game ran on punts; a validation game is re-run after the limit resets and its findings, if any, reopen items here.
 
+- **BL-17** — **v3.3.3 cut and shipped 2026-09-04.** FULL gate green on the review-fix tree (`14cd9b8b219`: 429 arena + 286 parent tests), packaged from `5f72c0a8714`, packager negative checks clean (no `dossier/.cache`, no DeckCheck creator payloads, retired scripts absent), `forge-light-llm-20260904.tar.gz` (118634974 bytes, sha256 `56bb675d…3bb12f`) PUT as dated + `-latest`, both hash-verified from the public URL. Live validation: game 21 (22 model turns, the new windows exercised) — see the plan's execution log.
 - **BL-01** — **Life-for-mana statics are outside the stock payer's search.** With K'rrik, Son of Yawgmoth out, Mikaeus ({3}{B}{B}{B}) for 3 mana + 6 life…
 - **BL-02** — **Trigger ordering is decided by stock** for the seat's simultaneous triggers (CR 603.3b gives it to the controller).…
 - **BL-03** — **Any-color mana picks are decided by stock** (`chooseColor` / `chooseColorAllowColorless`).…
