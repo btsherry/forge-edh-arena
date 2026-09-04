@@ -1,9 +1,10 @@
 # forge-light-llm — Patch Notes
 
-## Unreleased — after v3.3.2
+## v3.3.3 — 2026-09-04
 
-Reliability release in progress: the 2026-09-03 full review's interactive
-findings, fixed one at a time.
+Reliability release: the 2026-09-03 full review's interactive findings and
+the 2026-09-04 blind second review, fixed item by item behind the FULL gate
+(429 arena tests including the extended group) and a live validation game.
 
 - **A seat's own triggers are aimed correctly.** A mandatory trigger can no
   longer be "declined" (the option was offered for every trigger; the code
@@ -58,6 +59,11 @@ findings, fixed one at a time.
   `CHOOSE_MODE` window with `state.purpose = "TRIGGER_ORDER"` asks for the
   resolution order (first listed resolves first); identical triggers never
   open a window, and a missing or malformed answer falls to stock ordering.
+  The runner remembers the answer for the same set of trigger groups for the
+  rest of the game, so a Purphoros table is asked once per group set, not on
+  every creature. On this window and the colour window a punt hands the pick
+  back to the engine's stock logic (`{"chosen": []}`) rather than inventing
+  an order.
 - **The seat picks its colours.** "Choose a color" effects with two or more
   legal colours reach the seat as a `CHOOSE_MODE` window with
   `state.purpose = "COLOR"` ("colorless" offered only where the effect allows
@@ -104,10 +110,20 @@ findings, fixed one at a time.
 - **Dashboards** count `hold`/`plan`/`cycle` as fast paths, tolerate records
   written before the backend keys existed, and count torn log lines instead
   of dropping them silently.
+- **Life-for-mana statics are paid correctly** (K'rrik, Son of Yawgmoth
+  class, `PayLifeInsteadOf:<C>`). Forge's AI payer spent its sources on the
+  black pips first and then reported a cost unpayable when three Swamps and
+  40 life could cast Mikaeus ({3}{B}{B}{B}). When the sources cannot cover
+  every remaining pip, the coloured pips the static names are paid with life
+  and the sources kept for the rest; a cost mana alone can pay never costs
+  life. The cast option states the life price when it applies. This is a
+  change to the shared AI payer (forge-ai), so it applies to stock seats too
+  — only when the keyword is present.
 
-Still pending for this release: the K'rrik-class payer fix (paying coloured
-pips with life when sources fall short, a forge-ai change behind the FULL
-gate) and the cut itself, which replaces the v3.3.2 tarball on the bucket.
+Open by design, tracked in `docs/BUG-LOG.md`: further stock surfaces
+(combat damage assignment, convoke) wait for evidence; a silent brain still
+costs one timeout per decision (the heartbeat gate covers a runner that is
+gone, not one that is wedged).
 
 ## v3.3.2 — 2026-09-01
 
