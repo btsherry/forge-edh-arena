@@ -128,7 +128,13 @@ public final class GameResultSpool {
         for (final Player p : players) {
             final int have = counts.getOrDefault(p.getId(), 0);
             final int want = deckSize(p);
-            if (want > 0 && have != want) {
+            if (p.hasLost()) {
+                // CR 800.4a: a player who leaves a multiplayer game takes every
+                // object they own with them — an eliminated seat reads 0 by the
+                // rules, not by a seam (game 19 showed exactly that).
+                System.err.println("[arena] CARD-CHECK seat " + p.getId() + ": eliminated — "
+                        + "owned cards left the game (CR 800.4a); " + have + " remain");
+            } else if (want > 0 && have != want) {
                 System.err.println("[arena] CARD-VANISH seat " + p.getId() + " (" + p.getName()
                         + "): " + have + " of " + want + " owned cards found across all zones");
             } else {

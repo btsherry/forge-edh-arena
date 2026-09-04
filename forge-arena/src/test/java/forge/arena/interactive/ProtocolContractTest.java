@@ -129,11 +129,18 @@ public class ProtocolContractTest {
                 Assert.assertTrue(firstByType.containsKey(must), "surface not exercised: " + must);
             }
 
-            // engine-emitted fixtures for the Python side
+            // engine-emitted fixtures for the Python side. The per-run gameId
+            // is normalized (keeps the schema's shape) and a file is rewritten
+            // only when its content changed, so a green gate leaves the tree
+            // clean instead of touching ten fixtures every run.
             Files.createDirectories(ENGINE_FIXTURES);
             for (Map.Entry<String, JsonNode> e : firstByType.entrySet()) {
+                ((com.fasterxml.jackson.databind.node.ObjectNode) e.getValue()).put("gameId", "1-1");
                 Path out = ENGINE_FIXTURES.resolve(e.getKey().toLowerCase() + ".json");
-                Files.writeString(out, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(e.getValue()) + "\n");
+                String text = MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(e.getValue()) + "\n";
+                if (!Files.exists(out) || !Files.readString(out).equals(text)) {
+                    Files.writeString(out, text);
+                }
             }
         }
     }

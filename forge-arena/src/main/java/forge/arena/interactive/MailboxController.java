@@ -687,9 +687,12 @@ public final class MailboxController extends PlayerControllerAi
             }
             if (!payable) {
                 Card h = sa.getHostCard();
-                System.err.println("[mailbox seat " + seatIndex + "] REFUSED unaffordable cast: "
-                        + (h != null ? h.getName() : sa) + " — cost not payable now (kept in zone)");
                 noteRefusal(sa, h, "unaffordable");
+                System.err.println("[mailbox seat " + seatIndex + "] REFUSED unaffordable cast: "
+                        + (h != null ? h.getName() : sa) + " — needed "
+                        + (lastRefused != null ? lastRefused.get("needed") : "?") + ", payable now "
+                        + (lastRefused != null ? lastRefused.get("payableNow") : "?")
+                        + " (kept in zone; the next window says so)");
                 return true; // keep priority; the next window reports the refusal (item 4)
             }
         }

@@ -192,7 +192,8 @@ JVM launcher), `run-gui.sh`, `arena-add-deck.py` (ingester),
 | `packaging/README.md` | package users | current (v3.3.2; Unreleased section in PATCH-NOTES) |
 | `packaging/PATCH-NOTES.md` | package users | current (v1→v3.3.2 + Unreleased) |
 | `../BUILDING.md` | developers | current |
-| `docs/INTERACTIVE-ARENA.md` | seam engineers | field notes through 59 (2026-09-03) |
+| `docs/INTERACTIVE-ARENA.md` | seam engineers | field notes through 60 (2026-09-03) |
+| `docs/BUG-LOG.md` | everyone | the outstanding-items ledger (opened 2026-09-04): interactive open items, watch items, deferred headless findings, closed-this-pass with commits |
 | `docs/INVENTORY.md` | (this file) | 2026-08-17 |
 | `docs/UPSTREAM-SYNC.md` | maintainers | 2026-08-17 |
 | `docs/IMPLEMENTATION-PLAN.md` | Project 1 | living plan, §-annotated as-builts |
