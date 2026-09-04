@@ -23,6 +23,13 @@ and never acts for another player, but it is not stock play: a punted lethal
 block is "no blocks". The table is in `forge-arena/runner/seatd/seat-brief.md`
 and pinned by a test; `PATCH-NOTES.md` lists every surface.
 
+**Download:** [forge-light-llm-latest.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-latest.tar.gz)
+(always the current release; v3.4, 2026-09-04, ~113 MB). Each release also
+keeps its dated object, this one
+[forge-light-llm-20260904b.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-20260904b.tar.gz);
+`PATCH-NOTES.md` inside says which version you have. Unpack anywhere:
+`tar xzf forge-light-llm-latest.tar.gz`.
+
 Built on [Forge](https://github.com/Card-Forge/forge) (GPL-3.0); the engine
 ships prebuilt, see `LICENSE`. Non-commercial fan project. Magic: The
 Gathering is © Wizards of the Coast.
