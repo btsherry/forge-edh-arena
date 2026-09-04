@@ -52,10 +52,10 @@ Two more surefire knobs (both added 2026-09-04, BL-25):
 - **`arena.excluded.groups`** (default `extended`). Tests tagged with the
   TestNG group `extended` are skipped by the STANDARD gate so its time does
   not grow; the FULL / release gate passes `-Darena.excluded.groups=none` to
-  run them. As of 2026-09-04 the group is wired in the pom but no test in
-  the tree carries it yet — the two-card seam widenings, the malformed-answer
-  matrix and the launcher tests planned for it (BUG-LOG BL-11/12/25) are
-  pending.
+  run them. As of 2026-09-04 the group holds the two-card seam widenings, the malformed-answer
+  matrix (`FallbackMatrixTest`) and the launcher roster tests
+  (`GuiPilotMatchRosterTest`): 82 methods that the FULL gate runs and the
+  standard gate skips.
 - **`-Darena.fixtures.refresh=true`** — `ProtocolContractTest` compares the
   requests the engine emits against the committed fixtures in
   `forge-arena/runner/tests/fixtures/engine/*.json` and fails, naming the
