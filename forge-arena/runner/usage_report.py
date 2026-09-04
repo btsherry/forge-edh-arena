@@ -34,14 +34,16 @@ for jl in sorted(logs.glob("seat-*.jsonl")):
           f"({', '.join(f'{k}={v}' for k, v in sorted(sources.items()))}) "
           f"avg model latency {avg:.1f}s")
     if last_cum:
-        print(f"  cumulative: {last_cum['calls']} calls, "
-              f"in={last_cum['input_tokens']} out={last_cum['output_tokens']} "
-              f"cache_read={last_cum['cache_read_input_tokens']} "
-              f"≈${last_cum['cost_usd']:.2f} API-equivalent (subscription-covered)")
+        # BL-10: pre-backend records may lack keys — defaults, never KeyError
+        g = lambda k, d=0: last_cum.get(k, d)  # noqa: E731
+        print(f"  cumulative: {g('calls')} calls, "
+              f"in={g('input_tokens')} out={g('output_tokens')} "
+              f"cache_read={g('cache_read_input_tokens')} "
+              f"≈${g('cost_usd', 0.0):.2f} API-equivalent (subscription-covered)")
         for k in ("input_tokens", "output_tokens", "cache_read_input_tokens"):
-            grand[k] += last_cum[k]
-        grand["cost"] += last_cum["cost_usd"]
-        grand["calls"] += last_cum["calls"]
+            grand[k] += g(k)
+        grand["cost"] += g("cost_usd", 0.0)
+        grand["calls"] += g("calls")
     else:  # pre-telemetry records: fall back to per-decision usage sums
         print(f"  summed usage (excl. session init): in={per['input_tokens']} "
               f"out={per['output_tokens']} cache_read={per['cache_read_input_tokens']}")

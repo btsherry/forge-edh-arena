@@ -38,6 +38,12 @@ while [ $# -gt 0 ]; do
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
+# BL-27: deck files are slugs by construction; a name with whitespace would
+# word-split in three scripts and surface as an unexplained preflight failure.
+case "$HUMAN_DECK" in *[[:space:]]*)
+  echo "arena: deck file names must not contain whitespace: '$HUMAN_DECK' — rename it to a slug (e.g. my-deck.dck)" >&2; exit 2 ;;
+esac
+HUMAN_SLUG=$(basename "$HUMAN_DECK" .dck)   # item 13g: a path prefix used to break the slug
 # Advisor default: ON for human games (Ben, 2026-08-17), N/A for all-ai.
 if [ -z "$ADVISOR" ]; then
   [ "$MODE" = "human" ] && ADVISOR=1 || ADVISOR=0
@@ -47,7 +53,6 @@ fi
 # The advisor brain needs the human deck's dossier + primer (same preflight
 # the AI seats get). Missing → the game still launches, just unadvised.
 if [ "$ADVISOR" = "1" ]; then
-  HUMAN_SLUG=$(basename "$HUMAN_DECK" .dck)   # item 13g: a path prefix used to break the slug
   if ! pf_err=$(PREFLIGHT_DECKS="$HUMAN_SLUG" "$ROOT/runner/run_table.sh" --preflight 2>&1 >/dev/null); then
     # item 13g: say WHAT failed — this used to report every preflight failure
     # (a missing OpenRouter key, a backend model on seat 0) as "not ingested"
@@ -58,7 +63,10 @@ if [ "$ADVISOR" = "1" ]; then
 fi
 [ -n "$MODE" ] || { echo "specify --all-ai or --human [deck]" >&2; exit 2; }
 
-ALL=""
+# Item R (Ben, 2026-09-04): run_table.sh seats the AI decks from the roster
+# rule (all-AI: roster order; human: the first three roster decks that are not
+# the human's). The human's slug is what the rule needs.
+ALL="ARENA_HUMAN_DECK=$HUMAN_SLUG"
 [ "$MODE" = "all-ai" ] && ALL="ALL_SEATS=1"
 
 # 0) preflight the AI decks BEFORE tearing down any running game: each AI seat must
@@ -83,17 +91,14 @@ sleep 3
 # engine writes; one-way, so it can never stall the game. Backend API keys are
 # stripped (plan F-19): only run_table.sh's seat children may hold them —
 # env -u is a no-op when the vars are unset, so the Claude path is untouched.
+# BL-26: supervised like the seats (runner/run_advisor.sh restart loop); the
+# loop writes advisor.pid per restart, this PID is the loop itself.
 if [ "$ADVISOR" = "1" ]; then
   nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
-    python3 "$ROOT/runner/advisor_runner.py" --deck "$HUMAN_SLUG" \
+    "$ROOT/runner/run_advisor.sh" --deck "$HUMAN_SLUG" \
     --model "$MODEL" --effort "$EFFORT" >"$LOGS/advisor_runner.out" 2>&1 &
-  echo $! > "$LOGS/pids/advisor.pid"
+  echo $! > "$LOGS/pids/advisor-loop.pid"
 fi
-
-# (react-autopass daemon RETIRED from the launch 2026-08-17: its allowlist
-# fastpath lives in the seat runners now. scripts/react-autopass.py stays in
-# the repo for manual experiments only — not shipped, not reaped (item 13d):
-# it writes into EVERY seat's outbox with no threat check.)
 
 # 3) GUI (spectator for all-ai, human seat 0 otherwise)
 if [ "$MODE" = "all-ai" ]; then GUI_ARG="--all-ai"; else GUI_ARG="$HUMAN_DECK"; fi

@@ -33,6 +33,12 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=120.0)
     args = ap.parse_args()
 
+    if not FIX.is_dir():
+        # BL-21: the package ships without runner/tests, so this tool has
+        # nothing to replay there; say so instead of "0 fixtures".
+        print(f"replay: no fixtures at {FIX} — this tool needs the source "
+              f"checkout's runner/tests/fixtures (not shipped in the package)")
+        return 2
     names = (args.only.split(",") if args.only
              else sorted(p.stem for p in FIX.glob("*.json")))
     brain = SeatBrain(args.seat, args.deck, model=args.model)

@@ -167,8 +167,13 @@ def validate(req: dict, out) -> dict | None:
             if a in seen:
                 continue  # a creature attacks once; a repeat entry is noise, keep first
             d = e.get("defender")
+            if d is None and len(defender_ids) == 1:
+                # BL-23: the engine's chooseDefender accepts a missing
+                # defender when exactly one is legal — fill it in rather
+                # than punting a legal attack to "no attackers".
+                d = next(iter(defender_ids))
             if not _is_int(d) or (defender_ids and d not in defender_ids):
-                return None  # defender ALWAYS explicit and known
+                return None  # defender explicit and known (or the sole legal one)
             seen.add(a)
             clean.append({"attacker": a, "defender": d})
         return {"attackers": clean}

@@ -32,8 +32,19 @@ from seatd.brain import SeatBrain  # noqa: E402
 POLL_S = 0.25  # advice feels snappier; cost is a stat() at 4Hz
 # Table roster convention shared with run_table.sh / GuiPilotMatch: four deck
 # slugs in seat order, overridable via ARENA_SEAT_DECKS.
-DEFAULT_TABLE = ("selvala-heart-of-the-wilds purphoros-god-of-the-forge "
-                 "giada-font-of-hope urza-lord-high-artificer")
+# Item R (Ben, 2026-09-04): the all-AI table is Urza, Giada, Purphoros, Selvala
+# in seat order; a human game seats the human's deck at 0 and the first three
+# roster decks that are not the human's behind it. GuiPilotMatch.DECKS and
+# run_table.sh apply the same rule.
+DEFAULT_TABLE = ("urza-lord-high-artificer giada-font-of-hope "
+                 "purphoros-god-of-the-forge selvala-heart-of-the-wilds")
+CONTEXT_MAX_LINES = 40  # BL-13: bound on lines carried between advice calls
+
+
+def table_opponents(own_deck: str, roster: list[str]) -> list[str]:
+    """The three AI decks at a human table: roster minus the human's deck, in
+    roster order, first three. Mirrors GuiPilotMatch/run_table.sh."""
+    return [d for d in roster if d != own_deck][:3]
 
 
 def opponent_deck_sections(own_deck: str, arena_root: Path) -> list[str]:
@@ -47,9 +58,7 @@ def opponent_deck_sections(own_deck: str, arena_root: Path) -> list[str]:
     import os
     roster = (os.environ.get("ARENA_SEAT_DECKS", "").split() or DEFAULT_TABLE.split())
     parts: list[str] = []
-    for slug in roster:
-        if slug == own_deck:
-            continue
+    for slug in table_opponents(own_deck, roster):
         dossier = arena_root / "decks" / slug / "dossier"
         try:
             cards = json.loads((dossier / "deck-cards.json").read_text()).get("cards", [])
@@ -93,6 +102,7 @@ class AdvisorRunner:
         self.last_seq = 0
         self.game_id: str | None = None   # item 5/8: the game being advised
         self.pending_context: list[str] = []  # chosen/digest lines awaiting a call
+        self._context_dropped = 0             # BL-13: lines cut by the bound
         self._init_control(model, effort)
         # ---- frequency governor state (the charm patch) ----------------------
         # Advice is deliberately sparse and humanly random: every in-game window
@@ -146,17 +156,32 @@ class AdvisorRunner:
         print(time.strftime("%H:%M:%S"), msg, flush=True)
 
     def _stream_write(self, text: str) -> None:
-        with self._stream.open("a") as f:
-            f.write(text)
+        try:
+            with self._stream.open("a") as f:
+                f.write(text)
+        except OSError:
+            pass  # BL-26: bookkeeping never ends the advisor
 
     def _record(self, kind: str, body: dict) -> None:
         body = {"ts": round(time.time(), 3), "kind": kind, **body}
-        with self._jsonl.open("a") as f:
-            f.write(json.dumps(body) + "\n")
+        try:
+            with self._jsonl.open("a") as f:
+                f.write(json.dumps(body) + "\n")
+        except OSError:
+            pass  # BL-26
         try:
             self._usage.write_text(json.dumps(self.brain.totals))
         except OSError:
             pass
+
+    def _push_context(self, line: str) -> None:
+        """BL-13: the context carried into the next advice call is bounded;
+        the oldest lines go first and the drop is stated, never silent."""
+        self.pending_context.append(line)
+        extra = len(self.pending_context) - CONTEXT_MAX_LINES
+        if extra > 0:
+            del self.pending_context[:extra]
+            self._context_dropped += extra
 
     # ---- control file (AI-tab steppers re-dial the advisor mid-game) ----------
 
@@ -268,8 +293,11 @@ class AdvisorRunner:
         turn, phase = req.get("turn"), req.get("phase")
         ctx = ""
         if self.pending_context:
-            ctx = "SINCE LAST TIME:\n" + "\n".join(self.pending_context) + "\n\n"
+            head = (f"- … {self._context_dropped} earlier line(s) dropped\n"
+                    if self._context_dropped else "")
+            ctx = "SINCE LAST TIME:\n" + head + "\n".join(self.pending_context) + "\n\n"
             self.pending_context = []
+            self._context_dropped = 0
         prompt = (f"{ctx}DECISION NOW — {req.get('decisionType')} "
                   f"(turn {turn}, {phase}): {req.get('prompt')}\n"
                   f"{self._fmt_options(req)}"
@@ -305,6 +333,7 @@ class AdvisorRunner:
         self._say(f"[advisor] new game detected ({why}) — resetting session")
         self.brain.reset()
         self.pending_context = []
+        self._context_dropped = 0
         self.last_seq = 0
         self.gov_turn = -1
         self.gov_budget = 0
@@ -348,7 +377,7 @@ class AdvisorRunner:
             elif kind == "digest":
                 digests.append(body)
             elif kind == "chosen":
-                self.pending_context.append(
+                self._push_context(
                     f"- the human chose {json.dumps(body.get('chosen'))} "
                     f"for {body.get('decisionType')} (seq {body.get('seq')})")
             elif kind == "note":
@@ -364,7 +393,7 @@ class AdvisorRunner:
                 self._record("skipped_backlog", {"seq": r.get("seq"),
                                                  "decisionType": r.get("decisionType")})
             for d in digests:
-                self.pending_context.append(
+                self._push_context(
                     f"- turn {d.get('turn')} public log: "
                     + " | ".join((d.get("digest") or [])[-25:]))
             return consumed
@@ -386,7 +415,7 @@ class AdvisorRunner:
         # color); with no admitted decision they get their own commentary call.
         if admitted is not None:
             for d in digests:
-                self.pending_context.append(
+                self._push_context(
                     f"- turn {d.get('turn')} public log: "
                     + " | ".join((d.get("digest") or [])[-25:]))
             self._advise(admitted[0])

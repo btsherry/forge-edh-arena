@@ -212,49 +212,43 @@ class SeatRunner:
                                for a in combat][:6]
         return stamp
 
-    def _transport_event(self, kind: str) -> None:
-        """Append {ts, seat, kind} to logs/transport-events.jsonl — the
+    def _transport_event(self, kind: str, game_id=None) -> None:
+        """Append {ts, seat, kind, gameId} to logs/transport-events.jsonl — the
         ratings applier voids transport-contaminated games from this file
-        (any wedge, or a punt pile-up on one seat)."""
+        (any wedge, or a punt pile-up on one seat). BL-09: the game id lets
+        the sweep attribute an event to its game exactly; the time window is
+        the fallback for events from an unstamped engine. The file is never
+        rotated or moved during a session (one append, one file)."""
         try:
             p = self._jsonl_path.parent / "transport-events.jsonl"
             with p.open("a") as f:
                 f.write(json.dumps({"ts": time.time(), "seat": self.seat,
-                                    "kind": kind}) + "\n")
+                                    "kind": kind, "gameId": game_id}) + "\n")
         except OSError:
             pass  # never let bookkeeping hurt the game
 
-    def _game_log_for(self, gid) -> Path:
-        """game-<gid>.jsonl, with game.jsonl kept as a symlink to it (atomic
-        replace, so four seats racing to point it are harmless). A legacy
-        regular game.jsonl is set aside as game-legacy-<mtime>.jsonl once.
-        No gid (unstamped engine): the flat file, exactly as before."""
-        if not isinstance(gid, str) or not gid:
-            return self._game_log
-        link = self._game_log
-        target = link.with_name(f"game-{gid}.jsonl")
-        try:
-            if link.is_symlink():
-                if os.readlink(link) == target.name:
-                    return target
-            elif link.exists():
-                try:
-                    link.rename(link.with_name(
-                        f"game-legacy-{int(link.stat().st_mtime)}.jsonl"))
-                except OSError:
-                    pass  # another seat moved it first
-            tmp = link.with_name(f"{link.name}.{os.getpid()}.tmp")
+    def _game_log_paths(self, gid) -> list:
+        """The two append targets for one narrative record (BL-21, replacing
+        item 13h's symlink swap): game.jsonl, a PLAIN append-only file that is
+        the human `tail -f` target for the whole session and is archived at
+        teardown; and game-<gid>.jsonl, the per-game machine record ratings
+        and the dashboards read. Both are single-line appends to files that
+        are never moved during a session — the one file operation with no
+        partial-state window. A symlink left by a pre-BL-21 runner is removed
+        once so the plain file can take its place (a sibling seat may have
+        removed it first; that is fine)."""
+        flat = self._game_log
+        if not getattr(self, "_game_log_checked", False):
+            self._game_log_checked = True
             try:
-                os.symlink(target.name, tmp)
-                os.replace(tmp, link)
+                if flat.is_symlink():
+                    os.unlink(flat)
             except OSError:
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-        except OSError:
-            pass
-        return target
+                pass
+        paths = [flat]
+        if isinstance(gid, str) and gid:
+            paths.append(flat.with_name(f"game-{gid}.jsonl"))
+        return paths
 
     def _record(self, req: dict, answer: dict, source: str, meta=None,
                 why: str | None = None, consumed: bool = True) -> None:
@@ -301,19 +295,21 @@ class SeatRunner:
             tmp_p.write_text(json.dumps(cum, indent=1))
             os.replace(tmp_p, usage_p)
             # Shared narrative line (append-only; single-line writes are atomic
-            # enough on a local fs; no seat ever reads this file). Item 13h:
-            # one file per game (game-<gameId>.jsonl) with game.jsonl a symlink
-            # to the current one, so the live readers keep their path and the
-            # dataset stops being one unbounded file every sweep re-reads.
-            with self._game_log_for(req.get("gameId")).open("a") as f:
-                f.write(json.dumps({
-                    "ts": rec["ts"], "seat": self.seat, "deck": self.deck,
-                    "turn": rec["turn"], "phase": rec["phase"],
-                    "type": rec["type"], "seq": rec["seq"], "source": source,
-                    "model": self.brain.model, "effort": self.brain.effort,
-                    "answer": answer, "why": why,
-                    "deviation": rec.get("deviation"),
-                    "latency_s": rec.get("latency_s"), "board": stamp}) + "\n")
+            # enough on a local fs; no seat ever reads this file). BL-21: the
+            # same line goes to game.jsonl (human tail, archived at teardown)
+            # and to game-<gameId>.jsonl (the per-game machine record).
+            line = json.dumps({
+                "ts": rec["ts"], "seat": self.seat, "deck": self.deck,
+                "gameId": req.get("gameId"),
+                "turn": rec["turn"], "phase": rec["phase"],
+                "type": rec["type"], "seq": rec["seq"], "source": source,
+                "model": self.brain.model, "effort": self.brain.effort,
+                "answer": answer, "why": why,
+                "deviation": rec.get("deviation"),
+                "latency_s": rec.get("latency_s"), "board": stamp}) + "\n"
+            for gp in self._game_log_paths(req.get("gameId")):
+                with gp.open("a") as f:
+                    f.write(line)
         except OSError:
             pass
 
@@ -433,10 +429,18 @@ class SeatRunner:
         return (req.get("decisionType"), req.get("phase"), stack, opts, n_opp)
 
     @staticmethod
+    def _opt_key(o: dict) -> tuple:
+        """Replay identity of an option: (label, type, cost). BL-08: label
+        alone let a card's costed ability rebind to its free sibling when the
+        description drifted between windows."""
+        return (str(o.get("label", "")), o.get("type"), o.get("cost"))
+
+    @staticmethod
     def _cycle_shape(req: dict, answer: dict):
         """Answer -> replayable shape, or None (unsupported: never replayed).
-        Shapes rebind by option LABEL, never by id — ids are per-window."""
-        opts = {o.get("id"): str(o.get("label", ""))
+        Shapes rebind by option identity (label, type, cost), never by id —
+        ids are per-window."""
+        opts = {o.get("id"): SeatRunner._opt_key(o)
                 for o in req.get("options", []) or []}
         if not isinstance(answer, dict):
             return None
@@ -461,15 +465,20 @@ class SeatRunner:
 
     @staticmethod
     def _cycle_rebind(shape, req: dict):
-        """Shape -> concrete answer against THIS request, or None."""
-        def find(lab):
-            exact = [o for o in req.get("options", []) or []
-                     if str(o.get("label", "")) == lab]
+        """Shape -> concrete answer against THIS request, or None. An exact
+        (label, type, cost) match wins; otherwise the label PREFIX (the card
+        name) must match together with the same type and cost, and exactly
+        one option may qualify — any ambiguity means no replay (BL-08)."""
+        def find(key):
+            lab, typ, cost = key
+            opts = req.get("options", []) or []
+            exact = [o for o in opts if SeatRunner._opt_key(o) == key]
             if len(exact) == 1:
                 return exact[0].get("id")
             pre = lab.split("  ")[0]
-            close = [o for o in req.get("options", []) or []
-                     if str(o.get("label", "")).split("  ")[0] == pre]
+            close = [o for o in opts
+                     if str(o.get("label", "")).split("  ")[0] == pre
+                     and o.get("type") == typ and o.get("cost") == cost]
             return close[0].get("id") if len(close) == 1 else None
         if shape == ("id0",):
             return {"chosenId": 0}
@@ -668,10 +677,14 @@ class SeatRunner:
             import traceback
             self._say(f"[seat {self.seat}] seq={req.get('seq')} INTERNAL ERROR in "
                       f"handle() — answering the safe default:\n{traceback.format_exc()}")
+            # BL-20 hardening: an internal error leaves a hole in the cycle
+            # tape; never let a loop arm across it.
+            self.cycle = None
+            self._hist.clear()
             try:
                 answer = rules.safe_default(req)
                 ok = self.mb.respond(req, answer)
-                self._transport_event("punt")
+                self._transport_event("punt", req.get("gameId"))
                 self._record(req, answer, "punt", why="punt: runner exception", consumed=ok)
             except Exception:  # noqa: BLE001
                 pass
@@ -782,12 +795,17 @@ class SeatRunner:
             self.plan = None
 
         # Deadline: answer must land before the engine gives up on us.
+        vanished = False
         try:
             mtime = (self.mb.inbox / f"req-{seq}.json").stat().st_mtime
         except OSError:
+            # BL-28: on a real mailbox a missing request file means the
+            # engine already timed out or died — punt now, never invent a
+            # fresh window. A fake mailbox with no inbox (tests) keeps one.
+            vanished = self.mb.inbox.is_dir()
             mtime = time.time()
         deadline = mtime + 0.8 * self.timeout_s
-        budget = deadline - time.time()
+        budget = 0.0 if vanished else deadline - time.time()
         answer, source, meta, why = None, "punt", None, None
         if budget > 5.0:
             # Advisory: remaining planned cards (if a plan survives) fed as text.
@@ -888,6 +906,10 @@ class SeatRunner:
                 why = f"punt: invalid model answer ({(why or '-')[:80]})"
             else:
                 why = "punt: model failure/timeout"
+        elif vanished:
+            self._say(f"[seat {self.seat}] seq={seq} request file vanished "
+                      f"(engine moved on) -> safe default without model call")
+            why = "punt: request file vanished"
         else:
             self._say(f"[seat {self.seat}] seq={seq} only {budget:.0f}s left "
                       f"-> safe default without model call")
@@ -895,11 +917,11 @@ class SeatRunner:
         if answer is None:
             answer = rules.safe_default(req)
         if source == "punt":
-            self._transport_event("punt")
+            self._transport_event("punt", req.get("gameId"))
         wedges = getattr(self.brain, "wedges", 0)
         if wedges > getattr(self, "_wedges_seen", 0):
             self._wedges_seen = wedges
-            self._transport_event("wedge")
+            self._transport_event("wedge", req.get("gameId"))
 
         # Item 3: only a REAL model pass feeds the same-turn memo. A punt
         # (timeout / wedge / invalid / short budget) also answers {"chosenId":0}
@@ -917,5 +939,10 @@ class SeatRunner:
                   f"{'' if ok else ' WINDOW LOST'}")
         self._record(req, answer, source, meta, why=why, consumed=ok)
         if cyc_sig is not None:
-            self._hist.append((cyc_sig, dtype, self._cycle_shape(req, answer)))
+            # BL-20: a punt is never a replayable step. Recording it with an
+            # unreplayable shape makes repeat_cycle refuse to arm across it
+            # (the existing "non-replayable decision" check), so a punted
+            # decline can never be replayed 64 times as source "cycle".
+            shape = None if source == "punt" else self._cycle_shape(req, answer)
+            self._hist.append((cyc_sig, dtype, shape))
             del self._hist[:-self.CYCLE_MAX_HIST]

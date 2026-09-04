@@ -45,7 +45,7 @@ class TableDrivenContract(unittest.TestCase):
          [{"attackers": []},
           {"attackers": [{"attacker": 302, "defender": 0}]},
           {"attackers": [{"attacker": 302, "defender": 3}]}],
-         [{"attackers": [{"attacker": 302}]},                     # defender omitted
+         [{"attackers": [{"attacker": 302}]},                     # defender omitted with SEVERAL legal
           {"attackers": [{"attacker": 999, "defender": 0}]},      # unknown attacker
           {"attackers": [{"attacker": 302, "defender": 2}]},      # unknown defender
           {"attackers": [{"attacker": 0, "defender": 0}]},        # pass id as attacker

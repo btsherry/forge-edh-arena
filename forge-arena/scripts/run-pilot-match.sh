@@ -75,6 +75,11 @@ fi
 
 if [ -n "${JAVA_HOME:-}" ]; then JAVA="$JAVA_HOME/bin/java"; else JAVA="java"; fi
 
+# BL-27: deck files are slugs; whitespace would word-split below.
+case "${1:-}" in *[[:space:]]*)
+  echo "run-pilot-match: deck file names must not contain whitespace: '$1'" >&2; exit 2 ;;
+esac
+
 # Table roster pass-through: spaces become commas so the property stays one
 # JVM argument (GuiPilotMatch splits on both). Empty when unset — the word
 # then vanishes from the (intentionally unquoted) exec arg list.

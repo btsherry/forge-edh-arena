@@ -120,9 +120,14 @@ for s in $SLUGS; do
   cp "$src/dossier/deck-cards.json" "$src/dossier/combos.json" \
      "$src/dossier/manifest.json" \
      "$DEST/forge-arena/decks/$s/dossier/"   # manifest: the launch preflight's hash check (item 7)
-  [ -d "$src/dossier/.cache" ] && rsync -a "$src/dossier/.cache/" \
-     "$DEST/forge-arena/decks/$s/dossier/.cache/"
+  # BL-18: dossier/.cache is NOT shipped. It is an ingestion accelerator only
+  # (Scryfall/Spellbook/DeckCheck API payloads) and the DeckCheck payload
+  # carries the account's username and avatar. Nothing at runtime reads it.
 done
+if find "$DEST/forge-arena/decks" -path '*/dossier/.cache*' -print -quit 2>/dev/null | grep -q .; then
+  echo "ERROR: a dossier/.cache reached the package tree (BL-18) — refusing to build" >&2
+  exit 1
+fi
 
 echo "[6/9] docs — primers for the shipped decks + the two rules digests the"
 echo "      brains load verbatim (the sole research/ exception)"
@@ -136,6 +141,7 @@ cp "$REPO/forge-arena/docs/research/mtg-rules-summary.md" \
 
 echo "[7/9] runner — the seatd tree (no tests, no pycache, empty logs/)"
 rsync -a --exclude '__pycache__/' --exclude '/tests/' --exclude '/logs/' \
+  --exclude '/replay.py' \
   --exclude '/ratings.json' --exclude '/ratings-history.jsonl' \
   --exclude '/ratings.lock' --exclude '/results/' \
   "$REPO/forge-arena/runner/" "$DEST/forge-arena/runner/"
@@ -149,8 +155,7 @@ if [ -n "$KEEP" ]; then
 fi
 
 echo "[8/9] scripts — play/stop/launch/ingest/observe/cardwatch (batch, canary, prep,"
-echo "      smoke, discovery harnesses and react-autopass stay home — item 13d:"
-echo "      react-autopass writes into EVERY seat's outbox with no threat check)"
+echo "      smoke and the discovery harnesses stay home)"
 mkdir -p "$DEST/forge-arena/scripts"
 for f in arena-play.sh arena-stop.sh run-pilot-match.sh run-gui.sh \
          arena-add-deck.py arena-status.py arena-digest.py arena-cardwatch.py; do

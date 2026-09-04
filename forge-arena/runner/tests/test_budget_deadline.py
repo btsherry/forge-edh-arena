@@ -34,7 +34,7 @@ class BudgetDeadlineTests(unittest.TestCase):
         self.calls = []            # (timeout passed to subprocess, was_init)
         self.init_takes = [0.0]    # simulated wall time the init call burns
         self.now = [1000.0]
-        orig_run, orig_time = brain_mod.subprocess.run, brain_mod.time.time
+        orig_run, orig_time = brain_mod._run, brain_mod.time.time
 
         def fake_run(cmd, **kw):
             is_init = "--resume" not in cmd
@@ -45,9 +45,9 @@ class BudgetDeadlineTests(unittest.TestCase):
                 self.now[0] += 1.0
             return Proc(envelope("sess-A"))
 
-        brain_mod.subprocess.run = fake_run
+        brain_mod._run = fake_run
         brain_mod.time.time = lambda: self.now[0]
-        self.addCleanup(lambda: setattr(brain_mod.subprocess, "run", orig_run))
+        self.addCleanup(lambda: setattr(brain_mod, "_run", orig_run))
         self.addCleanup(lambda: setattr(brain_mod.time, "time", orig_time))
 
     def _brain(self):

@@ -57,14 +57,42 @@ def extract_json(text: str) -> dict | None:
             return out if isinstance(out, dict) else None
         except json.JSONDecodeError:
             pass
-    start, end = t.find("{"), t.rfind("}")
-    if 0 <= start < end:
+    # BL-27: walk every "{" with raw_decode until an object parses. The old
+    # first-"{"-to-last-"}" slice broke on mana symbols in prose ("{G}{2}{W}
+    # ... {"chosenId": 3}") and turned a usable answer into a punt.
+    dec = json.JSONDecoder()
+    for i, ch in enumerate(t):
+        if ch != "{":
+            continue
         try:
-            out = json.loads(t[start:end + 1])
-            return out if isinstance(out, dict) else None
+            out, _ = dec.raw_decode(t, i)
         except json.JSONDecodeError:
-            pass
+            continue
+        if isinstance(out, dict):
+            return out
     return None
+
+
+def _run(cmd, *, input, timeout, cwd, on_child=None):
+    """subprocess.run's contract (CompletedProcess or TimeoutExpired) with a
+    TRACKED child (BL-28): `on_child(proc)` is called when the child starts
+    and `on_child(None)` when it is gone, so the seat's signal handler can
+    kill an in-flight CLI call instead of orphaning it at teardown. Tests
+    monkeypatch this function, never subprocess itself."""
+    child = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, text=True, cwd=cwd)
+    if on_child is not None:
+        on_child(child)
+    try:
+        out, err = child.communicate(input, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        child.communicate()
+        raise
+    finally:
+        if on_child is not None:
+            on_child(None)
+    return subprocess.CompletedProcess(cmd, child.returncode, out, err)
 
 
 class SeatBrain:
@@ -105,6 +133,7 @@ class SeatBrain:
         self._rejoin_pending = False
         self.wedges = 0  # lifetime count; the runner mirrors these into
                          # transport-events.jsonl for the ratings void check
+        self._child = None  # the in-flight CLI process, for kill_child (BL-28)
         # Cumulative burn since instantiation (includes the dossier init call).
         self.totals = {"calls": 0, "input_tokens": 0, "output_tokens": 0,
                        "cache_read_input_tokens": 0,
@@ -192,16 +221,20 @@ class SeatBrain:
         # ~3.3s of the ~6s per-call floor (2026-08-17 pace study). Skipping
         # it changes nothing the model can see or do; --disallowedTools "*"
         # already made those servers inert.
+        # --setting-sources "" (BL-24): no user/project settings, hooks or
+        # plugins load into a brain call — model and effort are passed
+        # explicitly, so nothing from those files is needed. (CLAUDE.md
+        # auto-discovery is NOT affected by this flag; see the README note.)
         cmd = ["claude", "-p", "-", "--output-format", "json",
                "--model", self.model, "--effort", eff,
                "--disallowedTools", "*",
-               "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
+               "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+               "--setting-sources", ""]
         if resume and self.session_id:
             cmd += ["--resume", self.session_id]
         try:
-            proc = subprocess.run(
-                cmd, input=prompt, capture_output=True, text=True,
-                timeout=timeout_s, cwd=str(self.root))
+            proc = _run(cmd, input=prompt, timeout=timeout_s, cwd=str(self.root),
+                        on_child=self._track_child)
         except subprocess.TimeoutExpired:
             self.log(f"[seat {self.seat}] model call timed out ({timeout_s:.0f}s)")
             return None
@@ -226,6 +259,19 @@ class SeatBrain:
                      f"{str(env.get('result'))[:200]}")
             return None
         return env
+
+    def _track_child(self, proc) -> None:
+        self._child = proc
+
+    def kill_child(self) -> None:
+        """Kill the in-flight CLI call, if any (BL-28: called from the seat's
+        SIGTERM/SIGINT handler so teardown never orphans a model call)."""
+        c = self._child
+        if c is not None:
+            try:
+                c.kill()
+            except OSError:
+                pass
 
     def _accumulate(self, env: dict) -> None:
         u = env.get("usage") or {}

@@ -119,25 +119,41 @@ class RunnerHygiene(unittest.TestCase):
         self.assertIn("runner exception", rows[-1]["why"])
         self.assertIn("INTERNAL ERROR", r._log_path.read_text())
 
-    def test_game_log_rotates_per_game_with_a_current_symlink(self):
+    def test_game_log_is_plain_and_per_game_files_ride_alongside(self):
+        """BL-21 (2026-09-04, replacing item 13h's symlink): game.jsonl is a
+        PLAIN append-only file — the human `tail -f` target for the whole
+        session — and every record is ALSO appended to game-<gameId>.jsonl,
+        the per-game machine record. A symlink left by a 13h runner is removed
+        once so the plain file can take its place."""
         r = runner()
         r.brain.decide = lambda prompt, **kw: ({"chosenId": 0}, dict(META))
+        # a pre-BL-21 runner left game.jsonl as a symlink: it must go
+        legacy = r._game_log.with_name("game-legacy-target.jsonl")
+        legacy.write_text("")
+        r._game_log.symlink_to(legacy.name)
         req = react(1)
         req["gameId"] = "1756950000123-4242"
         r.handle(req)
         per_game = r._game_log.with_name("game-1756950000123-4242.jsonl")
-        self.assertTrue(per_game.exists(), "records go to the per-game file")
-        self.assertTrue(r._game_log.is_symlink(), "game.jsonl is a symlink")
-        self.assertEqual(r._game_log.resolve(), per_game.resolve())
+        self.assertFalse(r._game_log.is_symlink(), "game.jsonl is a plain file again")
+        self.assertTrue(r._game_log.is_file())
+        self.assertTrue(per_game.exists(), "records ALSO go to the per-game file")
+        self.assertEqual(len(r._game_log.read_text().splitlines()), 1)
         self.assertEqual(len(per_game.read_text().splitlines()), 1)
-        # a second game: the symlink moves, the first file stays
+        self.assertEqual(json.loads(per_game.read_text())["gameId"], "1756950000123-4242")
+        # a second game: game.jsonl keeps accumulating (same inode, tail -f
+        # follows), a second per-game file appears, the first stays
         req2 = react(1, turn=1)
         req2["gameId"] = "1756950009999-4242"
         r.handle(req2)
-        self.assertEqual(r._game_log.resolve(),
-                         r._game_log.with_name("game-1756950009999-4242.jsonl").resolve())
+        self.assertEqual(len(r._game_log.read_text().splitlines()), 2)
+        self.assertTrue(r._game_log.with_name("game-1756950009999-4242.jsonl").exists())
         self.assertTrue(per_game.exists())
-
+        self.assertEqual(len(per_game.read_text().splitlines()), 1)
+        # an unstamped engine (no gameId): only the flat file
+        r.handle(react(2, turn=2))
+        self.assertEqual(len(r._game_log.read_text().splitlines()), 3)
+        self.assertEqual(len(list(r._game_log.parent.glob("game-*.jsonl"))), 3)  # 2 games + legacy
 
 if __name__ == "__main__":
     unittest.main()

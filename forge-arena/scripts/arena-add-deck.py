@@ -93,11 +93,13 @@ def parse_dck(path: str):
             continue
         if section == "sideboard":
             continue
-        m = re.match(r"(\d+)\s*[xX]?\s+(.+)", line)            # "3 Card" / "3x Card"
-        if m:
+        m = re.match(r"^(\d+)\s*[xX]?\s+(.+)$", line)          # "3 Card" / "3x Card"
+        if m and int(m.group(1)) <= 100:
             qty, card = int(m.group(1)), m.group(2)
         else:
-            qty, card = 1, line                                # bare card name -> qty 1
+            # bare card name -> qty 1; BL-14: a leading number that cannot be a
+            # count in a 100-card deck is part of the name ("1996 World Champion")
+            qty, card = 1, line
         card = card.split("|")[0].strip()                      # drop |SET|num tags
         if card:
             (commanders if section == "commander" else main).append((card, qty))

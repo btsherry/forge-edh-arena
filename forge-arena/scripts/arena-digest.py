@@ -9,7 +9,9 @@ game.jsonl and, on each turn rollover, emits:
   t14 | life 40/38/40/25 | seat2 CAST_SPELL x4, DECLARE_ATTACKERS | ELIM: seat3
 
 Also emits an immediate line for eliminations and for any punt/invalid, so the
-digest doubles as a light problem signal without a second monitor.
+digest doubles as a light problem signal without a second monitor. game.jsonl
+is a plain append-only file for the whole session (BL-21), so one digest spans
+every game of the session; torn lines are counted and reported, never silent.
 
 Usage: python3 forge-arena/scripts/arena-digest.py [game.jsonl]
 """
@@ -56,6 +58,7 @@ def main():
     last_lives = {}
     prev_lives = None
     elim_this_turn = set()
+    torn = 0
 
     while True:
         line = f.readline()
@@ -65,6 +68,9 @@ def main():
         try:
             r = json.loads(line)
         except json.JSONDecodeError:
+            torn += 1  # BL-10: a torn/partial line is counted, not swallowed
+            if torn in (1, 10, 100) or torn % 1000 == 0:
+                print(f"digest: {torn} unparseable line(s) skipped so far", flush=True)
             continue
         turn = r.get("turn")
         seat = r.get("seat")

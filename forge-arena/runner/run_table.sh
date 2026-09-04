@@ -1,6 +1,10 @@
 #!/bin/sh
-# Launch the 3 autonomous AI seats (seats 1-3) against the standard table:
-#   seat 1 Purphoros / seat 2 Giada / seat 3 Urza  (human plays seat 0 in the GUI)
+# Launch the autonomous AI seats against the standard table (item R, Ben
+# 2026-09-04): the roster is Urza, Giada, Purphoros, Selvala in seat order.
+#   all-AI (ALL_SEATS=1): seat i plays roster[i].
+#   human game: the human plays seat 0 (default Selvala); seats 1-3 take the
+#   first three roster decks that are not the human's — Urza, Giada, Purphoros
+#   for the default. GuiPilotMatch applies the identical rule.
 # Each seat runs in a while-true restart loop — that plus the engine's
 # timeout->stock fallback is the whole supervision story. (Backend-model seats
 # get a crash-loop damper on top: 5 exits in 10 minutes stops the seat rather
@@ -84,13 +88,29 @@ seat() { # seat_no deck model
 # arena.seat.decks property (run-pilot-match.sh forwards ARENA_SEAT_DECKS), so
 # the engine's seats and the brains launched here move together. ALL_SEATS also
 # seats seat 0. PREFLIGHT_DECKS lets a caller (or a test) check an explicit set.
-TABLE="${ARENA_SEAT_DECKS:-selvala-heart-of-the-wilds purphoros-god-of-the-forge giada-font-of-hope urza-lord-high-artificer}"
+TABLE="${ARENA_SEAT_DECKS:-urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds}"
 # shellcheck disable=SC2086  # intentional word split: TABLE is a slug list
 set -- $TABLE
 [ $# -eq 4 ] || { echo "[run_table] ARENA_SEAT_DECKS must list exactly 4 deck slugs in seat order (got $#: $TABLE)" >&2; exit 1; }
 D0=$1; D1=$2; D2=$3; D3=$4
-AI_DECKS="$D1 $D2 $D3"
-[ "${ALL_SEATS:-0}" = "1" ] && AI_DECKS="$D0 $AI_DECKS"
+if [ "${ALL_SEATS:-0}" = "1" ]; then
+  AI_DECKS="$D0 $D1 $D2 $D3"        # all-AI: roster order IS seat order
+else
+  # Human game (item R): seats 1-3 = the first three roster decks that are not
+  # the human's. arena-play.sh passes the human's slug as ARENA_HUMAN_DECK;
+  # a hand launch without it assumes the default human deck.
+  HUMAN="${ARENA_HUMAN_DECK:-selvala-heart-of-the-wilds}"
+  AI_DECKS=""; n=0
+  for d in $D0 $D1 $D2 $D3; do
+    [ "$d" = "$HUMAN" ] && continue
+    [ "$n" -ge 3 ] && break
+    AI_DECKS="$AI_DECKS $d"; n=$((n + 1))
+  done
+  AI_DECKS="${AI_DECKS# }"
+  # shellcheck disable=SC2086
+  set -- $AI_DECKS
+  D1=$1; D2=$2; D3=$3               # the seats launched below
+fi
 AI_DECKS="${PREFLIGHT_DECKS:-$AI_DECKS}"
 
 # Startup preflight: every AI seat needs deck text + combos + a strategy primer
@@ -315,6 +335,6 @@ fi
 seat 1 "$D1" "$M1" &
 seat 2 "$D2" "$M2" &
 seat 3 "$D3" "$M3" &
-echo "seatd table up (seats 1-3, model=$M1/$M2/$M3, timeout=${ARENA_MAILBOX_TIMEOUT}s)"
+echo "seatd table up (seats 1-3 = $D1 / $D2 / $D3, model=$M1/$M2/$M3, timeout=${ARENA_MAILBOX_TIMEOUT}s)"
 echo "logs: tail -f $DIR/logs/seat-*.log"
 wait

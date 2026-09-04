@@ -187,6 +187,11 @@ def void_reason(spool: dict, events: list[dict]) -> str | None:
         return None
     t0 = spool["startMillis"] / 1000.0 - WINDOW_SLACK_S
     t1 = spool["endMillis"] / 1000.0 + WINDOW_SLACK_S
+    # BL-09: a stamped spool attributes events by game id exactly; events
+    # from an unstamped runner (no gameId) still fall under the time window.
+    gid = spool.get("gameId")
+    if isinstance(gid, str) and gid:
+        events = [e for e in events if e.get("gameId") in (None, gid)]
     punts: dict = {}
     for e in events:
         ts = e.get("ts")
@@ -201,6 +206,40 @@ def void_reason(spool: dict, events: list[dict]) -> str | None:
                 return (f"seat {e.get('seat')} punted {n}+ decisions "
                         f"(transport degradation)")
     return None
+
+
+REQUIRED_SPOOL_KEYS = ("startMillis", "endMillis", "seats", "placementGroups")
+
+
+def spool_problem(spool) -> str | None:
+    """BL-26: the shape process_spool indexes without checking. A problem
+    string means the spool is marked .skipped instead of raising."""
+    if not isinstance(spool, dict):
+        return "not an object"
+    for k in REQUIRED_SPOOL_KEYS:
+        if k not in spool:
+            return f"missing {k}"
+    if not isinstance(spool["startMillis"], (int, float)) \
+            or not isinstance(spool["endMillis"], (int, float)):
+        return "startMillis/endMillis not numeric"
+    if not isinstance(spool["seats"], list) or not all(
+            isinstance(x, dict) and "seat" in x and "control" in x and "slug" in x
+            for x in spool["seats"]):
+        return "seats rows need seat/control/slug"
+    if not isinstance(spool["placementGroups"], list):
+        return "placementGroups not a list"
+    return None
+
+
+def _rename_quiet(p: Path, suffix: str, log=print) -> bool:
+    """BL-26: a spool another sweeper already moved is its win, not a crash."""
+    try:
+        p.rename(p.with_name(p.name + suffix))
+        return True
+    except OSError as e:
+        log(f"[ratings] note: could not mark {p.name}{suffix} ({e}) — "
+            f"another sweeper moved it")
+        return False
 
 
 def process_spool(spool: dict, tables: dict, game_log: Path, log=print,
@@ -275,9 +314,9 @@ def write_digests(tables: dict, record: dict, elo_dir: Path) -> None:
 
 def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
           game_log: Path, elo_dir: Path, log=print) -> int:
-    spools = sorted(results_dir.glob("game-*.json"))
-    spools = [p for p in spools if not p.name.endswith((".rated", ".skipped"))]
-    if not spools:
+    # BL-26: the listing happens UNDER the lock (below) — a sweep that listed
+    # first could rename a spool a concurrent sweeper had already moved.
+    if not results_dir.is_dir():
         return 0
     lock_path = ratings_path.with_suffix(".lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -294,6 +333,10 @@ def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
                 return 0
             time.sleep(0.2)
     try:
+        spools = sorted(results_dir.glob("game-*.json"))
+        spools = [p for p in spools if not p.name.endswith((".rated", ".skipped"))]
+        if not spools:
+            return 0
         try:
             tables = json.loads(ratings_path.read_text())
             assert isinstance(tables, dict)
@@ -309,19 +352,24 @@ def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
                 spool = json.loads(p.read_text())
             except (OSError, ValueError) as e:
                 log(f"[ratings] SKIP {p.name}: unreadable ({e})")
-                p.rename(p.with_name(p.name + ".skipped"))
+                _rename_quiet(p, ".skipped", log)
+                continue
+            problem = spool_problem(spool)
+            if problem:
+                log(f"[ratings] SKIP {p.name}: malformed spool ({problem})")
+                _rename_quiet(p, ".skipped", log)
                 continue
             rec = process_spool(spool, tables, game_log, log=log,
                                 events=events)
             if rec is None:
-                p.rename(p.with_name(p.name + ".skipped"))
+                _rename_quiet(p, ".skipped", log)
                 continue
             rec["spool"] = p.name
             with history_path.open("a") as f:
                 f.write(json.dumps(rec) + "\n")
             if rec.get("voided"):
                 # the record survives for review; the ladders never move
-                p.rename(p.with_name(p.name + ".voided"))
+                _rename_quiet(p, ".voided", log)
                 continue
             # Item 13c: persist the ladders BEFORE marking the spool rated —
             # a crash between the two used to leave history saying "rated"
@@ -329,7 +377,7 @@ def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
             tmp = ratings_path.with_name(ratings_path.name + ".tmp")
             tmp.write_text(json.dumps(tables, indent=1, sort_keys=True))
             tmp.replace(ratings_path)
-            p.rename(p.with_name(p.name + ".rated"))
+            _rename_quiet(p, ".rated", log)
             last_record = rec
             rated += 1
             top = max(rec["changes"]["models"].items(),
