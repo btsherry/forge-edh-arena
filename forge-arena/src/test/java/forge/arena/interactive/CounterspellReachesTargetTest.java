@@ -40,6 +40,21 @@ import forge.model.FModel;
  */
 public class CounterspellReachesTargetTest {
 
+    /** Item 15 (2026-09-03): the scripted brain must not outlive its test —
+     *  these pre-kit pollers used to spin for up to 150 s after their method
+     *  returned, inside the one reused surefire fork. */
+    private static volatile boolean legacyBrainAlive = true;
+
+    @org.testng.annotations.BeforeMethod
+    public void armLegacyBrain() {
+        legacyBrainAlive = true;
+    }
+
+    @org.testng.annotations.AfterMethod(alwaysRun = true)
+    public void stopLegacyBrain() {
+        legacyBrainAlive = false;
+    }
+
     private static Card put(String name, Player p, ZoneType z) {
         IPaperCard pc = FModel.getMagicDb().getCommonCards().getCard(name);
         if (pc == null) {
@@ -95,7 +110,7 @@ public class CounterspellReachesTargetTest {
         Thread brain = new Thread(() -> {
             long end = System.currentTimeMillis() + 150_000;
             java.util.Set<String> done = new java.util.HashSet<>();
-            while (System.currentTimeMillis() < end) {
+            while (legacyBrainAlive && System.currentTimeMillis() < end) {
                 try {
                     if (Files.isDirectory(inbox)) {
                         for (Path f : Files.newDirectoryStream(inbox, "req-*.json")) {
@@ -107,16 +122,16 @@ public class CounterspellReachesTargetTest {
                             if (body.contains("\"decisionType\":\"REACT\"") || body.contains("\"decisionType\":\"CAST_SPELL\"")) {
                                 // prefer the FREE Guardianship option if offered, else any Guardianship
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Fierce Guardianship[^}]*FREE").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOfWhere(body, "Fierce Guardianship", "FREE")));
                                 if (!m.find()) {
                                     m = java.util.regex.Pattern
-                                            .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Fierce Guardianship").matcher(body);
+                                            .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Fierce Guardianship")));
                                     if (!m.find()) { resp = "{\"chosenId\": 0}"; }
                                     else resp = "{\"chosenId\": " + m.group(1) + "}";
                                 } else resp = "{\"chosenId\": " + m.group(1) + "}";
                             } else if (body.contains("\"decisionType\":\"CHOOSE_ENTITY\"")) {
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Divination").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Divination")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "1") + "}";
                             } else {
                                 resp = "{\"chosenId\": 0}";
@@ -207,7 +222,7 @@ public class CounterspellReachesTargetTest {
         Thread brain = new Thread(() -> {
             long end = System.currentTimeMillis() + 150_000;
             java.util.Set<String> done = new java.util.HashSet<>();
-            while (System.currentTimeMillis() < end) {
+            while (legacyBrainAlive && System.currentTimeMillis() < end) {
                 try {
                     if (Files.isDirectory(inbox)) {
                         for (Path f : Files.newDirectoryStream(inbox, "req-*.json")) {
@@ -218,11 +233,11 @@ public class CounterspellReachesTargetTest {
                             String resp;
                             if (body.contains("\"decisionType\":\"REACT\"") || body.contains("\"decisionType\":\"CAST_SPELL\"")) {
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Fierce Guardianship").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Fierce Guardianship")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "0") + "}";
                             } else if (body.contains("\"decisionType\":\"CHOOSE_ENTITY\"")) {
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Divination").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Divination")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "1") + "}";
                             } else {
                                 resp = "{\"chosenId\": 0}";

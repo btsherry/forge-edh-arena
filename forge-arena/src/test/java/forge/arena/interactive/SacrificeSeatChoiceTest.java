@@ -49,6 +49,21 @@ import forge.model.FModel;
  */
 public class SacrificeSeatChoiceTest {
 
+    /** Item 15 (2026-09-03): the scripted brain must not outlive its test —
+     *  these pre-kit pollers used to spin for up to 150 s after their method
+     *  returned, inside the one reused surefire fork. */
+    private static volatile boolean legacyBrainAlive = true;
+
+    @org.testng.annotations.BeforeMethod
+    public void armLegacyBrain() {
+        legacyBrainAlive = true;
+    }
+
+    @org.testng.annotations.AfterMethod(alwaysRun = true)
+    public void stopLegacyBrain() {
+        legacyBrainAlive = false;
+    }
+
     private static Card put(String name, Player p, ZoneType z) {
         IPaperCard pc = FModel.getMagicDb().getCommonCards().getCard(name);
         if (pc == null) {
@@ -116,7 +131,7 @@ public class SacrificeSeatChoiceTest {
             Thread t = new Thread(() -> {
                 long end = System.currentTimeMillis() + 150_000;
                 java.util.Set<String> done = new java.util.HashSet<>();
-                while (System.currentTimeMillis() < end) {
+                while (legacyBrainAlive && System.currentTimeMillis() < end) {
                     try {
                         if (Files.isDirectory(in)) {
                             for (Path f : Files.newDirectoryStream(in, "req-*.json")) {

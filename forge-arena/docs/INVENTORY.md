@@ -122,7 +122,7 @@ falls back to stock, so a dead brain never hangs a game.
 | `engine/` | 1 (+SeatViews shared) | `EngineFacade`, `SeatView`/`SeatViews` (hidden-info-safe read model — the fairness boundary, ArchUnit-guarded). |
 | `harness/`, `combo/`, `prep/`, `bindgen/`, `report/` | 1 | Headless batch stack (BatchMain, combo programs, dossier prep, pilot floors). Not shipped in forge-light-llm. |
 
-Tests: `src/test/java/forge/arena/**` — 308 as of 2026-08-17, including the
+Tests: `src/test/java/forge/arena/**` — 321 `@Test` methods as of 2026-09-03 (data providers expand them; the surefire summary is the count that gates), including the
 seam regression suite (`*ReachesMailboxTest`, `GuardedCastTargetIntegrityTest`,
 `TapSymmetryBreakTest`, `UnaffordableCastRollbackTest`, `CounterspellReachesTargetTest`).
 Test-harness pattern: `ArenaBootstrap.initialize` + cards placed by zone +
@@ -144,7 +144,7 @@ matching anywhere in the body hits card ids in `state.battlefield` (bit twice).
 | `advisor_runner.py` | Seat-0 coach (read-only shadow feed → Advisor tab). |
 | `ratings.py` | ELO applier: 3 ladders (pilot / deck / pilot×deck), six-pairwise scoring with tie groups, **transport-void** (wedge or ≥8 punts/seat in window → history recorded, ladders frozen; `ARENA_RATE_VOIDED=1` overrides), flock-serialized, per-seat digests for the AI panel. |
 | `arena-ctl.py`, `status.py`, `usage_report.py`, `replay.py` | Ops: mid-game re-dial, dashboards, spend reports, replay. |
-| `tests/` | 110 Python tests (golden argv, rules/validator, memo, cycle replay, wedge recovery, ratings incl. void, backends, protocol). |
+| `tests/` | 152 Python tests (golden argv, rules/validator, memo, cycle replay, wedge recovery, ratings incl. void, backends, protocol). |
 
 ## 5. Scripts catalog (`scripts/`)
 
@@ -182,16 +182,17 @@ JVM launcher), `run-gui.sh`, `arena-add-deck.py` (ingester),
 | `runner/ratings.json`, `ratings-history.jsonl`, `ratings.lock` | `ratings.py` | panel, plots | per-installation state; survives package rebuilds; gitignored, never ships. |
 | `runner/logs/advisor-0.{log,jsonl}` | advisor (stream + structured twin) | Advisor tab tail / reviews | archived at stop. In an advised human game, `seat-0.usage.json` is the ADVISOR's spend snapshot (seat 0 is the human). |
 | `runner/logs/archive/<ts>-stop/` | `arena-stop.sh` | forensics, later ELO re-sweeps | every finished game's full log set + consumed spools; grows unbounded by design. |
+| `schemas/arena.mailbox-request.1.schema.json` | `ProtocolContractTest` (validates engine requests, writes `runner/tests/fixtures/engine/*.json`) | `runner/tests/test_engine_fixtures.py` | the mailbox wire contract, tested from both sides (2026-09-03). |
 | `decks/<slug>/dossier/*`, `.cache/`, `.dck`, primers | `arena-add-deck.py` | brains at init | per-deck; dossiers are disk-only (`decks/*/` is gitignored — the package carries them). `dossier/manifest.json` (2026-09-03, plan item 7): the registered `.dck`'s SHA-256, card count, card-DB stamp and every Scryfall→Forge name resolution; the launch preflight compares the hash in ms, no JVM. `deck-cards.json` entries carry `scryfall_id`/`set`/`collector_number` (Scryfall canonical) and `forge_name` (the loader's name, from `DeckLoadProbe --resolve`). |
 
 ## 7. Documentation set
 
 | Doc | Audience | State (2026-08-17) |
 |---|---|---|
-| `packaging/README.md` | package users | current (v3.1) |
-| `packaging/PATCH-NOTES.md` | package users | current (v1→v3.1) |
+| `packaging/README.md` | package users | current (v3.3.2; Unreleased section in PATCH-NOTES) |
+| `packaging/PATCH-NOTES.md` | package users | current (v1→v3.3.2 + Unreleased) |
 | `../BUILDING.md` | developers | current |
-| `docs/INTERACTIVE-ARENA.md` | seam engineers | refreshed 2026-08-17 (this pass) |
+| `docs/INTERACTIVE-ARENA.md` | seam engineers | field notes through 59 (2026-09-03) |
 | `docs/INVENTORY.md` | (this file) | 2026-08-17 |
 | `docs/UPSTREAM-SYNC.md` | maintainers | 2026-08-17 |
 | `docs/IMPLEMENTATION-PLAN.md` | Project 1 | living plan, §-annotated as-builts |
@@ -203,6 +204,6 @@ JVM launcher), `run-gui.sh`, `arena-add-deck.py` (ingester),
 - ~~`decks/selvala-competitive.dck`~~ — removed 2026-08-19 (cleanup round).
 - `scripts/selvala-wholedeck-ingestion-wf_*.js` — tracked one-off; candidate
   for deletion.
-- `scripts/__pycache__/`, `runner/__pycache__/` — should be gitignored if not.
+- `scripts/__pycache__/`, `runner/__pycache__/` — gitignored (root `.gitignore` + `runner/.gitignore`).
 - `EDocID.java` / `CMatchUI.java` edits are the only parent-module changes
   without `[arena]` markers (action item in UPSTREAM-SYNC.md).

@@ -94,7 +94,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - Test asserting brief table and `rules.safe_default` agree.
 - Watch punt rate and `latency_s` for the calibration effect.
 
-## 15. Tests and docs
+## 15. Tests and docs — DONE 2026-09-03 (field note 60; schema + `ProtocolContractTest` + `test_engine_fixtures.py`; 12 regex sites migrated; 9 classes' brains stop with the test; INVENTORY/BUILDING/poll figure refreshed). Single-card seam tests widen as their seams are touched.
 - Per-decision-type schema emitted from Java; Java test producing one request per controller branch; Python test feeding every `safe_default` through it.
 - Dead-brain test (5 ms poll, 1 s timeout).
 - Migrate four probe-regex classes and eleven thread-leaking classes to `MailboxTestKit`, preserving assertions.

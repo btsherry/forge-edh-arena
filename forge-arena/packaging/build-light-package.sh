@@ -14,7 +14,7 @@
 #         existing dest (refused otherwise so a reviewed tree isn't clobbered).
 #
 # Prereqs: a green `mvn -o -pl forge-arena -am package` (fat jar + classes +
-# classpath.txt all fresh — the arena pom runs the full 292-test gate even
+# classpath.txt all fresh — the arena pom runs the full arena suite (350+ tests) even
 # with -DskipTests, so a successful package build IS the green gate).
 set -eu
 

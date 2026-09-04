@@ -45,6 +45,21 @@ import forge.model.FModel;
  */
 public class TriggerSurfacesReachMailboxTest {
 
+    /** Item 15 (2026-09-03): the scripted brain must not outlive its test —
+     *  these pre-kit pollers used to spin for up to 150 s after their method
+     *  returned, inside the one reused surefire fork. */
+    private static volatile boolean legacyBrainAlive = true;
+
+    @org.testng.annotations.BeforeMethod
+    public void armLegacyBrain() {
+        legacyBrainAlive = true;
+    }
+
+    @org.testng.annotations.AfterMethod(alwaysRun = true)
+    public void stopLegacyBrain() {
+        legacyBrainAlive = false;
+    }
+
     private static Card put(String name, Player p, forge.game.zone.ZoneType z) {
         IPaperCard pc = FModel.getMagicDb().getCommonCards().getCard(name);
         if (pc == null) {
@@ -91,7 +106,7 @@ public class TriggerSurfacesReachMailboxTest {
             long end = System.currentTimeMillis() + 150_000;
             java.util.Set<String> done = new java.util.HashSet<>();
             boolean[] activatedOnce = {false};
-            while (System.currentTimeMillis() < end) {
+            while (legacyBrainAlive && System.currentTimeMillis() < end) {
                 try {
                     if (Files.isDirectory(inbox)) {
                         for (Path f : Files.newDirectoryStream(inbox, "req-*.json")) {
@@ -110,8 +125,7 @@ public class TriggerSurfacesReachMailboxTest {
                                 // triggers Rings), NOT "remove a +1/+1 counter: deal
                                 // damage". The {4} cost is the unique discriminator.
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Walking Ballista[^}]*\\{4\\}")
-                                        .matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOfWhere(body, "Walking Ballista", "{4}")));
                                 if (m.find()) { resp = "{\"chosenId\": " + m.group(1) + "}"; activatedOnce[0] = true; }
                                 else resp = "{\"chosenId\": 0}";
                             } else {

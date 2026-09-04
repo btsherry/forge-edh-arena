@@ -1172,7 +1172,10 @@ public final class MailboxController extends PlayerControllerAi
         int turn = game.getPhaseHandler().getTurn();
         Map<String, Object> state = buildState(turn);
         state.put("cardsToReturn", cardsToReturn);
-        state.put("hand", ownZone(ZoneType.Hand));
+        // (item 15: the MULLIGAN request used to overwrite state.hand with bare
+        // names while every other request sends {name,manaCost,types} objects —
+        // the contract test caught it, and rules.combo_status_line had been
+        // reading an EMPTY hand at the one decision where it matters most)
         MailboxProtocol.Request req = req(turn, "MULLIGAN",
                 "Keep this hand, or mulligan?")
                 .state(state)
@@ -3411,14 +3414,6 @@ public final class MailboxController extends PlayerControllerAi
         state.put("stackTargets", stackTargets);
         state.put("stackOracle", stackOracle);
         return state;
-    }
-
-    private List<String> ownZone(ZoneType zone) {
-        List<String> names = new ArrayList<>();
-        for (Card c : getPlayer().getCardsIn(zone)) {
-            names.add(c.getName());
-        }
-        return names;
     }
 
     /** The game's Player whose id matches {@code id}, or null. */

@@ -1,0 +1,172 @@
+{
+  "seq" : 7,
+  "gameId" : "1788500819039-88161",
+  "timeoutSec" : 300,
+  "seat" : 1,
+  "turn" : 1,
+  "phase" : "MAIN1",
+  "decisionType" : "PAY_UNLESS",
+  "prompt" : "PAY OR ELSE: pay {1} now, or Grizzly Bears does: Grizzly Bears - Creature 2 / 2 (an OPPONENT's effect taxing you — e.g. a counter-unless-you-pay, Rhystic Study, Propaganda). Paying uses your floating mana first, then untapped sources.",
+  "state" : {
+    "seat" : 1,
+    "turn" : 1,
+    "phase" : "MAIN1",
+    "life" : 20,
+    "poison" : 0,
+    "commandZone" : [ ],
+    "manaPool" : 0,
+    "untappedManaSourceCount" : 4,
+    "manaSources" : [ {
+      "id" : 1,
+      "name" : "Swamp",
+      "yield" : 1,
+      "colors" : "B",
+      "count" : 3
+    }, {
+      "id" : 7,
+      "name" : "Sol Ring",
+      "yield" : 2,
+      "colors" : "colorless"
+    }, {
+      "id" : 9,
+      "name" : "Llanowar Elves",
+      "yield" : 1,
+      "colors" : "G",
+      "sick" : true
+    } ],
+    "manaAvailableNow" : 5,
+    "ritualsInHand" : [ {
+      "id" : 10,
+      "name" : "Dark Ritual",
+      "cost" : "{B}",
+      "kind" : "ritual",
+      "yield" : 3,
+      "net" : 2,
+      "colors" : "B"
+    } ],
+    "handSize" : 3,
+    "handLands" : 0,
+    "librarySize" : 3,
+    "ownBoardPower" : 3,
+    "battlefield" : [ {
+      "id" : 1,
+      "name" : "Swamp",
+      "types" : "Basic Land - Swamp",
+      "tapped" : false,
+      "abilities" : [ {
+        "cost" : "{T}",
+        "desc" : "{T}: Add {B}.",
+        "producesMana" : true
+      } ]
+    }, {
+      "id" : 3,
+      "name" : "Swamp",
+      "types" : "Basic Land - Swamp",
+      "tapped" : false,
+      "abilities" : [ {
+        "cost" : "{T}",
+        "desc" : "{T}: Add {B}.",
+        "producesMana" : true
+      } ]
+    }, {
+      "id" : 5,
+      "name" : "Swamp",
+      "types" : "Basic Land - Swamp",
+      "tapped" : false,
+      "abilities" : [ {
+        "cost" : "{T}",
+        "desc" : "{T}: Add {B}.",
+        "producesMana" : true
+      } ]
+    }, {
+      "id" : 7,
+      "name" : "Sol Ring",
+      "types" : "Artifact",
+      "tapped" : false,
+      "abilities" : [ {
+        "cost" : "{T}",
+        "desc" : "{T}: Add {C}{C}.",
+        "producesMana" : true
+      } ]
+    }, {
+      "id" : 8,
+      "name" : "Grizzly Bears",
+      "power" : 2,
+      "toughness" : 2,
+      "sick" : true,
+      "types" : "Creature - Bear",
+      "tapped" : false,
+      "abilities" : [ ]
+    }, {
+      "id" : 9,
+      "name" : "Llanowar Elves",
+      "power" : 1,
+      "toughness" : 1,
+      "sick" : true,
+      "types" : "Creature - Elf Druid",
+      "tapped" : false,
+      "abilities" : [ {
+        "cost" : "{T}",
+        "desc" : "{T}: Add {G}.",
+        "producesMana" : true
+      } ]
+    } ],
+    "hand" : [ {
+      "name" : "Dark Ritual",
+      "manaCost" : "{B}",
+      "types" : "Instant"
+    }, {
+      "name" : "Counterspell",
+      "manaCost" : "{U}{U}",
+      "types" : "Instant"
+    }, {
+      "name" : "Divination",
+      "manaCost" : "{2}{U}",
+      "types" : "Sorcery"
+    } ],
+    "command" : [ ],
+    "graveyard" : [ "Island" ],
+    "exile" : [ ],
+    "opponents" : [ {
+      "seat" : 0,
+      "life" : 20,
+      "poison" : 0,
+      "creaturePower" : 2,
+      "battlefield" : [ {
+        "id" : 14,
+        "name" : "Grizzly Bears",
+        "power" : 2,
+        "toughness" : 2,
+        "sick" : true,
+        "types" : "Creature - Bear",
+        "tapped" : false
+      } ],
+      "handSize" : 1,
+      "librarySize" : 0,
+      "graveyard" : [ ],
+      "exile" : [ ],
+      "commandZone" : [ ]
+    } ],
+    "stack" : [ ],
+    "stackOwners" : [ ],
+    "stackKinds" : [ ],
+    "stackTargets" : [ ],
+    "stackOracle" : [ ],
+    "min" : 0,
+    "max" : 1,
+    "unlessCost" : "{1}",
+    "effectSource" : "Grizzly Bears",
+    "effectIsMine" : false
+  },
+  "options" : [ {
+    "id" : 0,
+    "label" : "Decline — do not pay; let the effect happen",
+    "cost" : null,
+    "type" : "NONE"
+  }, {
+    "id" : 1,
+    "label" : "Pay {1}",
+    "cost" : "{1}",
+    "type" : "PAY"
+  } ]
+}

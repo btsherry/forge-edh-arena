@@ -7,7 +7,7 @@ not cover the arena.
 
 ## Prerequisites
 
-- **JDK 17** (exactly 17; the project targets 17). Scripts honor `$JAVA_HOME`
+- **JDK 17+** (the project targets 17; the recorded green gates since late August ran on JDK 25 — both work). Scripts honor `$JAVA_HOME`
   if set, otherwise `java` on `PATH`.
 - **Maven 3.8+** and **git**.
 - **Network access for the first build** (Maven downloads Forge's dependencies

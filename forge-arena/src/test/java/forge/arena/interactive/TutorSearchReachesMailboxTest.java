@@ -113,7 +113,7 @@ public class TutorSearchReachesMailboxTest {
                             done.add(n);
                             int chosen = 0;
                             java.util.regex.Matcher m = java.util.regex.Pattern
-                                    .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Craterhoof").matcher(body);
+                                    .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Craterhoof")));
                             if (m.find()) chosen = Integer.parseInt(m.group(1));
                             Files.createDirectories(outbox);
                             Path tmp = outbox.resolve(n.replace("req-", "resp-") + ".tmp");
@@ -237,12 +237,12 @@ public class TutorSearchReachesMailboxTest {
                                 resp = "{\"chosen\": [0]}";
                             } else if (body.contains("\"decisionType\":\"CHOOSE_CARD\"")) {
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Craterhoof").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Craterhoof")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "0") + "}";
                             } else if (body.contains("\"decisionType\":\"CAST_SPELL\"")) {
                                 // cast the Charm if offered, else pass
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Archdruid").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Archdruid")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "0") + "}";
                             } else {
                                 resp = "{\"chosenId\": 0}";

@@ -13,7 +13,7 @@ won by the human via a Selvala + Umbral Mantle + Craterhoof combo turn.
 
 Second session 2026-08-06 (v2, "fast loop"): validated `REACT`, `CHOOSE_CARD`,
 and deck-aware casting live; **hardened the reactive gate**; and cut end-to-end
-latency (75ms outbox poll, 0.5s monitor, ~2s brain drain, brains self-serving
+latency (75ms outbox poll, 0.15s seat-daemon inbox poll — was 0.5s until 2026-08-13, ~2s brain drain, brains self-serving
 their own inboxes). The distilled learnings from both sessions
 live under **Operational learnings** below — read that and the **protocol
 contract** first if you are picking this up. (**Next architecture** further
@@ -1166,6 +1166,24 @@ Hard-won from two live sessions; read before optimizing anything.
     not attached / ON / PAUSED) via `AiControlFile.advisorAttached()`; it
     read "ON — click to pause" in advisor-less games because
     `advisorEnabled()` is only the pause flag and defaults true.
+60. **The wire contract, tested from both sides (2026-09-03, plan item 15).**
+    Fourteen decision types and ~25 state keys were specified in prose and
+    checked by `String.contains` in test brains; the Python punts were tested
+    against hand-written fixtures that agreed with the Python validator by
+    construction. Now `schemas/arena.mailbox-request.1.schema.json` states
+    the request shape (top-level fields, the state keys a reader may rely on,
+    per-type conditionals), `ProtocolContractTest` drives nine surfaces
+    through the real controller, validates every request the engine wrote
+    against it and writes one ENGINE-EMITTED fixture per type to
+    `runner/tests/fixtures/engine/`, and `test_engine_fixtures.py` feeds each
+    through `rules.safe_default` + `rules.validate`. A field the engine
+    renames now fails a Java test; a punt the engine would reject now fails a
+    Python test. Also in this item: the four seam tests still using the
+    probe regex INVENTORY §3 forbids (matching `"id":N` anywhere in the body)
+    moved to the kit's anchored option lookups (`idOf`/`idOfWhere`), and the
+    nine pre-kit classes whose scripted brains polled for 150 s past their
+    test now stop with the test (`legacyBrainAlive` + `@AfterMethod`).
+    `HeartbeatGateTest` is the suite's first dead-brain test.
 59. **Scryfall canonical, Forge at the boundary, 400 cards or no game
     (2026-09-03, plan item 7).** The 09-01 DFC rule in arena-add-deck (layout
     'split' keeps "A // B", everything else front face) was a whitelist, and
