@@ -318,21 +318,49 @@ class SeatBrain:
 
     # ---- decisions ----------------------------------------------------------------
 
-    def decide(self, prompt: str, timeout_s: float,
-               effort: str | None = None) -> tuple[dict | None, dict]:
-        """Send one decision prompt; return (answer dict or None, meta)."""
+    # Below this many seconds of window a model call cannot land in time;
+    # the runner's own floor (handle()) uses the same number.
+    MIN_CALL_S = 5.0
+
+    def decide(self, prompt: str, timeout_s: float | None = None,
+               effort: str | None = None,
+               deadline: float | None = None) -> tuple[dict | None, dict]:
+        """Send one decision prompt; return (answer dict or None, meta).
+
+        Interactive plan item 2: the budget is ONE clock. `deadline` is the
+        absolute time the answer must land by (the runner passes the engine's
+        deadline); `timeout_s` is the legacy duration form. Init and the
+        decision call each get what REMAINS of that deadline — never the
+        whole budget twice, never a fixed cap. A lazy re-init that eats the
+        window yields an on-time safe default (logged), not a dark seat.
+        """
         meta = {"latency_s": None, "usage": None, "cache_read": None, "raw": None}
-        # Init is budget-bounded on BOTH transports (plan F-08): a lazy re-init
-        # (game boundary or mid-game transport swap) must fit the decision
-        # window it runs in; one that can't returns False -> safe default now,
-        # retry at the next boundary.
-        if not self.ensure_session(timeout_s=min(max(timeout_s - 5.0, 5.0), 240.0)):
+        if deadline is None:
+            deadline = time.time() + (timeout_s if timeout_s is not None else 240.0)
+        remaining = deadline - time.time()
+        if remaining < self.MIN_CALL_S:
+            self.log(f"[seat {self.seat}] {remaining:.0f}s left of the window "
+                     f"-> no model call")
             return None, meta
+        had_session = bool(self.session_id) or self.backend is not None
+        t_init = time.time()
+        if not self.ensure_session(timeout_s=max(remaining - self.MIN_CALL_S,
+                                                 self.MIN_CALL_S)):
+            return None, meta
+        remaining = deadline - time.time()
+        if remaining < self.MIN_CALL_S:
+            self.log(f"[seat {self.seat}] init took {time.time() - t_init:.0f}s, "
+                     f"{remaining:.0f}s left of the window -> safe default "
+                     f"(session is warm for the next decision)")
+            return None, meta
+        if not had_session:
+            self.log(f"[seat {self.seat}] init took {time.time() - t_init:.0f}s, "
+                     f"{remaining:.0f}s left for the decision")
         if self._rejoin_pending:
             prompt = REJOIN_NOTE + prompt
             self._rejoin_pending = False
         t0 = time.time()
-        env = self._call(prompt, timeout_s, resume=True, effort=effort)
+        env = self._call(prompt, remaining, resume=True, effort=effort)
         meta["latency_s"] = round(time.time() - t0, 2)
         if env is None:
             self._note_failure()
