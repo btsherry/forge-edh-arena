@@ -91,8 +91,14 @@ def persist(cards):
 
 
 def write_dck(path, name, commanders, cards):
+    # Commander lines use the FRONT face of "A // B" names (2026-09-01):
+    # Forge names transform/MDFC cards by their front face and the loader
+    # resolves no commander otherwise; split-layout commanders don't exist,
+    # so the heuristic is safe here. Main entries pass through untouched —
+    # arena-add-deck's layout-aware rewrite is the authoritative fix.
     lines = ["[metadata]", "Name=" + (name or "Imported Deck"), "[Commander]"]
-    lines += [f"{c.get('quantity',1)} {c['name']}" for c in commanders]
+    lines += [f"{c.get('quantity',1)} {c['name'].split(' // ')[0].strip()}"
+              for c in commanders]
     lines.append("[Main]")
     lines += [f"{c.get('quantity',1)} {c['name']}" for c in cards]
     open(path, "w").write("\n".join(lines) + "\n")
@@ -108,6 +114,10 @@ def main():
     ap.add_argument("--no-analyze", action="store_true",
                     help="import + save + set visibility, but skip the paid analysis")
     ap.add_argument("--dck-out", help="also write a Forge .dck to this path")
+    ap.add_argument("--drop-sideboard", action="store_true",
+                    help="do not persist the source deck's sideboard/maybe pile "
+                         "(Commander Deck Scan rejects drafts with non-companion "
+                         "sideboard cards — HTTP 409)")
     ap.add_argument("--cred", default=DEFAULT_CRED)
     a = ap.parse_args()
     u, p = load_creds(a.cred)
@@ -152,7 +162,7 @@ def main():
         "commander2": cmd_names[1] if len(cmd_names) > 1 else None,
         "companion": None,
         "cards": persist(imp.get("cards", [])),
-        "sideboard": persist(imp.get("sideboard", [])),
+        "sideboard": persist([] if a.drop_sideboard else imp.get("sideboard", [])),
         "considering": {}, "notes": "", "deck_roles": {}, "deck_metadata": {},
     }
     st, sv = call("POST", "/builder/api/save-draft", payload)

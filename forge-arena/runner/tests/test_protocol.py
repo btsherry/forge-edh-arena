@@ -150,3 +150,85 @@ class ProtocolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GameIdentityTests(unittest.TestCase):
+    """Plan item 8 (2026-09-03): the engine's gameId is the only new-game
+    signal for a stamped engine; seq heuristics apply to unstamped ones only."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name)
+        self.mb = SeatMailbox(2, self.base, timeout_s=90.0)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _stamped(self, seq, gid):
+        body = {"seq": seq, "gameId": gid, "seat": 2, "turn": 1, "phase": "MAIN1",
+                "decisionType": "CAST_SPELL", "prompt": "x", "state": {},
+                "options": [{"id": 0, "label": "Pass (do nothing)"}]}
+        return write_req(self.mb.inbox, seq, payload=body)
+
+    def test_fresh_runner_adopts_the_first_id_without_reset(self):
+        self._stamped(7, "g1")
+        req = self.mb.pending_request()
+        self.assertEqual(req["seq"], 7)
+        self.assertFalse(self.mb.game_reset, "a runner joining mid-game is a rejoin")
+        self.assertEqual(self.mb.game_id, "g1")
+
+    def test_slow_engine_delete_is_not_a_restart(self):
+        req_path = self._stamped(1, "g1")
+        req = self.mb.pending_request()
+        self.mb.respond(req, {"chosenId": 0}, consume_wait_s=0.0)
+        (self.mb.outbox / "resp-1.json").unlink()
+        self.mb._answered_at[1] -= 60.0           # far outside the delete race
+        self.assertTrue(req_path.exists())
+        self.assertIsNone(self.mb.pending_request(),
+                          "same game, already answered: never re-answer, never reset")
+        self.assertFalse(self.mb.game_reset)
+
+    def test_id_change_resets_and_sweeps_the_outbox(self):
+        self._stamped(5, "g1")
+        req = self.mb.pending_request()
+        self.mb.respond(req, {"chosenId": 0}, consume_wait_s=0.0)
+        (self.mb.inbox / "req-5.json").unlink()
+        # the engine died before consuming it: a stale landmine for game 2
+        self.assertTrue((self.mb.outbox / "resp-5.json").exists())
+        self._stamped(1, "g2")
+        req = self.mb.pending_request()
+        self.assertEqual(req["seq"], 1)
+        self.assertTrue(self.mb.game_reset)
+        self.assertEqual((self.mb.prev_game_id, self.mb.game_id), ("g1", "g2"))
+        self.assertEqual(self.mb.swept_on_reset, 1)
+        self.assertEqual(list(self.mb.outbox.iterdir()), [])
+
+    def test_seq_regression_within_one_game_id_is_not_a_reset(self):
+        self._stamped(5, "g1")
+        req = self.mb.pending_request()
+        self.mb.respond(req, {"chosenId": 0}, consume_wait_s=0.0)
+        (self.mb.inbox / "req-5.json").unlink()
+        (self.mb.outbox / "resp-5.json").unlink()
+        self._stamped(1, "g1")                    # odd numbering, same game
+        req = self.mb.pending_request()
+        self.assertEqual(req["seq"], 1)
+        self.assertFalse(self.mb.game_reset, "identity wins over numbering")
+
+
+class HeartbeatTests(unittest.TestCase):
+    """Plan item 12: the runner touches <seat-dir>/heartbeat at most every 5s."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.mb = SeatMailbox(2, Path(self.tmp.name), timeout_s=90.0)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_heartbeat_is_written_and_rate_limited(self):
+        hb = self.mb.inbox.parent / "heartbeat"
+        self.assertTrue(self.mb.heartbeat(now=1000.0))
+        self.assertTrue(hb.exists())
+        self.assertFalse(self.mb.heartbeat(now=1003.0), "under 5s: no touch")
+        self.assertTrue(self.mb.heartbeat(now=1005.0), "5s later: touch")
+        self.assertEqual(hb.parent, self.mb.inbox.parent, "lives beside inbox/outbox, own seat only")

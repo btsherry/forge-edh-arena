@@ -1,0 +1,184 @@
+package forge.arena.interactive;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.function.Function;
+
+import com.google.common.collect.Lists;
+
+import forge.StaticData;
+import forge.ai.LobbyPlayerAi;
+import forge.arena.bootstrap.ArenaBootstrap;
+import forge.deck.Deck;
+import forge.game.Game;
+import forge.game.GameRules;
+import forge.game.GameStage;
+import forge.game.GameType;
+import forge.game.Match;
+import forge.game.card.Card;
+import forge.game.phase.PhaseType;
+import forge.game.player.Player;
+import forge.game.player.RegisteredPlayer;
+import forge.game.zone.ZoneType;
+import forge.item.IPaperCard;
+import forge.model.FModel;
+
+/**
+ * Shared fixture for mailbox-seam tests (wave-2 cleanup, 2026-08-28): one
+ * kit == one game == one controller. NEVER build a second Game against the
+ * same {@code base} dir: since BL-05 (2026-09-04) the bus is one instance per
+ * seat directory and its request sequence continues, but the second Game's
+ * requests would then interleave with the first's on one inbox and the
+ * brain's processed-file set would be shared. Consolidated test classes share
+ * ONE kit instead.
+ *
+ * <p>Original doc: one
+ * two-player Commander game (stock {@code opp} at seat A, mailbox {@code seat}
+ * at seat B), a scripted brain thread, and the card-placement helper every
+ * older test copy-pasted. New tests prefer DIRECT CALLS on the seat's
+ * controller (cheap, no phase machinery) and use {@link #run} only when the
+ * engine call-site itself is under test.
+ */
+final class MailboxTestKit implements AutoCloseable {
+
+    final Game game;
+    final Player opp;
+    final Player seat;
+    final Path base;
+    final List<String> seen =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
+    private volatile boolean brainAlive = true;
+    /** The current responder; {@link #startBrain} swaps it, so a test can
+     *  change answers mid-way without a second poller on the same inbox
+     *  (review 2026-09-04: two pollers raced for one response file). */
+    private volatile Function<String, String> responder;
+    private Thread brainThread;
+
+    MailboxTestKit(boolean oppActive) throws Exception {
+        ArenaBootstrap.initialize(new java.io.File("..", "forge-gui"));
+        base = Files.createTempDirectory("mbkit");
+        List<RegisteredPlayer> players = Lists.newArrayList();
+        Deck d = new Deck();
+        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("opp", null)));
+        players.add(new RegisteredPlayer(d).setPlayer(new MailboxLobbyPlayer("seat", base)));
+        GameRules rules = new GameRules(GameType.Commander);
+        game = new Game(players, rules, new Match(rules, players, "t"));
+        opp = game.getPlayers().get(0);
+        seat = game.getPlayers().get(1);
+        game.setAge(GameStage.Play);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, oppActive ? opp : seat);
+        game.getPhaseHandler().onStackResolved();
+    }
+
+    static Card put(String name, Player p, ZoneType z) {
+        IPaperCard pc = FModel.getMagicDb().getCommonCards().getCard(name);
+        if (pc == null) {
+            StaticData.instance().attemptToLoadCard(name);
+            pc = FModel.getMagicDb().getCommonCards().getCard(name);
+        }
+        Card c = Card.fromPaperCard(pc, p);
+        c.setGameTimestamp(p.getGame().getNextTimestamp());
+        p.getZone(z).add(c);
+        return c;
+    }
+
+    MailboxController controller() {
+        return (MailboxController) seat.getController();
+    }
+
+    /** First option id in {@code body} whose label starts with {@code name}
+     *  AND contains {@code extra} later in the same label (e.g. the "[FREE"
+     *  alt-cost variant of a spell). Still anchored on the option object, so
+     *  a battlefield card's "id" can never be matched (INVENTORY §3 lesson). */
+    static String idOfWhere(String body, String name, String extra) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("\\{\"id\":(\\d+),\"label\":\"" + java.util.regex.Pattern.quote(name)
+                        + "[^}]*" + java.util.regex.Pattern.quote(extra))
+                .matcher(body);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /** First option id in {@code body} whose label starts with {@code name}. */
+    static String idOf(String body, String name) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("\\{\"id\":(\\d+),\"label\":\"" + java.util.regex.Pattern.quote(name))
+                .matcher(body);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /** Responder return value meaning "never answer this request" — the
+     *  engine's exchange then times out, exercising the stock-floor paths. */
+    static final String SILENT = "\u0000SILENT";
+
+    /** Start the scripted brain: {@code responder} maps a request body to a
+     *  response JSON; {@code null} answers the safe default; {@link #SILENT}
+     *  writes nothing. */
+    void startBrain(Function<String, String> responder) {
+        this.responder = responder;
+        if (brainThread != null && brainThread.isAlive()) {
+            return; // one poller per kit; the responder above is what changed
+        }
+        Path in = base.resolve("seat-" + seat.getId()).resolve("inbox");
+        Path out = base.resolve("seat-" + seat.getId()).resolve("outbox");
+        Thread t = new Thread(() -> {
+            java.util.Set<String> done = new java.util.HashSet<>();
+            while (brainAlive) {
+                try {
+                    if (Files.isDirectory(in)) {
+                        // try-with-resources (adversarial review F8): at a 5ms
+                        // poll an unclosed stream leaks an fd per iteration
+                        try (java.nio.file.DirectoryStream<Path> reqs =
+                                Files.newDirectoryStream(in, "req-*.json")) {
+                            for (Path f : reqs) {
+                                String n = f.getFileName().toString();
+                                if (done.contains(n)) continue;
+                                String body = new String(Files.readAllBytes(f));
+                                seen.add(body);
+                                done.add(n);
+                                String resp = this.responder.apply(body);
+                                if (SILENT.equals(resp)) {
+                                    continue; // dead-brain simulation: no answer, ever
+                                }
+                                if (resp == null) {
+                                    resp = "{\"chosenId\": 0}";
+                                }
+                                Files.createDirectories(out);
+                                Path tmp = out.resolve(n.replace("req-", "resp-") + ".tmp");
+                                Files.write(tmp, resp.getBytes());
+                                Files.move(tmp, out.resolve(n.replace("req-", "resp-")));
+                            }
+                        }
+                    }
+                    Thread.sleep(5);
+                } catch (Exception e) { /* keep polling */ }
+            }
+        }, "mbkit-brain");
+        t.setDaemon(true);
+        brainThread = t;
+        t.start();
+    }
+
+    void stopBrain() {
+        brainAlive = false;
+    }
+
+    /** try-with-resources support (review catch: brains must not outlive
+     *  their test — legacy fixtures' pollers lingered up to 150s). */
+    @Override
+    public void close() {
+        stopBrain();
+    }
+
+    /** Step the phase loop until {@code done} (or {@code maxSteps}). */
+    void run(java.util.function.BooleanSupplier done, int maxSteps) {
+        int steps = 0;
+        while (steps++ < maxSteps && !game.isGameOver()) {
+            game.getPhaseHandler().mainLoopStep();
+            if (done.getAsBoolean() && game.getStack().isEmpty() && steps > 5) {
+                break;
+            }
+        }
+    }
+}

@@ -1,8 +1,10 @@
 #!/bin/sh
-# One-shot teardown: kill GUI + all seat runners, archive this game's per-seat
-# logs (game.jsonl is preserved and keeps accumulating), clear the mailbox +
-# control files. Prints a single summary line. Zero-fidelity-loss consolidation
-# of the multi-step teardown so the orchestrator spends one round trip, not five.
+# One-shot teardown: kill GUI + all seat runners, archive this session's logs
+# (per-seat logs, game.jsonl and the per-game game-<id>.jsonl files — BL-21:
+# the whole log set of a session moves to archive/ together), clear the
+# mailbox + control files. Prints a single summary line. Zero-fidelity-loss
+# consolidation of the multi-step teardown so the orchestrator spends one
+# round trip, not five.
 #
 # Usage: forge-arena/scripts/arena-stop.sh
 set -u
@@ -10,40 +12,82 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$DIR/.." && pwd)          # forge-arena/
 LOGS="$ROOT/runner/logs"
 
-pkill -f "GuiPilotMatch" 2>/dev/null
-pkill -f "run_table.sh" 2>/dev/null
-pkill -f "seat_runner.py --seat" 2>/dev/null
-pkill -f "advisor_runner.py" 2>/dev/null
-pkill -f "react-autopass.py" 2>/dev/null
-sleep 1
+# Item 13e: kill by PID file (written by arena-play.sh / run_table.sh), so a
+# stop touches only THIS table's processes. The command-line patterns are the
+# fallback for a table launched before PID files existed.
+PIDS="$LOGS/pids"
+# BL-27 hardening: a PID file may be stale (a runner restarted, the number
+# reused by an unrelated process). Only signal a PID whose command line is an
+# arena process. The marker is path-INDEPENDENT on purpose (review 2026-09-04):
+# matching the checkout path would silently skip every kill when the launching
+# and stopping invocations spelled the path differently (/private aliasing,
+# case) — and then wipe the mailbox under a live game.
+ours() { ps -p "$1" -o command= 2>/dev/null | grep -qE "seat_runner\.py|advisor_runner\.py|GuiPilotMatch|run_table\.sh|run_advisor\.sh|arena-autostop\.sh"; }
+skipped=0
+if [ -d "$PIDS" ] && ls "$PIDS"/*.pid >/dev/null 2>&1; then
+  for f in "$PIDS"/*.pid; do
+    p=$(cat "$f" 2>/dev/null); [ -n "$p" ] || continue
+    if ours "$p"; then kill "$p" 2>/dev/null; elif ps -p "$p" >/dev/null 2>&1; then skipped=$((skipped + 1)); fi
+  done
+  sleep 1
+  for f in "$PIDS"/*.pid; do p=$(cat "$f" 2>/dev/null); [ -n "$p" ] && ours "$p" && kill -9 "$p" 2>/dev/null; rm -f "$f"; done
+  [ "$skipped" -gt 0 ] && echo "arena-stop: $skipped PID file(s) pointed at a live process that is not an arena process — left alone (stale PID reused)"
+  left=$(pgrep -f "seat_runner.py --seat|advisor_runner.py|GuiPilotMatch|arena-autostop.sh" | wc -l | tr -d ' ')
+  [ "$left" -gt 0 ] && echo "note: $left arena process(es) not covered by a PID file are still running (another table, or a hand launch) — left alone" >&2
+else
+  # BL-27: the fallback patterns are anchored on this checkout's path so a
+  # stop here never reaches another checkout's table.
+  pkill -f "$ROOT/.*GuiPilotMatch" 2>/dev/null
+  pkill -f "$ROOT/runner/run_table.sh" 2>/dev/null
+  pkill -f "$ROOT/runner/run_advisor.sh" 2>/dev/null
+  pkill -f "$ROOT/runner/seat_runner.py" 2>/dev/null
+  pkill -f "$ROOT/runner/advisor_runner.py" 2>/dev/null
+  pkill -f "$ROOT/scripts/arena-autostop.sh" 2>/dev/null
+  sleep 1
+fi
 
-# ELO sweep BEFORE the archive: the applier attributes pilots from game.jsonl
-# (never archived) and needs unconsumed spool files in runner/results/. Rated
-# and skipped spools then ride into the archive; unrated ones stay for the
+# ELO sweep BEFORE the archive: the applier attributes pilots from the game
+# logs (archived below with everything else — a spool left unrated finds its
+# game later by id in archive/*/game-<id>.jsonl) and needs unconsumed spool
+# files in runner/results/. Rated and skipped spools then ride into the
+# archive; unrated ones stay for the
 # next sweep. Never blocks teardown.
 python3 "$ROOT/runner/ratings.py" >>"$LOGS/ratings.out" 2>&1 || true
 
 archived=0
-if ls "$LOGS"/seat-*.log "$LOGS"/gui.out >/dev/null 2>&1; then
+# BL-21: archive whenever ANY of the session's log files exists (the old test
+# needed seat logs AND gui.out together, so a stop after a partial launch, or
+# one that only had game logs left, archived nothing).
+have_logs=0
+for f in "$LOGS"/seat-*.log "$LOGS"/gui.out "$LOGS"/game.jsonl "$LOGS"/game-*.jsonl; do
+  [ -e "$f" ] || [ -L "$f" ] && { have_logs=1; break; }
+done
+if [ "$have_logs" = 1 ]; then
   A="$LOGS/archive/$(date +%Y%m%d-%H%M%S)-stop"
   mkdir -p "$A"
   # gui.out/run_table.out ride along so the next launch's `>` redirects never
   # clobber a past game's record — every game's full log set survives intact.
   mv "$LOGS"/seat-*.log "$LOGS"/seat-*.jsonl "$LOGS"/seat-*.usage.json \
      "$LOGS"/advisor-0.log "$LOGS"/advisor-0.jsonl "$LOGS"/advisor_runner.out \
-     "$LOGS"/react-autopass.out "$LOGS"/gui.out "$LOGS"/run_table.out \
+     "$LOGS"/gui.out "$LOGS"/run_table.out "$LOGS"/autostop.out \
+     "$LOGS"/game.jsonl "$LOGS"/game-*.jsonl \
      "$LOGS"/ratings.out "$LOGS"/transport-events.jsonl \
      "$ROOT"/runner/results/*.rated \
      "$ROOT"/runner/results/*.skipped "$ROOT"/runner/results/*.voided "$A/" 2>/dev/null
   archived=$(ls "$A" 2>/dev/null | wc -l | tr -d ' ')
 fi
-rm -rf "$ROOT"/mailbox/seat-* "$ROOT"/mailbox/observer-state.json "$LOGS"/control/* 2>/dev/null
+rm -rf "$ROOT"/mailbox/seat-* "$ROOT"/mailbox/observer-state.json "$ROOT"/mailbox/launch-status.json "$LOGS"/control/* 2>/dev/null
 
 runners=$(pgrep -f "seat_runner.py --seat" | wc -l | tr -d ' ')
 gui=$(pgrep -f GuiPilotMatch >/dev/null && echo up || echo down)
-decisions=0
-[ -f "$LOGS/game.jsonl" ] && decisions=$(wc -l < "$LOGS/game.jsonl" | tr -d ' ')
-echo "arena stopped: runners=$runners gui=$gui | archived $archived log files | game.jsonl=${decisions:-0} decisions (preserved)"
+# BL-21: the session's game.jsonl (and its per-game files) are in the archive
+# now; report what went there.
+decisions=0; games=0
+if [ -n "${A:-}" ] && [ -f "$A/game.jsonl" ]; then
+  decisions=$(wc -l < "$A/game.jsonl" | tr -d ' ')
+  games=$(ls "$A"/game-*.jsonl 2>/dev/null | grep -v legacy | wc -l | tr -d ' ')
+fi
+echo "arena stopped: runners=$runners gui=$gui | archived $archived log files | $decisions decisions across $games game(s) (archived)"
 
 # Watchers armed by a driving agent session (digest monitors, log tails) are
 # deliberately NOT killed — they re-attach across games by design. Surface

@@ -37,6 +37,21 @@ import forge.model.FModel;
  */
 public class UnlessCostReachesMailboxTest {
 
+    /** Item 15 (2026-09-03): the scripted brain must not outlive its test —
+     *  these pre-kit pollers used to spin for up to 150 s after their method
+     *  returned, inside the one reused surefire fork. */
+    private static volatile boolean legacyBrainAlive = true;
+
+    @org.testng.annotations.BeforeMethod
+    public void armLegacyBrain() {
+        legacyBrainAlive = true;
+    }
+
+    @org.testng.annotations.AfterMethod(alwaysRun = true)
+    public void stopLegacyBrain() {
+        legacyBrainAlive = false;
+    }
+
     private static Card put(String name, Player p, ZoneType z) {
         IPaperCard pc = FModel.getMagicDb().getCommonCards().getCard(name);
         if (pc == null) {
@@ -79,7 +94,7 @@ public class UnlessCostReachesMailboxTest {
         Thread brain = new Thread(() -> {
             long end = System.currentTimeMillis() + 150_000;
             java.util.Set<String> done = new java.util.HashSet<>();
-            while (System.currentTimeMillis() < end) {
+            while (legacyBrainAlive && System.currentTimeMillis() < end) {
                 try {
                     if (Files.isDirectory(inbox)) {
                         for (Path f : Files.newDirectoryStream(inbox, "req-*.json")) {
@@ -90,16 +105,16 @@ public class UnlessCostReachesMailboxTest {
                             String resp;
                             if (body.contains("\"decisionType\":\"CAST_SPELL\"")) {
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Transmute Artifact").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Transmute Artifact")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "0") + "}";
                             } else if (body.contains("\"decisionType\":\"CHOOSE_CARD\"")) {
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Mana Vault").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Mana Vault")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "0") + "}";
                             } else if (body.contains("\"decisionType\":\"CHOOSE_ENTITY\"")) {
                                 // sacrifice choice: pick Ornithopter
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Ornithopter").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Ornithopter")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "1") + "}";
                             } else if (body.contains("\"decisionType\":\"PAY_UNLESS\"")) {
                                 resp = "{\"chosenId\": 1}";      // PAY the difference
@@ -142,5 +157,71 @@ public class UnlessCostReachesMailboxTest {
         Assert.assertTrue(vaultOnBf, "Mana Vault should be on the battlefield after paying X "
                 + "(defect: stock refuses to pay for non-creatures -> graveyard)");
         Assert.assertFalse(vaultInGy, "Mana Vault must not be binned");
+    }
+
+    private static boolean has(Player p, ZoneType z, String name) {
+        for (Card c : p.getCardsIn(z)) {
+            if (name.equals(c.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * BL-11 second card (group {@code extended}). Abandon Attachments carries
+     * the exact script triple that routes Transmute Artifact's X to the seat:
+     * {@code UnlessCost$ ... | UnlessPayer$ You | UnlessSwitched$ True} on the
+     * seat's OWN spell ({@code A:SP$ Draw | NumCards$ 2 | UnlessCost$
+     * Discard<1/Card> | UnlessPayer$ You | UnlessSwitched$ True}). The unless
+     * cost is a discard rather than X mana, so the seat must both decide to
+     * pay (PAY_UNLESS) and name the discarded card (DISCARD PAYMENT), and the
+     * "if you do" draw must then actually happen.
+     */
+    @Test(groups = "extended", timeOut = 240_000)
+    public void abandonAttachmentsDiscardUnlessReachesTheSeat() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            for (int i = 0; i < 2; i++) MailboxTestKit.put("Island", k.seat, ZoneType.Battlefield);
+            MailboxTestKit.put("Abandon Attachments", k.seat, ZoneType.Hand);
+            MailboxTestKit.put("Swamp", k.seat, ZoneType.Hand);                 // the discard
+            MailboxTestKit.put("Craterhoof Behemoth", k.seat, ZoneType.Hand);   // must survive
+            for (int i = 0; i < 4; i++) MailboxTestKit.put("Plains", k.seat, ZoneType.Library);
+            for (int i = 0; i < 2; i++) MailboxTestKit.put("Island", k.opp, ZoneType.Library);
+            final boolean[] played = {false};
+            k.startBrain(body -> {
+                if (body.contains("DISCARD PAYMENT")) {
+                    String id = MailboxTestKit.idOf(body, "Swamp");
+                    return id != null ? "{\"chosen\": [" + id + "]}" : null;
+                }
+                if (body.contains("\"decisionType\":\"PAY_UNLESS\"")) {
+                    return "{\"chosenId\": 1}";      // PAY: discard, then draw two
+                }
+                if ((body.contains("\"decisionType\":\"CAST_SPELL\"")
+                        || body.contains("\"decisionType\":\"REACT\"")) && !played[0]) {
+                    String id = MailboxTestKit.idOf(body, "Abandon Attachments");
+                    if (id != null) {
+                        played[0] = true;
+                        return "{\"chosenId\": " + id + "}";
+                    }
+                }
+                return null;
+            });
+            k.run(() -> played[0] && has(k.seat, ZoneType.Graveyard, "Swamp"), 300);
+
+            boolean payUnlessAsked = k.seen.stream().anyMatch(s -> s.contains("\"decisionType\":\"PAY_UNLESS\""));
+            boolean discardWindow = k.seen.stream().anyMatch(s -> s.contains("DISCARD PAYMENT"));
+            int lib = k.seat.getCardsIn(ZoneType.Library).size();
+            int hand = k.seat.getCardsIn(ZoneType.Hand).size();
+            System.out.println("UNLESS-DISCARD test: cast=" + played[0] + " payUnlessAsked=" + payUnlessAsked
+                    + " discardWindow=" + discardWindow + " swampInGy=" + has(k.seat, ZoneType.Graveyard, "Swamp")
+                    + " lib=" + lib + " hand=" + hand + " reqs=" + k.seen.size());
+            Assert.assertTrue(played[0], "Abandon Attachments was never cast through the mailbox");
+            Assert.assertTrue(payUnlessAsked, "the discard-unless decision never reached the seat");
+            Assert.assertTrue(discardWindow, "WHICH card is discarded must be the seat's pick");
+            Assert.assertTrue(has(k.seat, ZoneType.Graveyard, "Swamp"), "the seat's named discard must be the card discarded");
+            Assert.assertTrue(has(k.seat, ZoneType.Hand, "Craterhoof Behemoth"), "the high-value card must survive");
+            Assert.assertEquals(lib, 2, "paying the unless cost must draw two (library 4 -> 2)");
+            Assert.assertEquals(hand, 3, "hand = Craterhoof + the two drawn Plains");
+        }
     }
 }

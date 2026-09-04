@@ -49,19 +49,15 @@ class SeatRunner:
         #   {"turn": int, "steps": [{"card","why"}], "idx": int}
         # Consumed locally under the four-part guard; discarded on any divergence.
         self.plan: dict | None = None
-        # Deck combos (CommanderSpellbook included-combos distillation) for the
-        # per-decision COMBO STATUS line. Ship-pattern source: dossier/combos.json
-        # only — no project-internal combo-program/advisory artifacts.
-        self.combos: list = []
-        try:
-            combos_p = (Path(__file__).parents[2] / "decks" / deck
-                        / "dossier" / "combos.json")
-            if combos_p.exists():
-                self.combos = (json.loads(combos_p.read_text()).get("combos")
-                               or [])
-        except (OSError, json.JSONDecodeError):
-            self.combos = []
         self.react_seen: set[tuple] = set()
+        # BL-02 follow-up: a trigger-order answer for the SAME set of trigger
+        # groups is replayed for the rest of the TURN (Purphoros + Impact
+        # Tremors would otherwise ask on every creature). Cleared with the other
+        # per-turn memos at the turn boundary and on a new game: a stale order
+        # across turns is wrong more often than it is cheap. Keyed by the sorted
+        # option labels; the answer is stored as labels in resolution order and
+        # rebound to the new window's indices. Fed only by real model answers.
+        self.order_memo: dict[tuple, list[str]] = {}
         # Cycle replay (backlog item 3, 2026-08-17): the brain may declare
         # "repeat_cycle": N on a decision it has answered identically before
         # this turn; the runner replays the recorded cycle's answers for
@@ -96,6 +92,24 @@ class SeatRunner:
         if self.brain.backend is not None:
             self._seed_spend()
         self._init_control()
+        # Deck combos (CommanderSpellbook included-combos distillation) for the
+        # per-decision COMBO STATUS line. Ship-pattern source: dossier/combos.json
+        # only — no project-internal combo-program/advisory artifacts. Item 13b:
+        # resolve() like the siblings (a relative __file__ found nothing and
+        # every prompt silently lost its combo grounding), and SAY when absent.
+        self.combos: list = []
+        combos_p = (Path(__file__).resolve().parents[2] / "decks" / deck
+                    / "dossier" / "combos.json")
+        try:
+            if combos_p.exists():
+                self.combos = (json.loads(combos_p.read_text()).get("combos") or [])
+            else:
+                self._say(f"[seat {seat}] WARN combos.json missing at {combos_p} — "
+                          f"COMBO STATUS lines will be absent from every prompt")
+        except (OSError, json.JSONDecodeError) as e:
+            self.combos = []
+            self._say(f"[seat {seat}] WARN combos.json unreadable ({e}) — "
+                      f"COMBO STATUS lines will be absent")
 
     def _seed_spend(self) -> None:
         p = self._jsonl_path.parent / f"seat-{self.seat}.usage.json"
@@ -206,22 +220,49 @@ class SeatRunner:
                                for a in combat][:6]
         return stamp
 
-    def _transport_event(self, kind: str) -> None:
-        """Append {ts, seat, kind} to logs/transport-events.jsonl — the
+    def _transport_event(self, kind: str, game_id=None) -> None:
+        """Append {ts, seat, kind, gameId} to logs/transport-events.jsonl — the
         ratings applier voids transport-contaminated games from this file
-        (any wedge, or a punt pile-up on one seat)."""
+        (any wedge, or a punt pile-up on one seat). BL-09: the game id lets
+        the sweep attribute an event to its game exactly; the time window is
+        the fallback for events from an unstamped engine. The file is never
+        rotated or moved during a session (one append, one file)."""
         try:
             p = self._jsonl_path.parent / "transport-events.jsonl"
             with p.open("a") as f:
                 f.write(json.dumps({"ts": time.time(), "seat": self.seat,
-                                    "kind": kind}) + "\n")
+                                    "kind": kind, "gameId": game_id}) + "\n")
         except OSError:
             pass  # never let bookkeeping hurt the game
+
+    def _game_log_paths(self, gid) -> list:
+        """The two append targets for one narrative record (BL-21, replacing
+        item 13h's symlink swap): game.jsonl, a PLAIN append-only file that is
+        the human `tail -f` target for the whole session and is archived at
+        teardown; and game-<gid>.jsonl, the per-game machine record ratings
+        and the dashboards read. Both are single-line appends to files that
+        are never moved during a session — the one file operation with no
+        partial-state window. A symlink left by a pre-BL-21 runner is removed
+        once so the plain file can take its place (a sibling seat may have
+        removed it first; that is fine)."""
+        flat = self._game_log
+        if not getattr(self, "_game_log_checked", False):
+            self._game_log_checked = True
+            try:
+                if flat.is_symlink():
+                    os.unlink(flat)
+            except OSError:
+                pass
+        paths = [flat]
+        if isinstance(gid, str) and gid:
+            paths.append(flat.with_name(f"game-{gid}.jsonl"))
+        return paths
 
     def _record(self, req: dict, answer: dict, source: str, meta=None,
                 why: str | None = None, consumed: bool = True) -> None:
         stamp = self.board_stamp(req)
-        rec = {"ts": time.time(), "seat": self.seat, "seq": req.get("seq"),
+        rec = {"ts": time.time(), "seat": self.seat, "gameId": req.get("gameId"),
+               "seq": req.get("seq"),
                "turn": req.get("turn"), "phase": req.get("phase"),
                "type": req.get("decisionType"), "source": source,
                "model": self.brain.model, "effort": self.brain.effort,
@@ -262,16 +303,21 @@ class SeatRunner:
             tmp_p.write_text(json.dumps(cum, indent=1))
             os.replace(tmp_p, usage_p)
             # Shared narrative line (append-only; single-line writes are atomic
-            # enough on a local fs; no seat ever reads this file).
-            with self._game_log.open("a") as f:
-                f.write(json.dumps({
-                    "ts": rec["ts"], "seat": self.seat, "deck": self.deck,
-                    "turn": rec["turn"], "phase": rec["phase"],
-                    "type": rec["type"], "seq": rec["seq"], "source": source,
-                    "model": self.brain.model, "effort": self.brain.effort,
-                    "answer": answer, "why": why,
-                    "deviation": rec.get("deviation"),
-                    "latency_s": rec.get("latency_s"), "board": stamp}) + "\n")
+            # enough on a local fs; no seat ever reads this file). BL-21: the
+            # same line goes to game.jsonl (human tail, archived at teardown)
+            # and to game-<gameId>.jsonl (the per-game machine record).
+            line = json.dumps({
+                "ts": rec["ts"], "seat": self.seat, "deck": self.deck,
+                "gameId": req.get("gameId"),
+                "turn": rec["turn"], "phase": rec["phase"],
+                "type": rec["type"], "seq": rec["seq"], "source": source,
+                "model": self.brain.model, "effort": self.brain.effort,
+                "answer": answer, "why": why,
+                "deviation": rec.get("deviation"),
+                "latency_s": rec.get("latency_s"), "board": stamp}) + "\n"
+            for gp in self._game_log_paths(req.get("gameId")):
+                with gp.open("a") as f:
+                    f.write(line)
         except OSError:
             pass
 
@@ -317,7 +363,17 @@ class SeatRunner:
         lives = (st.get("life"),) + tuple(o.get("life")
                                           for o in st.get("opponents", []) or [])
         pool = st.get("manaPool")
-        return (req.get("turn"), stack, opts, lives, pool)
+        # Wave-2 (2026-08-28 audit finding 1): the signature was blind to
+        # phase, combat and stack TARGETS — one correct pass at "beginning of
+        # combat, nothing declared" fast-passed every later window that turn
+        # (post-attackers, post-blocks, end step: the game-2 fog death one
+        # layer up), and a same-named spell at a different target collided.
+        # json digests are shape-agnostic and deterministic; memo fires
+        # strictly less often, never more.
+        combat = json.dumps(st.get("combat"), sort_keys=True, default=str)
+        tgts = json.dumps(st.get("stackTargets"), sort_keys=True, default=str)
+        return (req.get("turn"), req.get("phase"), stack, opts, lives, pool,
+                combat, tgts)
 
     def _all_own_objects(self, req: dict) -> bool:
         """True iff the stack is non-empty and EVERY item belongs to this
@@ -381,10 +437,18 @@ class SeatRunner:
         return (req.get("decisionType"), req.get("phase"), stack, opts, n_opp)
 
     @staticmethod
+    def _opt_key(o: dict) -> tuple:
+        """Replay identity of an option: (label, type, cost). BL-08: label
+        alone let a card's costed ability rebind to its free sibling when the
+        description drifted between windows."""
+        return (str(o.get("label", "")), o.get("type"), o.get("cost"))
+
+    @staticmethod
     def _cycle_shape(req: dict, answer: dict):
         """Answer -> replayable shape, or None (unsupported: never replayed).
-        Shapes rebind by option LABEL, never by id — ids are per-window."""
-        opts = {o.get("id"): str(o.get("label", ""))
+        Shapes rebind by option identity (label, type, cost), never by id —
+        ids are per-window."""
+        opts = {o.get("id"): SeatRunner._opt_key(o)
                 for o in req.get("options", []) or []}
         if not isinstance(answer, dict):
             return None
@@ -409,15 +473,20 @@ class SeatRunner:
 
     @staticmethod
     def _cycle_rebind(shape, req: dict):
-        """Shape -> concrete answer against THIS request, or None."""
-        def find(lab):
-            exact = [o for o in req.get("options", []) or []
-                     if str(o.get("label", "")) == lab]
+        """Shape -> concrete answer against THIS request, or None. An exact
+        (label, type, cost) match wins; otherwise the label PREFIX (the card
+        name) must match together with the same type and cost, and exactly
+        one option may qualify — any ambiguity means no replay (BL-08)."""
+        def find(key):
+            lab, typ, cost = key
+            opts = req.get("options", []) or []
+            exact = [o for o in opts if SeatRunner._opt_key(o) == key]
             if len(exact) == 1:
                 return exact[0].get("id")
             pre = lab.split("  ")[0]
-            close = [o for o in req.get("options", []) or []
-                     if str(o.get("label", "")).split("  ")[0] == pre]
+            close = [o for o in opts
+                     if str(o.get("label", "")).split("  ")[0] == pre
+                     and o.get("type") == typ and o.get("cost") == cost]
             return close[0].get("id") if len(close) == 1 else None
         if shape == ("id0",):
             return {"chosenId": 0}
@@ -536,13 +605,78 @@ class SeatRunner:
     def _stack_names(req: dict) -> list[str]:
         return [str(x) for x in (req.get("state", {}) or {}).get("stack", [])]
 
+    def _threatens_own(self, req: dict) -> bool:
+        """True iff any OPPONENT stack item's announced targets
+        (state.stackTargets) point at this seat or its battlefield — the
+        protect-window shape the autopass allowlist must never eat.
+        Wave-3 (adversarial review F7/F9): divided-damage labels carry a
+        trailing " [n]" that must be stripped before matching, and the
+        seat's OWN items (pump on own attacker) are not threats."""
+        st = req.get("state", {}) or {}
+        groups = st.get("stackTargets") or []
+        if not groups:
+            return False
+        owners = st.get("stackOwners") or []
+        me = f"seat {self.seat}"
+        own_ids = {f"({c.get('id')})" for c in (st.get("battlefield") or [])
+                   if isinstance(c, dict) and c.get("id") is not None}
+        for i, grp in enumerate(groups):
+            if i < len(owners) and owners[i] == self.seat:
+                continue  # own spell aiming own stuff is a plan, not a threat
+            for raw in (grp or []):
+                t = str(raw).split(" [")[0]  # strip divided-amount suffix
+                if t == me or any(t.endswith(oid) for oid in own_ids):
+                    return True
+        return False
+
+    @staticmethod
+    def _order_key(req: dict) -> tuple | None:
+        """Identity of a TRIGGER_ORDER window: the sorted group labels."""
+        st = req.get("state", {}) or {}
+        if req.get("decisionType") != "CHOOSE_MODE" or st.get("purpose") != "TRIGGER_ORDER":
+            return None
+        return tuple(sorted(str(o.get("label", "")) for o in req.get("options", []) or []))
+
+    def _order_replay(self, req: dict) -> dict | None:
+        """Rebind a remembered resolution order (labels) to this window's indices."""
+        key = self._order_key(req)
+        labels = self.order_memo.get(key) if key is not None else None
+        if not labels:
+            return None
+        by_label = {str(o.get("label", "")): o.get("id") for o in req.get("options", []) or []}
+        try:
+            ids = [by_label[lab] for lab in labels]
+        except KeyError:
+            return None
+        return {"chosen": ids}
+
+    def _order_remember(self, req: dict, answer: dict) -> None:
+        key = self._order_key(req)
+        if key is None or not isinstance(answer, dict):
+            return
+        by_id = {o.get("id"): str(o.get("label", "")) for o in req.get("options", []) or []}
+        try:
+            self.order_memo[key] = [by_id[i] for i in answer.get("chosen", [])]
+        except (KeyError, TypeError):
+            pass
+
     def _fastpath(self, req: dict) -> tuple[dict, str] | None:
+        if req.get("decisionType") == "CHOOSE_MODE":
+            replay = self._order_replay(req)
+            if replay is not None and rules.validate(req, replay) is not None:
+                return replay, "memo"
+            return None
         if req.get("decisionType") != "REACT":
             return None
         non_pass = [o for o in req.get("options", []) if o.get("id") != 0]
         if non_pass and all(any(str(o.get("label", "")).startswith(p)
                                 for p in self.autopass) for o in non_pass):
-            return {"chosenId": 0}, "autopass"
+            # Wave-2 (audit finding 5, restoring note 12's dropped clause): the
+            # ONE window where a Mother-of-Runes-class option is the right play
+            # is an opponent object aimed at OUR stuff — never autopass those.
+            # state.stackTargets (note 51) names every stack item's targets.
+            if not self._threatens_own(req):
+                return {"chosenId": 0}, "autopass"
         if self._react_signature(req) in self.react_seen:
             return {"chosenId": 0}, "memo"
         # #2 reactive hold: brain armed a same-turn hold; auto-pass only when the
@@ -565,6 +699,8 @@ class SeatRunner:
         self._say(f"[seat {self.seat}] runner up — deck={self.deck} "
                   f"model={self.brain.model} timeout={self.timeout_s}s"
                   + (f" (swept {swept} stale)" if swept else ""))
+        self.mb.start_heartbeat_thread()  # item 12: "somebody is home", every 5s,
+                                          # beating through the pre-warm below too
         self.brain.ensure_session()  # pre-warm: dossier loads before turn 0
         while True:
             self._apply_control()
@@ -575,25 +711,69 @@ class SeatRunner:
             self.handle(req)
 
     def handle(self, req: dict) -> None:
+        """Item 13a: nothing raised inside a decision may kill the runner — a
+        crash restarts it 2 s later with a fresh session and a full dossier
+        re-send, and the game memory is gone. Log the traceback, answer the
+        safe default on time, carry on."""
+        try:
+            self._handle_inner(req)
+        except Exception:  # noqa: BLE001 — surviving anything is the point
+            import traceback
+            self._say(f"[seat {self.seat}] seq={req.get('seq')} INTERNAL ERROR in "
+                      f"handle() — answering the safe default:\n{traceback.format_exc()}")
+            # BL-20 hardening: an internal error leaves a hole in the cycle
+            # tape; never let a loop arm across it.
+            self.cycle = None
+            self._hist.clear()
+            try:
+                answer = rules.safe_default(req)
+                ok = self.mb.respond(req, answer)
+                self._transport_event("punt", req.get("gameId"))
+                self._record(req, answer, "punt", why="punt: runner exception", consumed=ok)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _handle_inner(self, req: dict) -> None:
         if self.mb.game_reset:
             self._usage_readout("game close")  # final readout for the ended game
-            self._say(f"[seat {self.seat}] NEW GAME detected — session + memory reset")
+            self._say(f"[seat {self.seat}] NEW GAME detected "
+                      f"({self.mb.prev_game_id or 'unstamped'} -> {self.mb.game_id or 'unstamped'}; "
+                      f"swept {self.mb.swept_on_reset} stale resp) — session + memory reset")
             self.mb.game_reset = False
             self.brain.reset()
             self.plan = None
             self.hold = None
             self.react_seen.clear()
+            self.order_memo.clear()
             self.cycle = None
             self._hist = []
         if self._last_turn != req.get("turn"):
             self._last_turn = req.get("turn")
             self.react_seen.clear()
+            self.order_memo.clear()
             self.hold = None  # hold posture is single-turn
             self.turn_intent = None
             self.cycle = None   # loops never survive a turn boundary
             self._hist = []
 
         seq, dtype = req.get("seq"), req.get("decisionType")
+        # Item 12: the engine publishes its wait on every request. It is the
+        # one timeout knob; budget from what the engine will actually do
+        # rather than from a copy passed through the environment.
+        eng_t = req.get("timeoutSec")
+        if isinstance(eng_t, (int, float)) and eng_t > 0 and float(eng_t) != self.timeout_s:
+            self._say(f"[seat {self.seat}] engine timeout is {eng_t:.0f}s "
+                      f"(runner had {self.timeout_s:.0f}s) — budgeting from the engine's value")
+            self.timeout_s = float(eng_t)
+            self.mb.timeout_s = float(eng_t)
+        if not req.get("gameId") and not getattr(self, "_unstamped_warned", False):
+            self._unstamped_warned = True
+            self._say(f"[seat {self.seat}] engine requests carry no gameId (pre-item-8 "
+                      f"engine) — falling back to the seq heuristic for new-game detection")
+        # Item 3: a deviation belongs to the model call that reported it. It
+        # used to persist across fastpath/plan/cycle/punt records (no model
+        # call) and get stamped onto every one of them.
+        self._deviation = None
 
         # Guard #4: any opponent instant-speed action during our own turn shows
         # up as a REACT req — it invalidates the executable plan wholesale (the
@@ -661,12 +841,17 @@ class SeatRunner:
             self.plan = None
 
         # Deadline: answer must land before the engine gives up on us.
+        vanished = False
         try:
             mtime = (self.mb.inbox / f"req-{seq}.json").stat().st_mtime
         except OSError:
+            # BL-28: on a real mailbox a missing request file means the
+            # engine already timed out or died — punt now, never invent a
+            # fresh window. A fake mailbox with no inbox (tests) keeps one.
+            vanished = self.mb.inbox.is_dir()
             mtime = time.time()
         deadline = mtime + 0.8 * self.timeout_s
-        budget = deadline - time.time()
+        budget = 0.0 if vanished else deadline - time.time()
         answer, source, meta, why = None, "punt", None, None
         if budget > 5.0:
             # Advisory: remaining planned cards (if a plan survives) fed as text.
@@ -681,8 +866,10 @@ class SeatRunner:
                 req, plan=plan_text, observer=self.mb.read_observer(),
                 speculative=self.speculative, react_hold=self.react_hold,
                 combo_status=rules.combo_status_line(self.combos, req))
-            # Cap at the deadline (raised to 240 so fable/high effort isn't
-            # truncated on long-timeout games; normal 90s games stay budget-bound).
+            # Item 2: the brain gets the DEADLINE, not a duration — init and
+            # the decision call each spend only what remains of it (the old
+            # min(budget, 240) handed the same budget to both, so a lazy
+            # re-init could block the seat for 2x the window).
             # Option B (2026-08-17): a REACT where every stack item is the
             # seat's OWN trigger (measured 7+/game at 8-16s each, never once a
             # real play) thinks at effort low — full authority retained, never
@@ -706,7 +893,7 @@ class SeatRunner:
                     fast_eff = "low"
                     self._say(f"[seat {self.seat}] free own-trigger CONFIRM -> "
                               f"effort low for this window")
-            out, meta = self.brain.decide(prompt, timeout_s=min(budget, 240.0),
+            out, meta = self.brain.decide(prompt, deadline=deadline,
                                           effort=fast_eff)
             clean = rules.validate(req, out) if out is not None else None
             if isinstance(out, dict) and isinstance(out.get("why"), str):
@@ -765,6 +952,10 @@ class SeatRunner:
                 why = f"punt: invalid model answer ({(why or '-')[:80]})"
             else:
                 why = "punt: model failure/timeout"
+        elif vanished:
+            self._say(f"[seat {self.seat}] seq={seq} request file vanished "
+                      f"(engine moved on) -> safe default without model call")
+            why = "punt: request file vanished"
         else:
             self._say(f"[seat {self.seat}] seq={seq} only {budget:.0f}s left "
                       f"-> safe default without model call")
@@ -772,14 +963,21 @@ class SeatRunner:
         if answer is None:
             answer = rules.safe_default(req)
         if source == "punt":
-            self._transport_event("punt")
+            self._transport_event("punt", req.get("gameId"))
         wedges = getattr(self.brain, "wedges", 0)
         if wedges > getattr(self, "_wedges_seen", 0):
             self._wedges_seen = wedges
-            self._transport_event("wedge")
+            self._transport_event("wedge", req.get("gameId"))
 
-        if dtype == "REACT" and answer == {"chosenId": 0}:
+        # Item 3: only a REAL model pass feeds the same-turn memo. A punt
+        # (timeout / wedge / invalid / short budget) also answers {"chosenId":0}
+        # but the brain never saw the window — memoizing it auto-passed every
+        # identical window for the rest of the turn under a "why" that claimed
+        # otherwise, and hid the punts from the ratings void counter.
+        if source == "model" and dtype == "REACT" and answer == {"chosenId": 0}:
             self.react_seen.add(self._react_signature(req))
+        if source == "model" and dtype == "CHOOSE_MODE":
+            self._order_remember(req, answer)
 
         ok = self.mb.respond(req, answer)
         lat = f" {meta['latency_s']}s" if meta and meta.get("latency_s") else ""
@@ -789,5 +987,10 @@ class SeatRunner:
                   f"{'' if ok else ' WINDOW LOST'}")
         self._record(req, answer, source, meta, why=why, consumed=ok)
         if cyc_sig is not None:
-            self._hist.append((cyc_sig, dtype, self._cycle_shape(req, answer)))
+            # BL-20: a punt is never a replayable step. Recording it with an
+            # unreplayable shape makes repeat_cycle refuse to arm across it
+            # (the existing "non-replayable decision" check), so a punted
+            # decline can never be replayed 64 times as source "cycle".
+            shape = None if source == "punt" else self._cycle_shape(req, answer)
+            self._hist.append((cyc_sig, dtype, shape))
             del self._hist[:-self.CYCLE_MAX_HIST]

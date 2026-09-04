@@ -93,11 +93,13 @@ def parse_dck(path: str):
             continue
         if section == "sideboard":
             continue
-        m = re.match(r"(\d+)\s*[xX]?\s+(.+)", line)            # "3 Card" / "3x Card"
-        if m:
+        m = re.match(r"^(\d+)\s*[xX]?\s+(.+)$", line)          # "3 Card" / "3x Card"
+        if m and int(m.group(1)) <= 100:
             qty, card = int(m.group(1)), m.group(2)
         else:
-            qty, card = 1, line                                # bare card name -> qty 1
+            # bare card name -> qty 1; BL-14: a leading number that cannot be a
+            # count in a 100-card deck is part of the name ("1996 World Champion")
+            qty, card = 1, line
         card = card.split("|")[0].strip()                      # drop |SET|num tags
         if card:
             (commanders if section == "commander" else main).append((card, qty))
@@ -199,6 +201,11 @@ def build_deck_cards(parsed, scry, slug):
                 continue
             cards.append({
                 "name": c["name"], "qty": qty, "zone": zone,
+                # Scryfall is canonical (plan item 7): keep its identity so the
+                # Forge join is by PRINTING, never by guessing a layout rule.
+                "scryfall_id": c.get("id"), "set": c.get("set"),
+                "collector_number": c.get("collector_number"),
+                "layout": c.get("layout", ""),
                 "mana_cost": c.get("mana_cost")
                 or (c.get("card_faces", [{}])[0].get("mana_cost", "")),
                 "type_line": c.get("type_line", ""),
@@ -207,6 +214,164 @@ def build_deck_cards(parsed, scry, slug):
             })
     return {"schema": "arena.deck-cards/1", "deck_id": slug,
             "cards": cards, "unresolved": unresolved}
+
+
+def forge_card_name(card):
+    """Forge's loader name for a resolved Scryfall card. Plan item 7
+    (2026-09-03): this is no longer a layout rule — the 2026-09-01 whitelist
+    ('split' keeps "A // B", everything else front face) missed Rooms (layout
+    'room', Forge keeps the combined name) and would have re-broken Sythis on
+    its next ingest. `resolve_forge_names` asks Forge's own card database
+    (printing join, then name forms) and stores the answer as `forge_name`;
+    this accessor just reads it."""
+    fn = card.get("forge_name")
+    if not fn:
+        raise SystemExit(f"ERROR: {card.get('name')!r} has no forge_name — "
+                         f"resolve_forge_names must run before any write")
+    return fn
+
+
+def _probe_classpath():
+    """Classpath for the Forge card-DB helpers: the source tree's
+    target/classes + classpath.txt, or the packaged tree's lib/*."""
+    classes = os.path.join(ROOT, "target", "classes")
+    if not os.path.isdir(classes):
+        return None
+    cp_txt = os.path.join(ROOT, "target", "classpath.txt")
+    lib = os.path.join(os.path.dirname(ROOT), "lib")
+    if os.path.exists(cp_txt):
+        return classes + os.pathsep + open(cp_txt).read().strip()
+    if os.path.isdir(lib):
+        return classes + os.pathsep + os.path.join(lib, "*")
+    return None
+
+
+def _forge_gui_dir():
+    return os.path.join(os.path.dirname(ROOT), "forge-gui")
+
+
+def resolve_forge_names(deck_cards):
+    """Ask Forge what it calls every card (plan item 7). One JVM: the probe's
+    --resolve mode joins each Scryfall (set, collector_number) to Forge's
+    edition data, falling back to the name forms (combined, then front face).
+    Fills `forge_name` + `forge_method` on each entry. Anything unresolved is
+    a NAMED failure here, before a single file is written — Forge often has
+    no entry for the newest sets and never will for some cards; the game
+    must not start with fewer than 100 real cards, so neither may the ingest."""
+    import subprocess
+    cp = _probe_classpath()
+    if not cp:
+        raise SystemExit("ERROR: Forge card database not available (no forge-arena/target/"
+                         "classes + classpath.txt, and no lib/) — run the arena build "
+                         "first; ingestion must verify every card against Forge.")
+    lines = [json.dumps({"name": c["name"], "set": c.get("set"),
+                         "collector_number": c.get("collector_number")})
+             for c in deck_cards["cards"]]
+    pr = subprocess.run(["java", "-cp", cp, "forge.arena.interactive.DeckLoadProbe",
+                         "--resolve", _forge_gui_dir()],
+                        input="\n".join(lines) + "\n", capture_output=True, text=True,
+                        timeout=600)
+    by_name = {}
+    for ln in pr.stdout.splitlines():
+        if ln.startswith("{"):
+            try:
+                r = json.loads(ln)
+            except ValueError:
+                continue
+            by_name[r.get("name")] = r
+    if not by_name:
+        for ln in pr.stderr.strip().splitlines()[-6:]:
+            log("      " + ln)
+        raise SystemExit("ERROR: Forge resolver produced no answers (see above)")
+    unresolved, unanswered, errors = [], [], []
+    for c in deck_cards["cards"]:
+        r = by_name.get(c["name"])
+        if r is None:
+            unanswered.append(c["name"])          # resolver never spoke: OUR fault
+            continue
+        if r.get("method") == "error":
+            errors.append(f"{c['name']}: {r.get('error')}")
+            continue
+        if not r.get("forge_name"):
+            unresolved.append(f"{c['name']} [{c.get('set')} #{c.get('collector_number')}]")
+            continue
+        c["forge_name"], c["forge_method"] = r["forge_name"], r.get("method")
+    if unanswered or errors:
+        # Never report a resolver failure as "Forge lacks the card" — those are
+        # different problems with different fixes (found live, 2026-09-03).
+        for ln in pr.stderr.strip().splitlines()[-6:]:
+            log("      " + ln)
+        raise SystemExit("ERROR: the Forge resolver FAILED (this is a tooling fault, not a "
+                         f"card fault): {len(unanswered)} card(s) got no answer"
+                         + (f" — {unanswered[:5]}" if unanswered else "")
+                         + (f"; {len(errors)} error(s):\n  - " + "\n  - ".join(errors) if errors else "")
+                         + "\nNothing written.")
+    methods = {}
+    for c in deck_cards["cards"]:
+        methods[c.get("forge_method")] = methods.get(c.get("forge_method"), 0) + 1
+    if unresolved:
+        raise SystemExit("ERROR: Forge has no implementation for "
+                         f"{len(unresolved)} card(s) — a game would start short, so the "
+                         "ingest stops here, nothing written:\n  - "
+                         + "\n  - ".join(unresolved)
+                         + "\nFix: swap the card(s) in the list, or check Forge's card "
+                           "scripts for a different spelling.")
+    return methods
+
+
+def _db_stamp():
+    """Cheap stamp of the Forge card database the names were verified against:
+    card-script count + edition count. Compared at launch; a change is a
+    WARNING (resolution rarely goes backwards), not a refusal."""
+    gui = _forge_gui_dir()
+    n_cards = 0
+    for _root, _dirs, files in os.walk(os.path.join(gui, "res", "cardsfolder")):
+        n_cards += sum(1 for f in files if f.endswith(".txt"))
+    try:
+        n_eds = sum(1 for f in os.listdir(os.path.join(gui, "res", "editions")) if f.endswith(".txt"))
+    except OSError:
+        n_eds = 0
+    return f"{n_cards}:{n_eds}"
+
+
+def write_manifest(dossier, slug, dck_path, deck_cards):
+    """decks/<slug>/dossier/manifest.json — what launch checks in milliseconds
+    (plan item 7): the registered .dck's SHA-256, its card count, the DB stamp
+    the names were verified against, and every resolution."""
+    raw = open(dck_path, "rb").read()
+    m = {"schema": "arena.deck-manifest/1", "slug": slug,
+         "dck": os.path.basename(dck_path),
+         "dck_sha256": hashlib.sha256(raw).hexdigest(),
+         "card_count": sum(c["qty"] for c in deck_cards["cards"]),
+         "db_stamp": _db_stamp(),
+         "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+         "resolved": [{"name": c["name"], "forge_name": c.get("forge_name"),
+                       "set": c.get("set"), "collector_number": c.get("collector_number"),
+                       "method": c.get("forge_method")} for c in deck_cards["cards"]]}
+    path = os.path.join(dossier, "manifest.json")
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(m, f, indent=1)
+    os.replace(tmp, path)
+    return path
+
+
+def write_registered_dck(path, deck_name, deck_cards, parsed):
+    """Regenerate the registered .dck with Forge-loader names (instead of
+    byte-copying the input): proper sections, layout-aware DFC naming,
+    quantities preserved. Unresolved names pass through as written."""
+    resolved = {}
+    for c in deck_cards["cards"]:
+        resolved.setdefault(_normname(c["name"]), c)
+        resolved.setdefault(_normname(c["name"].split(" // ")[0]), c)
+    def line(name, qty):
+        c = resolved.get(_normname(name))
+        return f"{qty} {forge_card_name(c) if c else name}"
+    lines = ["[metadata]", f"Name={deck_name}", "[Commander]"]
+    lines += [line(n, q) for n, q in parsed["commanders"]]
+    lines.append("[Main]")
+    lines += [line(n, q) for n, q in parsed["main"]]
+    open(path, "w").write("\n".join(lines) + "\n")
 
 
 # ---- step 3: CommanderSpellbook combos --------------------------------------
@@ -522,6 +687,26 @@ def make_primer(slug, deck_cards, combos, primer_path, mode, deckcheck,
 
 # ---- orchestration -----------------------------------------------------------
 
+def _probe_or_die(dst_dck):
+    """Forge's real loader on the registered .dck: commanders, exactly 100,
+    no unsupported placeholder. Mandatory (item 7): no resolver, no ingest."""
+    import subprocess
+    cp = _probe_classpath()
+    if not cp:
+        raise SystemExit("ERROR: Forge card database not available for the load probe — "
+                         "run the arena build first.")
+    pr = subprocess.run(["java", "-cp", cp, "forge.arena.interactive.DeckLoadProbe",
+                         dst_dck, _forge_gui_dir()], capture_output=True, text=True, timeout=300)
+    verdict = [ln for ln in (pr.stdout + pr.stderr).splitlines() if ln.startswith("PROBE")]
+    for ln in verdict:
+        log("[4.5/6] " + ln)
+    if pr.returncode != 0:
+        for ln in pr.stderr.strip().splitlines()[-4:]:
+            log("      " + ln)
+        raise SystemExit("ERROR: Forge load probe FAILED — the deck would not launch. "
+                         "Fix the names above and re-run.")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dck")
@@ -541,6 +726,10 @@ def main():
                     help="write the primer to PATH instead of "
                          "docs/primers/<slug>-deckcheck.md")
     ap.add_argument("--no-cache", action="store_true")
+    ap.add_argument("--manifest-only", action="store_true",
+                    help="verify the EXISTING registered .dck against Forge and write "
+                         "the launch manifest; touch nothing else (for decks whose "
+                         "dossier was built by another tool)")
     args = ap.parse_args()
     use_cache = not args.no_cache
 
@@ -561,6 +750,21 @@ def main():
     log(f"[2/6] Scryfall: {len(scry)} cards resolved"
         + (f", {len(nf)} NOT FOUND: {nf}" if nf else ""))
     deck_cards = build_deck_cards(parsed, scry, slug)
+    if deck_cards["unresolved"]:
+        raise SystemExit("ERROR: Scryfall does not know these names — fix the list "
+                         f"first, nothing written: {deck_cards['unresolved']}")
+    methods = resolve_forge_names(deck_cards)   # item 7: NAMED failure, before any write
+    log(f"[2.5/6] Forge names resolved for all {len(deck_cards['cards'])} cards "
+        + "(" + ", ".join(f"{v} by {k}" for k, v in sorted(methods.items())) + ")")
+
+    dst_dck = os.path.join(DECKS, slug + ".dck")
+    if args.manifest_only:
+        if not os.path.exists(dst_dck):
+            raise SystemExit(f"ERROR: --manifest-only needs an existing {rel(dst_dck)}")
+        _probe_or_die(dst_dck)
+        mp = write_manifest(dossier, slug, dst_dck, deck_cards)
+        log(f"[6/6] manifest written: {rel(mp)} (nothing else touched)")
+        return
 
     combos = fetch_combos(parsed, slug, cache_dir, use_cache)
     log(f"[3/6] CommanderSpellbook: {len(combos['combos'])} included combos")
@@ -576,13 +780,18 @@ def main():
     else:
         log(f"[4/6] lint: all {lint_res['checked']} cards implemented in Forge")
 
-    # write dossier + combos + copy the .dck
+    # write dossier + combos + REGENERATE the registered .dck with Forge-loader
+    # names (2026-09-01: byte-copying preserved import-source naming, and a
+    # transform commander's "A // B" form made the deck unloadable at launch)
     json.dump(deck_cards, open(os.path.join(dossier, "deck-cards.json"), "w"), indent=1)
     json.dump(combos, open(os.path.join(dossier, "combos.json"), "w"), indent=1)
-    dst_dck = os.path.join(DECKS, slug + ".dck")
-    if os.path.abspath(args.dck) != os.path.abspath(dst_dck):
-        open(dst_dck, "w").write(open(args.dck, encoding="utf-8",
-                                      errors="replace").read())
+    write_registered_dck(dst_dck, parsed["name"], deck_cards, parsed)
+
+    # step 4.5: load the deck through Forge's REAL loader (DeckLoadProbe) —
+    # the authoritative gate the two live-launch failures earned.
+    _probe_or_die(dst_dck)
+    mp = write_manifest(dossier, slug, dst_dck, deck_cards)
+    log(f"[4.6/6] launch manifest: {rel(mp)}")
 
     primer_path = args.primer_out or os.path.join(PRIMERS, f"{slug}-deckcheck.md")
     # Passing --deckcheck implies mode A even when --primer wasn't given.

@@ -1,6 +1,7 @@
 package forge.arena.interactive;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.testng.Assert;
@@ -30,12 +31,20 @@ import forge.model.FModel;
 /**
  * Game-12 finding 3 (six live incidents): the AI auto-payer refuses casts
  * payable from Ancient Tomb / Gemstone Caverns-class sources with an empty
- * pool. This probes ComputerUtilCost.canPayCost directly across source
- * classes to pin exactly which source the payer can't see.
+ * pool. Probes ComputerUtilCost.canPayCost across source classes.
+ *
+ * <p>Harness boil (2026-08-28): ONE game; each probe SWAPS the battlefield
+ * to exactly its source set before asking (canPayCost is read-only, and
+ * fresh Card instances per probe mean no counter/state leakage). Oracle
+ * isolation is preserved — a probe still sees ONLY its own sources, which
+ * is the entire discriminating power of the test.
  */
 public class PainSourcePaymentTest {
 
-    private static Card put(String name, Player p, ZoneType z) {
+    private Game game;
+    private Player me;
+
+    private Card put(String name, Player p, ZoneType z) {
         IPaperCard pc = FModel.getMagicDb().getCommonCards().getCard(name);
         if (pc == null) {
             StaticData.instance().attemptToLoadCard(name);
@@ -47,25 +56,54 @@ public class PainSourcePaymentTest {
         return c;
     }
 
-    private static boolean probeActivation(String[] battlefield, String host, int saIndex) {
-        List<RegisteredPlayer> players = Lists.newArrayList();
-        Deck d = new Deck();
-        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("opp", null)));
-        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("me", null)));
-        GameRules rules = new GameRules(GameType.Commander);
-        Game game = new Game(players, rules, new Match(rules, players, "t"));
-        Player me = game.getPlayers().get(1);
-        game.setAge(GameStage.Play);
-        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, me);
-        game.getPhaseHandler().onStackResolved();
-        Card hostCard = null;
-        for (String n : battlefield) {
-            Card c = put(n, me, ZoneType.Battlefield);
-            if (n.equals(host)) hostCard = c;
+    /** Replace the probe player's battlefield with exactly {@code names};
+     *  returns the freshly placed cards (index-aligned). */
+    private List<Card> swapBattlefield(String[] names, String counterOn, String counterType) {
+        for (Card c : new ArrayList<>(me.getCardsIn(ZoneType.Battlefield))) {
+            me.getZone(ZoneType.Battlefield).remove(c);
         }
-        List<SpellAbility> sas = Lists.newArrayList(hostCard.getSpellAbilities());
-        SpellAbility sa = sas.get(Math.min(saIndex, sas.size() - 1));
-        for (SpellAbility cand : sas) {   // prefer the costed ({2}...) ability
+        List<Card> placed = new ArrayList<>();
+        for (String n : names) {
+            Card c = put(n, me, ZoneType.Battlefield);
+            if (n.equals(counterOn) && counterType != null) {
+                c.addCounterInternal(forge.game.card.CounterEnumType.valueOf(counterType),
+                        1, me, false, null, null);
+            }
+            placed.add(c);
+        }
+        return placed;
+    }
+
+    private boolean probe(String[] battlefield, String spellName, ZoneType castFrom,
+            String counterOn, String counterType) {
+        swapBattlefield(battlefield, counterOn, counterType);
+        Card spell = put(spellName, me, castFrom);
+        SpellAbility sa = spell.getFirstSpellAbility();
+        sa.setActivatingPlayer(me);
+        boolean ok = ComputerUtilCost.canPayCost(sa, me, false);
+        me.getZone(castFrom).remove(spell);
+        System.out.println("PAYPROBE: " + java.util.Arrays.toString(battlefield)
+                + " -> " + spellName + " : " + ok);
+        return ok;
+    }
+
+    private boolean probeCommander(String[] battlefield, String counterOn, String counterType) {
+        swapBattlefield(battlefield, counterOn, counterType);
+        Card cmdr = me.getCardsIn(ZoneType.Command).isEmpty() ? null
+                : me.getCardsIn(ZoneType.Command).get(0);
+        SpellAbility sa = cmdr.getFirstSpellAbility();
+        sa.setActivatingPlayer(me);
+        boolean ok = ComputerUtilCost.canPayCost(sa, me, false);
+        System.out.println("PAYPROBE-CMDR: " + java.util.Arrays.toString(battlefield)
+                + " -> " + cmdr.getName() + " : " + ok);
+        return ok;
+    }
+
+    private boolean probeActivation(String[] battlefield, String host) {
+        List<Card> placed = swapBattlefield(battlefield, null, null);
+        Card hostCard = placed.get(java.util.Arrays.asList(battlefield).indexOf(host));
+        SpellAbility sa = hostCard.getSpellAbilities().get(0);
+        for (SpellAbility cand : hostCard.getSpellAbilities()) {   // prefer the {2}... ability
             if (cand.getPayCosts() != null
                     && cand.getPayCosts().toSimpleString().contains("{2}")) {
                 sa = cand;
@@ -74,85 +112,44 @@ public class PainSourcePaymentTest {
         }
         sa.setActivatingPlayer(me);
         boolean ok = ComputerUtilCost.canPayCost(sa, me, false);
-        System.out.println("PAYPROBE-ACT: " + host + " sa[" + saIndex + "]='"
-                + sa.toString().substring(0, Math.min(60, sa.toString().length()))
-                + "' with " + java.util.Arrays.toString(battlefield) + " : " + ok);
-        return ok;
-    }
-
-    private static boolean probeCast(String[] battlefield, String spellName,
-            String counterOn, String counterType) {
-        List<RegisteredPlayer> players = Lists.newArrayList();
-        Deck d = new Deck();
-        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("opp", null)));
-        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("me", null)));
-        GameRules rules = new GameRules(GameType.Commander);
-        Game game = new Game(players, rules, new Match(rules, players, "t"));
-        Player me = game.getPlayers().get(1);
-        game.setAge(GameStage.Play);
-        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, me);
-        game.getPhaseHandler().onStackResolved();
-        for (String n : battlefield) {
-            Card c = put(n, me, ZoneType.Battlefield);
-            if (n.equals(counterOn) && counterType != null) {
-                c.addCounterInternal(forge.game.card.CounterEnumType.valueOf(counterType),
-                        1, me, false, null, null);
-            }
-        }
-        Card spell = put(spellName, me, ZoneType.Command);
-        me.addCommander(spell);   // Command Tower's mana = commander identity
-        SpellAbility sa = spell.getFirstSpellAbility();
-        sa.setActivatingPlayer(me);
-        boolean ok = ComputerUtilCost.canPayCost(sa, me, false);
-        System.out.println("PAYPROBE-CAST: " + java.util.Arrays.toString(battlefield)
-                + " -> " + spellName + " (commander) : " + ok);
-        return ok;
-    }
-
-    private static boolean probe(String landName, String spellName) {
-        List<RegisteredPlayer> players = Lists.newArrayList();
-        Deck d = new Deck();
-        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("opp", null)));
-        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("me", null)));
-        GameRules rules = new GameRules(GameType.Commander);
-        Game game = new Game(players, rules, new Match(rules, players, "t"));
-        Player me = game.getPlayers().get(1);
-        game.setAge(GameStage.Play);
-        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, me);
-        game.getPhaseHandler().onStackResolved();
-        put(landName, me, ZoneType.Battlefield);
-        Card spell = put(spellName, me, ZoneType.Hand);
-        SpellAbility sa = spell.getFirstSpellAbility();
-        sa.setActivatingPlayer(me);
-        boolean ok = ComputerUtilCost.canPayCost(sa, me, false);
-        System.out.println("PAYPROBE: " + landName + " -> " + spellName + " : " + ok);
+        System.out.println("PAYPROBE-ACT: " + host + " with "
+                + java.util.Arrays.toString(battlefield) + " : " + ok);
         return ok;
     }
 
     @Test(timeOut = 240_000)
     public void painAndConditionalSourcesArePayable() throws Exception {
         ArenaBootstrap.initialize(new File("..", "forge-gui"));
-        boolean island = probe("Island", "Omen of the Sea");        // {1}{U} — control, needs 2 lands... use cheap
-        boolean control = probe("Mountain", "Shock");               // {R} — control: MUST be true
-        boolean tombRing = probe("Ancient Tomb", "Sol Ring");       // {1} off {C}{C}
-        boolean tombMedallion = probe("Ancient Tomb", "Ruby Medallion"); // {2} — the live case
-        boolean caverns = probe("Gemstone Caverns", "Sol Ring");    // {1} off {C}
+        List<RegisteredPlayer> players = Lists.newArrayList();
+        Deck d = new Deck();
+        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("opp", null)));
+        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("me", null)));
+        GameRules rules = new GameRules(GameType.Commander);
+        game = new Game(players, rules, new Match(rules, players, "t"));
+        me = game.getPlayers().get(1);
+        game.setAge(GameStage.Play);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, me);
+        game.getPhaseHandler().onStackResolved();
+        Card sythis = put("Sythis, Harvest's Hand", me, ZoneType.Command);
+        me.addCommander(sythis);   // Command Tower's mana = commander identity
+
+        boolean control = probe(new String[]{"Mountain"}, "Shock", ZoneType.Hand, null, null);
+        boolean tombRing = probe(new String[]{"Ancient Tomb"}, "Sol Ring", ZoneType.Hand, null, null);
+        boolean tombMedallion = probe(new String[]{"Ancient Tomb"}, "Ruby Medallion", ZoneType.Hand, null, null);
+        boolean caverns = probe(new String[]{"Gemstone Caverns"}, "Sol Ring", ZoneType.Hand, null, null);
 
         // live shapes from games 10-12
-        boolean sythis = probeCast(new String[]{"Gemstone Caverns", "Command Tower"},
-                "Sythis, Harvest's Hand", "Gemstone Caverns", "LUCK");   // {G}{W}
+        boolean sythisCast = probeCommander(new String[]{"Gemstone Caverns", "Command Tower"},
+                "Gemstone Caverns", "LUCK");   // {G}{W}
         boolean nykthos = probeActivation(
                 new String[]{"Nykthos, Shrine to Nyx", "Ancient Tomb", "Plains"},
-                "Nykthos, Shrine to Nyx", 1);                            // {2},{T} devotion
-        boolean ctl2 = probeCast(new String[]{"Forest", "Plains"},
-                "Sythis, Harvest's Hand", null, null);
-        boolean towerHalf = probeCast(new String[]{"Command Tower", "Plains"},
-                "Sythis, Harvest's Hand", null, null);
-        boolean cavernsHalf = probeCast(new String[]{"Gemstone Caverns", "Plains"},
-                "Sythis, Harvest's Hand", "Gemstone Caverns", "LUCK");
-        boolean twoTowers = probeCast(new String[]{"Command Tower", "Command Tower"},
-                "Sythis, Harvest's Hand", null, null);
-        System.out.println("PAYPROBE-SUMMARY: sythisCast=" + sythis
+                "Nykthos, Shrine to Nyx");     // {2},{T} devotion
+        boolean ctl2 = probeCommander(new String[]{"Forest", "Plains"}, null, null);
+        boolean towerHalf = probeCommander(new String[]{"Command Tower", "Plains"}, null, null);
+        boolean cavernsHalf = probeCommander(new String[]{"Gemstone Caverns", "Plains"},
+                "Gemstone Caverns", "LUCK");
+        boolean twoTowers = probeCommander(new String[]{"Command Tower", "Command Tower"}, null, null);
+        System.out.println("PAYPROBE-SUMMARY: sythisCast=" + sythisCast
                 + " nykthosActivation=" + nykthos + " | forest+plains=" + ctl2
                 + " tower+plains=" + towerHalf + " caverns+plains=" + cavernsHalf
                 + " tower+tower=" + twoTowers);
@@ -162,7 +159,7 @@ public class PainSourcePaymentTest {
                 "THE LIVE BUG: Ancient Tomb ({C}{C}) refused for a {2} cast");
         Assert.assertTrue(tombRing, "Ancient Tomb refused for a {1} cast");
         Assert.assertTrue(caverns, "Gemstone Caverns refused for a {1} cast");
-        Assert.assertTrue(sythis,
+        Assert.assertTrue(sythisCast,
                 "THE GAME-12 BUG: Caverns(luck)+Command Tower refused for the "
                 + "{G}{W} commander cast — condition-forked mana invisible to "
                 + "the payer (guards the ComputerUtilMana effective-part walk)");

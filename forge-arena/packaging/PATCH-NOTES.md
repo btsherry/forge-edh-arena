@@ -1,5 +1,266 @@
 # forge-light-llm — Patch Notes
 
+## v3.4 — 2026-09-04
+
+Feature release on top of the v3.3.3 reliability work, validated in a live
+human game (Selvala vs Urza, Giada, Purphoros: 238 model decisions, zero
+punts; the human won).
+
+- **Chat with the advisor.** The Advisor tab gains a black text field and a
+  **Chat** button (Enter sends). Your question goes straight to the advisor
+  brain and the exchange lands in the same stream as `[t12 · you] …` /
+  `[t12 · advisor] …`. One question at a time; answered even while the
+  advisor is paused.
+- **Tables tear themselves down when the match is over.** Once the engine
+  reports game over, or you close the game window, `arena-play.sh` lingers
+  (`--linger N`; default 120 s in human games so you can read the final
+  board, 60 s all-AI) and then runs the same stop as `arena-stop.sh`: kill,
+  rate, archive, clear. `--no-autostop` keeps the old behaviour; a hand stop
+  always wins.
+- **README rewritten**: shorter, same content, one place for each fact.
+
+## v3.3.3 — 2026-09-04
+
+Reliability release: the 2026-09-03 full review's interactive findings and
+the 2026-09-04 blind second review, fixed item by item behind the FULL gate
+(429 arena tests including the extended group) and a live validation game.
+
+- **A seat's own triggers are aimed correctly.** A mandatory trigger can no
+  longer be "declined" (the option was offered for every trigger; the code
+  then aimed it at an arbitrary legal target), and a brain that fails to
+  answer while aiming falls to stock like every other surface instead of
+  silently throwing the trigger away.
+- **Refused casts are explained.** When the engine refuses an unaffordable
+  cast, the next window says so — the spell, what it needed, what the seat
+  can pay right now, and to float first if a sequence was intended — and
+  omits that card for one window. Modal casts report a failed cast the same
+  way instead of claiming "played".
+- **Mana tables.** The state now lists every untapped mana source with its
+  yield on the live board, colors and restricted/sick/cost flags, the sum the
+  engine itself uses (`manaAvailableNow`), and the rituals and mana
+  multipliers in hand — the brain no longer counts lands.
+- **One clock per decision.** Session re-init and the decision call share the
+  engine's deadline; a slow init punts on time instead of blocking the seat
+  for twice the window. `--timeout` is the only timeout knob; nothing is
+  derived from effort.
+- **Punts are honest.** A transport failure is never memoized as a real pass;
+  the CONFIRM punt says yes only to the seat's own free effects (engine
+  facts, not prompt words); the ratings void counter sees every punt.
+- **Game identity.** Every request and advisor-feed file carries a `gameId`;
+  the seat runner and the advisor reset on an id change only. The advisor no
+  longer drops its session on ordinary file interleaving or on pause/resume,
+  and re-arms its per-turn budget for a second game.
+- **Dead brains cost seconds, not minutes.** Runners write a heartbeat; the
+  engine skips the wait for a seat whose runner is gone and says so once.
+  The dashboard shows `brainAlive`; the ELO spool records `stockDecisions`.
+- **Mindslaver-class control goes to the master's brain** (CR 721), and
+  pay-or-else payments are chosen by the seat.
+- **Ingestion verifies against Forge once; launch checks a hash.** Scryfall
+  is canonical in every built file (`scryfall_id`, `set`,
+  `collector_number`); Forge's name comes from Forge's own database by
+  printing, then by name form — no layout whitelist. Anything Forge cannot
+  play is a named failure before a file is written. A `manifest.json` per
+  deck lets the launch preflight refuse an edited or never-verified deck in
+  milliseconds. The engine refuses to seat a deck short of 100 real cards
+  and, at game end, counts every owned card across all zones (`CARD-VANISH`
+  on a shortfall).
+- **Packaging can no longer ship an incomplete `lib/`**; `react-autopass.py`
+  is gone (retired from the launch 2026-08-17, deleted now); teardown kills
+  by PID file.
+- **`game.jsonl` is a plain append-only file again.** An earlier cut of this
+  release swapped it for a per-game symlink, which silently broke every
+  `tail -f` and the digest after the first game. Now every decision is
+  appended to `game.jsonl` (the whole session, the `tail -f` target) AND to
+  `game-<gameId>.jsonl` (one file per game); `arena-stop.sh` archives both
+  with the seat logs and reports `N decisions across M game(s) (archived)`.
+- **The seat orders its own triggers** (CR 603.3b). When two or more of a
+  seat's triggers with different text go on the stack together, a
+  `CHOOSE_MODE` window with `state.purpose = "TRIGGER_ORDER"` asks for the
+  resolution order (first listed resolves first); identical triggers never
+  open a window, and a missing or malformed answer falls to stock ordering.
+  The runner remembers the answer for the same set of trigger groups for the
+  rest of the turn, so a Purphoros table is asked once per group set per
+  turn, not on every creature. Trigger groups are keyed by the trigger's own
+  text, never by which creature set it off, so twenty deaths at once are one
+  group. On this window and the colour window a punt hands the pick
+  back to the engine's stock logic (`{"chosen": []}`) rather than inventing
+  an order.
+- **The seat picks its colours.** "Choose a color" effects with two or more
+  legal colours reach the seat as a `CHOOSE_MODE` window with
+  `state.purpose = "COLOR"` ("colorless" offered only where the effect allows
+  it). Picks made while paying a cost stay with the engine's payer.
+- **Mindslaver-class control, completed.** All requests for one seat travel
+  on one bus (a controller opened for a controlled seat used to restart the
+  request numbering, and the runner rightly ignored the reused names); a
+  controlled seat's request carries `state.controllerBoard` — the master's
+  own life, mana, battlefield and hand — so the master's brain reads its own
+  cards while it plays yours (CR 721.3).
+- **Protocol edges.** The engine sweeps stale responses out of a seat's
+  outbox before its first request (a hand relaunch after a crash could
+  consume a dead game's answer); a game id can no longer collide when two
+  games start in the same millisecond of one JVM; a runner's model call is
+  killed at teardown instead of running on as an orphan; a request whose
+  file has already vanished punts at once instead of earning a fresh window;
+  an attack declaration that omits the defender is filled in when exactly
+  one defender is legal.
+- **Punts are never replayed.** A cycle (`repeat_cycle`) that contains a
+  punted decision refuses to arm, and a runner exception clears the tape.
+- **Observer snapshot never loses the last event.** `observer-state.json` is
+  rewritten on every event whose state changed (no timer), so the final
+  state of a burst is on disk.
+- **Brain calls load no settings.** Every `claude` call passes
+  `--setting-sources ""`: no user or project settings, hooks or plugins.
+  `CLAUDE.md` files above the install directory are still auto-discovered;
+  see the README footnote.
+- **Advisor supervised and bounded.** The Advisor runs in the same restart
+  loop as the seats (one I/O error used to end it silently for the rest of
+  the game); its between-calls context keeps the last 40 lines and says how
+  many it dropped; its log writes are guarded.
+- **Ratings sweep hardened.** Spools are listed under the lock, a spool
+  another sweeper already took is not an error, a malformed spool is marked
+  `.skipped` with the missing key named, and punt/wedge events are matched
+  to a game by `gameId` rather than by time window.
+- **Default table.** All-AI games seat Urza, Giada, Purphoros, Selvala in
+  that order; a human game seats you at 0 (Selvala unless you name a deck)
+  and the first three roster decks that are not yours behind you. Deck file
+  names with whitespace are refused with a message.
+- **Ingestion.** A leading number is a quantity only when it could be a count
+  in a 100-card deck ("1996 World Champion" is a card name); the packager no longer
+  ships `dossier/.cache/` (its DeckCheck payloads carried the account's
+  username) and fails if one reaches the package tree.
+- **Dashboards** count `hold`/`plan`/`cycle` as fast paths, tolerate records
+  written before the backend keys existed, and count torn log lines instead
+  of dropping them silently.
+- **Life-for-mana statics are paid correctly** (K'rrik, Son of Yawgmoth
+  class, `PayLifeInsteadOf:<C>`). Forge's AI payer spent its sources on the
+  black pips first and then reported a cost unpayable when three Swamps and
+  40 life could cast Mikaeus ({3}{B}{B}{B}). When the sources cannot cover
+  every remaining pip, the coloured pips the static names are paid with life
+  and the sources kept for the rest; a cost mana alone can pay never costs
+  life. The cast option states the life price when it applies. This is a
+  change to the shared AI payer (forge-ai), so it applies to stock seats too
+  — only when the keyword is present.
+
+Open by design, tracked in `docs/BUG-LOG.md`: further stock surfaces
+(combat damage assignment, convoke) wait for evidence; a silent brain still
+costs one timeout per decision (the heartbeat gate covers a runner that is
+gone, not one that is wedged).
+
+## v3.3.2 — 2026-09-01
+
+Deck-integrity release: two bundled decks were quietly short; the fix ships
+with new nets so it cannot recur, plus a tenth deck.
+
+- **Tenth bundled deck: Sheoldred's Sacrifice** — a mono-black sacrifice
+  list piloting Sheoldred, the Apocalypse's Praetor side (Sheoldred // The
+  True Scriptures), with its dossier, combos and DeckCheck primer. The
+  default four-seat table is unchanged; seat it with `ARENA_SEAT_DECKS`
+  (slug `sheoldreds-sacrifice`) or play it yourself with `--human`.
+- **Two shipped decks were playing short.** Sythis ran 95 cards and Urza 98:
+  five double-faced cards (Bala Ged Recovery, Branchloft Pathway, Katilda,
+  Strength of the Harvest, Wandering Archaic) were written "A // B", which
+  Forge only accepts for split cards — everything else must use the front
+  face. The loader counted them and the match dropped them silently. All
+  five lines are fixed, and three nets now catch the class: the ingestion
+  probe and the shipped-deck test fail on any unresolvable name (they
+  previously counted placeholders), and the launch preflight checks every
+  "A // B" line against the card scripts before a game starts.
+- **Advisor pause button** no longer reads "ON" in games with no advisor
+  (all-AI, or `--no-advisor`); it shows OFF and is disabled.
+- New `scripts/arena-cardwatch.py`: a live card-conservation watcher that
+  prints per-seat card totals across all zones whenever they change — the
+  quickest way to spot a card that vanished.
+- Two decks are now named for their commanders in the GUI — "Sythis,
+  Harvest's Hand" and "Liberator, Urza's Battlethopter" — instead of the
+  Moxfield export titles they still carried.
+
+## v3.3.1 — 2026-08-31
+
+Fix release: a two-model adversarial review of v3.3's new decision surfaces
+found ten defects; all are fixed and every fix is proven end-to-end.
+
+- **Optional costs work properly now**: Buyback/Kicker appear as separate
+  "[+ cost]" options in the seat's cast list (affordability-checked; the
+  base spell is always offered). v3.3 could hide the base spell and opened
+  redundant prompts.
+- **Multikicker actually kicks**: Everflowing-Chalice-class spells enter
+  with the number of kicks the seat chooses (v3.3's fix was on a code path
+  the AI never reached).
+- **Library ordering is no longer inverted**: Sensei's Top / Scroll Rack
+  put-backs land in exactly the order the seat states.
+- **No more phantom payment prompts**: cost-payment questions only appear
+  while a cast is actually happening, never during the AI's own planning.
+- **Safer timeouts**: a timed-out brain now bids LOW on Wheel-of-
+  Misfortune-class effects (it used to bid the maximum and take the
+  damage); X-spells still default to the affordable maximum.
+- Protective abilities are never auto-passed while divided-damage spells
+  (Arc Trail class) point at your board; a seat's own spells no longer
+  count as threats against itself.
+
+## v3.3 — 2026-08-28
+
+### The seats now own nearly every decision
+
+The largest play-quality release since the interactive seam shipped. A
+dual-model audit of the engine/AI boundary found every remaining place a
+stock heuristic silently decided FOR the seat — all of them are now the
+seat's own choice, with the same fail-safe as always (an invalid or late
+answer falls back to stock, never worse than before):
+
+- **Sacrifices** — edicts and "each player sacrifices" effects, AND which
+  card pays a sacrifice cost (Viscera-Seer-class outlets, additional-cost
+  spells). The seat feeds the token, not the win condition.
+- **Pitch costs** — which blue card Force of Will exiles, which card a
+  discard/return/put-to-library cost eats.
+- **Cleanup & mulligans** — discarding to hand size at end of turn and
+  choosing which cards go under the library on a London mulligan.
+- **Library control** — scry, surveil, reorder-on-library effects
+  (Sensei's Top / Scroll Rack class), and clash top-or-bottom calls.
+- **Casts with options** — Buyback/Kicker-class optional costs, non-X
+  announced values (Multikicker), "choose a number" effects (Wheel of
+  Misfortune class), and may-cast offers (Isochron Scepter copies) with the
+  seat aiming the copy's targets.
+- **Redirects** — Deflecting-Swat-class retargeting actually retargets
+  (stock AI literally could not do this and the spell fizzled silently).
+- **Table politics** — votes, Fact-or-Fiction pile splits, protection
+  color choices (Mother of Runes picks the RIGHT color from the stack),
+  and creature-or-player choices.
+
+### Brains see more of the table
+
+Every stack item now announces its **chosen targets** (public information —
+"Beast Within, targeting Purphoros") and carries a compact **oracle-text
+line**, so reactive decisions run on ground truth instead of model recall.
+The reactive fastpaths were rekeyed on phase, combat state, and targets, so
+a held Fog or Flawless Maneuver can no longer be auto-passed after an
+earlier quiet window that merely looked identical — and protective
+abilities (Mother of Runes / Giver of Runes) are never fast-passed while
+removal is pointed at your board.
+
+### Advisor discipline
+
+The seat-0 Advisor now verifies a target's effective keywords before
+recommending removal — no more "hold Beast Within for the indestructible
+god" advice.
+
+### Fixed
+
+- **Y'shtola's deck file** shipped in a raw export format that the game
+  refused to load (the deck had never actually hit a table); rebuilt as a
+  legal 100-card Commander deck. If your v3.2 install won't seat Y'shtola,
+  this is why.
+- Ability option labels no longer render as "Exile ." / "Untap ." before
+  targets are chosen — they show the card's rules text.
+- `arena-status.py` shows the live table's real deck names instead of a
+  default roster.
+
+### Under the hood
+
+Faster test/gate tooling for contributors (project-classified suite,
+documented gate policy and revert flags — see `BUILDING.md`), a shared test
+harness, and regression tests for every surface above (355+ Java/Python
+tests, all green).
+
 ## v3.2 — 2026-08-19
 
 ### New: DeckCheck primers without copy/paste

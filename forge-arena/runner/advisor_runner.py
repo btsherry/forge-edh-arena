@@ -11,6 +11,9 @@ stall the game. Discipline:
     the newest is advised (advising yesterday's window helps nobody).
   - The human's actual choices ride along as context for the next call —
     the brain teaches from divergence but never gets a dedicated call for it.
+  - QUESTIONS ARE ANSWERED FIRST, EVEN WHILE PAUSED: the Advisor tab's field
+    writes logs/control/ask/ask-<ts>-<n>.json; each is one direct call, answered
+    in the stream as [you] / [advisor] lines (Ben, 2026-09-04).
 
 Usage:
   advisor_runner.py --deck <slug> [--model opus] [--effort low]
@@ -32,8 +35,20 @@ from seatd.brain import SeatBrain  # noqa: E402
 POLL_S = 0.25  # advice feels snappier; cost is a stat() at 4Hz
 # Table roster convention shared with run_table.sh / GuiPilotMatch: four deck
 # slugs in seat order, overridable via ARENA_SEAT_DECKS.
-DEFAULT_TABLE = ("selvala-heart-of-the-wilds purphoros-god-of-the-forge "
-                 "giada-font-of-hope urza-lord-high-artificer")
+# Item R (Ben, 2026-09-04): the all-AI table is Urza, Giada, Purphoros, Selvala
+# in seat order; a human game seats the human's deck at 0 and the first three
+# roster decks that are not the human's behind it. GuiPilotMatch.DECKS and
+# run_table.sh apply the same rule.
+DEFAULT_TABLE = ("urza-lord-high-artificer giada-font-of-hope "
+                 "purphoros-god-of-the-forge selvala-heart-of-the-wilds")
+CONTEXT_MAX_LINES = 40  # BL-13: bound on lines carried between advice calls
+ASK_MAX_CHARS = 500     # a question is one line; the GUI caps at the same value
+
+
+def table_opponents(own_deck: str, roster: list[str]) -> list[str]:
+    """The three AI decks at a human table: roster minus the human's deck, in
+    roster order, first three. Mirrors GuiPilotMatch/run_table.sh."""
+    return [d for d in roster if d != own_deck][:3]
 
 
 def opponent_deck_sections(own_deck: str, arena_root: Path) -> list[str]:
@@ -47,9 +62,7 @@ def opponent_deck_sections(own_deck: str, arena_root: Path) -> list[str]:
     import os
     roster = (os.environ.get("ARENA_SEAT_DECKS", "").split() or DEFAULT_TABLE.split())
     parts: list[str] = []
-    for slug in roster:
-        if slug == own_deck:
-            continue
+    for slug in table_opponents(own_deck, roster):
         dossier = arena_root / "decks" / slug / "dossier"
         try:
             cards = json.loads((dossier / "deck-cards.json").read_text()).get("cards", [])
@@ -75,22 +88,27 @@ def opponent_deck_sections(own_deck: str, arena_root: Path) -> list[str]:
 
 
 class AdvisorRunner:
-    def __init__(self, deck: str, base: Path, model: str, effort: str, timeout: float):
+    def __init__(self, deck: str, base: Path, model: str, effort: str, timeout: float,
+                 log_dir: Path | None = None):
         self.inbox = base / "seat-0-advisor" / "inbox"
         self.timeout = timeout
-        log_dir = Path(__file__).parent / "logs"
+        log_dir = Path(log_dir) if log_dir else Path(__file__).parent / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         self._stream = log_dir / "advisor-0.log"
         self._jsonl = log_dir / "advisor-0.jsonl"
         self._usage = log_dir / "seat-0.usage.json"
         self._control = log_dir / "control" / "seat-0.json"
         self._control_mtime = 0.0
+        self._asks = log_dir / "control" / "ask"   # questions from the Advisor tab
+        self._last_turn = None                      # for the [tN · you] label
         arena_root = Path(__file__).resolve().parent.parent
         self.brain = SeatBrain(0, deck, model=model, effort=effort,
                                log=self._say, brief="advisor-brief.md",
                                extra_parts=opponent_deck_sections(deck, arena_root))
         self.last_seq = 0
+        self.game_id: str | None = None   # item 5/8: the game being advised
         self.pending_context: list[str] = []  # chosen/digest lines awaiting a call
+        self._context_dropped = 0             # BL-13: lines cut by the bound
         self._init_control(model, effort)
         # ---- frequency governor state (the charm patch) ----------------------
         # Advice is deliberately sparse and humanly random: every in-game window
@@ -144,17 +162,32 @@ class AdvisorRunner:
         print(time.strftime("%H:%M:%S"), msg, flush=True)
 
     def _stream_write(self, text: str) -> None:
-        with self._stream.open("a") as f:
-            f.write(text)
+        try:
+            with self._stream.open("a") as f:
+                f.write(text)
+        except OSError:
+            pass  # BL-26: bookkeeping never ends the advisor
 
     def _record(self, kind: str, body: dict) -> None:
         body = {"ts": round(time.time(), 3), "kind": kind, **body}
-        with self._jsonl.open("a") as f:
-            f.write(json.dumps(body) + "\n")
+        try:
+            with self._jsonl.open("a") as f:
+                f.write(json.dumps(body) + "\n")
+        except OSError:
+            pass  # BL-26
         try:
             self._usage.write_text(json.dumps(self.brain.totals))
         except OSError:
             pass
+
+    def _push_context(self, line: str) -> None:
+        """BL-13: the context carried into the next advice call is bounded;
+        the oldest lines go first and the drop is stated, never silent."""
+        self.pending_context.append(line)
+        extra = len(self.pending_context) - CONTEXT_MAX_LINES
+        if extra > 0:
+            del self.pending_context[:extra]
+            self._context_dropped += extra
 
     # ---- control file (AI-tab steppers re-dial the advisor mid-game) ----------
 
@@ -266,8 +299,11 @@ class AdvisorRunner:
         turn, phase = req.get("turn"), req.get("phase")
         ctx = ""
         if self.pending_context:
-            ctx = "SINCE LAST TIME:\n" + "\n".join(self.pending_context) + "\n\n"
+            head = (f"- … {self._context_dropped} earlier line(s) dropped\n"
+                    if self._context_dropped else "")
+            ctx = "SINCE LAST TIME:\n" + head + "\n".join(self.pending_context) + "\n\n"
             self.pending_context = []
+            self._context_dropped = 0
         prompt = (f"{ctx}DECISION NOW — {req.get('decisionType')} "
                   f"(turn {turn}, {phase}): {req.get('prompt')}\n"
                   f"{self._fmt_options(req)}"
@@ -294,6 +330,173 @@ class AdvisorRunner:
         self._record("color", {"seq": digest.get("seq"), "turn": turn,
                                "text": text, "latency_s": meta.get("latency_s")})
 
+    # ---- game identity (plan items 5 + 8) ----------------------------------------
+
+    def _reset_for_new_game(self, why: str) -> None:
+        """Fresh session, fresh transcript, fresh governor. The governor used
+        to keep the previous game's turn counter, so a second game in one
+        process never re-armed and got no advice past the mulligan."""
+        self._say(f"[advisor] new game detected ({why}) — resetting session")
+        self.brain.reset()
+        self.pending_context = []
+        self._context_dropped = 0
+        self.last_seq = 0
+        self.gov_turn = -1
+        self.gov_budget = 0
+
+    def _maybe_new_game(self, body: dict, n: int, kind: str) -> bool:
+        """Engine-stamped feeds: reset on a gameId CHANGE, never on numbering
+        (chosen-<n> reuses its request's number while digests/notes take fresh
+        ones, so the file numbers were never monotonic — the old comparison
+        fired on ordinary interleaving). Unstamped feeds keep the legacy seq
+        check, but only on kinds whose numbers do increase."""
+        gid = body.get("gameId")
+        if isinstance(gid, str) and gid:
+            if self.game_id is None:
+                self.game_id = gid
+                return False
+            if gid != self.game_id:
+                old, self.game_id = self.game_id, gid
+                self._reset_for_new_game(f"{old} -> {gid}")
+                return True
+            return False
+        if kind in ("req", "digest", "note") and n < self.last_seq:
+            self._reset_for_new_game(f"seq {n} < {self.last_seq}, unstamped engine")
+            return True
+        return False
+
+    def _process(self, items: list[tuple[int, str, Path]], quiet: bool = False) -> int:
+        """Consume scanned feed items. `quiet` (resume after a pause): fold
+        chosen/digest lines into context, record notes without streaming them,
+        skip every backlogged request — then the caller announces once.
+        Returns the number of items consumed."""
+        reqs, digests, consumed = [], [], 0
+        for n, kind, path in items:
+            body = self._load(path)
+            if body is None:
+                continue  # partial write — leave for next poll
+            self._maybe_new_game(body, n, kind)
+            self.last_seq = max(self.last_seq, n)
+            consumed += 1
+            if kind in ("req", "digest") and body.get("turn") is not None:
+                self._last_turn = body.get("turn")
+            if kind == "req":
+                reqs.append(body)
+            elif kind == "digest":
+                digests.append(body)
+            elif kind == "chosen":
+                self._push_context(
+                    f"- the human chose {json.dumps(body.get('chosen'))} "
+                    f"for {body.get('decisionType')} (seq {body.get('seq')})")
+            elif kind == "note":
+                if not quiet:
+                    self._stream_write(f"[t{body.get('turn')}] ⏭ {body.get('note')}\n")
+                self._record("note", body)
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        if quiet:
+            for r in reqs:
+                self._record("skipped_backlog", {"seq": r.get("seq"),
+                                                 "decisionType": r.get("decisionType")})
+            for d in digests:
+                self._push_context(
+                    f"- turn {d.get('turn')} public log: "
+                    + " | ".join((d.get("digest") or [])[-25:]))
+            return consumed
+        # Governor: stale requests die first (advising yesterday's window
+        # helps nobody), then the NEWEST request faces the admission rules.
+        for stale in reqs[:-1]:
+            self._record("skipped", {"seq": stale.get("seq"),
+                                     "decisionType": stale.get("decisionType")})
+        admitted = None
+        if reqs:
+            ok, reason = self._admit(reqs[-1])
+            if ok:
+                admitted = (reqs[-1], reason)
+            else:
+                self._record("skipped_gov", {"seq": reqs[-1].get("seq"),
+                                             "decisionType": reqs[-1].get("decisionType"),
+                                             "turn": reqs[-1].get("turn")})
+        # digests fold into a pending advice call as context (advice preempts
+        # color); with no admitted decision they get their own commentary call.
+        if admitted is not None:
+            for d in digests:
+                self._push_context(
+                    f"- turn {d.get('turn')} public log: "
+                    + " | ".join((d.get("digest") or [])[-25:]))
+            self._advise(admitted[0])
+        else:
+            for d in digests:
+                self._commentate(d)
+        return consumed
+
+    # ---- questions from the Advisor tab (Ben, 2026-09-04) -------------------------
+
+    def _scan_asks(self) -> list[Path]:
+        """logs/control/ask/ask-<millis>-<serial>.json, oldest first (numeric
+        order, not lexical). Each file is one question typed into the field."""
+        try:
+            files = [p for p in self._asks.iterdir()
+                     if p.name.startswith("ask-") and p.name.endswith(".json")]
+        except OSError:
+            return []
+
+        def key(p: Path) -> tuple[int, int, str]:
+            parts = p.name[4:-5].split("-")
+            try:
+                return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0, p.name
+            except ValueError:
+                return 0, 0, p.name
+        return sorted(files, key=key)
+
+    def _handle_asks(self) -> int:
+        """Answer every pending question, in order. Called BEFORE the pause
+        gate: a typed question is an explicit request, so a paused advisor
+        still answers it (and only it). The file is deleted the moment it is
+        read — that deletion is the panel's "sent" signal — so a torn write
+        is retried next poll and a malformed one is dropped, never re-read."""
+        n = 0
+        for p in self._scan_asks():
+            body = self._load(p)
+            if body is None:
+                continue  # partial write — next poll
+            try:
+                p.unlink()
+            except OSError:
+                pass
+            text = body.get("ask") if isinstance(body, dict) else None
+            text = " ".join(str(text).split()) if isinstance(text, str) else ""
+            if not text:
+                self._record("ask_rejected", {"file": p.name})
+                continue
+            self._answer_ask(text[:ASK_MAX_CHARS])
+            n += 1
+        return n
+
+    def _answer_ask(self, text: str) -> None:
+        turn = self._last_turn if self._last_turn is not None else "?"
+        ctx = ""
+        if self.pending_context:
+            head = (f"- … {self._context_dropped} earlier line(s) dropped\n"
+                    if self._context_dropped else "")
+            ctx = "SINCE LAST TIME:\n" + head + "\n".join(self.pending_context) + "\n\n"
+            self.pending_context = []
+            self._context_dropped = 0
+        prompt = (f"{ctx}THE HUMAN AT YOUR SEAT ASKS: {text}\n\n"
+                  "Answer them directly (1-4 sentences, plain text). Ground it in the "
+                  "most recent board state you were shown; if it needs something you "
+                  "have not seen, say so rather than guess.")
+        self._stream_write(f"\n[t{turn} · you] {text}\n")
+        answer, meta = self.brain.decide(prompt, self.timeout)
+        reply = (meta.get("raw") or "").strip()
+        self._stream_write(f"[t{turn} · advisor] "
+                           + (reply or "(no answer — the call timed out or failed; ask again)")
+                           + "\n")
+        self._record("ask", {"turn": self._last_turn, "text": text, "answer": reply,
+                             "latency_s": meta.get("latency_s")})
+
     # ---- main loop ---------------------------------------------------------------
 
     def run(self) -> None:
@@ -302,8 +505,23 @@ class AdvisorRunner:
         self.brain.ensure_session()  # pre-warm: dossier loads before turn 0
         self._stream_write("[advisor] session warm — watching your table.\n")
         enabled = True
+        catch_up = False
+        # item 12: liveness for the dashboard, from a daemon thread so it beats
+        # through blocking model calls too
+        import threading
+        hb = self.inbox.parent / "heartbeat"
+
+        def beat():
+            while True:
+                try:
+                    hb.touch()
+                except OSError:
+                    pass
+                time.sleep(5.0)
+        threading.Thread(target=beat, name="advisor-heartbeat", daemon=True).start()
         while True:
             self._apply_control()
+            self._handle_asks()   # questions first, pause or not (see docstring)
             # In-game on/off toggle (plan 13b): the Advisor tab's button writes
             # logs/control/advisor.json; disabled = no scanning, no model calls
             # (the engine's one-way feed keeps writing, harmlessly). arena-stop
@@ -313,9 +531,7 @@ class AdvisorRunner:
                 enabled = want
                 if enabled:
                     self._say("[advisor] resumed by toggle")
-                    self._stream_write("\n[advisor] back — resuming counsel from here.\n")
-                    self.last_seq = max(self.last_seq,
-                                        max((n for n, _, _ in self._scan()), default=0))
+                    catch_up = True   # item 5: consume the backlog quietly first
                 else:
                     self._say("[advisor] paused by toggle")
                     self._stream_write("\n[advisor] paused — click the button to bring me back.\n")
@@ -323,61 +539,16 @@ class AdvisorRunner:
                 time.sleep(POLL_S)
                 continue
             items = self._scan()
+            if catch_up:
+                n = self._process(items, quiet=True)
+                catch_up = False
+                self._stream_write(f"\n[advisor] back — caught up on {n} events while "
+                                   f"paused; resuming counsel from here.\n")
+                continue
             if not items:
                 time.sleep(POLL_S)
                 continue
-            if items[0][0] < self.last_seq:
-                # seq regression = new game: fresh session, fresh transcript
-                self._say("[advisor] new game detected — resetting session")
-                self.brain.reset()
-                self.pending_context = []
-                self.last_seq = 0
-            reqs, digests = [], []
-            for n, kind, path in items:
-                body = self._load(path)
-                if body is None:
-                    continue  # partial write — leave for next poll
-                self.last_seq = max(self.last_seq, n)
-                if kind == "req":
-                    reqs.append(body)
-                elif kind == "digest":
-                    digests.append(body)
-                elif kind == "chosen":
-                    self.pending_context.append(
-                        f"- the human chose {json.dumps(body.get('chosen'))} "
-                        f"for {body.get('decisionType')} (seq {body.get('seq')})")
-                elif kind == "note":
-                    self._stream_write(f"[t{body.get('turn')}] ⏭ {body.get('note')}\n")
-                    self._record("note", body)
-                try:
-                    path.unlink()
-                except OSError:
-                    pass
-            # Governor: stale requests die first (advising yesterday's window
-            # helps nobody), then the NEWEST request faces the admission rules.
-            for stale in reqs[:-1]:
-                self._record("skipped", {"seq": stale.get("seq"),
-                                         "decisionType": stale.get("decisionType")})
-            admitted = None
-            if reqs:
-                ok, reason = self._admit(reqs[-1])
-                if ok:
-                    admitted = (reqs[-1], reason)
-                else:
-                    self._record("skipped_gov", {"seq": reqs[-1].get("seq"),
-                                                 "decisionType": reqs[-1].get("decisionType"),
-                                                 "turn": reqs[-1].get("turn")})
-            # digests fold into a pending advice call as context (advice preempts
-            # color); with no admitted decision they get their own commentary call.
-            if admitted is not None:
-                for d in digests:
-                    self.pending_context.append(
-                        f"- turn {d.get('turn')} public log: "
-                        + " | ".join((d.get("digest") or [])[-25:]))
-                self._advise(admitted[0])
-            else:
-                for d in digests:
-                    self._commentate(d)
+            self._process(items)
 
 
 def main() -> None:

@@ -258,6 +258,7 @@ public final class PrepMain {
             java.util.List<String> lines = forge.arena.ingest.MoxfieldClient.fetchDeckList(
                     args[0], forge.arena.ingest.MoxfieldClient.httpFetcher());
             input = java.nio.file.Files.createTempFile("moxfield-", ".txt");
+            input.toFile().deleteOnExit(); // BL-14: the fetched list is scratch
             java.nio.file.Files.write(input, lines);
             System.out.println("fetched moxfield deck: " + lines.size() + " list lines");
         } else {

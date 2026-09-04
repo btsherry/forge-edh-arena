@@ -54,7 +54,8 @@ def main() -> None:
         lat = [r["latency_s"] for r in recs if r.get("latency_s")]
         lost = sum(1 for r in recs if r.get("consumed") is False)
         punts = by.get("punt", 0)
-        fast = by.get("autopass", 0) + by.get("memo", 0)
+        # BL-10: every model-free source counts as fast path
+        fast = sum(by.get(k, 0) for k in ("autopass", "memo", "hold", "plan", "cycle"))
         model = by.get("model", 0)
         # cache-hit rate across model calls that reported usage
         hits = misses = 0

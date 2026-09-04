@@ -18,7 +18,8 @@ DECK = "selvala-heart-of-the-wilds"
 GOLDEN_INIT_ARGV = ["claude", "-p", "-", "--output-format", "json",
                     "--model", "opus", "--effort", "low",
                     "--disallowedTools", "*",
-                    "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
+                    "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+                    "--setting-sources", ""]   # BL-24: no hooks/plugins/settings
 GOLDEN_DECIDE_ARGV = GOLDEN_INIT_ARGV + ["--resume", "sess-golden-1"]
 GOLDEN_TOTALS_KEYS = {"calls", "input_tokens", "output_tokens",
                       "cache_read_input_tokens",
@@ -44,14 +45,14 @@ def envelope(session="sess-golden-1", result="READY"):
 class GoldenClaudeTests(unittest.TestCase):
     def setUp(self):
         self.argvs = []
-        self._orig = brain_mod.subprocess.run
+        self._orig = brain_mod._run
 
         def fake_run(cmd, **kw):
             self.argvs.append(list(cmd))
             return Proc(envelope())
 
-        brain_mod.subprocess.run = fake_run
-        self.addCleanup(lambda: setattr(brain_mod.subprocess, "run", self._orig))
+        brain_mod._run = fake_run
+        self.addCleanup(lambda: setattr(brain_mod, "_run", self._orig))
 
     def test_argv_byte_identical_and_lifecycle(self):
         b = SeatBrain(1, DECK, model="opus", effort="low", log=lambda *a: None)

@@ -14,7 +14,7 @@
 #         existing dest (refused otherwise so a reviewed tree isn't clobbered).
 #
 # Prereqs: a green `mvn -o -pl forge-arena -am package` (fat jar + classes +
-# classpath.txt all fresh — the arena pom runs the full 292-test gate even
+# classpath.txt all fresh — the arena pom runs the full arena suite (350+ tests) even
 # with -DskipTests, so a successful package build IS the green gate).
 set -eu
 
@@ -29,13 +29,14 @@ for a in "$@"; do
   esac
 done
 
-# The nine decks that ship.
+# The ten decks that ship.
 SLUGS="giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds
 urza-lord-high-artificer swords-plunder swords-plunder-gc
-y-shtola-night-s-blessed sythis-harvests-hand liberator-urzas-battlethopter"
+y-shtola-night-s-blessed sythis-harvests-hand liberator-urzas-battlethopter
+sheoldreds-sacrifice"
 
 FATJAR=$(ls "$REPO"/forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)
-CP_TXT="$REPO/forge-arena/target/classpath.txt"
+CP_TXT="${ARENA_PACKAGE_CP_TXT:-$REPO/forge-arena/target/classpath.txt}"  # override: negative test only
 CLASSES="$REPO/forge-arena/target/classes"
 
 # ---- preflight: refuse to package stale or missing build artifacts ----------
@@ -61,10 +62,28 @@ echo "[1/9] lib/ — every jar from classpath.txt (order within lib/* is JVM-"
 echo "      unspecified; the fat jar precedes lib/* in -cp so its classes win"
 echo "      duplicates exactly as in the source tree)"
 mkdir -p "$DEST/lib"
-tr ':' '\n' < "$CP_TXT" | while IFS= read -r jar; do
-  [ -f "$jar" ] || { echo "ERROR: classpath entry missing: $jar" >&2; exit 1; }
+# Plan item 9 (2026-09-03): the old `tr | while read` loop ran in a pipe
+# SUBSHELL, so its `exit 1` ended the subshell, not the script — a missing
+# jar printed ERROR and the build went on to ship an incomplete lib/ that
+# died at first launch elsewhere. Collect first, then fail naming them all.
+missing=""; want=0
+while IFS= read -r jar; do
+  [ -n "$jar" ] || continue
+  want=$((want + 1))
+  [ -f "$jar" ] || missing="$missing
+  $jar"
+done <<EOF_CP
+$(tr ':' '\n' < "$CP_TXT")
+EOF_CP
+[ -z "$missing" ] || { echo "ERROR: classpath entries missing:$missing" >&2; exit 1; }
+while IFS= read -r jar; do
+  [ -n "$jar" ] || continue
   cp "$jar" "$DEST/lib/"
-done
+done <<EOF_CP
+$(tr ':' '\n' < "$CP_TXT")
+EOF_CP
+have=$(ls "$DEST/lib" | wc -l | tr -d ' ')
+[ "$have" -eq "$want" ] || { echo "ERROR: lib/ holds $have jars, classpath lists $want" >&2; exit 1; }
 
 echo "[2/9] engine — fat jar + desktop pom (the launcher greps its JVM args)"
 mkdir -p "$DEST/forge-gui-desktop/target"
@@ -99,10 +118,16 @@ for s in $SLUGS; do
   mkdir -p "$DEST/forge-arena/decks/$s/dossier"
   cp "$REPO/forge-arena/decks/$s.dck" "$DEST/forge-arena/decks/"
   cp "$src/dossier/deck-cards.json" "$src/dossier/combos.json" \
-     "$DEST/forge-arena/decks/$s/dossier/"
-  [ -d "$src/dossier/.cache" ] && rsync -a "$src/dossier/.cache/" \
-     "$DEST/forge-arena/decks/$s/dossier/.cache/"
+     "$src/dossier/manifest.json" \
+     "$DEST/forge-arena/decks/$s/dossier/"   # manifest: the launch preflight's hash check (item 7)
+  # BL-18: dossier/.cache is NOT shipped. It is an ingestion accelerator only
+  # (Scryfall/Spellbook/DeckCheck API payloads) and the DeckCheck payload
+  # carries the account's username and avatar. Nothing at runtime reads it.
 done
+if find "$DEST/forge-arena/decks" -path '*/dossier/.cache*' -print -quit 2>/dev/null | grep -q .; then
+  echo "ERROR: a dossier/.cache reached the package tree (BL-18) — refusing to build" >&2
+  exit 1
+fi
 
 echo "[6/9] docs — primers for the shipped decks + the two rules digests the"
 echo "      brains load verbatim (the sole research/ exception)"
@@ -116,6 +141,7 @@ cp "$REPO/forge-arena/docs/research/mtg-rules-summary.md" \
 
 echo "[7/9] runner — the seatd tree (no tests, no pycache, empty logs/)"
 rsync -a --exclude '__pycache__/' --exclude '/tests/' --exclude '/logs/' \
+  --exclude '/replay.py' \
   --exclude '/ratings.json' --exclude '/ratings-history.jsonl' \
   --exclude '/ratings.lock' --exclude '/results/' \
   "$REPO/forge-arena/runner/" "$DEST/forge-arena/runner/"
@@ -128,17 +154,20 @@ if [ -n "$KEEP" ]; then
   echo "[preserve] ELO ratings restored into the rebuilt tree"
 fi
 
-echo "[8/9] scripts — play/stop/launch/ingest/observe (batch, canary, prep,"
-echo "      smoke, discovery harnesses, react-autopass stay home)"
+echo "[8/9] scripts — play/stop/launch/ingest/observe/cardwatch (batch, canary, prep,"
+echo "      smoke and the discovery harnesses stay home)"
 mkdir -p "$DEST/forge-arena/scripts"
-for f in arena-play.sh arena-stop.sh run-pilot-match.sh run-gui.sh \
-         arena-add-deck.py arena-status.py arena-digest.py react-autopass.py; do
+for f in arena-play.sh arena-stop.sh arena-autostop.sh run-pilot-match.sh run-gui.sh \
+         arena-add-deck.py arena-status.py arena-digest.py arena-cardwatch.py; do
   cp "$REPO/forge-arena/scripts/$f" "$DEST/forge-arena/scripts/"
 done
 
 echo "[9/9] top level — README (from packaging/), LICENSE, provenance stamp"
-[ -f "$DIR/README.md" ] && cp "$DIR/README.md" "$DEST/README.md" \
-  || echo "  WARN: $DIR/README.md not written yet — package has no README"
+if [ -f "$DIR/README.md" ]; then
+  cp "$DIR/README.md" "$DEST/README.md"   # a failed cp now fails the build (set -e), not "WARN: missing"
+else
+  echo "  WARN: $DIR/README.md not written yet — package has no README"
+fi
 [ -f "$DIR/PATCH-NOTES.md" ] && cp "$DIR/PATCH-NOTES.md" "$DEST/PATCH-NOTES.md"
 cp "$REPO/LICENSE" "$DEST/LICENSE"
 { echo "forge-light-llm — built $(date -u '+%Y-%m-%d %H:%M UTC')"

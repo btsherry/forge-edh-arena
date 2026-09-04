@@ -20,6 +20,11 @@
           deliberate and explicit: -Darena.skip.tests=true.
         -->
         <arena.skip.tests>false</arena.skip.tests>
+        <!-- BL-25 (2026-09-04): tests in the TestNG group `extended` (two-card
+             seam widenings, the malformed-answer matrix, launcher tests) are
+             skipped by the standard gate so its time does not grow; the FULL /
+             release gate runs them with -Darena.excluded.groups=none. -->
+        <arena.excluded.groups>extended</arena.excluded.groups>
     </properties>
 
     <dependencies>
@@ -102,7 +107,26 @@
                       the heap and use the simpler collector: predictable
                       memory beats a heap that can grow until the GC folds.
                     -->
-                    <argLine>-Xmx4g -XX:+UseParallelGC</argLine>
+                    <!-- The parent's add-opens set is repeated here because a
+                         child argLine REPLACES the parent's (BL-25). -->
+                    <argLine>
+                        --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.base/java.time=ALL-UNNAMED
+                        --add-opens java.base/java.text=ALL-UNNAMED
+                        --add-opens java.base/java.util=ALL-UNNAMED
+                        --add-opens java.base/java.util.regex=ALL-UNNAMED
+                        --add-opens java.base/java.util.stream=ALL-UNNAMED
+                        --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+                        --add-opens java.desktop/javax.imageio.spi=ALL-UNNAMED
+                        -Xmx4g -XX:+UseParallelGC
+                    </argLine>
+                    <excludedGroups>${arena.excluded.groups}</excludedGroups>
+                    <systemPropertyVariables>
+                        <!-- harness-boil B1 (2026-08-28): E2E mailbox tests
+                             stop paying live-game pacing. Live launches never
+                             set this property and keep the 75ms default. -->
+                        <arena.mailbox.poll.ms>5</arena.mailbox.poll.ms>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>

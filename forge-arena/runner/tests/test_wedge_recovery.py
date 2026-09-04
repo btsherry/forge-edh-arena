@@ -35,7 +35,7 @@ class WedgeRecoveryTests(unittest.TestCase):
         self.now = [1000.0]
         self.sessions = iter(["sess-A", "sess-B", "sess-C"])
         self.cur = ["sess-A"]
-        orig_run, orig_time = brain_mod.subprocess.run, brain_mod.time.time
+        orig_run, orig_time = brain_mod._run, brain_mod.time.time
 
         def fake_run(cmd, **kw):
             self.calls.append((list(cmd), kw.get("input", "")))
@@ -48,9 +48,9 @@ class WedgeRecoveryTests(unittest.TestCase):
                 self.cur[0] = next(self.sessions)
             return Proc(envelope(self.cur[0]))
 
-        brain_mod.subprocess.run = fake_run
+        brain_mod._run = fake_run
         brain_mod.time.time = lambda: self.now[0]
-        self.addCleanup(lambda: setattr(brain_mod.subprocess, "run", orig_run))
+        self.addCleanup(lambda: setattr(brain_mod, "_run", orig_run))
         self.addCleanup(lambda: setattr(brain_mod.time, "time", orig_time))
 
     def _brain(self):

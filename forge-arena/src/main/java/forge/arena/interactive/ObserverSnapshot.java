@@ -50,15 +50,20 @@ import forge.game.zone.ZoneType;
  * names (public).
  *
  * <p><b>Robustness:</b> the handler never throws — a snapshot failure must never
- * disrupt the game — and writes are atomic (temp file + rename) and debounced
- * (skipped if less than {@link #MIN_WRITE_INTERVAL_MS} since the last write) so
- * the bus firing many events in a burst does not thrash the disk. The final
- * event of a game (game outcome) always forces a write regardless of debounce.
+ * disrupt the game — and writes are atomic (temp file + rename). BL-07
+ * (2026-09-04): no debounce timer; every event serializes the snapshot and a
+ * write happens only when the state (timestamp aside) differs from the last
+ * write, so the last event of a burst is never lost and an event that changes
+ * nothing visible costs no I/O. The game-outcome event always forces a write.
  */
 public final class ObserverSnapshot {
 
-    /** Debounce window: skip writing if the previous write was this recent. */
-    private static final long MIN_WRITE_INTERVAL_MS = 200L;
+    /** BL-07 (2026-09-04): no debounce timer. Every event serializes the
+     *  snapshot and writes it only when the state (timestamp aside) differs
+     *  from the last write — so the last event of a burst is never lost and a
+     *  22-trigger loop that changes nothing visible costs one write. */
+    static final java.util.concurrent.atomic.AtomicInteger WRITES =
+            new java.util.concurrent.atomic.AtomicInteger();
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -72,7 +77,7 @@ public final class ObserverSnapshot {
 
     private final Game game;
     private final Path outputFile;
-    private volatile long lastWriteMs;
+    private byte[] lastKey;  // last written snapshot, timestamp removed
 
     private ObserverSnapshot(Game game, Path outputFile) {
         this.game = game;
@@ -133,16 +138,21 @@ public final class ObserverSnapshot {
         }
     }
 
-    /** Build and atomically write the snapshot, honouring the debounce unless forced. */
-    private void write(boolean force) {
-        long now = System.currentTimeMillis();
-        if (!force && (now - lastWriteMs) < MIN_WRITE_INTERVAL_MS) {
-            return;
-        }
-        lastWriteMs = now;
+    /** Build the snapshot; write it when it differs from the last write (or
+     *  when forced). Synchronized: game events can arrive from more than one
+     *  thread and a torn pair of writes is the one thing this must never do. */
+    private synchronized void write(boolean force) {
         try {
-            byte[] bytes = MAPPER.writeValueAsBytes(buildSnapshot());
-            writeAtomic(outputFile, bytes);
+            Map<String, Object> snap = buildSnapshot();
+            Object ts = snap.remove("timestamp");
+            byte[] key = MAPPER.writeValueAsBytes(snap);
+            if (!force && lastKey != null && java.util.Arrays.equals(lastKey, key)) {
+                return;
+            }
+            lastKey = key;
+            snap.put("timestamp", ts);
+            writeAtomic(outputFile, MAPPER.writeValueAsBytes(snap));
+            WRITES.incrementAndGet();
         } catch (Throwable t) {
             // best effort; a failed snapshot must not disturb the game
         }
@@ -181,6 +191,11 @@ public final class ObserverSnapshot {
             s.put("poison", p.getPoisonCounters());
             s.put("handSize", p.getCardsIn(ZoneType.Hand).size());
             s.put("librarySize", p.getCardsIn(ZoneType.Library).size());
+            // item 12: liveness of this seat's brain from its heartbeat file
+            // (true fresh / false stale / null no runner) — a dead seat reads
+            // as dead on the dashboard instead of as a slow game
+            s.put("brainAlive", MailboxProtocol.brainAlive(
+                    outputFile.getParent().resolve("seat-" + p.getId())));
             List<Map<String, Object>> board = new ArrayList<>();
             for (Card c : p.getCardsIn(ZoneType.Battlefield)) {
                 board.add(cardState(c));

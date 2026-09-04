@@ -235,3 +235,186 @@ Five findings, ranked by likelihood x impact. For each:
 5. **Fix shape**: minimal-footprint remedy consistent with our fail-safe
    contract and "minimize parent-project edits" policy.
 Then a short "honorable mentions" list (max 5 one-liners). No preamble.
+
+## §4 Wave-2 outcome (2026-08-28, same day)
+
+All ten findings fixed in one rationalized change-set (field note 52):
+one new hook interface (PaymentPickPreference) + three shared wire
+mechanisms; two deferrals with rationale (replacement-effect ordering,
+routine tap picks). Pre-finalize review: the full diffs went back to
+Gemini side-by-side — 1 BLOCKER refuted by code inspection
+(clearTargets() reassigns targetChosen; save/restore sound), 1 real FIX
+applied (chooseCardsPile hid-pile visibility leak), 4 risk spots
+confirmed, verdict SHIP. Gates: 338 Java + checkstyle, 120 Python.
+
+### Reviewer output (verbatim)
+```
+Here is the review of the Wave-2 seam audit fixes, evaluated against the fail-safe contract, MTG rules, and Forge API constraints.
+
+**1. [BLOCKER] `MailboxController.chooseNewTargetsFor` — Forge API Mutation Hole**
+*Reason:* In Forge, `SpellAbility.clearTargets()` does not reassign the internal `TargetChoices` object; it calls `.clearTargets()` *on* it, emptying its internal lists. Because `old = sa.getTargets()` just holds a reference to that exact same object, calling `sa.clearTargets()` empties `old` as well. When the seat declines or fails the retarget, the restore path `sa.setTargets(old)` sets the spell's targets to the now-empty object, permanently breaking the spell on the stack and violating the fail-safe contract.
+*Suggested Change:* Back up the actual target entities into a new list, and restore them by re-adding them to the cleared `TargetChoices` object.
+```java
+    TargetChoices old = sa.getTargets();
+    if (old == null || old.size() != 1 || sa.isDividedAsYouChoose()) {
+        return super.chooseNewTargetsFor(ability, filter, optional);
+    }
+    // Deep copy the actual target entities
+    List<forge.game.GameObject> oldTargets = new java.util.ArrayList<>(old.getTargets());
+    sa.clearTargets();
+    if (chooseTargetsFor(sa)) {
+        forge.game.spellability.TargetChoices next = sa.getTargets();
+        boolean legal = next != null && next.size() == 1;
+        if (legal && filter != null) {
+            for (forge.game.GameObject t : next) {
+                legal &= filter.test(t);
+            }
+        }
+        if (legal) {
+            return next;
+        }
+    }
+    // Restore path
+    sa.clearTargets();
+    for (forge.game.GameObject t : oldTargets) {
+        sa.getTargets().add(t);
+    }
+    return null;
+```
+
+**2. [OK-NOTE] `MailboxController.arrangeForScry` / `arrangeFor
+--- continuation ---
+2. [FIX] `MailboxController.java` / `chooseCardsPile`
+The visibility logic `!"False".equals(faceUp)` and `"True".equals(faceUp)` mishandles asymmetric splits (e.g., Fortune's Favor, where `faceUp` is `"Pile1"` or `"Pile2"`). If `faceUp` is `"Pile2"`, Pile 1 incorrectly evaluates as visible to the LLM and Pile 2 as hidden. Change Pile 1 visibility to `"True".equals(faceUp) || "Pile1".equals(faceUp)` and Pile 2 to `"True".equals(faceUp) || "Pile2".equals(faceUp)`.
+
+3. [OK-NOTE] `MailboxController.java` / `orderMoveToZoneList` & `arrangeForScry`
+Risk spots [a] and [h] are correctly implemented. Forge's library insertion expects index 0 to be the top, matching the `FIRST=top` prompt convention, and iterating over `topN` to populate `toTop` inherently preserves the original relative order of kept cards. No change required.
+
+4. [OK-NOTE] `MailboxController.java` / `announceRequirements` & `chooseOptionalCosts`
+Risk spots [c] and [g] are safe. The `announceRequirements` branch correctly falls through to stock for unbounded ranges (`max - min > 1000`), and always opening a window for optional costs with a `min=0` bound correctly allows the LLM to decline all costs by returning an empty array. No change required.
+
+5. [OK-NOTE] `runner.py` / `_runner` & `_threatens_own`
+Risk spots [d] and [e] are robust. `json.dumps(..., sort_keys=True)` is deterministic and cheap for the memo signature, and the threat clause correctly identifies both direct seat targeting and permanent targeting via the `(id)` suffix in `stackTargets`. No change required.
+
+6. [OK-NOTE] `AiCostDecision.java` & `MailboxController.java` / Entity IDs & CostDiscard
+Risk spot [f] correctly uses `validD.removeAll(discarded)` to prevent duplicate payments. Furthermore, falling back to sequential IDs (`seq++`) when `opts` contains a mix of Cards and Players is a brilliant, collision-free way to round-trip mixed entities. No change required.
+
+SHIP```
+
+## §5 Wave-3: adversarial validation round + fixes (2026-08-31)
+
+A local high-effort review of the wave-2 span found ten defects; Ben
+mandated full-context adversarial validation before fixing. Gemini
+(whole seam + runner + upstream call-sites + context-request protocol):
+10/10 VALIDATED, zero context requests, REJECT. All ten fixed in one
+wave (field note 54); the fix diff went back for re-review: 10/10
+FIXED, no new defects, SHIP. Gates: 339 Java + checkstyle, py green.
+
+### Validation round (verbatim)
+```
+1. **F1 [MailboxController.chooseOptionalCosts]**
+   - **VALIDATED**. Causal chain: `MailboxController.chooseSpellAbilityToPlay` calls `ComputerUtilAbility.getOriginalAndAltCostAbilities` (forge-ai/src/main/java/forge/ai/ComputerUtilAbility.java:190), which invokes `chooseOptionalCosts` (line 136) for every spell with optional costs during the `canPlay` enumeration loop. This opens a mailbox window before the cast decision, and if the brain says yes, the base spell is omitted from the options list (line 148).
+   - **Severity**: CRITICAL (pacing bug causing 5-10s window spam per spell in hand, plus logic bug hiding the base spell).
+   - **Minimal fix shape**: In `MailboxController`, set a `ThreadLocal<Boolean> isEnumerating` flag around the `getOriginalAndAltCostAbilities` call. In `chooseOptionalCosts`, return `Collections.emptyList()` if the flag is true. Then, manually expand the optional costs into separate `SpellAbility` options inside `chooseSpellAbilityToPlay` so the brain sees both base and kicked versions in the `CAST_SPELL` prompt.
+
+2. **F2 [AiCostDecision hooks]**
+   - **VALIDATED**. Causal chain: `DrawAi.willPayCosts` (forge-ai/src/main/java/forge/ai/ability/DrawAi.java:101) instantiates `AiCostDecision` to evaluate discard costs during `canPlay` planning scans. This triggers `MailboxController.preferredPaymentCards` (via `AiCostDecision.visit(CostDiscard)`), opening live mailbox windows during background evaluation.
+   - **Severity**: CRITICAL (pacing bug causing window spam during enumeration).
+   - **Minimal fix shape**: Add an `isPlanning` flag to `MailboxController` (set to true during the `canPlay` loop in `chooseSpellAbilityToPlay` and during `mailboxManaX`'s `determineLeftoverMana` call). If `isPlanning` is true, `preferredPaymentCards` and `preferredSacCards` must immediately return `null`.
+
+3. **F3 [chooseNumber / CHOOSE_NUMBER punt]**
+   - **VALIDATED**. Causal chain: `rules.py`'s `safe_default` for `CHOOSE_NUMBER` unconditionally returns `hi` (forge-arena/runner/seatd/rules.py:248). For generic number choices like Wheel of Misfortune (min 0, max 99), a timeout causes the seat to bid 99 and lose the game.
+   - **Severity**: HIGH.
+   - **Minimal fix shape**: In `MailboxController.mailboxManaX`, add `"isManaX": true` to the request state. In `rules.py`'s `safe_default`, return `hi` only if `state.get("isManaX")` is true; otherwise, return `lo` (or a safe heuristic).
+
+4. **F4 [orderMoveToZoneList]**
+   - **VALIDATED**. Causal chain: `MailboxController.orderMoveToZoneList` returns the brain's chosen order verbatim (forge-arena/src/main/java/forge/arena/interactive/MailboxController.java:1013). However, consumers like `RearrangeTopOfLibraryEffect` (forge-game/src/main/java/forge/game/ability/effects/RearrangeTopOfLibraryEffect.java:104) iterate forward and call `moveToLibrary(next, 0)`, which inverts the list.
+   - **Severity**: HIGH (inverts all library manipulation like Scry/Top).
+   - **Minimal fix shape**: In `MailboxController.orderMoveToZoneList`, check `if (orderedMoveToTopOfLibrary(destinationZone, source))` and call `Collections.reverse(ordered)` before returning the collection, mirroring `PlayerControllerAi`.
+
+5. **F5 [chooseOptionalCosts]**
+   - **VALIDATED**. Causal chain: `MailboxController.chooseOptionalCosts` returns the brain's picks directly (forge-arena/src/main/java/forge/arena/interactive/MailboxController.java:1167), dropping the `ComputerUtilCost.canPayCost` check that `SpellAbilityAi.chooseOptionalCosts` performs (forge-ai/src/main/java/forge/ai/SpellAbilityAi.java:434). This allows unpayable optional costs to be attached, causing the cast to be refused later.
+   - **Severity**: HIGH.
+   - **Minimal fix shape**: The manual expansion fix for F1 naturally resolves this. When expanding optional costs into separate `SpellAbility` options in `chooseSpellAbilityToPlay`, wrap the addition in `if (ComputerUtilCost.canPayCost(copy, me, false))`.
+
+6. **F6 [announceRequirements non-X branch]**
+   - **VALIDATED**. Causal chain: The AI cast path (`ComputerUtil.handlePlayingSpellAbility`) does not call `announceRequirements` for non-mana variables; it is only called by the human `PlaySpellAbility` path. Thus, the override in `MailboxController.announceRequirements` (forge-arena/src/main/java/forge/arena/interactive/MailboxController.java:309) is dead code for AI casts.
+   - **Severity**: MEDIUM.
+   - **Minimal fix shape**: Move the non-mana announcement logic into `MailboxController.playChosenSpellAbility`. Iterate over `sa.getChoices().keySet()`, and for any variable mapped to `"X"`, prompt the seat and update the choice map, mirroring `PlaySpellAbility`'s logic.
+
+7. **F7 [runner._threatens_own]**
+   - **VALIDATED**. Causal chain: `runner.py:_threatens_own` checks if the target string `endswith(oid)` (forge-arena/runner/seatd/runner.py:561). Because `MailboxController` appends divided damage allocations like `" [2]"` to target labels (forge-arena/src/main/java/forge/arena/interactive/MailboxController.java:2956), the `endswith` check fails, causing the runner to falsely auto-pass critical protection windows.
+   - **Severity**: HIGH.
+   - **Minimal fix shape**: Change the check in `runner.py` from `t.endswith(oid)` to `oid in t` (or `oid in str(t)`).
+
+8. **F8 [MailboxTestKit brain]**
+   - **VALIDATED**. Causal chain: `MailboxTestKit.java` calls `Files.newDirectoryStream` (forge-arena/src/test/java/forge/arena/interactive/MailboxTestKit.java:102) inside a polling loop every 5ms but never closes the stream, leaking file descriptors until the OS limit is reached.
+   - **Severity**: MEDIUM.
+   - **Minimal fix shape**: Wrap the `Files.newDirectoryStream` call in a `try (java.nio.file.DirectoryStream<Path> stream = Files.newDirectoryStream(...)) { ... }` block.
+
+9. **F9 [runner._threatens_own]**
+   - **VALIDATED**. Causal chain: `runner.py:_threatens_own` iterates over all `stackTargets` (forge-arena/runner/seatd/runner.py:554) without checking `stackOwners`. If the seat casts a pump spell on its own creature, it counts as a threat to itself, disabling the autopass fastpath.
+   - **Severity**: LOW (performance/cost issue, not a gameplay bug).
+   - **Minimal fix shape**: Zip `targets` with `owners` in `_threatens_own`, and `continue` (ignore) any stack item where `owner == self.seat`.
+
+10. **F10 [confirmAction gate]**
+    - **VALIDATED**. Causal chain: `MailboxController.confirmAction` gates untyped confirms by checking if `message.toLowerCase().contains("target")` (forge-arena/src/main/java/forge/arena/interactive/MailboxController.java:2367). This is fragile to localization and over-matches cards with "target" in their name.
+    - **Severity**: LOW.
+    - **Minimal fix shape**: Replace the string check with `sa != null && sa.getApi() == ApiType.ChangeTargets`.
+
+---
+
+### CONTEXT REQUESTS
+*(None required; all findings validated with provided context.)*
+
+---
+
+### BROADER CORRELATIONS
+1. **Planning vs Execution Leakage:** The AI engine frequently uses the same code paths (like `AiCostDecision` or `canPlay`) for both *evaluating* a move's legality/cost and *executing* it. The seam author assumed hooks like `preferredPaymentCards` only fire at execution time. This plausibly bites other hooks too, like `chooseCardsToDiscardFrom` or `choosePermanentsToSacrifice`, if they are ever called during planning scans.
+2. **Human vs AI Path Divergence:** The engine has separate cast paths for Humans (`PlaySpellAbility`) and AI (`ComputerUtil.handlePlayingSpellAbility`). The seam author hooked `announceRequirements` assuming it's a universal choke point, but it's Human-only for non-mana X. This plausibly bites other `PlayerController` methods that are only called by the Human UI (e.g., `chooseTargetsFor` might be bypassed by some AI logic, which the author already discovered and patched in `orderAndPlaySimultaneousSa`).
+3. **String-Matching Fragility:** Relying on `endswith` or `contains` for game logic (F7, F10). This plausibly bites `cycle_rebind` in `runner.py` which matches options by label prefix.
+
+---
+
+### ERROR PATTERNS
+1. **Testing against Mocks/Direct Calls instead of E2E:** F6 was "proven" by a direct unit test (`k.controller().announceRequirements(...)`) rather than an E2E test of the AI casting the spell. This hides reachability bugs.
+2. **Testing Return Values instead of State:** F4 tested the return value of `orderMoveToZoneList` instead of asserting the actual order of the library after the effect resolved.
+3. **Incomplete State Simulation in Tests:** F2 was missed because the author only checked `ComputerUtilCost`, missing that `DrawAi` also instantiates `AiCostDecision` during planning.
+
+---
+
+### NEW FINDINGS
+*(None found that violate the constraints or fail-safe contract.)*
+
+---
+
+### OVERALL VERDICT
+**REJECT** — The change-set introduces critical pacing bugs (F1, F2) and game-losing logic flaws (F3, F4, F5) that violate the fail-safe and pacing constraints, requiring structural fixes to the planning/execution boundaries before merge.```
+
+### Fix review (verbatim)
+```
+Here is the review of the Wave-3 fixes.
+
+**F1 (Optional Cost Spam)**: FIXED. The `enumeratingOwnWindow` flag successfully suppresses the optional cost prompt during the AI's window-building enumeration phase (`MailboxController.java:258-268`, `2129-2133`). This ensures the base spell is always enumerated without spamming the seat.
+
+**F2 (Phantom Payment Windows)**: FIXED. The `inPaymentContext` flag acts as a robust default-deny for payment hooks, safely wrapping actual execution paths (`playChosenSpellAbility`, `playStack`, Charm modes) in `try/finally` blocks (`MailboxController.java:108-113`, `688-693`). This completely silences planning scans like `DrawAi.willPayCosts`.
+
+**F3 (Bid Timeout Punt)**: FIXED. The Java side now explicitly flags X-costs with `puntHigh=true` (`MailboxController.java:774`). The Python `safe_default` reads this flag to safely punt low for generic bids (preventing Wheel of Misfortune deaths) while keeping the affordability-capped max punt for X-costs (`rules.py:286-291`).
+
+**F4 (Top-of-Library Order)**: FIXED. The controller correctly checks `orderedMoveToTopOfLibrary` and reverses the seat's top-to-bottom answer to match the engine's bottom-to-top sequential stacking requirement (`MailboxController.java:1976-1992`).
+
+**F5 (Variant Affordability/Offering)**: FIXED. Affordable optional-cost variants are now safely expanded, vetted via `ComputerUtilCost.canPayCost`, and injected directly into the cast window as distinct `[+ ...]` options (`MailboxController.java:476-506`).
+
+**F6 (Multikicker Execution Surface)**: FIXED. As noted, the real execution-time surface for Multikicker/Replicate is `chooseNumberForKeywordCost`; the new override correctly calculates the affordable cap, prompts the seat, and falls back to stock on timeout (`MailboxController.java:2213-2248`). The `announceRequirements` branch correctly remains in place for `ChooseNumberEffect` and `BidLife`.
+
+**F7 (Divided Damage Suffix)**: FIXED. The Python autopass logic correctly strips the divided-damage ` [n]` suffix via `split(" [")[0]` before matching targets, preventing spells like Arc Trail from bypassing the threat check (`runner.py:564`).
+
+**F8 (FD Leak in Polling)**: FIXED. The `DirectoryStream` is now properly wrapped in a `try-with-resources` block, preventing file descriptor exhaustion during the rapid 5ms polling loop (`MailboxTestKit.java:102-103`).
+
+**F9 (Own Spell Threat)**: FIXED. The autopass threat detection now correlates the stack item with `stackOwners` and correctly ignores the seat's own spells targeting its own permanents (`runner.py:561-562`).
+
+**F10 (ChangeTargets Confirm)**: FIXED. The untyped confirm fallback now explicitly checks `sa.getApi() == ApiType.ChangeTargets`, ensuring redirect effects aren't missed due to arbitrary prompt text variations (`MailboxController.java:2510-2511`).
+
+No new defects or regressions were introduced by these fixes. The reachability proofs confirm the logic executes end-to-end exactly as intended.
+
+SHIP.```

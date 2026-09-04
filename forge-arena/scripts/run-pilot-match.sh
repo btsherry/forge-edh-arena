@@ -19,7 +19,8 @@
 #
 # Env:
 #   ARENA_MAILBOX_TIMEOUT  seconds a mailbox seat waits for a brain before
-#                          falling back to stock AI (default 300).
+#                          falling back to stock AI (default 90 — the same
+#                          default run_table.sh uses; plan item 12).
 #                          Use a SMALL value (e.g. 3) for a no-brains smoke test.
 #   ARENA_MAILBOX_DIR      override the mailbox base dir.
 #   ARENA_SEAT_DECKS       four deck slugs in seat order — repoints the table
@@ -37,7 +38,7 @@ ARENA_CP_TXT="$REPO_ROOT/forge-arena/target/classpath.txt"
 DESKTOP_POM="$REPO_ROOT/forge-gui-desktop/pom.xml"
 DECKS_DIR="$REPO_ROOT/forge-arena/decks"
 MAILBOX_DIR="${ARENA_MAILBOX_DIR:-$REPO_ROOT/forge-arena/mailbox}"
-TIMEOUT="${ARENA_MAILBOX_TIMEOUT:-300}"
+TIMEOUT="${ARENA_MAILBOX_TIMEOUT:-90}"
 
 # Self-contained desktop jar (all forge + deps); survives version bumps.
 JAR=$(ls "$REPO_ROOT"/forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)
@@ -73,6 +74,11 @@ if [ -z "$MAND" ] || [ -z "$OPENS" ]; then
 fi
 
 if [ -n "${JAVA_HOME:-}" ]; then JAVA="$JAVA_HOME/bin/java"; else JAVA="java"; fi
+
+# BL-27: deck files are slugs; whitespace would word-split below.
+case "${1:-}" in *[[:space:]]*)
+  echo "run-pilot-match: deck file names must not contain whitespace: '$1'" >&2; exit 2 ;;
+esac
 
 # Table roster pass-through: spaces become commas so the property stays one
 # JVM argument (GuiPilotMatch splits on both). Empty when unset — the word

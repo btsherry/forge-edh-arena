@@ -40,6 +40,21 @@ import forge.model.FModel;
  */
 public class CounterspellReachesTargetTest {
 
+    /** Item 15 (2026-09-03): the scripted brain must not outlive its test —
+     *  these pre-kit pollers used to spin for up to 150 s after their method
+     *  returned, inside the one reused surefire fork. */
+    private static volatile boolean legacyBrainAlive = true;
+
+    @org.testng.annotations.BeforeMethod
+    public void armLegacyBrain() {
+        legacyBrainAlive = true;
+    }
+
+    @org.testng.annotations.AfterMethod(alwaysRun = true)
+    public void stopLegacyBrain() {
+        legacyBrainAlive = false;
+    }
+
     private static Card put(String name, Player p, ZoneType z) {
         IPaperCard pc = FModel.getMagicDb().getCommonCards().getCard(name);
         if (pc == null) {
@@ -95,7 +110,7 @@ public class CounterspellReachesTargetTest {
         Thread brain = new Thread(() -> {
             long end = System.currentTimeMillis() + 150_000;
             java.util.Set<String> done = new java.util.HashSet<>();
-            while (System.currentTimeMillis() < end) {
+            while (legacyBrainAlive && System.currentTimeMillis() < end) {
                 try {
                     if (Files.isDirectory(inbox)) {
                         for (Path f : Files.newDirectoryStream(inbox, "req-*.json")) {
@@ -107,16 +122,16 @@ public class CounterspellReachesTargetTest {
                             if (body.contains("\"decisionType\":\"REACT\"") || body.contains("\"decisionType\":\"CAST_SPELL\"")) {
                                 // prefer the FREE Guardianship option if offered, else any Guardianship
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Fierce Guardianship[^}]*FREE").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOfWhere(body, "Fierce Guardianship", "FREE")));
                                 if (!m.find()) {
                                     m = java.util.regex.Pattern
-                                            .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Fierce Guardianship").matcher(body);
+                                            .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Fierce Guardianship")));
                                     if (!m.find()) { resp = "{\"chosenId\": 0}"; }
                                     else resp = "{\"chosenId\": " + m.group(1) + "}";
                                 } else resp = "{\"chosenId\": " + m.group(1) + "}";
                             } else if (body.contains("\"decisionType\":\"CHOOSE_ENTITY\"")) {
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Divination").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Divination")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "1") + "}";
                             } else {
                                 resp = "{\"chosenId\": 0}";
@@ -207,7 +222,7 @@ public class CounterspellReachesTargetTest {
         Thread brain = new Thread(() -> {
             long end = System.currentTimeMillis() + 150_000;
             java.util.Set<String> done = new java.util.HashSet<>();
-            while (System.currentTimeMillis() < end) {
+            while (legacyBrainAlive && System.currentTimeMillis() < end) {
                 try {
                     if (Files.isDirectory(inbox)) {
                         for (Path f : Files.newDirectoryStream(inbox, "req-*.json")) {
@@ -218,11 +233,11 @@ public class CounterspellReachesTargetTest {
                             String resp;
                             if (body.contains("\"decisionType\":\"REACT\"") || body.contains("\"decisionType\":\"CAST_SPELL\"")) {
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Fierce Guardianship").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Fierce Guardianship")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "0") + "}";
                             } else if (body.contains("\"decisionType\":\"CHOOSE_ENTITY\"")) {
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Divination").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Divination")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "1") + "}";
                             } else {
                                 resp = "{\"chosenId\": 0}";
@@ -257,5 +272,86 @@ public class CounterspellReachesTargetTest {
         Assert.assertTrue(divInGy && oppHand == 0, "paid Guardianship must still counter its target");
         Assert.assertEquals(opp.getCardsIn(ZoneType.Library).size(), 6,
                 "opponent library must be untouched — a resolved Divination draws two");
+    }
+
+    private static boolean has(Player p, ZoneType z, String name) {
+        for (Card c : p.getCardsIn(z)) {
+            if (name.equals(c.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * BL-11 second card (group {@code extended}). Force of Will is the same
+     * seam by script shape: an {@code S:Mode$ AlternativeCost | ValidSA$
+     * Spell.Self | EffectZone$ All} static on top of a plain {@code A:SP$
+     * Counter | TargetType$ Spell} — exactly Fierce Guardianship's two lines —
+     * but its alternative cost is a non-mana pitch ({@code Cost$ PayLife<1>
+     * ExileFromHand<1/Card.Blue+Other>}) rather than {@code Cost$ 0}. So the
+     * seat must be OFFERED the alt-cost cast with no mana at all, name the
+     * pitched card through the payment window, aim the counter at the STACK
+     * item, and the target must actually be countered. The seat has no lands:
+     * the pitch is the only legal Force of Will.
+     */
+    @Test(groups = "extended", timeOut = 240_000)
+    public void forceOfWillPitchOfferedAndCountersTheTarget() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(true)) {
+            MailboxTestKit.put("Force of Will", k.seat, ZoneType.Hand);
+            MailboxTestKit.put("Brainstorm", k.seat, ZoneType.Hand);   // the pitch
+            MailboxTestKit.put("Mana Drain", k.seat, ZoneType.Hand);   // the blue card to spare
+            for (int i = 0; i < 3; i++) MailboxTestKit.put("Island", k.opp, ZoneType.Battlefield);
+            for (int i = 0; i < 6; i++) MailboxTestKit.put("Island", k.opp, ZoneType.Library);
+            Card div = MailboxTestKit.put("Divination", k.opp, ZoneType.Hand);
+            SpellAbility divSa = div.getFirstSpellAbility();
+            divSa.setActivatingPlayer(k.opp);
+            k.game.getAction().moveToStack(div, divSa);
+            k.game.getStack().add(divSa);
+            final int lifeBefore = k.seat.getLife();
+
+            k.startBrain(body -> {
+                if (body.contains("EXILE PAYMENT")) {
+                    String id = MailboxTestKit.idOf(body, "Brainstorm");
+                    return id != null ? "{\"chosen\": [" + id + "]}" : null;
+                }
+                if (body.contains("\"decisionType\":\"REACT\"")
+                        || body.contains("\"decisionType\":\"CAST_SPELL\"")) {
+                    String id = MailboxTestKit.idOf(body, "Force of Will");
+                    return id != null ? "{\"chosenId\": " + id + "}" : null;
+                }
+                if (body.contains("\"decisionType\":\"CHOOSE_ENTITY\"")) {
+                    String id = MailboxTestKit.idOf(body, "Divination");
+                    return id != null ? "{\"chosenId\": " + id + "}" : null;
+                }
+                return null;
+            });
+            // stops as soon as the stack has emptied — countered or resolved
+            k.run(() -> true, 300);
+
+            boolean fowOffered = k.seen.stream().anyMatch(s ->
+                    (s.contains("\"decisionType\":\"REACT\"") || s.contains("\"decisionType\":\"CAST_SPELL\""))
+                    && s.contains("Force of Will"));
+            boolean pitchWindow = k.seen.stream().anyMatch(s -> s.contains("EXILE PAYMENT"));
+            boolean stackAim = k.seen.stream().anyMatch(s ->
+                    s.contains("CHOOSE_ENTITY") && s.contains("Divination") && s.contains("\"STACK\""));
+            boolean divInGy = has(k.opp, ZoneType.Graveyard, "Divination");
+            int oppHand = k.opp.getCardsIn(ZoneType.Hand).size();
+            System.out.println("FOW COUNTER test: fowOffered=" + fowOffered + " pitchWindow=" + pitchWindow
+                    + " stackAim=" + stackAim + " divInGy=" + divInGy + " oppHand=" + oppHand
+                    + " life " + lifeBefore + "->" + k.seat.getLife() + " reqs=" + k.seen.size());
+            Assert.assertTrue(fowOffered,
+                    "Force of Will must be offered through its pitch alternative cost with NO mana");
+            Assert.assertTrue(pitchWindow, "the pitched blue card must be the seat's pick (EXILE PAYMENT)");
+            Assert.assertTrue(has(k.seat, ZoneType.Exile, "Brainstorm"), "Brainstorm must be the card pitched");
+            Assert.assertTrue(has(k.seat, ZoneType.Hand, "Mana Drain"), "Mana Drain must be spared");
+            Assert.assertEquals(k.seat.getLife(), lifeBefore - 1, "the pitch costs exactly 1 life");
+            Assert.assertTrue(stackAim,
+                    "the counter's target must be offered as a STACK item (spell), not the stack-zone card");
+            Assert.assertTrue(divInGy, "Divination should be countered (in graveyard)");
+            Assert.assertEquals(oppHand, 0, "Divination must not have resolved (opponent drew cards)");
+            Assert.assertEquals(k.opp.getCardsIn(ZoneType.Library).size(), 6,
+                    "opponent library must be untouched — a resolved Divination draws two");
+        }
     }
 }

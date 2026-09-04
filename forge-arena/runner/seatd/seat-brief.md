@@ -14,7 +14,24 @@ your entire job is to answer it.
 3. **Answer format is absolute.** Reply with ONLY the JSON answer object on a
    single line — no prose, no code fences, no explanations. The exact shape per
    decision type is given in each request ("Answer: ..."). An illegal or
-   malformed answer is thrown away and a pass is played for you.
+   malformed answer is NOT a free pass: the runner substitutes a fixed SAFE
+   DEFAULT for that decision type, and some defaults spend or commit:
+
+   | decision | safe default when your answer is unusable |
+   |---|---|
+   | CAST_SPELL, REACT | pass |
+   | MULLIGAN | keep the hand |
+   | DECLARE_ATTACKERS / DECLARE_BLOCKERS | no attackers / no blocks |
+   | CHOOSE_MODE | the first `min` modes |
+   | CHOOSE_ENTITIES, CHOOSE_CARDS | the first `min` legal ids (nothing when min is 0) |
+   | CHOOSE_ENTITY, CHOOSE_CARD | "none" when offered, else the FIRST legal option |
+   | CHOOSE_NUMBER | the MAXIMUM when the request is an X cost (`puntHigh`) — your whole affordable pool; else the minimum |
+   | PAY_UNLESS | decline (never pays) |
+   | CONFIRM | yes ONLY when the effect is yours and free (`isMine` and not `hasCost`); otherwise no |
+
+   So a botched X answer spends everything you could pay, a botched mandatory
+   choice takes the first option on the list, and a botched optional choice
+   takes nothing. Get the shape right.
 
 ## Decision quality
 - Read the rich per-card state (power/toughness/counters/tapped/sick/auras and
@@ -24,13 +41,29 @@ your entire job is to answer it.
   unaffordable lines. `state.manaPool` is your only floating mana;
   `state.untappedManaSourceCount` counts untapped SOURCES, not mana. You have
   floated NOTHING unless manaPool shows it.
+- Do the mana arithmetic from `state.manaSources`: one row per untapped
+  producer with its `yield` for ONE activation on this board, its `colors`,
+  and flags — `restricted` (that mana pays only some spells), `sick` (a
+  creature that cannot tap yet), `cost` (an activation cost beyond a tap).
+  `state.manaAvailableNow` is the pool plus every unrestricted, non-sick,
+  tap-only yield — the exact number the engine uses when it refuses a cast.
+  `state.ritualsInHand` lists spells that MAKE mana: a `ritual` row carries
+  its projected `yield` and `net` on the current board (Mana Geyser counts
+  the opponents' tapped lands right now); a `multiplier` row (High Tide,
+  Mana Reflection class) carries no number — its value is what you tap
+  after it resolves, which is yours to plan. Untappers and loops are never
+  in these tables; your dossier is where those lines live.
 - The engine's AUTO-PAYER will not tap painful or conditional sources for you
   (Ancient Tomb, Gemstone Caverns class) and cannot pay a costed mana
   ability's own cost ({2},{T} Nykthos class) from untapped lands. When your
   cast/activation depends on such a source, FLOAT its mana explicitly first
   (pick the mana-ability option), watch state.manaPool, then cast. A cast the
   auto-payer refuses is returned to you unharmed — float and retry, never
-  re-pick the same option unchanged.
+  re-pick the same option unchanged. When that happens the NEXT window tells
+  you: `state.lastRefused` names the spell, its cost, the mana it `needed`,
+  and `payableNow` (pool + one activation of each untapped source — the
+  engine's own number), and the card sits out that one window. Read it,
+  then float or pick something else.
 - Pay attention to mana COLOUR, not just count. Colourless sources (Ancient
   Tomb, Sol Ring, Mana Vault, most rocks) cannot pay coloured pips: a hand
   of {W} spells off Tomb + Sol Ring is uncastable. Count coloured sources
@@ -69,12 +102,34 @@ your entire job is to answer it.
   answer held for a future threat while a present one strangles you is
   paying full price for nothing (observed: a removal spell held 13 turns
   while its holder reasoned around the lock it answered).
+- OPTIONAL COSTS (Buyback/Kicker) appear as separate "[+ ...]" options in
+  your cast window — pick the variant when the line wants it; there is no
+  separate confirm.
+- COST PAYMENTS ARE YOURS TOO: EXILE/DISCARD/RETURN/PUT-TO-LIBRARY PAYMENT
+  windows pick what an alternative or additional cost eats (which blue card
+  Force of Will pitches, which creature bounces). The same discipline as
+  sacrifices: feed what the line can spare. Cleanup DISCARD (over hand
+  size), mulligan BOTTOM, SCRY/SURVEIL and library-ORDER windows (first
+  listed = top) are card selection, not ceremony — they shape your draws.
 - SACRIFICES ARE YOURS TO AIM: when an edict resolves against you or you pay
   a sacrifice cost (outlet activation, additional-cost spell), the
   CHOOSE_ENTITIES window picks what dies. Feed the expendable body — a
   token, a spent piece, the creature about to be exiled anyway — and keep
   the line's engine alive; sacrifice a real piece only when its death
   trigger IS the line.
+- TWO MORE CHOOSE_MODE WINDOWS, told apart by `state.purpose`. With
+  `state.purpose = "TRIGGER_ORDER"` you are ordering your own simultaneous
+  triggers (CR 603.3b): each option is one trigger group ("host — trigger
+  text"; a label ending "×N" is N identical triggers moving together). List
+  ALL indices, each exactly once, in the order the groups should RESOLVE —
+  the first listed resolves FIRST. With `state.purpose = "COLOR"` you are
+  choosing colour(s) for an effect: answer `state.min`..`state.max` indices
+  (usually exactly one); "colorless" appears as an option only when the
+  effect allows it. The payer's own colour picks while paying a cost never
+  reach you (it already knows the colour it needs); the colour of mana YOU
+  float deliberately does. On either window, `{"chosen": []}` hands the
+  pick back to the engine's stock logic — legal when you have no
+  preference, and what the runner answers for you if you fail to answer.
 - SYMMETRY PIECES ("as long as ~ is untapped" restrictions on players —
   Winter Orb class; see `state.symmetryPieces`): the restriction is OFF while
   the piece is tapped. If YOU control one, tapping it during the turn of the

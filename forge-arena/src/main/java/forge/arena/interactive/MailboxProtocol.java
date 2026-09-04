@@ -50,16 +50,58 @@ public final class MailboxProtocol {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final long DEFAULT_TIMEOUT_SEC = 300L;
 
+    /** System property: heartbeat staleness (ms) beyond which the brain is
+     *  treated as absent and stock plays at once (item 12). Default 15 s —
+     *  well above the runner's 5 s beat and its 2 s restart loop. */
+    public static final String HEARTBEAT_STALE_PROPERTY = "arena.mailbox.heartbeat.stale.ms";
+
+    /** Age in ms of {@code <seatDir>/heartbeat}, or -1 when there is no file. */
+    public static long heartbeatAgeMillis(Path seatDir) {
+        try {
+            Path hb = seatDir.resolve("heartbeat");
+            if (!Files.exists(hb)) {
+                return -1L;
+            }
+            return System.currentTimeMillis() - Files.getLastModifiedTime(hb).toMillis();
+        } catch (IOException | RuntimeException e) {
+            return -1L;
+        }
+    }
+
+    /** Liveness verdict for a seat dir: TRUE fresh, FALSE stale, null unknown
+     *  (no heartbeat file — a pre-item-12 runner, or none launched). */
+    public static Boolean brainAlive(Path seatDir) {
+        long age = heartbeatAgeMillis(seatDir);
+        if (age < 0) {
+            return null;
+        }
+        return age <= Long.getLong(HEARTBEAT_STALE_PROPERTY, 15_000L);
+    }
+
+    private final Path seatDir;
     private final Path inbox;
     private final Path outbox;
     private final long timeoutMillis;
+    private boolean absentLogged = false;
     // Outbox pickup latency: how soon the engine notices the brain's written
     // response and unblocks. 75ms keeps the game feeling responsive without
     // meaningful CPU cost (the poll is a single file stat on a tiny dir).
-    private final long pollMillis = 75L;
+    // Overridable via -Darena.mailbox.poll.ms (harness-boil B1, 2026-08-28):
+    // the test suite sets 5ms so every mailbox exchange in an E2E test stops
+    // paying live-game pacing; live launches never set it and keep 75.
+    private final long pollMillis = Long.getLong("arena.mailbox.poll.ms", 75L);
     private final AtomicLong seq = new AtomicLong();
+    /** Interactive plan item 8: the game this bus serves, stamped on every
+     *  request so the brain resets on an id CHANGE, never on a seq guess. */
+    private volatile String gameId;
+
+    /** Set once by the controller when the in-game Player (and thus the Game) exists. */
+    public void setGameId(String id) {
+        this.gameId = id;
+    }
 
     private MailboxProtocol(Path seatDir, long timeoutMillis) {
+        this.seatDir = seatDir;
         this.inbox = seatDir.resolve("inbox");
         this.outbox = seatDir.resolve("outbox");
         this.timeoutMillis = timeoutMillis;
@@ -68,6 +110,30 @@ public final class MailboxProtocol {
             Files.createDirectories(outbox);
         } catch (IOException e) {
             throw new IllegalStateException("cannot create mailbox dirs under " + seatDir, e);
+        }
+        sweepOutbox();
+    }
+
+    /** BL-22: nothing legitimate can be in the outbox before this bus writes
+     *  its first request, so a leftover {@code resp-N.json} (a crashed engine,
+     *  a hand relaunch that skipped arena-stop) is deleted here rather than
+     *  consumed as the answer to this game's request N. */
+    private void sweepOutbox() {
+        int n = 0;
+        try (java.nio.file.DirectoryStream<Path> ds = Files.newDirectoryStream(outbox)) {
+            for (Path p : ds) {
+                String name = p.getFileName().toString();
+                if (name.startsWith("resp-") || name.endsWith(".tmp")) {
+                    deleteQuietly(p);
+                    n++;
+                }
+            }
+        } catch (IOException ignore) {
+            // best effort — the sweep is protection, never a precondition
+        }
+        if (n > 0) {
+            System.err.println("[mailbox " + seatDir.getFileName() + "] swept " + n
+                    + " stale outbox file(s) at start");
         }
     }
 
@@ -95,10 +161,18 @@ public final class MailboxProtocol {
         return forSeat(baseDir(), seatId);
     }
 
+    /** One bus per seat directory (BL-05, 2026-09-04): the request sequence
+     *  lives on the bus, so every controller that writes into a seat's inbox —
+     *  the seat's own and a Mindslaver-class controller routed to it — must
+     *  share ONE instance. A second instance restarted seq at 1 and reused
+     *  names the runner had already answered, which it rightly skips. */
+    private static final java.util.concurrent.ConcurrentMap<Path, MailboxProtocol> BUSES =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     /** A protocol rooted at {@code <base>/seat-<id>} with an explicit base dir. */
     public static MailboxProtocol forSeat(Path base, int seatId) {
-        return new MailboxProtocol(base.resolve("seat-" + seatId),
-                timeoutSeconds() * 1000L);
+        Path dir = base.resolve("seat-" + seatId).toAbsolutePath().normalize();
+        return BUSES.computeIfAbsent(dir, d -> new MailboxProtocol(d, timeoutSeconds() * 1000L));
     }
 
     /**
@@ -108,8 +182,31 @@ public final class MailboxProtocol {
      * missing or malformed brain — a silent brain must never hang the game.
      */
     public JsonNode exchange(Request request) {
+        // Item 12: one stat before blocking. A stale heartbeat means nobody is
+        // home — skip the wait, stock plays now, one log line per transition.
+        // No file (older runner, or none) or an unreadable stat = unknown =
+        // wait as always: the gate can only ever SHORTEN a wait.
+        Boolean alive = brainAlive(seatDir);
+        if (Boolean.FALSE.equals(alive)) {
+            if (!absentLogged) {
+                absentLogged = true;
+                System.err.println("[mailbox " + seatDir.getFileName() + "] brain absent "
+                        + "(heartbeat " + (heartbeatAgeMillis(seatDir) / 1000) + "s stale) — "
+                        + "stock plays until it returns");
+            }
+            return null;
+        }
+        if (absentLogged) {
+            absentLogged = false;
+            System.err.println("[mailbox " + seatDir.getFileName() + "] brain back — "
+                    + "resuming normal waits");
+        }
         long n = seq.incrementAndGet();
         request.seq = n;
+        request.gameId = gameId;
+        // item 12: the engine's wait is the ONE timeout knob — publish it so
+        // the runner derives its budget from what the engine will actually do
+        request.timeoutSec = timeoutMillis / 1000L;
         Path reqFile = inbox.resolve("req-" + n + ".json");
         Path respFile = outbox.resolve("resp-" + n + ".json");
         try {
@@ -199,6 +296,12 @@ public final class MailboxProtocol {
      */
     public static final class Request {
         public long seq;
+        /** Identity of the game this request belongs to (start millis + pid + a
+         *  per-process serial, BL-28);
+         *  null only from an engine that predates item 8. */
+        public String gameId;
+        /** Seconds the engine will wait for the answer before stock plays. */
+        public long timeoutSec;
         public int seat;
         public int turn;
         public String phase;

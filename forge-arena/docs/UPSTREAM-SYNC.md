@@ -9,20 +9,21 @@ divergence list). Read both before ANY merge from upstream.*
 - We are a fork of [Card-Forge/forge](https://github.com/Card-Forge/forge)
   (`origin`), working on branch `arena`, pushed to `private`
   (btsherry/forge-edh-arena). **Never push to `origin`.**
-- Upstream base: `0eec0a16d0a` (2026-07-15). We are ~396 commits ahead
-  (2026-08-24 count); upstream is very active (daily card-script updates,
-  regular engine work).
+- Upstream base: `0eec0a16d0a` (2026-07-15). We are 439 commits ahead
+  (2026-09-04 count, `git rev-list --count`); upstream is very active (daily
+  card-script updates, regular engine work).
 - The early rule "all new code lives in forge-arena, no parent-module
   patches" was **deliberately dropped**. The full delta outside
-  `forge-arena/` (2026-08-24 re-audit) is **31 files**:
-  - **12 modified**: 9 upstream Java files (~263 changed lines —
+  `forge-arena/` (2026-09-04 recount, `git diff --name-status
+  0eec0a16d0a..HEAD -- . ':(exclude)forge-arena'`) is **32 files**:
+  - **12 modified**: 9 upstream Java files (301 insertions / 22 deletions —
     ComputerUtil, ComputerUtilMana, AiCostDecision, MyRandom, Combat,
     StaticAbilityTurnPhaseReversed, MagicStack, EDocID, CMatchUI), plus
     `forge-gui/res/defaults/match.xml`, root `pom.xml` (the
     `<module>forge-arena</module>` reactor line), and root `.gitignore`
     (arena transient-output block). pom.xml is a REAL conflict surface —
     upstream edits it routinely.
-  - **19 new (ours, zero conflict)**: 8 parent-module code files (2
+  - **20 new (ours, zero conflict)**: 9 parent-module code files (3
     forge-ai hook interfaces, 6 gui-desktop advisor/AI-panel files — see
     INVENTORY §1b), 10 `runs/*.json` batch templates, and the historical
     `UPSTREAM-PATCHES.md` deep-dive log at root.
@@ -97,7 +98,7 @@ git merge origin/master
 | Class | Files | Resolution rule |
 |---|---|---|
 | Behavioral patches | `ComputerUtil.java`, `ComputerUtilMana.java`, `MyRandom.java` | Take upstream's new shape, **re-apply our behavior by hand** at the marker site; the guarding test is the arbiter. If upstream restructured the whole method, port the *intent* (rollback-to-origin-zone; seedable RNG), not the old lines. |
-| Additive hooks | `AiCostDecision.java` (+`TapCostPreference`, `SacCostPreference`) | Re-insert the hook blocks ahead of upstream's (possibly new) stock logic. `TapSymmetryBreakTest` / `SacrificeSeatChoiceTest` arbitrate. |
+| Additive hooks | `AiCostDecision.java` (+`TapCostPreference`, `SacCostPreference`, `PaymentPickPreference`) | Re-insert the hook blocks ahead of upstream's (possibly new) stock logic. `TapSymmetryBreakTest` / `SacrificeSeatChoiceTest` / `PaymentPickPreferenceTest` arbitrate. |
 | Diagnostics | `MagicStack.java` | Re-add the FIZZLE stderr block wherever the fizzle branch now lives. Cheap; skip only if the branch vanished. |
 | Defensive fixes | `Combat.java`, `StaticAbilityTurnPhaseReversed.java` | Check if upstream fixed it themselves (both are upstream-worthy); if yes, drop ours — divergence shrinks. |
 | GUI wiring | `EDocID.java`, `CMatchUI.java` | Re-add the 2+6 registration lines. Mechanical. |
@@ -110,7 +111,13 @@ git merge origin/master
 `handlePlayingSpellAbility` / `chooseTargetsFor` /
 `playSaFromPlayEffect` (and its callers in `PlayEffect`/`DiscoverEffect`/
 `ChangeZoneEffect`) / `choosePermanentsToSacrifice`+`Destroy` (callers in
-`SacrificeEffect`/`BalanceEffect`) against our `MailboxController`
+`SacrificeEffect`/`BalanceEffect`) / the wave-2 set — `chooseNewTargetsFor`
+(caller `ChangeTargetsEffect`), `chooseCardsToDiscardToMaximumHandSize`,
+`tuckCardsViaMulligan`, `arrangeForScry`/`Surveil`, `orderMoveToZoneList`,
+`willPutCardOnTop`, `chooseNumber` x2, `announceRequirements`,
+`chooseOptionalCosts`, `chooseProtectionType`, `vote`, `chooseCardsPile`
+(check `TwoPilesEffect`'s FaceDown domain: False/One/True) —
+against our `MailboxController`
 mirrors and the assumptions in `INTERACTIVE-ARENA.md` field notes
 14/15/21/49/50; port semantic changes. In `AiCostDecision`, re-verify the
 two hook consults (`visit(CostTapType)` → `TapCostPreference`,
@@ -124,7 +131,9 @@ surface).
 
 **5) Gates, in order — all must pass before touching `arena`:**
 ```sh
-mvn -pl forge-arena -am package         # full build + 318 tests + checkstyle, ONLINE first time
+mvn -pl forge-arena -am package         # FULL gate: no -DskipTests here — sync
+                                        # imports must re-run upstream module
+                                        # tests (BUILDING.md gate policy)
 ( cd forge-arena/runner && python3 -m unittest discover -s tests )   # 113 py tests
 forge-arena/runner/run_table.sh --preflight
 forge-arena/scripts/arena-play.sh --all-ai   # one live smoke game, watch for

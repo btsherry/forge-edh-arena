@@ -83,15 +83,127 @@ import forge.util.collect.FCollectionView;
  * silent brain never hangs the game.
  */
 public final class MailboxController extends PlayerControllerAi
-        implements forge.ai.TapCostPreference, forge.ai.SacCostPreference {
+        implements forge.ai.TapCostPreference, forge.ai.SacCostPreference,
+        forge.ai.PaymentPickPreference {
 
     private final MailboxProtocol bus;
     private final int seatIndex;
 
     MailboxController(Game game, Player p, LobbyPlayer lobby, MailboxProtocol bus) {
+        this(game, p, lobby, bus, -1);
+    }
+
+    /**
+     * Item 11a: a controller for {@code p} whose decisions are answered by
+     * ANOTHER seat's brain ({@code controllingSeat} — Mindslaver, Worst
+     * Fears, Emrakul class: CR 721, the controlling player decides). The bus
+     * is the master's; every request carries {@code state.controllingSeat}
+     * and a prompt line saying whose cards are being played.
+     */
+    MailboxController(Game game, Player p, LobbyPlayer lobby, MailboxProtocol bus,
+            int controllingSeat) {
+        this(game, p, lobby, bus, controllingSeat, null);
+    }
+
+    /** @param controller the MASTER player when this controller plays another
+     *  player's cards (BL-05): its board rides along in every request as
+     *  {@code state.controllerBoard}; null for a seat playing itself. */
+    MailboxController(Game game, Player p, LobbyPlayer lobby, MailboxProtocol bus,
+            int controllingSeat, Player controller) {
         super(game, p, lobby);
         this.bus = bus;
         this.seatIndex = p.getId();
+        this.controllingSeat = controllingSeat;
+        this.controllerPlayer = controller;
+        bus.setGameId(gameIdFor(game));
+        STOCK_FALLBACKS.put(p, new int[1]);
+    }
+
+    /** -1 for a seat playing its own cards; else the seat whose brain answers. */
+    private final int controllingSeat;
+    /** The master player under Mindslaver-class control, else null (BL-05). */
+    private final Player controllerPlayer;
+
+    /** Item 12: per controlled Player, how many decisions fell to stock
+     *  because the brain did not answer (timeout, or absent heartbeat). Read
+     *  by GameResultSpool at game end; weak keys so finished games collect. */
+    private static final Map<Player, int[]> STOCK_FALLBACKS =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    static int stockFallbacksFor(Player p) {
+        int[] n = STOCK_FALLBACKS.get(p);
+        return n == null ? 0 : n[0];
+    }
+
+    /** All exchanges go through here: a null answer (timeout / absent brain /
+     *  IO) is a stock fallback and is counted (item 12). */
+    private JsonNode exchange(MailboxProtocol.Request req) {
+        if (controllingSeat >= 0 && controllerPlayer != null && req.state instanceof Map) {
+            // BL-05 / CR 721.3: the master decides with full sight of the
+            // controlled player's hidden information (the request's own state
+            // is theirs) AND of its own board — this is the master's brain
+            // reading its own hand, so nothing crosses a fairness line.
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> st = (Map<String, Object>) req.state;
+                st.put("controllerBoard", controllerBoard(req.turn));
+            } catch (RuntimeException ignore) {
+                // the board summary is help, never a precondition
+            }
+        }
+        JsonNode resp = bus.exchange(req);
+        if (resp == null) {
+            countStockFallback();
+        }
+        return resp;
+    }
+
+    /** Every request is built here (item 11a): a controlled seat's request
+     *  says so in its prompt, so the master's brain knows it is playing
+     *  someone else's cards this turn. */
+    private MailboxProtocol.Request req(int turn, String type, String prompt) {
+        if (controllingSeat >= 0) {
+            prompt = "YOU ARE CONTROLLING SEAT " + seatIndex + " THIS TURN (Mindslaver-class; "
+                    + "you are seat " + controllingSeat + "). The state below is THEIRS and you "
+                    + "decide for them with THEIR cards. " + prompt;
+        }
+        return new MailboxProtocol.Request(seatIndex, turn, phaseName(getGame()), type, prompt);
+    }
+
+    /** One id per Game instance (item 8): start millis + JVM pid, assigned on
+     *  first ask and shared by every seat's bus and the advisor feed. Weak
+     *  keys let finished games collect. */
+    private static final Map<Game, String> GAME_IDS =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    /** BL-28: two Games created in the same millisecond of one JVM shared an
+     *  id; the serial makes the id unique per process. */
+    private static final java.util.concurrent.atomic.AtomicInteger GAME_SERIAL =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    static String gameIdFor(Game game) {
+        if (game == null) {
+            return null;
+        }
+        return GAME_IDS.computeIfAbsent(game, g ->
+                System.currentTimeMillis() + "-" + ProcessHandle.current().pid()
+                        + "-" + GAME_SERIAL.incrementAndGet());
+    }
+
+    /** The master's own board for a controlled seat's request (BL-05): the
+     *  same projection the master's own requests carry, minus stack/opponents
+     *  (those are in the request already). Includes the master's hand. */
+    private Map<String, Object> controllerBoard(int turn) {
+        Map<String, Object> full = buildState(controllerPlayer, controllingSeat, turn);
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (String k : new String[] {"seat", "life", "poison", "hand", "handSize", "battlefield",
+                "graveyard", "exile", "commandZone", "librarySize", "manaPool",
+                "manaAvailableNow", "manaSources", "untappedManaSourceCount"}) {
+            if (full.containsKey(k)) {
+                out.put(k, full.get(k));
+            }
+        }
+        return out;
     }
 
     /**
@@ -103,6 +215,19 @@ public final class MailboxController extends PlayerControllerAi
      */
     private final Map<SpellAbility, Card> pendingTapPreference =
             new java.util.IdentityHashMap<>();
+
+    /** Wave-3 (adversarial review F2): payment hooks are DEFAULT-DENY — they
+     *  open windows only while this seat's own cast/activation is actually
+     *  EXECUTING. The engine constructs AiCostDecision during planning scans
+     *  too (DrawAi.willPayCosts, and any caller we have not audited); without
+     *  this flag those scans opened phantom payment windows. */
+    private boolean inPaymentContext = false;
+
+    /** Wave-3 (F1): true while OUR window enumeration runs — the
+     *  chooseOptionalCosts consult inside getOriginalAndAltCostAbilities
+     *  returns empty then (base spell always enumerates; affordable
+     *  optional-cost variants become separate cast-window options). */
+    private boolean enumeratingOwnWindow = false;
 
     /**
      * Triggers the seat declined AT AIM TIME (game-12 finding 1): a
@@ -118,6 +243,30 @@ public final class MailboxController extends PlayerControllerAi
      *  invalid answers fall back to the CALLER (auto-aim + auto-decline),
      *  never to stock's silent aiming. */
     private int triggerAimDepth = 0;
+
+    /** Item 1 (review 2026-09-03): whether the trigger being aimed right now is
+     *  OPTIONAL. The id-0 "DECLINE this optional trigger" option is offered only
+     *  then — it used to be offered for every aimed trigger, so a brain could
+     *  "decline" a MANDATORY trigger, the code auto-aimed the first legal
+     *  candidate, and confirmTrigger (which returns true for mandatory) let it
+     *  resolve against a target the brain never chose. */
+    private boolean aimingOptionalTrigger = false;
+
+    /** Why the last trigger-aim exchange ended: a real pick, an explicit
+     *  decline, or no usable answer (timeout / malformed / unknown id). The
+     *  caller must tell the last two apart — a decline is honored, a failed
+     *  exchange falls to STOCK aiming like every other surface's timeout. */
+    private enum AimOutcome { ANSWERED, DECLINED, NO_ANSWER }
+    private AimOutcome lastAimOutcome = AimOutcome.ANSWERED;
+
+    /** Item 4 (review 2026-09-03): the last cast this controller REFUSED
+     *  (unaffordable, or a modal cast that failed). Reported in the NEXT
+     *  window's state as {@code lastRefused} plus a prompt sentence, and that
+     *  card is left out of that one window's options. Before, the refusal
+     *  went to stderr only and the brain saw identical options with no note —
+     *  a model-call livelock on the same pick. */
+    private Map<String, Object> lastRefused = null;
+    private Card refusedHost = null;
 
     @Override
     public CardCollection preferredTapCards(SpellAbility ability) {
@@ -244,12 +393,15 @@ public final class MailboxController extends PlayerControllerAi
         // does when it casts.
         List<SpellAbility> enumerated;
         try {
+            enumeratingOwnWindow = true; // F1: suppress optional-cost windows here
             enumerated = ComputerUtilAbility.getOriginalAndAltCostAbilities(
                     ComputerUtilAbility.getSpellAbilities(
                             ComputerUtilAbility.getAvailableCards(game, me), me), me);
         } catch (RuntimeException e) {
             enumerated = ComputerUtilAbility.getSpellAbilities(
                     ComputerUtilAbility.getAvailableCards(game, me), me);
+        } finally {
+            enumeratingOwnWindow = false;
         }
         for (SpellAbility sa : enumerated) {
             Card host = sa != null ? sa.getHostCard() : null;
@@ -406,14 +558,25 @@ public final class MailboxController extends PlayerControllerAi
         } else {
             prompt = "Instant-speed window — respond to what's on the stack, or pass.";
         }
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), decisionType, prompt)
-                .state(buildState(turn))
+        Map<String, Object> windowState = buildState(turn);
+        final Card skipHost = refusedHost; // item 4: suppressed for THIS window only
+        if (lastRefused != null) {
+            windowState.put("lastRefused", lastRefused);
+            prompt += " NOTE: your last pick, " + lastRefused.get("name")
+                    + (lastRefused.get("cost") != null ? " (" + lastRefused.get("cost") + ")" : "")
+                    + ", was refused: " + lastRefused.get("reason")
+                    + " It is omitted from this window; choose something else or pass.";
+        }
+        MailboxProtocol.Request req = req(turn, decisionType, prompt)
+                .state(windowState)
                 .option(0, "Pass (do nothing)", null, "PASS");
         Map<Integer, SpellAbility> byId = new LinkedHashMap<>();
         int id = 1;
         for (SpellAbility sa : playable) {
             Card host = sa.getHostCard();
+            if (skipHost != null && host == skipHost) {
+                continue; // item 4: the refused card sits out one window
+            }
             String name = host != null ? host.getName() : sa.getDescription();
             String cost = sa.getPayCosts() != null ? sa.getPayCosts().toSimpleString() : null;
             String lab = label(sa, host);
@@ -444,6 +607,17 @@ public final class MailboxController extends PlayerControllerAi
             } catch (RuntimeException ignore) {
                 // label decoration must never break option building
             }
+            // BL-01 (2026-09-04): a life-for-mana static (PayLifeInsteadOf:<C>,
+            // K'rrik) makes a cost payable with life when sources are short —
+            // the payer now does that — so state the true bill before the pick.
+            try {
+                String lifeHint = lifeForPipsHint(sa, host, windowState);
+                if (lifeHint != null) {
+                    lab += lifeHint;
+                }
+            } catch (RuntimeException ignore) {
+                // label decoration must never break option building
+            }
             // Ground the float decision: any visible mana ability that would
             // add 2+ RIGHT NOW says so (Cradle, Selvala, Tomb...), so the
             // brain prices the float without doing SVar math itself.
@@ -456,6 +630,41 @@ public final class MailboxController extends PlayerControllerAi
             req.option(id, lab, cost, typeHint(host));
             byId.put(id, sa);
             id++;
+            // Wave-3 (F1/F5): offer affordable optional-cost VARIANTS as their
+            // own options ("Whispers of the Muse [+ Buyback: {5}]") — the seat
+            // picks the variant directly; no extra window ever opens, and
+            // affordability is vetted here so an unpayable kicker is simply
+            // not offered.
+            if (sa.isSpell()) {
+                try {
+                    List<forge.game.spellability.OptionalCostValue> ocvs =
+                            forge.game.GameActionUtil.getOptionalCostValues(sa);
+                    int variants = 0;
+                    for (forge.game.spellability.OptionalCostValue v : ocvs) {
+                        if (variants >= 3) {
+                            break;
+                        }
+                        SpellAbility variant = forge.game.GameActionUtil.addOptionalCosts(
+                                sa, java.util.Collections.singletonList(v));
+                        variant.setActivatingPlayer(me);
+                        if (!variant.canPlay()
+                                || !ComputerUtilCost.canPayCost(variant, me, false)) {
+                            continue;
+                        }
+                        String vcost = variant.getPayCosts() != null
+                                ? variant.getPayCosts().toSimpleString() : null;
+                        req.option(id, label(variant, host) + " [+ " + v.getType().name()
+                                + ": " + (v.getCost() != null
+                                    ? v.getCost().toSimpleString() : "?") + "]",
+                                vcost, typeHint(host));
+                        byId.put(id, variant);
+                        id++;
+                        variants++;
+                    }
+                } catch (RuntimeException ignore) {
+                    // variant expansion must never break option building
+                }
+            }
         }
         Map<Integer, Card> symPieceById = new LinkedHashMap<>();
         for (Object[] offer : symOffers) {
@@ -469,7 +678,11 @@ public final class MailboxController extends PlayerControllerAi
             id++;
         }
 
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
+        // item 4: the refusal has been reported and suppressed once; a fresh
+        // refusal (below, in playChosenSpellAbility) re-arms it for the next window
+        lastRefused = null;
+        refusedHost = null;
         if (resp == null) {
             // timeout / IO / silent brain — never hang; let stock decide
             return super.chooseSpellAbilityToPlay();
@@ -528,9 +741,13 @@ public final class MailboxController extends PlayerControllerAi
             }
             if (!payable) {
                 Card h = sa.getHostCard();
+                noteRefusal(sa, h, "unaffordable");
                 System.err.println("[mailbox seat " + seatIndex + "] REFUSED unaffordable cast: "
-                        + (h != null ? h.getName() : sa) + " — cost not payable now (kept in zone)");
-                return true; // keep priority; brain gets a fresh window with the same options
+                        + (h != null ? h.getName() : sa) + " — needed "
+                        + (lastRefused != null ? lastRefused.get("needed") : "?") + ", payable now "
+                        + (lastRefused != null ? lastRefused.get("payableNow") : "?")
+                        + " (kept in zone; the next window says so)");
+                return true; // keep priority; the next window reports the refusal (item 4)
             }
         }
         // (1) Announce mana X on the cast path (601.2b) — the stock AI path never
@@ -545,6 +762,38 @@ public final class MailboxController extends PlayerControllerAi
             }
             sa.setXManaCostPaid(x);
         }
+        // (1b) NON-mana announce vars (Multikicker / Pledge class — wave-3 F6):
+        // the AI cast path never calls announceRequirements (that is a
+        // human-only choke point), so announced vars silently stayed unset and
+        // a mailbox-cast Everflowing Chalice entered with 0 counters. Mirror
+        // PlaySpellAbility here: ask the seat, then set the SVar on BOTH the
+        // ability and its host card. Null/timeout leaves stock behavior.
+        try {
+            String announce = sa.getParam("Announce");
+            if (announce != null) {
+                for (String varName : announce.split(",")) {
+                    String v = varName.trim();
+                    if ("X".equalsIgnoreCase(v) || "Y".equalsIgnoreCase(v)) {
+                        continue; // mana X handled above
+                    }
+                    org.apache.commons.lang3.Range<Integer> r2 =
+                            AbilityUtils.getAnnouncementBounds(sa, v);
+                    Integer n = numberViaSeat("ANNOUNCE " + v + " for "
+                            + (sa.getHostCard() != null
+                                ? sa.getHostCard().getName() : "?")
+                            + " (" + r2.getMinimum() + "-" + r2.getMaximum() + ")",
+                            r2.getMinimum(), r2.getMaximum(), false);
+                    if (n != null) {
+                        sa.setSVar(v, n.toString());
+                        if (sa.getHostCard() != null) {
+                            sa.getHostCard().setSVar(v, n.toString());
+                        }
+                    }
+                }
+            }
+        } catch (RuntimeException ignore) {
+            // announce must never break the cast; stock default applies
+        }
         // (2) MODAL (Charm) spells choose their mode INSIDE the cast
         // (CharmEffect.makeChoices runs within handlePlayingSpellAbility), which
         // is AFTER any pre-targeting — so the chosen mode's target was never set
@@ -555,7 +804,10 @@ public final class MailboxController extends PlayerControllerAi
         // mode's target is set at the right moment. (Stock's deferred runnable
         // only handled TargetingPlayer, which is why modal targets were lost.)
         if (sa.getApi() == ApiType.Charm) {
-            ComputerUtil.handlePlayingSpellAbility(getPlayer(), sa, () -> {
+            inPaymentContext = true;
+            boolean charmPlayed;
+            try {
+            charmPlayed = ComputerUtil.handlePlayingSpellAbility(getPlayer(), sa, () -> {
                 // Target the CHAINED MODES, never the Charm shell. Calling
                 // chooseTargetsFor(sa) on the shell fell through to stock
                 // (no TargetRestrictions on a Charm) -> brains.doTrigger ->
@@ -577,7 +829,19 @@ public final class MailboxController extends PlayerControllerAi
                     }
                 }
             });
-            return true;
+            } finally {
+                inPaymentContext = false;
+            }
+            if (!charmPlayed) {
+                // item 11c: the cast result was silently dropped before — a
+                // failed modal cast is reported like a refusal so the brain
+                // is not told "played" about a spell still in hand
+                Card h = sa.getHostCard();
+                System.err.println("[mailbox seat " + seatIndex + "] modal cast FAILED: "
+                        + (h != null ? h.getName() : sa) + " (payment/targeting)");
+                noteRefusal(sa, h, "cast failed");
+            }
+            return charmPlayed;
         }
         // (3) NON-modal targeted spell: pre-set targets BEFORE the cast so we
         // can gracefully keep the card in hand if none can be chosen (rather
@@ -596,7 +860,13 @@ public final class MailboxController extends PlayerControllerAi
                 return true;
             }
         }
-        boolean played = super.playChosenSpellAbility(sa);
+        inPaymentContext = true;
+        boolean played;
+        try {
+            played = super.playChosenSpellAbility(sa);
+        } finally {
+            inPaymentContext = false;
+        }
         // FIZZLE-2 diagnostic (game 7, 2026-08-17): a required-target spell we
         // pre-targeted reached resolution with EMPTY TargetChoices ("[arena]
         // FIZZLE ... (none set)"). If the cast path ever swaps the SA object
@@ -638,6 +908,54 @@ public final class MailboxController extends PlayerControllerAi
         return played;
     }
 
+    /**
+     * Item 4: record a refused/failed cast for the next window. The numbers
+     * are the ENGINE's — what it measured when it refused — so the brain is
+     * told the same thing the payer will say: cost needed vs mana payable
+     * right now from the pool plus ONE activation of each untapped source.
+     * Sequences (float first, then cast) are the brain's to plan; the
+     * sentence says so.
+     */
+    private void noteRefusal(SpellAbility sa, Card host, String kind) {
+        try {
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("name", host != null ? host.getName() : String.valueOf(sa));
+            String cost = sa.getPayCosts() != null ? sa.getPayCosts().toSimpleString() : null;
+            int tax = commanderTax(sa, host);
+            if (tax > 0) {
+                cost = (cost != null ? cost : "") + " + {" + tax + "} commander tax";
+            }
+            r.put("cost", cost);
+            int needed = -1;
+            try {
+                needed = (sa.getPayCosts() != null && sa.getPayCosts().getTotalMana() != null
+                        ? sa.getPayCosts().getTotalMana().getCMC() : 0) + tax;
+            } catch (RuntimeException ignore) {
+                // best effort
+            }
+            int payableNow = -1;
+            try {
+                payableNow = ComputerUtilMana.getAvailableManaEstimate(getPlayer());
+            } catch (RuntimeException ignore) {
+                // best effort
+            }
+            r.put("needed", needed);
+            r.put("payableNow", payableNow);
+            r.put("kind", kind);
+            r.put("reason", "unaffordable".equals(kind)
+                    ? "cost not payable right now — it needs " + (needed >= 0 ? needed : "?")
+                      + " mana (colors matter too); the pool plus ONE activation of each "
+                      + "untapped source yields " + (payableNow >= 0 ? payableNow : "?")
+                      + ". If you meant to generate mana first (rituals, untappers, "
+                      + "commander mana), activate those abilities, THEN cast."
+                    : "the cast failed at payment or targeting; the card is still in hand.");
+            lastRefused = r;
+            refusedHost = host;
+        } catch (RuntimeException ignore) {
+            // reporting must never break the cast path
+        }
+    }
+
     /** True for a spell whose X the card doesn't set itself (mirrors
      *  PlaySpellAbility: Count$xPaid or empty SVar with an X in the cost). */
     private static boolean needsManaX(SpellAbility sa) {
@@ -676,6 +994,7 @@ public final class MailboxController extends PlayerControllerAi
         state.put("min", min);
         state.put("max", hi);
         state.put("cancelable", true);
+        state.put("puntHigh", true); // X: max is affordability-capped (F3)
         Card host = ability.getHostCard();
         String what = host != null ? host.getName() : String.valueOf(ability);
         String prompt = "Announce 'X' for " + what + " — pick a number in ["
@@ -688,10 +1007,9 @@ public final class MailboxController extends PlayerControllerAi
                   + "re-cast for a real X."
                 : "Answer -1 to CANCEL the cast instead (do that when max is far "
                   + "below your intent; float mana, then re-cast).";
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_NUMBER", prompt)
+        MailboxProtocol.Request req = req(turn, "CHOOSE_NUMBER", prompt)
                 .state(state);
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp != null) {
             JsonNode chosen = resp.get("chosen");
             if (chosen != null && chosen.isInt()) {
@@ -719,6 +1037,24 @@ public final class MailboxController extends PlayerControllerAi
             Integer x = mailboxManaX(ability, min, max);
             return x == null ? max + 1000 : x;
         }
+        // Non-mana announce vars (Multikicker, Pledge, generic ChooseNumber —
+        // wave-2, note 52): stock's heuristics silently picked these on the AI
+        // cast path (a mailbox-cast Everflowing Chalice entered with 0
+        // counters — note 15b's sibling). Bounded announces go to the seat;
+        // degenerate or unbounded ranges keep stock.
+        try {
+            if (max > min && max - min <= 1000) {
+                Integer n = numberViaSeat("ANNOUNCE " + announce
+                        + (ability != null && ability.getHostCard() != null
+                            ? " for " + ability.getHostCard().getName() : "")
+                        + " (" + min + "-" + max + ")", min, max, false);
+                if (n != null) {
+                    return n;
+                }
+            }
+        } catch (RuntimeException e) {
+            // fall through to stock
+        }
         return super.announceRequirements(ability, min, max, announce);
     }
 
@@ -734,6 +1070,11 @@ public final class MailboxController extends PlayerControllerAi
      */
     @Override
     public boolean chooseTargetsFor(SpellAbility currentAbility) {
+        if (triggerAimDepth > 0) {
+            // paths that hand the part to stock below (multi-target, no
+            // restrictions, no candidates) count as answered — stock aimed it
+            lastAimOutcome = AimOutcome.ANSWERED;
+        }
         try {
             forge.game.spellability.TargetRestrictions tgt =
                     currentAbility.getTargetRestrictions();
@@ -794,17 +1135,20 @@ public final class MailboxController extends PlayerControllerAi
             Map<String, Object> state = buildState(turn);
             state.put("min", minT);
             state.put("max", 1);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_ENTITY",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_ENTITY",
                     "Choose the TARGET for " + host.getName() + " ("
                             + currentAbility + ").")
                     .state(state);
+            if (triggerAimDepth > 0) {
+                lastAimOutcome = AimOutcome.NO_ANSWER; // until a usable answer lands
+            }
             if (minT == 0) {
                 req.option(0, "No target (decline)", null, "NONE");
-            } else if (triggerAimDepth > 0) {
+            } else if (triggerAimDepth > 0 && aimingOptionalTrigger) {
                 // aiming one of the seat's own OPTIONAL triggers: declining is
                 // always legal (the trigger will be auto-aimed to stack legally
-                // and auto-declined at resolution — it does nothing)
+                // and auto-declined at resolution — it does nothing). A
+                // MANDATORY trigger gets no such option (item 1).
                 req.option(0, "DECLINE this optional trigger (it will do nothing)",
                         null, "NONE");
             }
@@ -844,21 +1188,24 @@ public final class MailboxController extends PlayerControllerAi
                 byId.put(id, e);
                 id++;
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp != null) {
                 JsonNode chosen = resp.get("chosenId");
                 if (chosen != null && chosen.isInt()) {
                     int cid = chosen.asInt();
                     if (cid == 0 && minT == 0) {
+                        lastAimOutcome = AimOutcome.ANSWERED;
                         return true; // legal decline; ability proceeds untargeted
                     }
-                    if (cid == 0 && triggerAimDepth > 0) {
+                    if (cid == 0 && triggerAimDepth > 0 && aimingOptionalTrigger) {
+                        lastAimOutcome = AimOutcome.DECLINED;
                         return false; // trigger decline: caller auto-aims + auto-declines
                     }
                     forge.game.GameObject pick = byId.get(cid);
                     if (pick != null) {
                         currentAbility.resetTargets();
                         if (currentAbility.getTargets().add(pick)) {
+                            lastAimOutcome = AimOutcome.ANSWERED;
                             return true;
                         }
                     }
@@ -868,8 +1215,9 @@ public final class MailboxController extends PlayerControllerAi
             // targeting must never crash the seat — stock is the floor
         }
         if (triggerAimDepth > 0) {
-            // inside trigger aiming, stock's silent aim would override the
-            // seat's intent — report failure and let the caller handle it
+            // inside trigger aiming: no usable answer. Report failure and let
+            // the caller fall to STOCK aiming (item 1) — never a silent decline.
+            lastAimOutcome = AimOutcome.NO_ANSWER;
             return false;
         }
         return super.chooseTargetsFor(currentAbility);
@@ -881,14 +1229,16 @@ public final class MailboxController extends PlayerControllerAi
         int turn = game.getPhaseHandler().getTurn();
         Map<String, Object> state = buildState(turn);
         state.put("cardsToReturn", cardsToReturn);
-        state.put("hand", ownZone(ZoneType.Hand));
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "MULLIGAN",
+        // (item 15: the MULLIGAN request used to overwrite state.hand with bare
+        // names while every other request sends {name,manaCost,types} objects —
+        // the contract test caught it, and rules.combo_status_line had been
+        // reading an EMPTY hand at the one decision where it matters most)
+        MailboxProtocol.Request req = req(turn, "MULLIGAN",
                 "Keep this hand, or mulligan?")
                 .state(state)
                 .option(1, "Keep", null, "KEEP")
                 .option(0, "Mulligan", null, "MULLIGAN");
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null) {
             return super.mulliganKeepHand(firstPlayer, cardsToReturn);
         }
@@ -929,8 +1279,7 @@ public final class MailboxController extends PlayerControllerAi
         int turn = game.getPhaseHandler().getTurn();
         Map<String, Object> state = buildState(turn);
         state.put("defenders", defenderList(defenders));
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "DECLARE_ATTACKERS",
+        MailboxProtocol.Request req = req(turn, "DECLARE_ATTACKERS",
                 "Assign attackers to defenders (empty = attack with nobody).")
                 .state(state);
         Map<Integer, Card> byId = new LinkedHashMap<>();
@@ -939,7 +1288,7 @@ public final class MailboxController extends PlayerControllerAi
             byId.put(c.getId(), c);
         }
 
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("attackers") == null || !resp.get("attackers").isArray()) {
             super.declareAttackers(attacker, combat);
             return;
@@ -1015,8 +1364,7 @@ public final class MailboxController extends PlayerControllerAi
             attackerById.put(c.getId(), c);
         }
         state.put("attackers", atkList);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "DECLARE_BLOCKERS",
+        MailboxProtocol.Request req = req(turn, "DECLARE_BLOCKERS",
                 "Assign blockers to attackers (empty = no blocks).")
                 .state(state);
         Map<Integer, Card> blockerById = new LinkedHashMap<>();
@@ -1025,7 +1373,7 @@ public final class MailboxController extends PlayerControllerAi
             blockerById.put(c.getId(), c);
         }
 
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("blocks") == null || !resp.get("blocks").isArray()) {
             super.declareBlockers(defender, combat);
             return;
@@ -1086,16 +1434,20 @@ public final class MailboxController extends PlayerControllerAi
         // Gate to a genuine, card-only choice. A lone forced option or a
         // non-card entity (e.g. a player) is not worth mailboxing.
         boolean meaningful = opts.size() > 1 || (isOptional && opts.size() == 1);
-        if (!meaningful || !allCards(opts)) {
+        if (!meaningful || !cardsOrPlayers(opts)) {
             return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, relatedPlayer, params);
         }
+        // Card-only lists keep their card-id encoding (unchanged wire shape);
+        // a list containing PLAYERS switches to sequential synthetic ids —
+        // player ids collide with the reserved 0 and with card ids, and the
+        // targeting window already proved the sequential pattern (wave-2).
+        boolean cardIds = allCards(opts);
         Game game = getGame();
         int turn = game.getPhaseHandler().getTurn();
         Map<String, Object> state = buildState(turn);
         state.put("min", isOptional ? 0 : 1);
         state.put("max", 1);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_ENTITY",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_ENTITY",
                 (title != null && !title.isEmpty() ? title : "Choose one")
                         + (isOptional ? " (or none)" : ""))
                 .state(state);
@@ -1103,8 +1455,9 @@ public final class MailboxController extends PlayerControllerAi
             req.option(0, "Choose none", null, "NONE"); // id 0 reserved for "none"
         }
         Map<Integer, T> byId = new LinkedHashMap<>();
+        int seq = 1;
         for (T e : opts) {
-            int oid = e.getId();
+            int oid = cardIds ? e.getId() : seq++;
             if (oid <= 0 || byId.containsKey(oid)) {
                 // 0 is reserved for "none"; a collision means an ambiguous id
                 // space we can't safely round-trip — let stock decide.
@@ -1113,7 +1466,7 @@ public final class MailboxController extends PlayerControllerAi
             req.option(oid, entityLabel(e), null, entityType(e));
             byId.put(oid, e);
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null) {
             return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, relatedPlayer, params);
         }
@@ -1149,30 +1502,31 @@ public final class MailboxController extends PlayerControllerAi
         int lo = Math.max(0, min);
         // Nothing to decide when empty, max<=0, forced "take all" (lo>=size), or
         // any option is not a Card.
-        if (opts.isEmpty() || max <= 0 || lo >= opts.size() || !allCards(opts)) {
+        if (opts.isEmpty() || max <= 0 || lo >= opts.size() || !cardsOrPlayers(opts)) {
             return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
         }
+        boolean cardIds = allCards(opts); // see the single chooser's id note
         int hi = Math.min(max, opts.size());
         Game game = getGame();
         int turn = game.getPhaseHandler().getTurn();
         Map<String, Object> state = buildState(turn);
         state.put("min", lo);
         state.put("max", hi);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_ENTITIES",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_ENTITIES",
                 (title != null && !title.isEmpty() ? title : "Choose")
                         + " (" + lo + "-" + hi + ")")
                 .state(state);
         Map<Integer, T> byId = new LinkedHashMap<>();
+        int seq = 1;
         for (T e : opts) {
-            int oid = e.getId();
+            int oid = cardIds ? e.getId() : seq++;
             if (oid <= 0 || byId.containsKey(oid)) {
                 return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
             }
             req.option(oid, entityLabel(e), null, entityType(e));
             byId.put(oid, e);
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
             return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
         }
@@ -1208,6 +1562,9 @@ public final class MailboxController extends PlayerControllerAi
      */
     @Override
     public CardCollection preferredSacCards(SpellAbility ability, String type, int amount) {
+        if (!inPaymentContext) {
+            return null; // planning scan (F2): stock decides, no window
+        }
         try {
             Player me = getPlayer();
             Card host = ability != null ? ability.getHostCard() : null;
@@ -1293,8 +1650,7 @@ public final class MailboxController extends PlayerControllerAi
         Map<String, Object> state = buildState(turn);
         state.put("min", lo);
         state.put("max", hi);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_ENTITIES",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_ENTITIES",
                 prompt + " (answer {\"chosen\": [ids]})")
                 .state(state);
         Map<Integer, Card> byId = new LinkedHashMap<>();
@@ -1307,7 +1663,7 @@ public final class MailboxController extends PlayerControllerAi
                     c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
             byId.put(oid, c);
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
             return null;
         }
@@ -1350,8 +1706,7 @@ public final class MailboxController extends PlayerControllerAi
         state.put("max", num);
         state.put("allowRepeat", allowRepeat);
         Card host = sa != null ? sa.getHostCard() : null;
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_MODE",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_MODE",
                 "Choose mode(s) for " + (host != null ? host.getName() : "ability")
                         + " (" + lo + "-" + num + (allowRepeat ? ", may repeat" : "") + ")")
                 .state(state);
@@ -1363,7 +1718,7 @@ public final class MailboxController extends PlayerControllerAi
             }
             req.option(i, desc != null && !desc.isEmpty() ? desc : ("mode " + i), null, "MODE");
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
             return super.chooseModeForAbility(sa, possible, min, num, allowRepeat);
         }
@@ -1412,8 +1767,7 @@ public final class MailboxController extends PlayerControllerAi
         state.put("min", isOptional ? 0 : 1);
         state.put("max", 1);
         state.put("destination", destination != null ? destination.name() : null);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_CARD",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_CARD",
                 (selectPrompt != null && !selectPrompt.isEmpty() ? selectPrompt : "Choose a card")
                         + (destination != null ? " -> " + destination.name() : ""))
                 .state(state);
@@ -1430,7 +1784,7 @@ public final class MailboxController extends PlayerControllerAi
                     c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
             byId.put(oid, c);
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null) {
             return super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList, delayedReveal, selectPrompt, isOptional, decider);
         }
@@ -1479,8 +1833,7 @@ public final class MailboxController extends PlayerControllerAi
             state.put("min", lo);
             state.put("max", hi);
             Card src = sa != null ? sa.getHostCard() : null;
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_CARDS",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_CARDS",
                     "DISCARD " + lo + "-" + hi + " from "
                             + (p == getPlayer() ? "YOUR hand" : p.getName() + "'s cards")
                             + (src != null ? " [source: " + src.getName() + "]" : "")
@@ -1496,7 +1849,7 @@ public final class MailboxController extends PlayerControllerAi
                         c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
                 byId.put(oid, c);
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
                 return super.chooseCardsToDiscardFrom(p, sa, validCards, min, max, visibleToChooser);
             }
@@ -1535,8 +1888,7 @@ public final class MailboxController extends PlayerControllerAi
             Map<String, Object> state = buildState(turn);
             state.put("min", 1);
             state.put("max", 1);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_CARD",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_CARD",
                     "CHOOSE FACE: " + (message != null ? message : "pick a face")
                             + (sa != null && sa.getHostCard() != null
                                 ? " [source: " + sa.getHostCard().getName() + "]" : ""))
@@ -1551,7 +1903,7 @@ public final class MailboxController extends PlayerControllerAi
                 byId.put(id, f);
                 id++;
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp != null && resp.get("chosenId") != null && resp.get("chosenId").isInt()) {
                 forge.card.ICardFace pick = byId.get(resp.get("chosenId").asInt());
                 if (pick != null) {
@@ -1577,8 +1929,7 @@ public final class MailboxController extends PlayerControllerAi
             Map<String, Object> state = buildState(turn);
             state.put("min", 1);
             state.put("max", 1);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_CARD",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_CARD",
                     "CHOOSE STATE/SIDE: " + (message != null ? message : "pick a state")
                             + (sa != null && sa.getHostCard() != null
                                 ? " [source: " + sa.getHostCard().getName() + "]" : ""))
@@ -1592,7 +1943,7 @@ public final class MailboxController extends PlayerControllerAi
                 byId.put(id, st);
                 id++;
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp != null && resp.get("chosenId") != null && resp.get("chosenId").isInt()) {
                 forge.game.card.CardState pick = byId.get(resp.get("chosenId").asInt());
                 if (pick != null) {
@@ -1613,29 +1964,533 @@ public final class MailboxController extends PlayerControllerAi
             if (max <= min) {
                 return super.chooseNumberForCostReduction(sa, min, max);
             }
-            Game game = getGame();
-            int turn = game.getPhaseHandler().getTurn();
-            Map<String, Object> state = buildState(turn);
-            state.put("min", min);
-            state.put("max", max);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_NUMBER",
-                    "COST REDUCTION: choose a number " + min + "-" + max
-                            + (sa != null && sa.getHostCard() != null
-                                ? " for " + sa.getHostCard().getName() : "")
-                            + " (answer {\"chosen\": <n>})")
-                    .state(state);
-            JsonNode resp = bus.exchange(req);
-            if (resp != null && resp.get("chosen") != null && resp.get("chosen").isInt()) {
-                int n = resp.get("chosen").asInt();
-                if (n >= min && n <= max) {
-                    return n;
-                }
-            }
-            return super.chooseNumberForCostReduction(sa, min, max);
+            Integer n = numberViaSeat("COST REDUCTION: choose a number " + min + "-" + max
+                    + (sa != null && sa.getHostCard() != null
+                        ? " for " + sa.getHostCard().getName() : ""), min, max, true);
+            return n != null ? n : super.chooseNumberForCostReduction(sa, min, max);
         } catch (RuntimeException e) {
             return super.chooseNumberForCostReduction(sa, min, max);
         }
+    }
+
+    // ---- wave-2 (2026-08-28 dual audit, note 52): the missed-surface sweep ---
+
+    /** One bounded CHOOSE_NUMBER exchange; null → caller falls back.
+     *  {@code puntHigh}: whether a runner TIMEOUT should answer max (true
+     *  only for X-like costs where max is affordability-capped — wave-3 F3:
+     *  a punt of 99 on Wheel of Misfortune's bid was game-losing). */
+    private Integer numberViaSeat(String prompt, int min, int max, boolean puntHigh) {
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", min);
+        state.put("max", max);
+        state.put("puntHigh", puntHigh);
+        MailboxProtocol.Request req = req(turn, "CHOOSE_NUMBER",
+                prompt + " (answer {\"chosen\": <n>})")
+                .state(state);
+        JsonNode resp = exchange(req);
+        if (resp != null && resp.get("chosen") != null && resp.get("chosen").isInt()) {
+            int n = resp.get("chosen").asInt();
+            if (n >= min && n <= max) {
+                return n;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * One bounded pick-indices exchange over a finite label list (the
+     * CHOOSE_MODE wire shape: option ids are 0-based INDICES). Returns the
+     * chosen indices (distinct, in answer order, count within min..max) or
+     * null → caller falls back to stock.
+     */
+    private List<Integer> indexChoiceViaSeat(String prompt, List<String> labels,
+            int min, int max) {
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", min);
+        state.put("max", max);
+        state.put("allowRepeat", false);
+        MailboxProtocol.Request req = req(turn, "CHOOSE_MODE",
+                prompt + " (" + min + "-" + max + ")")
+                .state(state);
+        for (int i = 0; i < labels.size(); i++) {
+            String l = labels.get(i);
+            req.option(i, l != null && !l.isEmpty() ? l : ("choice " + i), null, "CHOICE");
+        }
+        JsonNode resp = exchange(req);
+        if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+            return null;
+        }
+        List<Integer> picks = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        for (JsonNode idn : resp.get("chosen")) {
+            if (idn == null || !idn.isInt()) {
+                return null;
+            }
+            int idx = idn.asInt();
+            if (idx < 0 || idx >= labels.size() || !seen.add(idx)) {
+                return null;
+            }
+            picks.add(idx);
+        }
+        if (picks.size() < min || picks.size() > max) {
+            return null;
+        }
+        return picks;
+    }
+
+    /**
+     * Pitch/return/put-to-library COST payments ({@link forge.ai.PaymentPickPreference},
+     * consulted by {@code AiCostDecision} at actual payment time). The seat
+     * already chose the alt-cost cast or activation; this names WHICH card
+     * pays (which blue card Force of Will eats, which creature Temur
+     * Sabertooth bounces) instead of stock's power-sort heuristics. Forced
+     * payments answer locally; null → stock, exactly as before the hook.
+     */
+    @Override
+    public CardCollection preferredPaymentCards(SpellAbility ability, String kind,
+            List<Card> valid, int amount) {
+        if (!inPaymentContext) {
+            return null; // planning scan (F2): stock decides, no window
+        }
+        try {
+            if (valid == null || amount <= 0 || valid.size() < amount) {
+                return null;
+            }
+            if (valid.size() == amount) {
+                return new CardCollection(valid); // forced — nothing to decide
+            }
+            Card host = ability != null ? ability.getHostCard() : null;
+            List<Card> picked = cardChoiceViaSeat(
+                    kind + " PAYMENT for " + (host != null ? host.getName() : "a cost")
+                            + (ability != null ? " (" + ability + ")" : "")
+                            + " — choose exactly " + amount,
+                    valid, amount, amount);
+            return picked == null ? null : new CardCollection(picked);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Cleanup-step discard to maximum hand size (dual-audit consensus #1):
+     * stock binned the sculpted Necropotence/wheel hand by worst-card
+     * heuristic with zero mailbox records. Own hand — hidden-info-safe.
+     */
+    @Override
+    public CardCollectionView chooseCardsToDiscardToMaximumHandSize(int numDiscard) {
+        try {
+            List<Card> hand = new ArrayList<>(getPlayer().getCardsIn(ZoneType.Hand));
+            if (numDiscard <= 0 || hand.size() <= numDiscard) {
+                return super.chooseCardsToDiscardToMaximumHandSize(numDiscard);
+            }
+            List<Card> picked = cardChoiceViaSeat(
+                    "DISCARD to maximum hand size (cleanup) — choose exactly " + numDiscard,
+                    hand, numDiscard, numDiscard);
+            return picked != null ? new CardCollection(picked)
+                    : super.chooseCardsToDiscardToMaximumHandSize(numDiscard);
+        } catch (RuntimeException e) {
+            return super.chooseCardsToDiscardToMaximumHandSize(numDiscard);
+        }
+    }
+
+    /**
+     * London-mulligan bottoming: the MULLIGAN request already told the brain
+     * N cards go under — the seat now picks WHICH N (stock's max-CMC rule
+     * bottomed exactly the payoff the keep was built around).
+     */
+    @Override
+    public CardCollectionView tuckCardsViaMulligan(CardCollectionView hand, int cardsToReturn) {
+        try {
+            List<Card> opts = new ArrayList<>(hand);
+            if (cardsToReturn <= 0 || opts.size() <= cardsToReturn) {
+                return super.tuckCardsViaMulligan(hand, cardsToReturn);
+            }
+            List<Card> picked = cardChoiceViaSeat(
+                    "BOTTOM for London mulligan — choose exactly " + cardsToReturn
+                            + " to put under your library",
+                    opts, cardsToReturn, cardsToReturn);
+            return picked != null ? new CardCollection(picked)
+                    : super.tuckCardsViaMulligan(hand, cardsToReturn);
+        } catch (RuntimeException e) {
+            return super.tuckCardsViaMulligan(hand, cardsToReturn);
+        }
+    }
+
+    /**
+     * Scry (own peek — the looked-at cards are exactly the request options).
+     * The seat picks what goes to the BOTTOM; the kept cards stay on top in
+     * the shown order (v1 simplification: the keep/bottom split is the
+     * decision that wins games; reordering the kept 2 is a later refinement).
+     */
+    @Override
+    public org.apache.commons.lang3.tuple.ImmutablePair<CardCollection, CardCollection>
+            arrangeForScry(CardCollection topN) {
+        try {
+            if (topN == null || topN.isEmpty()) {
+                return super.arrangeForScry(topN);
+            }
+            List<Card> opts = new ArrayList<>(topN);
+            List<Card> bottom = cardChoiceViaSeat(
+                    "SCRY — choose cards to put on the BOTTOM of your library "
+                            + "(the rest stay on TOP in the shown order)",
+                    opts, 0, opts.size());
+            if (bottom == null) {
+                return super.arrangeForScry(topN);
+            }
+            CardCollection toTop = new CardCollection();
+            for (Card c : topN) {
+                if (!bottom.contains(c)) {
+                    toTop.add(c);
+                }
+            }
+            return org.apache.commons.lang3.tuple.ImmutablePair.of(
+                    toTop, new CardCollection(bottom));
+        } catch (RuntimeException e) {
+            return super.arrangeForScry(topN);
+        }
+    }
+
+    /** Surveil — same shape as scry, graveyard instead of bottom. */
+    @Override
+    public org.apache.commons.lang3.tuple.ImmutablePair<CardCollection, CardCollection>
+            arrangeForSurveil(CardCollection topN) {
+        try {
+            if (topN == null || topN.isEmpty()) {
+                return super.arrangeForSurveil(topN);
+            }
+            List<Card> opts = new ArrayList<>(topN);
+            List<Card> grave = cardChoiceViaSeat(
+                    "SURVEIL — choose cards to put into your GRAVEYARD "
+                            + "(the rest stay on TOP in the shown order)",
+                    opts, 0, opts.size());
+            if (grave == null) {
+                return super.arrangeForSurveil(topN);
+            }
+            CardCollection toTop = new CardCollection();
+            for (Card c : topN) {
+                if (!grave.contains(c)) {
+                    toTop.add(c);
+                }
+            }
+            return org.apache.commons.lang3.tuple.ImmutablePair.of(
+                    toTop, new CardCollection(grave));
+        } catch (RuntimeException e) {
+            return super.arrangeForSurveil(topN);
+        }
+    }
+
+    /**
+     * Ordering own cards onto the LIBRARY (Sensei's Top spins, Scroll Rack
+     * put-backs, Brainstorm-class): the answer's order IS the final order,
+     * FIRST = closest to TOP (the human dialog's convention). Only library
+     * moves of 2+ own-visible cards are mailboxed; graveyard ordering keeps
+     * stock's Volrath logic.
+     */
+    @Override
+    public CardCollectionView orderMoveToZoneList(CardCollectionView cards,
+            ZoneType destinationZone, SpellAbility source) {
+        try {
+            if (destinationZone != ZoneType.Library || cards == null || cards.size() < 2) {
+                return super.orderMoveToZoneList(cards, destinationZone, source);
+            }
+            // Adversarial review F4: consumers place these one at a time via
+            // moveToLibrary(next, 0), so for TOP-of-library moves the LAST
+            // element ends on top — both stock controllers reverse before
+            // returning. Mirror them exactly (bottom moves are not reversed
+            // and the prompt flips accordingly).
+            boolean top = orderedMoveToTopOfLibrary(destinationZone, source);
+            List<Card> opts = new ArrayList<>(cards);
+            List<Card> ordered = cardChoiceViaSeat(
+                    "ORDER for your library — answer must list ALL " + opts.size()
+                            + " ids; FIRST = closest to " + (top ? "TOP" : "BOTTOM"),
+                    opts, opts.size(), opts.size());
+            if (ordered == null) {
+                return super.orderMoveToZoneList(cards, destinationZone, source);
+            }
+            CardCollection res = new CardCollection(ordered);
+            if (top) {
+                java.util.Collections.reverse(res);
+            }
+            return res;
+        } catch (RuntimeException e) {
+            return super.orderMoveToZoneList(cards, destinationZone, source);
+        }
+    }
+
+    /** Clash / top-or-bottom singles: a yes/no the seat should own. */
+    @Override
+    public boolean willPutCardOnTop(Card c) {
+        try {
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", 1);
+            state.put("max", 1);
+            String otext = c != null && c.getRules() != null ? c.getRules().getOracleText() : "";
+            state.put("spell", (c != null ? c.getName() : "?") + " — "
+                    + (otext.length() > 200 ? otext.substring(0, 200) : otext));
+            MailboxProtocol.Request req = req(turn, "CONFIRM",
+                    "TOP OR BOTTOM: put " + (c != null ? c.getName() : "the card")
+                            + " on TOP of your library? (No = bottom)")
+                    .state(state)
+                    .option(0, "No (bottom)", null, "NO")
+                    .option(1, "Yes (top)", null, "YES");
+            JsonNode resp = exchange(req);
+            if (resp != null && resp.get("chosenId") != null && resp.get("chosenId").isInt()
+                    && (resp.get("chosenId").asInt() == 0 || resp.get("chosenId").asInt() == 1)) {
+                return resp.get("chosenId").asInt() == 1;
+            }
+            return super.willPutCardOnTop(c);
+        } catch (RuntimeException e) {
+            return super.willPutCardOnTop(c);
+        }
+    }
+
+    /** Generic number choice (Wheel of Misfortune class) — the seam only
+     *  hooked cost-reduction and mana-X announce before wave-2. */
+    @Override
+    public int chooseNumber(SpellAbility sa, String title, int min, int max) {
+        try {
+            if (max <= min) {
+                return super.chooseNumber(sa, title, min, max);
+            }
+            Integer n = numberViaSeat("CHOOSE A NUMBER"
+                    + (sa != null && sa.getHostCard() != null
+                        ? " for " + sa.getHostCard().getName() : "")
+                    + (title != null && !title.isEmpty() ? " — " + title : "")
+                    + " (" + min + "-" + max + ")", min, max, false);
+            return n != null ? n : super.chooseNumber(sa, title, min, max);
+        } catch (RuntimeException e) {
+            return super.chooseNumber(sa, title, min, max);
+        }
+    }
+
+    /** Number choice from a discrete value list (non-contiguous). */
+    @Override
+    public int chooseNumber(SpellAbility sa, String title, List<Integer> values,
+            Player relatedPlayer) {
+        try {
+            if (values == null || values.size() <= 1) {
+                return super.chooseNumber(sa, title, values, relatedPlayer);
+            }
+            List<String> labels = new ArrayList<>();
+            for (Integer v : values) {
+                labels.add(String.valueOf(v));
+            }
+            List<Integer> picks = indexChoiceViaSeat("CHOOSE A VALUE"
+                    + (sa != null && sa.getHostCard() != null
+                        ? " for " + sa.getHostCard().getName() : "")
+                    + (title != null && !title.isEmpty() ? " — " + title : ""),
+                    labels, 1, 1);
+            return picks != null ? values.get(picks.get(0))
+                    : super.chooseNumber(sa, title, values, relatedPlayer);
+        } catch (RuntimeException e) {
+            return super.chooseNumber(sa, title, values, relatedPlayer);
+        }
+    }
+
+    /**
+     * Retargeting spells (Deflecting Swat / Misdirection class — dual-audit
+     * finding 2): stock literally cannot do this ({@code return null}), so a
+     * seat-cast redirect resolved as a silent no-op. Single-target,
+     * non-divided changes are seat-aimed through the existing targeting
+     * window; multi-target/divided keep today's behavior (targets unchanged).
+     * Contract per the engine: mutate the SA's targets on success and return
+     * them; restore and return null otherwise.
+     */
+    @Override
+    public forge.game.spellability.TargetChoices chooseNewTargetsFor(SpellAbility ability,
+            java.util.function.Predicate<forge.game.GameObject> filter, boolean optional) {
+        forge.game.spellability.TargetChoices old = null;
+        SpellAbility sa = ability;
+        try {
+            if (ability != null && ability.isWrapper()) {
+                sa = ((forge.game.trigger.WrappedAbility) ability).getWrappedAbility();
+            }
+            if (sa == null || !sa.usesTargeting()) {
+                return super.chooseNewTargetsFor(ability, filter, optional);
+            }
+            old = sa.getTargets();
+            if (old == null || old.size() != 1 || sa.isDividedAsYouChoose()) {
+                return super.chooseNewTargetsFor(ability, filter, optional);
+            }
+            sa.clearTargets();
+            if (chooseTargetsFor(sa)) {
+                forge.game.spellability.TargetChoices next = sa.getTargets();
+                boolean legal = next != null && next.size() == 1;
+                if (legal && filter != null) {
+                    for (forge.game.GameObject t : next) {
+                        legal &= filter.test(t);
+                    }
+                }
+                if (legal) {
+                    return next;
+                }
+            }
+            sa.setTargets(old);
+            return null; // keep the original targets (= stock's outcome)
+        } catch (RuntimeException e) {
+            if (old != null && sa != null) {
+                sa.setTargets(old);
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Optional add-on costs (Buyback / Kicker / Cleave). Wave-3 rework
+     * (adversarial review F1/F5): this surface is consulted by
+     * {@code ComputerUtilAbility.getOriginalAndAltCostAbilities} at option
+     * ENUMERATION time — on every priority window, for every such spell in
+     * hand — so mailboxing it here spammed windows and a "yes" hid the base
+     * spell. During OUR enumeration it now returns empty (base always
+     * enumerates; affordable variants are offered as separate cast-window
+     * options — see the variant expansion in the window builder). Everywhere
+     * else (stock-fallback windows, simulations) stock's vetted heuristics
+     * run unchanged.
+     */
+    @Override
+    public List<forge.game.spellability.OptionalCostValue> chooseOptionalCosts(
+            SpellAbility choosen, List<forge.game.spellability.OptionalCostValue> optionalCostValues) {
+        if (enumeratingOwnWindow) {
+            return java.util.Collections.emptyList();
+        }
+        return super.chooseOptionalCosts(choosen, optionalCostValues);
+    }
+
+    /** Protection color/type on resolution (Mother of Runes' second half). */
+    @Override
+    public String chooseProtectionType(SpellAbility sa, List<String> choices) {
+        try {
+            if (choices == null || choices.size() <= 1) {
+                return super.chooseProtectionType(sa, choices);
+            }
+            List<Integer> picks = indexChoiceViaSeat(
+                    "PROTECTION for "
+                            + (sa != null && sa.getHostCard() != null
+                                ? sa.getHostCard().getName() : "the ability")
+                            + " — choose what to protect from (see state.stack/stackTargets)",
+                    choices, 1, 1);
+            return picks != null ? choices.get(picks.get(0))
+                    : super.chooseProtectionType(sa, choices);
+        } catch (RuntimeException e) {
+            return super.chooseProtectionType(sa, choices);
+        }
+    }
+
+    /** Council's-dilemma votes: table politics belong to the seat. */
+    @Override
+    public Object vote(SpellAbility sa, String prompt, List<Object> options,
+            com.google.common.collect.ListMultimap<Object, Player> votes,
+            Player forPlayer, boolean optional) {
+        try {
+            if (options == null || options.size() <= 1) {
+                return super.vote(sa, prompt, options, votes, forPlayer, optional);
+            }
+            List<String> labels = new ArrayList<>();
+            for (Object o : options) {
+                labels.add(String.valueOf(o));
+            }
+            List<Integer> picks = indexChoiceViaSeat(
+                    "VOTE" + (prompt != null && !prompt.isEmpty() ? " — " + prompt : "")
+                            + (sa != null && sa.getHostCard() != null
+                                ? " (" + sa.getHostCard().getName() + ")" : ""),
+                    labels, 1, 1);
+            return picks != null ? options.get(picks.get(0))
+                    : super.vote(sa, prompt, options, votes, forPlayer, optional);
+        } catch (RuntimeException e) {
+            return super.vote(sa, prompt, options, votes, forPlayer, optional);
+        }
+    }
+
+    /** Fact-or-Fiction pile splits: true = pile 1. */
+    @Override
+    public boolean chooseCardsPile(SpellAbility sa, CardCollectionView pile1,
+            CardCollectionView pile2, String faceUp) {
+        try {
+            // The parameter is named faceUp but carries the script's FaceDown
+            // value (TwoPilesEffect): "False" (default) = both piles public,
+            // "One" = pile 1 is the face-DOWN pile, "True" = both face down.
+            // Review catch (Gemini, wave-2): the first cut leaked the hidden
+            // pile's contents to the chooser.
+            List<String> labels = new ArrayList<>();
+            labels.add("Pile 1: " + pileLabel(pile1, "False".equals(faceUp)));
+            labels.add("Pile 2: " + pileLabel(pile2,
+                    "False".equals(faceUp) || "One".equals(faceUp)));
+            List<Integer> picks = indexChoiceViaSeat(
+                    "CHOOSE A PILE for "
+                            + (sa != null && sa.getHostCard() != null
+                                ? sa.getHostCard().getName() : "the effect"),
+                    labels, 1, 1);
+            return picks != null ? picks.get(0) == 0
+                    : super.chooseCardsPile(sa, pile1, pile2, faceUp);
+        } catch (RuntimeException e) {
+            return super.chooseCardsPile(sa, pile1, pile2, faceUp);
+        }
+    }
+
+    /**
+     * Multikicker / Replicate / Casualty-class "pay N times" keyword costs
+     * (wave-3, the REAL Everflowing Chalice surface: `addExtraKeywordCost`
+     * calls this at EXECUTION time on the AI cast path — the Announce
+     * machinery never fires there). Stock pays greedy-max; the seat now
+     * chooses 0..affordable-cap. Timeout/invalid → stock's greedy answer.
+     */
+    @Override
+    public int chooseNumberForKeywordCost(SpellAbility sa, forge.game.cost.Cost cost,
+            forge.game.keyword.KeywordInterface keyword, String prompt, int max) {
+        try {
+            int cap = 0;
+            forge.game.cost.Cost costSoFar = sa.getPayCosts().copy();
+            for (int i = 0; i < Math.min(max, 20); i++) {
+                costSoFar.add(cost);
+                SpellAbility fullCostSa = sa.copyWithDefinedCost(costSoFar);
+                if (ComputerUtilCost.canPayCost(fullCostSa, getPlayer(), sa.isTrigger())) {
+                    cap++;
+                } else {
+                    break;
+                }
+            }
+            if (cap <= 0) {
+                return 0; // nothing affordable — same as stock
+            }
+            Integer n = numberViaSeat("KEYWORD COST — "
+                    + (prompt != null && !prompt.isEmpty() ? prompt : "pay how many times?")
+                    + " [" + keyword.getKeyword() + ", each: " + cost.toSimpleString()
+                    + "; affordable max " + cap + "]", 0, cap, false);
+            return n != null ? n
+                    : super.chooseNumberForKeywordCost(sa, cost, keyword, prompt, max);
+        } catch (RuntimeException e) {
+            return super.chooseNumberForKeywordCost(sa, cost, keyword, prompt, max);
+        }
+    }
+
+    /** TEST-ONLY: lets payment-vetting unit tests run their direct
+     *  AiCostDecision visits inside a payment context. Production callers
+     *  are the execution wrappers above. */
+    void paymentContextForTest(boolean v) {
+        inPaymentContext = v;
+    }
+
+    private static String pileLabel(CardCollectionView pile, boolean visible) {
+        if (pile == null || pile.isEmpty()) {
+            return "(empty)";
+        }
+        if (!visible) {
+            return pile.size() + " face-down card" + (pile.size() == 1 ? "" : "s");
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Card c : pile) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(c.getName());
+        }
+        return sb.toString();
     }
 
     /**
@@ -1661,8 +2516,7 @@ public final class MailboxController extends PlayerControllerAi
             Map<String, Object> state = buildState(turn);
             state.put("min", lo);
             state.put("max", hi);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_CARDS",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_CARDS",
                     (title != null && !title.isEmpty() ? title : "Choose cards")
                             + " (choose " + lo + "-" + hi
                             + "; answer {\"chosen\": [ids]})")
@@ -1677,7 +2531,7 @@ public final class MailboxController extends PlayerControllerAi
                         c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
                 byId.put(oid, c);
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
                 return super.chooseCardsForEffect(sourceList, sa, title, min, max, isOptional, params);
             }
@@ -1778,12 +2632,11 @@ public final class MailboxController extends PlayerControllerAi
                             : " (an OPPONENT's effect taxing you — e.g. a counter-unless-you-pay, "
                              + "Rhystic Study, Propaganda)")
                     + ". Paying uses your floating mana first, then untapped sources.";
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "PAY_UNLESS", prompt)
+            MailboxProtocol.Request req = req(turn, "PAY_UNLESS", prompt)
                     .state(state)
                     .option(0, "Decline — do not pay; let the effect happen", null, "NONE")
                     .option(1, "Pay " + cost.toSimpleString(), cost.toSimpleString(), "PAY");
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosenId") == null || !resp.get("chosenId").isInt()) {
                 return super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
             }
@@ -1791,7 +2644,15 @@ public final class MailboxController extends PlayerControllerAi
                 return false;
             }
             forge.game.cost.CostPayment pay = new forge.game.cost.CostPayment(cost, sa);
-            return pay.payComputerCosts(new forge.ai.AiCostDecision(me, sa, true));
+            // Item 11b: the seat owns WHICH permanent/card pays (sacrifice,
+            // discard, exile...) here too — the payment hooks only answer
+            // inside a payment context, and this call never opened one.
+            inPaymentContext = true;
+            try {
+                return pay.payComputerCosts(new forge.ai.AiCostDecision(me, sa, true));
+            } finally {
+                inPaymentContext = false;
+            }
         } catch (RuntimeException e) {
             return super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
         }
@@ -1820,8 +2681,7 @@ public final class MailboxController extends PlayerControllerAi
             state.put("min", lo);
             state.put("max", hi);
             state.put("destination", destination != null ? destination.name() : null);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_CARDS",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_CARDS",
                     (selectPrompt != null && !selectPrompt.isEmpty() ? selectPrompt : "Choose cards")
                             + (destination != null ? " -> " + destination.name() : "")
                             + " (choose " + lo + "-" + hi + "; answer {\"chosen\": [ids]})")
@@ -1836,7 +2696,7 @@ public final class MailboxController extends PlayerControllerAi
                         c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
                 byId.put(oid, c);
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
                 return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max, delayedReveal, selectPrompt, decider);
             }
@@ -1875,8 +2735,13 @@ public final class MailboxController extends PlayerControllerAi
                     && mode != null) {
                 return super.confirmAction(sa, mode, message, options, cardToShow, params);
             }
-            if (mode == null && (message == null || !message.toLowerCase().contains("play"))) {
-                // untyped confirms other than "do you want to play X" stay stock
+            boolean changeTargets = sa != null
+                    && sa.getApi() == ApiType.ChangeTargets; // F10: API, not text
+            // Item 11d: an untyped confirm reaches the seat when its SOURCE is
+            // the seat's own spell/ability (an engine fact) — not when the
+            // message happens to contain "play". Everything else stays stock.
+            boolean mine = sa != null && sa.getActivatingPlayer() == getPlayer();
+            if (mode == null && !changeTargets && !mine) {
                 return super.confirmAction(sa, mode, message, options, cardToShow, params);
             }
             Game game = getGame();
@@ -1886,15 +2751,19 @@ public final class MailboxController extends PlayerControllerAi
             state.put("min", 1);
             state.put("max", 1);
             state.put("confirmMode", mode != null ? mode.name() : "untyped");
+            // Item 10: structure for the runner's punt rule ("yes only when
+            // free AND mine"). The effect's cost was paid at cast/activation;
+            // saying yes here spends nothing further.
+            state.put("hasCost", false);
+            state.put("isMine", mine);
             String prompt = "CONFIRM (" + (mode != null ? mode.name() : "question") + "): "
                     + (message != null ? message : "?")
                     + (host != null ? "  [source: " + host.getName() + "]" : "");
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CONFIRM", prompt)
+            MailboxProtocol.Request req = req(turn, "CONFIRM", prompt)
                     .state(state)
                     .option(0, "No", null, "NO")
                     .option(1, "Yes", null, "YES");
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosenId") == null || !resp.get("chosenId").isInt()) {
                 return super.confirmAction(sa, mode, message, options, cardToShow, params);
             }
@@ -1917,8 +2786,9 @@ public final class MailboxController extends PlayerControllerAi
      * seat (single-target -> CHOOSE_ENTITY; multi-target/odd -> stock, exactly
      * as chooseTargetsFor already does). Non-targeting triggers keep stock's
      * doTrigger setup untouched; copied spells keep stock's branch verbatim.
-     * ORDER of simultaneous triggers stays stock (orderSimultaneousSa) — a
-     * separate, smaller surface.
+     * ORDER of simultaneous triggers is the seat's since BL-02 (2026-09-04):
+     * {@link #orderSimultaneousSa} opens a CHOOSE_MODE window (purpose
+     * TRIGGER_ORDER) when the batch holds two or more distinct triggers.
      */
     @Override
     public void orderAndPlaySimultaneousSa(List<SpellAbility> activePlayerSAs) {
@@ -1934,7 +2804,12 @@ public final class MailboxController extends PlayerControllerAi
                     ready = getAi().doTrigger(sa, true);
                 }
                 if (ready) {
-                    ComputerUtil.playStack(sa, me, game);
+                    inPaymentContext = true;
+                    try {
+                        ComputerUtil.playStack(sa, me, game);
+                    } finally {
+                        inPaymentContext = false;
+                    }
                 }
             } else {
                 if (sa.isCopied()) {
@@ -1959,6 +2834,7 @@ public final class MailboxController extends PlayerControllerAi
 
     /** Mirror of stock prepareSingleSa with the seat aiming targeting triggers. */
     private boolean prepareTriggerViaSeat(SpellAbility sa) {
+        final SpellAbility root = sa; // the WrappedAbility — optionality lives here
         Card host = sa.getHostCard();
         if (sa.getApi() == ApiType.Charm) {
             // modal trigger: mode choice already reaches the seat via
@@ -1987,7 +2863,13 @@ public final class MailboxController extends PlayerControllerAi
         if (!anyTargeting) {
             return getAi().doTrigger(sa, true); // stock setup for non-targeting triggers
         }
+        // Item 1: only an OPTIONAL trigger may be declined at aim time. The
+        // root is the WrappedAbility; isMandatory() == isTrigger() && !optional,
+        // so an un-wrapped trigger (should not occur) reads as mandatory — the
+        // safe direction.
+        final boolean optionalTrigger = !root.isMandatory();
         triggerAimDepth++;
+        aimingOptionalTrigger = optionalTrigger;
         try {
         for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
             if (!s.usesTargeting()) {
@@ -1998,6 +2880,17 @@ public final class MailboxController extends PlayerControllerAi
             Card h = s.getHostCard();
             forge.game.spellability.TargetRestrictions tr = s.getTargetRestrictions();
             int minT = (tr != null && h != null) ? tr.getMinTargets(h, s) : 0;
+            if (!aimed && lastAimOutcome == AimOutcome.NO_ANSWER) {
+                // No usable answer (timeout / malformed / unknown id): the
+                // whole trigger falls to STOCK aiming, exactly as every other
+                // surface degrades on a failed exchange. Before item 1 this
+                // path was treated as a decline — a silent brain silently
+                // threw its own triggers away.
+                System.err.println("[mailbox seat " + seatIndex + "] trigger "
+                        + (h != null ? h.getName() : "?") + ": no usable answer at "
+                        + "aim — stock aims (fallback)");
+                return getAi().doTrigger(sa, true);
+            }
             if (minT > 0 && !s.isTargetNumberValid()) {
                 // Game-12 finding 1: the brain declined (or the exchange
                 // failed) on a REQUIRED-target trigger. A targetless stack
@@ -2030,6 +2923,7 @@ public final class MailboxController extends PlayerControllerAi
         return true;
         } finally {
             triggerAimDepth--;
+            aimingOptionalTrigger = false;
         }
     }
 
@@ -2061,6 +2955,8 @@ public final class MailboxController extends PlayerControllerAi
                 state.put("confirmMode", "PLAY_FROM_EFFECT");
                 state.put("spell", host != null ? host.getName() : String.valueOf(tgtSA));
                 state.put("free", free);
+                state.put("hasCost", !free); // item 10: structured punt facts
+                state.put("isMine", true);
                 String desc;
                 try {
                     desc = tgtSA.getStackDescription();
@@ -2074,12 +2970,11 @@ public final class MailboxController extends PlayerControllerAi
                                     ? tgtSA.getPayCosts().toSimpleString() : "?") + ")")
                         + " — " + (desc.length() > 140 ? desc.substring(0, 140) : desc)
                         + "  1 = cast it, 0 = decline.";
-                MailboxProtocol.Request req = new MailboxProtocol.Request(
-                        seatIndex, turn, phaseName(game), "CONFIRM", prompt)
+                MailboxProtocol.Request req = req(turn, "CONFIRM", prompt)
                         .state(state)
                         .option(0, "No — decline the play", null, "NO")
                         .option(1, free ? "Yes — cast it for free" : "Yes — cast it", null, "YES");
-                JsonNode resp = bus.exchange(req);
+                JsonNode resp = exchange(req);
                 if (resp == null || resp.get("chosenId") == null
                         || !resp.get("chosenId").isInt()) {
                     return super.playSaFromPlayEffect(tgtSA);
@@ -2106,7 +3001,12 @@ public final class MailboxController extends PlayerControllerAi
                     return super.playSaFromPlayEffect(tgtSA);  // mandatory: stock floor
                 }
             }
-            return ComputerUtil.playStack(tgtSA, getPlayer(), getGame());
+            inPaymentContext = true;
+            try {
+                return ComputerUtil.playStack(tgtSA, getPlayer(), getGame());
+            } finally {
+                inPaymentContext = false;
+            }
         } catch (RuntimeException e) {
             return super.playSaFromPlayEffect(tgtSA);
         }
@@ -2183,6 +3083,8 @@ public final class MailboxController extends PlayerControllerAi
             }
             state.put("triggerText", trigText);
             state.put("yesCost", hasCost ? yesCost.toSimpleString() : "none");
+            state.put("hasCost", hasCost); // item 10: structured punt facts
+            state.put("isMine", true);     // it is the seat's own trigger
             List<String> tgts = new ArrayList<>();
             for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
                 if (s.usesTargeting()) {
@@ -2200,13 +3102,12 @@ public final class MailboxController extends PlayerControllerAi
                         + " (pool now " + me.getManaPool().totalMana() + ")." : "  Saying YES costs nothing.")
                     + (tgts.isEmpty() ? "" : "  Targets already chosen: " + tgts + ".")
                     + "  1 = yes (do it" + (hasCost ? ", pay" : "") + "), 0 = no.";
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CONFIRM", prompt)
+            MailboxProtocol.Request req = req(turn, "CONFIRM", prompt)
                     .state(state)
                     .option(0, "No — decline the trigger", null, "NO")
                     .option(1, "Yes" + (hasCost ? " — pay " + yesCost.toSimpleString() + " and do it" : " — do it"),
                             hasCost ? yesCost.toSimpleString() : null, "YES");
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosenId") == null || !resp.get("chosenId").isInt()) {
                 return super.confirmTrigger(wrapper);
             }
@@ -2216,10 +3117,339 @@ public final class MailboxController extends PlayerControllerAi
         }
     }
 
+    // ---- item 16: measure the surfaces still decided by stock ----------------
+    // Six real decisions the brain does not own yet. Nothing here changes
+    // behavior: each override logs one line and delegates to stock, so a few
+    // games of gui.out say which of them actually fire and how often —
+    // surfaces are opened by evidence, not by completeness.
+
+    private void stockSurface(String which) {
+        try {
+            System.err.println("[arena] STOCK-SURFACE seat " + seatIndex + " " + which
+                    + " turn " + getGame().getPhaseHandler().getTurn());
+        } catch (RuntimeException ignore) {
+            // measurement must never affect play
+        }
+    }
+
+    @Override
+    public String chooseSomeType(String kindOfType, SpellAbility sa,
+            java.util.Collection<String> validTypes, boolean isOptional) {
+        stockSurface("chooseSomeType(" + kindOfType + ")");
+        return super.chooseSomeType(kindOfType, sa, validTypes, isOptional);
+    }
+
+    @Override
+    public byte chooseColor(String message, SpellAbility sa, forge.card.ColorSet colors) {
+        List<Byte> pick = colorsViaSeat(message, sa, sa != null ? sa.getHostCard() : null, colors, 1, 1, false);
+        if (pick != null && pick.size() == 1) {
+            return pick.get(0);
+        }
+        stockSurface("chooseColor");
+        return super.chooseColor(message, sa, colors);
+    }
+
+    @Override
+    public byte chooseColorAllowColorless(String message, Card card, forge.card.ColorSet colors) {
+        List<Byte> pick = colorsViaSeat(message, null, card, colors, 1, 1, true);
+        if (pick != null && pick.size() == 1) {
+            return pick.get(0);
+        }
+        stockSurface("chooseColorAllowColorless");
+        return super.chooseColorAllowColorless(message, card, colors);
+    }
+
+    /** The hook "as CARDNAME enters, choose a color" and every other
+     *  {@code ChooseColor} effect actually reach (review 2026-09-04): the
+     *  plural form with a count range. Same window, {@code min}/{@code max}
+     *  as offered. */
+    @Override
+    public forge.card.ColorSet chooseColors(String message, SpellAbility sa, int min, int max,
+            forge.card.ColorSet options) {
+        List<Byte> pick = colorsViaSeat(message, sa, sa != null ? sa.getHostCard() : null, options,
+                min, max, false);
+        if (pick != null) {
+            int mask = 0;
+            for (byte b : pick) {
+                mask |= b;
+            }
+            return forge.card.ColorSet.fromMask(mask);
+        }
+        stockSurface("chooseColors(" + min + "-" + max + ")");
+        return super.chooseColors(message, sa, min, max, options);
+    }
+
+    /**
+     * BL-03 (2026-09-04): a colour choice reaches the seat as a one-pick
+     * {@code CHOOSE_MODE} window ({@code state.purpose = "COLOR"}) when it is a
+     * genuine choice — two or more legal colours — and it is NOT inside a
+     * payment context (the payer's planning scans and tap-for-this-cost picks
+     * already know the colour they need and stay on stock). Null or malformed
+     * → null here → the caller falls to stock. Gated on context, never on card.
+     */
+    private List<Byte> colorsViaSeat(String message, SpellAbility sa, Card host,
+            forge.card.ColorSet colors, int min, int max, boolean allowColorless) {
+        // The payer's planning scans and tap-for-this-cost picks stay on stock;
+        // a MANA ability's own colour choice does not (review 2026-09-04): the
+        // auto-payer narrows those to one colour via express choice (no window
+        // below), so the only mana choice that reaches here with 2+ colours is
+        // the brain's deliberate float — its pick, not stock's hand heuristic.
+        boolean manaChoice = sa != null && sa.getApi() == ApiType.Mana;
+        if ((inPaymentContext && !manaChoice) || colors == null) {
+            return null;
+        }
+        List<Byte> legal = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        for (byte c : forge.card.MagicColor.WUBRG) {
+            if (colors.hasAnyColor(c)) {
+                legal.add(c);
+                names.add(forge.card.MagicColor.toLongString(c));
+            }
+        }
+        if (allowColorless) {
+            legal.add(forge.card.MagicColor.COLORLESS);
+            names.add("colorless");
+        }
+        int lo = Math.max(1, Math.min(min, legal.size()));
+        int hi = Math.max(lo, Math.min(max, legal.size()));
+        if (legal.size() < 2 || lo >= legal.size()) {
+            return null; // no genuine choice
+        }
+        try {
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", lo);
+            state.put("max", hi);
+            state.put("allowRepeat", false);
+            state.put("purpose", "COLOR");
+            MailboxProtocol.Request req = req(turn, "CHOOSE_MODE",
+                    "Choose " + (hi == 1 ? "a color" : lo + "-" + hi + " colors") + " for "
+                            + (host != null ? host.getName() : "an effect")
+                            + (message != null && !message.isEmpty() ? ": " + message : "")
+                            + " — answer the index" + (hi == 1 ? " of ONE color." : "es.")).state(state);
+            for (int i = 0; i < names.size(); i++) {
+                req.option(i, names.get(i), null, "COLOR");
+            }
+            JsonNode resp = exchange(req);
+            if (resp != null && resp.get("chosen") != null && resp.get("chosen").isArray()
+                    && resp.get("chosen").size() == 0) {
+                countStockFallback(); // the documented hand-back: stock picks
+                return null;
+            }
+            if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()
+                    || resp.get("chosen").size() < lo || resp.get("chosen").size() > hi) {
+                return null;
+            }
+            List<Byte> out = new ArrayList<>();
+            Set<Integer> seen = new HashSet<>();
+            for (JsonNode idn : resp.get("chosen")) {
+                if (idn == null || !idn.isInt() || idn.asInt() < 0 || idn.asInt() >= legal.size()
+                        || !seen.add(idn.asInt())) {
+                    return null;
+                }
+                out.add(legal.get(idn.asInt()));
+            }
+            return out;
+        } catch (RuntimeException e) {
+            return null; // the seam never decides by crashing — stock picks
+        }
+    }
+
+    @Override
+    public List<SpellAbility> orderSimultaneousSa(List<SpellAbility> activePlayerSAs) {
+        if (activePlayerSAs == null || activePlayerSAs.size() <= 1) {
+            return super.orderSimultaneousSa(activePlayerSAs);
+        }
+        // BL-02 (2026-09-04), CR 603.3b: the controller orders its simultaneous
+        // triggers. Group by description (host + trigger text): a batch of
+        // identical triggers has no order to choose and never opens a window,
+        // which is also what keeps a 22-trigger death batch cheap.
+        try {
+            Map<String, List<SpellAbility>> groups = new LinkedHashMap<>();
+            for (SpellAbility sa : activePlayerSAs) {
+                groups.computeIfAbsent(triggerKey(sa), k -> new ArrayList<>()).add(sa);
+            }
+            if (groups.size() >= 2) {
+                List<SpellAbility> ordered = orderViaSeat(groups);
+                if (ordered != null) {
+                    return ordered;
+                }
+                stockSurface("orderSimultaneousSa(" + activePlayerSAs.size() + ")");
+            }
+        } catch (RuntimeException e) {
+            // the seam never decides by crashing (grouping included) — stock orders
+            stockSurface("orderSimultaneousSa(" + activePlayerSAs.size() + ") threw");
+        }
+        return super.orderSimultaneousSa(activePlayerSAs);
+    }
+
+    /** BL-01: when the seat has {@code PayLifeInsteadOf:<C>} and this spell's
+     *  cost has {@code <C>} pips that mana available now cannot cover, the label
+     *  says how many pips life can pay and at what price. Null otherwise. */
+    private String lifeForPipsHint(SpellAbility sa, Card host, Map<String, Object> windowState) {
+        if (host == null || !sa.isSpell() || sa.getPayCosts() == null
+                || sa.getPayCosts().getTotalMana() == null) {
+            return null;
+        }
+        forge.card.mana.ManaCost mc = sa.getPayCosts().getTotalMana();
+        Object avail = windowState.get("manaAvailableNow");
+        int available = avail instanceof Number ? ((Number) avail).intValue() : -1;
+        if (available < 0 || mc.getCMC() <= available) {
+            return null;
+        }
+        Player me = getPlayer();
+        for (byte c : forge.card.MagicColor.WUBRG) {
+            String letter = forge.card.MagicColor.toShortString(c);
+            if (!me.hasKeyword("PayLifeInsteadOf:" + letter)) {
+                continue;
+            }
+            int pips = 0;
+            for (forge.card.mana.ManaCostShard sh : mc) {
+                if (sh.isMonoColor() && !sh.isPhyrexian() && letter.equals(shardLetter(sh))) {
+                    pips++;
+                }
+            }
+            if (pips == 0) {
+                continue;
+            }
+            return " [{" + letter + "} pips may be paid with 2 life each (K'rrik-class static): "
+                    + pips + " pip(s) = " + (2 * pips) + " life; mana available now "
+                    + available + " for a cost of " + mc.getCMC() + "]";
+        }
+        return null;
+    }
+
+    private static String shardLetter(forge.card.mana.ManaCostShard sh) {
+        return sh.isWhite() ? "W" : sh.isBlue() ? "U" : sh.isBlack() ? "B"
+                : sh.isRed() ? "R" : sh.isGreen() ? "G" : null;
+    }
+
+    /** Grouping key for a trigger: host name plus the TRIGGER's own text
+     *  (its TriggerDescription with CARDNAME substituted). Never the stack
+     *  description: that carries per-instance text such as
+     *  "[Zone Changer: Grizzly Bears]", which made N copies of one death
+     *  trigger N distinct groups (review 2026-09-04) — a 22-trigger death
+     *  became a 22-option permutation and the runner's memo never matched. */
+    private static String triggerKey(SpellAbility sa) {
+        Card host = sa.getHostCard();
+        String desc = null;
+        forge.game.trigger.Trigger t = sa.getTrigger();
+        if (t != null) {
+            desc = t.toString(true);
+        }
+        if (desc == null || desc.isEmpty()) {
+            desc = sa.getDescription();
+        }
+        if (desc == null || desc.isEmpty()) {
+            desc = sa.getStackDescription();
+        }
+        return (host != null ? host.getName() : "?") + " — "
+                + (desc != null && !desc.isEmpty() ? desc : String.valueOf(sa));
+    }
+
+    /** Item 12 counter: a decision that fell to stock. Called for a null bus
+     *  answer and for the documented hand-back ({@code "chosen": []}) on the
+     *  trigger-order and colour windows (review 2026-09-04: those punts were
+     *  invisible to {@code stockDecisions}). */
+    private void countStockFallback() {
+        int[] n = STOCK_FALLBACKS.get(getPlayer());
+        if (n != null) {
+            n[0]++;
+        }
+    }
+
+    /**
+     * The trigger-order window: a {@code CHOOSE_MODE} request with
+     * {@code state.purpose = "TRIGGER_ORDER"}, one option per group (with its
+     * count), {@code min = max = groups}. The answer lists the groups in the
+     * order they should RESOLVE; the stack pushes in reverse, so the first to
+     * resolve is played last. Anything but a full permutation → null → stock.
+     */
+    private List<SpellAbility> orderViaSeat(Map<String, List<SpellAbility>> groups) {
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        int n = groups.size();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", n);
+        state.put("max", n);
+        state.put("allowRepeat", false);
+        state.put("purpose", "TRIGGER_ORDER");
+        MailboxProtocol.Request req = req(turn, "CHOOSE_MODE",
+                "ORDER your " + n + " simultaneous triggers: list ALL " + n
+                        + " indices in the order they should RESOLVE — the first listed"
+                        + " resolves FIRST (it goes on the stack last).").state(state);
+        List<List<SpellAbility>> byIndex = new ArrayList<>(groups.values());
+        int i = 0;
+        for (Map.Entry<String, List<SpellAbility>> e : groups.entrySet()) {
+            int count = e.getValue().size();
+            req.option(i++, e.getKey() + (count > 1 ? "  ×" + count : ""), null, "TRIGGER");
+        }
+        JsonNode resp = exchange(req);
+        if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+            return null;
+        }
+        if (resp.get("chosen").size() == 0) {
+            countStockFallback(); // the documented hand-back: stock orders
+            return null;
+        }
+        List<Integer> order = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        for (JsonNode idn : resp.get("chosen")) {
+            if (idn == null || !idn.isInt()) {
+                return null;
+            }
+            int idx = idn.asInt();
+            if (idx < 0 || idx >= n || !seen.add(idx)) {
+                return null;
+            }
+            order.add(idx);
+        }
+        if (order.size() != n) {
+            return null;
+        }
+        List<SpellAbility> play = new ArrayList<>();
+        for (int k = n - 1; k >= 0; k--) {
+            play.addAll(byIndex.get(order.get(k)));
+        }
+        return play;
+    }
+
+    @Override
+    public Map<Card, Integer> assignCombatDamage(Card attacker, CardCollectionView blockers,
+            CardCollectionView remaining, int damageDealt, GameEntity defender, boolean overrideOrder) {
+        if (blockers != null && blockers.size() > 1) {
+            stockSurface("assignCombatDamage(" + blockers.size() + " blockers)");
+        }
+        return super.assignCombatDamage(attacker, blockers, remaining, damageDealt, defender, overrideOrder);
+    }
+
+    @Override
+    public Map<Card, forge.card.mana.ManaCostShard> chooseCardsForConvokeOrImprovise(SpellAbility sa,
+            forge.card.mana.ManaCost manaCost, CardCollectionView untappedCards, boolean artifacts,
+            boolean creatures, Integer maxReduction) {
+        stockSurface("chooseCardsForConvokeOrImprovise");
+        return super.chooseCardsForConvokeOrImprovise(sa, manaCost, untappedCards, artifacts,
+                creatures, maxReduction);
+    }
+
+    @Override
+    public SpellAbility chooseSingleSpellForEffect(List<SpellAbility> spells, SpellAbility sa,
+            String title, Map<String, Object> params) {
+        if (spells != null && spells.size() > 1) {
+            stockSurface("chooseSingleSpellForEffect(" + spells.size() + ")");
+        }
+        return super.chooseSingleSpellForEffect(spells, sa, title, params);
+    }
+
     // ---- state projection (hidden-info-safe) -------------------------------
 
     private Map<String, Object> buildState(int turn) {
-        return buildState(getPlayer(), seatIndex, turn);
+        Map<String, Object> st = buildState(getPlayer(), seatIndex, turn);
+        if (controllingSeat >= 0) {
+            st.put("controllingSeat", controllingSeat); // item 11a
+        }
+        return st;
     }
 
     /**
@@ -2293,6 +3523,26 @@ public final class MailboxController extends PlayerControllerAi
         // SOURCE COUNT as floating mana ("seven floating mana") and wasted its
         // X spell. The name now says what it is.
         state.put("untappedManaSourceCount", view.untappedManaSources());
+        // Item 6 (2026-09-03): the brain had floating mana exactly and every
+        // other source as a HEADCOUNT — it could not sum its mana, see colors,
+        // or tell a restricted source from a general one. Two tables, all
+        // engine-computed on the live board, detected from mechanics only:
+        // manaSources (each untapped producer, one activation's yield) plus
+        // manaAvailableNow (the same quantity the refusal in item 4 measures),
+        // and ritualsInHand (spells that add mana, with projected yield, and
+        // multipliers/modifiers flagged with no number — their value depends
+        // on what the brain taps afterwards).
+        try {
+            List<Map<String, Object>> sources = manaSources(me);
+            state.put("manaSources", sources);
+            state.put("manaAvailableNow", manaAvailableNow(me, sources));
+            List<Map<String, Object>> rituals = ritualsInHand(me);
+            if (!rituals.isEmpty()) {
+                state.put("ritualsInHand", rituals);
+            }
+        } catch (RuntimeException ignore) {
+            // projection extras must never break state building
+        }
         state.put("handSize", view.handSize());
         state.put("handLands", view.handLands());
         state.put("librarySize", view.librarySize());
@@ -2429,10 +3679,21 @@ public final class MailboxController extends PlayerControllerAi
         // aimed at itself; the real target was an indestructible god). Whole
         // chain walked — sub-ability targets are announced too.
         List<List<String>> stackTargets = new ArrayList<>();
+        // Additive (wave-2, note 52): per-item ORACLE TEXT (<=300 chars) — REACT
+        // valuation of an unfamiliar card ran on model recall, the documented
+        // hallucination trigger. Public information (the card is on the stack).
+        List<String> stackOracle = new ArrayList<>();
         for (forge.game.spellability.SpellAbilityStackInstance si : me.getGame().getStack()) {
             SpellAbility sa = si.getSpellAbility();
             Card host = sa != null ? sa.getHostCard() : null;
             stack.add(host != null ? host.getName() : String.valueOf(si));
+            String otext = host != null && host.getRules() != null
+                    ? host.getRules().getOracleText() : "";
+            if (otext == null) {
+                otext = "";
+            }
+            otext = otext.replace("\r\n", " / ").replace("\n", " / ");
+            stackOracle.add(otext.length() > 300 ? otext.substring(0, 300) : otext);
             Player ctl = sa != null ? sa.getActivatingPlayer() : null;
             stackOwners.add(ctl != null ? ctl.getId() : -1);
             stackKinds.add(sa == null ? "?" : sa.isTrigger() ? "trigger"
@@ -2465,15 +3726,8 @@ public final class MailboxController extends PlayerControllerAi
         state.put("stackOwners", stackOwners);
         state.put("stackKinds", stackKinds);
         state.put("stackTargets", stackTargets);
+        state.put("stackOracle", stackOracle);
         return state;
-    }
-
-    private List<String> ownZone(ZoneType zone) {
-        List<String> names = new ArrayList<>();
-        for (Card c : getPlayer().getCardsIn(zone)) {
-            names.add(c.getName());
-        }
-        return names;
     }
 
     /** The game's Player whose id matches {@code id}, or null. */
@@ -2618,6 +3872,227 @@ public final class MailboxController extends PlayerControllerAi
         return yield >= 0 && yield <= 1; // unknown (-1) => show it, to be safe
     }
 
+    // ---- item 6: mana tables ------------------------------------------------
+
+    /**
+     * One row per UNTAPPED permanent the seat controls that has a mana
+     * ability: id, name, yield (one activation, on this board), colors,
+     * and — only when present — {@code restricted} (mana usable for a subset
+     * of spells: Mishra's Workshop class), {@code sick} (a creature that
+     * cannot tap this turn), {@code cost} (payment beyond a bare tap: Nykthos
+     * {2}, Selvala {G}). Identical rows collapse with a {@code count}, so
+     * eight Forests are one line. The bare-tap ability is preferred when a
+     * permanent has several; otherwise the first.
+     */
+    static List<Map<String, Object>> manaSources(Player me) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Card c : me.getCardsIn(ZoneType.Battlefield)) {
+            if (c.isTapped()) {
+                continue;
+            }
+            FCollectionView<SpellAbility> mas = c.getManaAbilities();
+            if (mas == null || mas.isEmpty()) {
+                continue;
+            }
+            SpellAbility best = null;
+            boolean bestBare = false;
+            String restricted = null;
+            for (SpellAbility ma : mas) {
+                if (ma == null) {
+                    continue;
+                }
+                if (restricted == null && ma.hasParam("RestrictValid")) {
+                    restricted = ma.getParam("RestrictValid");
+                }
+                Cost cost = ma.getPayCosts();
+                boolean bare = cost == null
+                        || (cost.hasTapCost() && cost.hasOnlySpecificCostType(CostTap.class));
+                if (best == null || (bare && !bestBare)) {
+                    best = ma;
+                    bestBare = bare;
+                }
+            }
+            if (best == null) {
+                continue;
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", c.getId());
+            row.put("name", c.getName());
+            int yield = manaAbilityYield(best, c);
+            row.put("yield", yield >= 0 ? yield : null);
+            row.put("colors", producedColors(best));
+            if (restricted != null) {
+                row.put("restricted", restricted);
+            }
+            if (c.isCreature() && c.hasSickness()) {
+                row.put("sick", true);
+            }
+            if (!bestBare && best.getPayCosts() != null) {
+                row.put("cost", best.getPayCosts().toSimpleString());
+            }
+            rows.add(row);
+        }
+        // collapse identical rows (same everything but id) into one with a count
+        List<Map<String, Object>> collapsed = new ArrayList<>();
+        Map<String, Map<String, Object>> byKey = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            StringBuilder key = new StringBuilder();
+            for (Map.Entry<String, Object> e : row.entrySet()) {
+                if (!"id".equals(e.getKey())) {
+                    key.append(e.getKey()).append('=').append(e.getValue()).append('|');
+                }
+            }
+            Map<String, Object> prev = byKey.get(key.toString());
+            if (prev == null) {
+                byKey.put(key.toString(), row);
+                collapsed.add(row);
+            } else {
+                Object n = prev.get("count");
+                prev.put("count", (n instanceof Integer ? (Integer) n : 1) + 1);
+            }
+        }
+        return collapsed;
+    }
+
+    /**
+     * Pool plus one activation of every unrestricted, non-sick, bare-tap
+     * source — exactly what the refusal in item 4 calls "payable now".
+     * Sources needing a payment or a sequence are listed but not summed.
+     */
+    static int manaAvailableNow(Player me, List<Map<String, Object>> sources) {
+        int total = me.getManaPool().totalMana();
+        for (Map<String, Object> row : sources) {
+            if (row.containsKey("restricted") || row.containsKey("sick")
+                    || row.containsKey("cost")) {
+                continue;
+            }
+            Object y = row.get("yield");
+            int per = y instanceof Integer ? (Integer) y : 1; // unknown: count one
+            Object n = row.get("count");
+            total += per * (n instanceof Integer ? (Integer) n : 1);
+        }
+        return total;
+    }
+
+    /**
+     * Spells in hand that make mana. {@code kind:"ritual"} — the spell's
+     * effect chain has a Mana part (Dark Ritual, Mana Geyser, Jeska's Will):
+     * cost, projected {@code yield} on the current board, {@code net}, colors.
+     * {@code kind:"multiplier"} — the spell installs an effect that changes
+     * what mana events produce (High Tide, Bubbling Muck via a TapsForMana
+     * trigger; Mana Reflection, Nyxbloom via a ProduceMana replacement): no
+     * number, because the value depends on what the brain taps afterwards.
+     * Detected from the card's abilities, triggers and replacements, never
+     * from names.
+     */
+    static List<Map<String, Object>> ritualsInHand(Player me) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Card c : me.getCardsIn(ZoneType.Hand)) {
+            for (SpellAbility sa : c.getSpellAbilities()) {
+                if (sa == null || !sa.isSpell()) {
+                    continue;
+                }
+                boolean manaPart = false;
+                for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
+                    if (cur.getApi() == ApiType.Mana) {
+                        manaPart = true;
+                        break;
+                    }
+                }
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", c.getId());
+                row.put("name", c.getName());
+                String cost = c.getManaCost() != null ? c.getManaCost().toString() : "";
+                row.put("cost", cost);
+                if (manaPart) {
+                    int yield = manaAbilityYield(sa, c);
+                    int cmc = c.getManaCost() != null ? c.getManaCost().getCMC() : 0;
+                    row.put("kind", "ritual");
+                    row.put("yield", yield >= 0 ? yield : null);
+                    row.put("net", yield >= 0 ? yield - cmc : null);
+                    row.put("colors", producedColors(sa));
+                    rows.add(row);
+                    break;
+                }
+                if (isManaMultiplier(sa, c)) {
+                    row.put("kind", "multiplier");
+                    rows.add(row);
+                    break;
+                }
+            }
+        }
+        return rows;
+    }
+
+    /** A spell whose installed effect, or whose permanent, alters mana
+     *  production: a TapsForMana trigger or a ProduceMana replacement. */
+    private static boolean isManaMultiplier(SpellAbility sa, Card c) {
+        try {
+            for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
+                for (String key : new String[] {"Triggers", "ReplacementEffects", "StaticAbilities"}) {
+                    String names = cur.getParam(key);
+                    if (names == null) {
+                        continue;
+                    }
+                    for (String n : names.split(",")) {
+                        String sv = c.getSVar(n.trim());
+                        if (sv != null && (sv.contains("TapsForMana") || sv.contains("ProduceMana"))) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            for (forge.game.trigger.Trigger t : c.getTriggers()) {
+                if (t.getMode() == forge.game.trigger.TriggerType.TapsForMana) {
+                    return true;
+                }
+            }
+            for (forge.game.replacement.ReplacementEffect re : c.getReplacementEffects()) {
+                if (re.getMode() == forge.game.replacement.ReplacementType.ProduceMana) {
+                    return true;
+                }
+            }
+        } catch (RuntimeException ignore) {
+            // detection is best-effort
+        }
+        return false;
+    }
+
+    /** Colors a mana chain produces right now: the active branch's mana part
+     *  (condition-forked scripts, Gemstone Caverns class), else the root's.
+     *  "any" / "colorless" / letters such as "G" or "WU". */
+    private static String producedColors(SpellAbility sa) {
+        try {
+            forge.game.spellability.AbilityManaPart mp = null;
+            for (SpellAbility tail = sa; tail != null; tail = tail.getSubAbility()) {
+                forge.game.spellability.AbilityManaPart tp = tail.getManaPart();
+                if (tp != null && (mp == null || tail.metConditions())) {
+                    mp = tp;
+                    if (tail.metConditions()) {
+                        break;
+                    }
+                }
+            }
+            if (mp == null) {
+                return "?";
+            }
+            if (mp.isAnyMana()) {
+                return "any";
+            }
+            String p = mp.getOrigProduced() != null ? mp.getOrigProduced() : "";
+            if (p.startsWith("Combo")) {
+                p = p.substring(5);
+            }
+            p = p.replace("Any", "any").replace(" ", "");
+            if ("C".equals(p)) {
+                return "colorless";
+            }
+            return p.isEmpty() ? "?" : p;
+        } catch (RuntimeException e) {
+            return "?";
+        }
+    }
+
     /** Current total mana yield of a mana-ability chain evaluated against the
      *  live board (e.g. Selvala's {G},{T}: add X = 12 with a Dreadnought out);
      *  -1 if it can't be evaluated. Works for any host, not just lands. */
@@ -2724,6 +4199,17 @@ public final class MailboxController extends PlayerControllerAi
 
     private static String creatureLabel(Card c) {
         return c.getName() + " (" + c.getNetPower() + "/" + c.getNetToughness() + ")";
+    }
+
+    /** True iff every entity is a {@link Card} or a {@link Player} — the two
+     *  kinds the entity choosers can label and round-trip (wave-2). */
+    private static boolean cardsOrPlayers(List<? extends GameEntity> opts) {
+        for (GameEntity e : opts) {
+            if (!(e instanceof Card) && !(e instanceof Player)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** True iff every entity in {@code opts} is a {@link Card} (id space = card ids). */

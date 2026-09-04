@@ -35,9 +35,14 @@ class CancelSentinelTests(unittest.TestCase):
                                         {"chosen": 5}), {"chosen": 5})
 
     def test_safe_default_never_cancels(self):
-        # punts must stay engine-legal: max, never -1
+        # punts must stay engine-legal, never -1. Wave-3 (F3): real mana-X
+        # requests carry puntHigh (max is affordability-capped) and punt max;
+        # un-flagged number requests (bids) punt LOW — still never -1.
+        x_req = num_req(0, 4, cancelable=True)
+        x_req["state"]["puntHigh"] = True
+        self.assertEqual(rules.safe_default(x_req), {"chosen": 4})
         self.assertEqual(rules.safe_default(num_req(0, 4, cancelable=True)),
-                         {"chosen": 4})
+                         {"chosen": 0})
 
 
 class PromptGatingTests(unittest.TestCase):

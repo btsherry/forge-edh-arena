@@ -49,6 +49,21 @@ import forge.model.FModel;
  */
 public class SacrificeSeatChoiceTest {
 
+    /** Item 15 (2026-09-03): the scripted brain must not outlive its test —
+     *  these pre-kit pollers used to spin for up to 150 s after their method
+     *  returned, inside the one reused surefire fork. */
+    private static volatile boolean legacyBrainAlive = true;
+
+    @org.testng.annotations.BeforeMethod
+    public void armLegacyBrain() {
+        legacyBrainAlive = true;
+    }
+
+    @org.testng.annotations.AfterMethod(alwaysRun = true)
+    public void stopLegacyBrain() {
+        legacyBrainAlive = false;
+    }
+
     private static Card put(String name, Player p, ZoneType z) {
         IPaperCard pc = FModel.getMagicDb().getCommonCards().getCard(name);
         if (pc == null) {
@@ -105,16 +120,18 @@ public class SacrificeSeatChoiceTest {
             game.getStack().add(sa);
         }
 
-        /** Brain: optionally play {@code playLabel} once; whenever a
-         *  sacrifice/destroy card choice arrives, feed the Dreadmaw. */
-        void startBrain(String playLabel) {
+        /** Brain: play each label once (in any window order); whenever a
+         *  sacrifice/destroy card choice arrives, feed the biggest big
+         *  creature still alive. */
+        void startBrain(String... playLabels) {
             Path in = base.resolve("seat-" + seat.getId()).resolve("inbox");
             Path out = base.resolve("seat-" + seat.getId()).resolve("outbox");
-            final boolean[] played = {false};
+            final java.util.Set<String> played =
+                    java.util.Collections.synchronizedSet(new java.util.HashSet<>());
             Thread t = new Thread(() -> {
                 long end = System.currentTimeMillis() + 150_000;
                 java.util.Set<String> done = new java.util.HashSet<>();
-                while (System.currentTimeMillis() < end) {
+                while (legacyBrainAlive && System.currentTimeMillis() < end) {
                     try {
                         if (Files.isDirectory(in)) {
                             for (Path f : Files.newDirectoryStream(in, "req-*.json")) {
@@ -123,20 +140,34 @@ public class SacrificeSeatChoiceTest {
                                 String body = new String(Files.readAllBytes(f));
                                 seen.add(body); done.add(n);
                                 String resp;
-                                if ((body.contains("\"decisionType\":\"CAST_SPELL\"")
-                                        || body.contains("\"decisionType\":\"REACT\""))
-                                        && playLabel != null && !played[0]) {
-                                    java.util.regex.Matcher m = java.util.regex.Pattern
-                                            .compile("\\{\"id\":(\\d+),\"label\":\"" + playLabel)
-                                            .matcher(body);
-                                    if (m.find()) { played[0] = true; resp = "{\"chosenId\": " + m.group(1) + "}"; }
-                                    else resp = "{\"chosenId\": 0}";
+                                if (body.contains("\"decisionType\":\"CAST_SPELL\"")
+                                        || body.contains("\"decisionType\":\"REACT\"")) {
+                                    resp = "{\"chosenId\": 0}";
+                                    for (String label : playLabels) {
+                                        if (played.contains(label)) continue;
+                                        java.util.regex.Matcher m = java.util.regex.Pattern
+                                                .compile("\\{\"id\":(\\d+),\"label\":\"" + label)
+                                                .matcher(body);
+                                        if (m.find()) {
+                                            played.add(label);
+                                            resp = "{\"chosenId\": " + m.group(1) + "}";
+                                            break;
+                                        }
+                                    }
                                 } else if (body.contains("\"decisionType\":\"CHOOSE_ENTITIES\"")
                                         && (body.contains("SACRIFICE") || body.contains("DESTROY"))) {
+                                    // merged scenarios: feed the biggest big
+                                    // creature still alive (anti-stock both times)
                                     java.util.regex.Matcher m = java.util.regex.Pattern
                                             .compile("\\{\"id\":(\\d+),\"label\":\"Colossal Dreadmaw")
                                             .matcher(body);
-                                    resp = m.find() ? "{\"chosen\": [" + m.group(1) + "]}" : "{\"chosen\": []}";
+                                    if (!m.find()) {
+                                        m = java.util.regex.Pattern
+                                            .compile("\\{\"id\":(\\d+),\"label\":\"Ghalta")
+                                            .matcher(body);
+                                        if (!m.find()) { resp = "{\"chosen\": []}"; m = null; }
+                                    }
+                                    resp = m != null ? "{\"chosen\": [" + m.group(1) + "]}" : "{\"chosen\": []}";
                                 } else if (body.contains("\"decisionType\":\"CHOOSE_ENTITIES\"")) {
                                     resp = "{\"chosen\": []}";
                                 } else if (body.contains("\"decisionType\":\"CONFIRM\"")) {
@@ -158,12 +189,11 @@ public class SacrificeSeatChoiceTest {
             t.start();
         }
 
-        void run() {
+        void run(java.util.function.BooleanSupplier done) {
             int steps = 0;
             while (steps++ < 400 && !game.isGameOver()) {
                 game.getPhaseHandler().mainLoopStep();
-                if (dreadmaw.isInZone(ZoneType.Graveyard) && game.getStack().isEmpty()
-                        && steps > 25) {
+                if (done.getAsBoolean() && game.getStack().isEmpty() && steps > 25) {
                     break;
                 }
             }
@@ -187,13 +217,17 @@ public class SacrificeSeatChoiceTest {
 
     // ---- EFFECT path: SacrificeEffect -> choosePermanentsToSacrifice --------
 
+    /** Harness boil note: an Innocent-Blood-then-Edict single-game merge was
+     *  tried and reverted — the second resolution needs more game-turns than
+     *  the deliberately tiny fixture libraries support (players deck out).
+     *  Two worlds, two games: the anti-contortion rule wins over one boot. */
     @Test(timeOut = 240_000)
     public void symmetricalSacrificeEffectIsSeatChosen() throws Exception {
         ArenaBootstrap.initialize(new java.io.File("..", "forge-gui"));
         Fixture fx = new Fixture(true, Files.createTempDirectory("sac-blood"));
         fx.oppCasts("Innocent Blood", false);   // each player sacrifices a creature
-        fx.startBrain(null);
-        fx.run();
+        fx.startBrain();
+        fx.run(() -> fx.dreadmaw.isInZone(ZoneType.Graveyard));
         fx.assertSeatChoseTheBigOne("SAC-EFFECT-SYM");
     }
 
@@ -202,35 +236,32 @@ public class SacrificeSeatChoiceTest {
         ArenaBootstrap.initialize(new java.io.File("..", "forge-gui"));
         Fixture fx = new Fixture(true, Files.createTempDirectory("sac-edict"));
         fx.oppCasts("Diabolic Edict", true);    // target player sacrifices a creature
-        fx.startBrain(null);
-        fx.run();
+        fx.startBrain();
+        fx.run(() -> fx.dreadmaw.isInZone(ZoneType.Graveyard));
         fx.assertSeatChoseTheBigOne("SAC-EFFECT-EDICT");
     }
 
-    // ---- COST path: AiCostDecision.visit(CostSacrifice) -> SacCostPreference
-
+    /** Harness boil: both cost shapes in ONE game — the Viscera Seer
+     *  activation feeds Dreadmaw, then Altar's Reap (additional-cost cast)
+     *  feeds Ghalta and draws two. Same oracles as the former two tests. */
     @Test(timeOut = 240_000)
-    public void outletActivationCostIsSeatChosen() throws Exception {
+    public void costPathSacrificesAreSeatChosen() throws Exception {
         ArenaBootstrap.initialize(new java.io.File("..", "forge-gui"));
-        Fixture fx = new Fixture(false, Files.createTempDirectory("sac-seer"));
+        Fixture fx = new Fixture(false, Files.createTempDirectory("sac-cost"));
         Card seer = put("Viscera Seer", fx.seat, ZoneType.Battlefield);
-        fx.startBrain("Viscera Seer");
-        fx.run();
-        fx.assertSeatChoseTheBigOne("SAC-COST-OUTLET");
-        Assert.assertTrue(seer.isInZone(ZoneType.Battlefield),
-                "the outlet itself (also a legal payment) must survive");
-    }
-
-    @Test(timeOut = 240_000)
-    public void additionalCastCostIsSeatChosen() throws Exception {
-        ArenaBootstrap.initialize(new java.io.File("..", "forge-gui"));
-        Fixture fx = new Fixture(false, Files.createTempDirectory("sac-reap"));
+        Card ghalta = put("Ghalta, Primal Hunger", fx.seat, ZoneType.Battlefield);
         for (int i = 0; i < 2; i++) put("Swamp", fx.seat, ZoneType.Battlefield);
         put("Altar's Reap", fx.seat, ZoneType.Hand);
-        fx.startBrain("Altar's Reap");
-        fx.run();
-        fx.assertSeatChoseTheBigOne("SAC-COST-CAST");
-        Assert.assertEquals(fx.seat.getCardsIn(ZoneType.Hand).size(), 2,
-                "Altar's Reap must have resolved (draw two)");
+        int hand0 = fx.seat.getCardsIn(ZoneType.Hand).size();
+        fx.startBrain("Viscera Seer", "Altar's Reap");
+        fx.run(() -> fx.dreadmaw.isInZone(ZoneType.Graveyard)
+                && ghalta.isInZone(ZoneType.Graveyard));
+        fx.assertSeatChoseTheBigOne("SAC-COST-MERGED");
+        Assert.assertTrue(seer.isInZone(ZoneType.Battlefield),
+                "the outlet itself (also a legal payment) must survive");
+        Assert.assertTrue(ghalta.isInZone(ZoneType.Graveyard),
+                "Altar's Reap fed the second big creature");
+        Assert.assertEquals(fx.seat.getCardsIn(ZoneType.Hand).size(), hand0 - 1 + 2,
+                "Altar's Reap must have resolved (cast from hand, draw two)");
     }
 }

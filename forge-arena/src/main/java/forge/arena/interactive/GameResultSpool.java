@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 
@@ -119,8 +120,34 @@ public final class GameResultSpool {
             placement.add(lostGroups.get(i));
         }
         final String[] slugs = System.getProperty("arena.seat.slugs", "").split(",", -1);
+        // Plan item 7, the end invariant: every card a player brought is still
+        // somewhere (library, hand, battlefield, graveyard, exile incl. face
+        // down, command, stack) — tokens, copies, emblems and effect pseudo-
+        // cards excluded. A shortfall is a CARD-VANISH: a seam dropped a card.
+        final Map<Integer, Integer> counts = ownedCardCounts(game);
+        for (final Player p : players) {
+            final int have = counts.getOrDefault(p.getId(), 0);
+            final int want = deckSize(p);
+            if (p.hasLost()) {
+                // CR 800.4a: a player who leaves a multiplayer game takes every
+                // object they own with them — an eliminated seat reads 0 by the
+                // rules, not by a seam (game 19 showed exactly that).
+                System.err.println("[arena] CARD-CHECK seat " + p.getId() + ": eliminated — "
+                        + "owned cards left the game (CR 800.4a); " + have + " remain");
+            } else if (want > 0 && have != want) {
+                System.err.println("[arena] CARD-VANISH seat " + p.getId() + " (" + p.getName()
+                        + "): " + have + " of " + want + " owned cards found across all zones");
+            } else {
+                System.err.println("[arena] CARD-CHECK seat " + p.getId() + ": " + have
+                        + (want > 0 ? "/" + want : "") + " owned cards");
+            }
+        }
         final StringBuilder sb = new StringBuilder(1024);
-        sb.append("{\"schema\": 1, \"startMillis\": ").append(startMillis)
+        // BL-09: the game id lets the ratings sweep attribute transport
+        // events (punts, wedges) to THIS game exactly, not by time window.
+        final String gameId = MailboxController.gameIdFor(game);
+        sb.append("{\"schema\": 1, \"gameId\": ").append(gameId == null ? "null" : "\"" + esc(gameId) + "\"")
+          .append(", \"startMillis\": ").append(startMillis)
           .append(", \"endMillis\": ").append(System.currentTimeMillis())
           .append(", \"turnsPlayed\": ").append(game.getPhaseHandler().getTurn())
           .append(", \"advisor\": ")
@@ -136,7 +163,13 @@ public final class GameResultSpool {
               .append(", \"name\": \"").append(esc(p.getName()))
               .append("\", \"slug\": \"")
               .append(esc(seat >= 0 && seat < slugs.length ? slugs[seat] : ""))
-              .append("\", \"control\": \"").append(controlOf(p)).append("\"}");
+              .append("\", \"control\": \"").append(controlOf(p))
+              // item 12: decisions that fell to stock because the brain did not
+              // answer — the void check can read this directly
+              .append("\", \"stockDecisions\": ").append(MailboxController.stockFallbacksFor(p))
+              .append(", \"cards\": ").append(counts.getOrDefault(seat, 0))
+              .append(", \"deckSize\": ").append(deckSize(p))
+              .append("}");
         }
         sb.append("], \"placementGroups\": ").append(intGroups(placement))
           .append(", \"lostGroupTurns\": ").append(ints(lostGroupTurns))
@@ -167,6 +200,68 @@ public final class GameResultSpool {
             System.err.println("[arena] game result spooled: " + out.getFileName());
         } catch (final IOException | RuntimeException e) {
             System.err.println("GameResultSpool: write failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Owner → number of REAL cards found across every zone (item 7). Walks
+     * each player's zones plus the shared stack zone, attributes by owner
+     * (a stolen creature counts for the player who brought it), and skips
+     * tokens, copied spells, emblems and immutable effect pseudo-cards (the
+     * "Commander Effect" in the command zone). Phased-out cards are included.
+     */
+    static Map<Integer, Integer> ownedCardCounts(final Game game) {
+        final Map<Integer, Integer> counts = new java.util.LinkedHashMap<>();
+        final java.util.Set<forge.game.card.Card> seen =
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        final forge.game.zone.ZoneType[] zones = {
+                forge.game.zone.ZoneType.Library, forge.game.zone.ZoneType.Hand,
+                forge.game.zone.ZoneType.Battlefield, forge.game.zone.ZoneType.Graveyard,
+                forge.game.zone.ZoneType.Exile, forge.game.zone.ZoneType.Command,
+                forge.game.zone.ZoneType.Stack };
+        for (final Player p : game.getRegisteredPlayers()) {
+            counts.put(p.getId(), 0);
+            for (final forge.game.zone.ZoneType z : zones) {
+                for (final forge.game.card.Card c : p.getCardsIn(z, false)) {
+                    tally(c, counts, seen);
+                }
+            }
+        }
+        for (final forge.game.card.Card c : game.getStackZone().getCards()) {
+            tally(c, counts, seen);
+        }
+        return counts;
+    }
+
+    private static void tally(final forge.game.card.Card c, final Map<Integer, Integer> counts,
+            final java.util.Set<forge.game.card.Card> seen) {
+        if (c == null || !seen.add(c)) {
+            return;
+        }
+        if (c.isToken() || c.isCopiedSpell() || c.isEmblem() || c.isImmutable()) {
+            return;
+        }
+        final Player owner = c.getOwner();
+        if (owner == null) {
+            return;
+        }
+        counts.merge(owner.getId(), 1, Integer::sum);
+    }
+
+    /** Cards the player registered (commanders + main), 0 when unknown. */
+    static int deckSize(final Player p) {
+        try {
+            final forge.deck.Deck d = p.getRegisteredPlayer().getDeck();
+            if (d == null) {
+                return 0;
+            }
+            int n = 0;
+            for (final Map.Entry<forge.item.PaperCard, Integer> e : d.getAllCardsInASinglePool()) {
+                n += e.getValue();
+            }
+            return n;
+        } catch (final RuntimeException e) {
+            return 0;
         }
     }
 

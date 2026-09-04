@@ -11,7 +11,8 @@ Traps encoded here (from the source-extracted contract, docs/INTERACTIVE-ARENA.m
 - CHOOSE_MODE ids are 0-based INDICES into options; 0 is a REAL mode. Everywhere
   else id 0 is reserved for pass/none and only legal when actually offered.
 - DECLARE_* are whole-assignment atomic: one bad pair discards ALL to stock;
-  defenders must ALWAYS be explicit (multiplayer ambiguity poisons the block).
+  a defender must be explicit unless exactly one is legal (BL-23: then it is
+  filled in, as the engine's chooseDefender does) — ambiguity poisons the block.
 - Ids must be bare JSON integers ('1' or 1.0 -> stock). Bools are not ints.
 - min/max/allowRepeat live in the request `state` and are strict.
 """
@@ -41,12 +42,17 @@ ANSWER_CONTRACT = {
                         'wants a death trigger to fire.'),
     "CHOOSE_MODE": ('Answer: {"chosen": [<mode index>, ...]} — indices are 0-BASED '
                     'positions in options (0 is a real mode), count within '
-                    'state.min..state.max; repeats only if state.allowRepeat.'),
+                    'state.min..state.max; repeats only if state.allowRepeat. '
+                    'Also carries generic indexed choices: PROTECTION, VOTE, '
+                    'CHOOSE A PILE, CHOOSE A VALUE. (Optional costs are NOT a '
+                    'window: Buyback/Kicker variants appear as separate '
+                    '"[+ ...]" options in your cast list.)'),
     "CHOOSE_CARD": ('Answer: {"chosenId": <option id>} — 0 (choose none) only if '
                     'offered in options.'),
     "CHOOSE_CARDS": ('Answer: {"chosen": [<option id>, ...]} — unique ids, count '
                      'within state.min..state.max (a multi-card search: e.g. '
-                     'Cultivate\'s two basics, "up to two"). [] only if min is 0.'),
+                     'Cultivate\'s two basics, "up to two"). [] only if min is 0.'
+                     ' PAYMENT prompts (EXILE/DISCARD/RETURN/PUT TO LIBRARY) pick what a cost eats — protect your line. SCRY/SURVEIL prompts choose what leaves the top. ORDER prompts: list ALL ids, FIRST = closest to TOP. Cleanup DISCARD and mulligan BOTTOM prompts shape your next turns.'),
     "PAY_UNLESS": ('Answer: {"chosenId": 1} to PAY state.unlessCost now (uses '
                    'floating mana first, then untapped sources), or {"chosenId": 0} '
                    'to decline and let the effect happen. If state.effectIsMine is '
@@ -162,8 +168,13 @@ def validate(req: dict, out) -> dict | None:
             if a in seen:
                 continue  # a creature attacks once; a repeat entry is noise, keep first
             d = e.get("defender")
+            if d is None and len(defender_ids) == 1:
+                # BL-23: the engine's chooseDefender accepts a missing
+                # defender when exactly one is legal — fill it in rather
+                # than punting a legal attack to "no attackers".
+                d = next(iter(defender_ids))
             if not _is_int(d) or (defender_ids and d not in defender_ids):
-                return None  # defender ALWAYS explicit and known
+                return None  # defender explicit and known (or the sole legal one)
             seen.add(a)
             clean.append({"attacker": a, "defender": d})
         return {"attackers": clean}
@@ -209,6 +220,11 @@ def validate(req: dict, out) -> dict | None:
         arr = out.get("chosen")
         if not isinstance(arr, list):
             return None
+        if arr == [] and (req.get("state", {}) or {}).get("purpose") in ("TRIGGER_ORDER", "COLOR"):
+            # BL-02/03 windows: an empty list is the documented "you decide" —
+            # the engine treats it as non-conforming and its stock logic orders
+            # / picks (the engine-side fallback); legal for a model to say too.
+            return {"chosen": []}
         lo, hi = _bounds(req, 1, 1)
         allow_repeat = bool((req.get("state", {}) or {}).get(
             "allowRepeat", req.get("allowRepeat", False)))
@@ -244,31 +260,36 @@ def safe_default(req: dict) -> dict:
     if dtype == "DECLARE_BLOCKERS":
         return {"blocks": []}
     if dtype == "CHOOSE_MODE":
+        if (req.get("state", {}) or {}).get("purpose") in ("TRIGGER_ORDER", "COLOR"):
+            # the new windows (2026-09-04): a punt hands the pick back to the
+            # engine's stock logic (which is what every other timeout does)
+            # rather than resolving triggers in offered order or naming white
+            return {"chosen": []}
         lo, _ = _bounds(req, 1, 1)
         return {"chosen": list(range(lo))}       # first `min` indices
     if dtype in ("CHOOSE_ENTITIES", "CHOOSE_CARDS"):
         lo, _ = _bounds(req, 0, len(ids))
         return {"chosen": [i for i in ids if i != 0][:lo]}
     if dtype == "CONFIRM":
-        # Shape-aware (game 7, 2026-08-17): a punt answered NO to "cast your
-        # free Dramatic Reversal copy?" and Urza's loop unwound at 72s a step.
-        # Confirms about the seat's OWN free play/copy default to YES (they
-        # spend nothing and are what the seat was doing); everything else —
-        # trigger yes-costs, sacrifice/pay-life/exile confirms — stays NO,
-        # the answer that spends nothing.
+        # Item 10 (2026-09-03): a punt never spends and never acts for anyone
+        # but the seat. The engine states the two facts that decide it —
+        # `hasCost` (does saying yes pay anything) and `isMine` (is the effect
+        # the seat's own) — so the rule is structural: YES only when free AND
+        # mine, NO otherwise. The old prompt-word heuristic ("play" in prompt
+        # matched "player") could default-ACCEPT an opponent's costed effect.
+        # Legacy engines without the fields: TRIGGER/PLAY_FROM_EFFECT keep
+        # their own free-and-mine facts (yesCost / free); everything else NO.
         st = req.get("state", {}) or {}
         mode = str(st.get("confirmMode", "") or "")
-        prompt = str(req.get("prompt", "") or "").lower()
+        has_cost, is_mine = st.get("hasCost"), st.get("isMine")
+        if isinstance(has_cost, bool) and isinstance(is_mine, bool):
+            return {"chosenId": 1 if (is_mine and not has_cost) else 0}
         if mode == "TRIGGER":
             free = str(st.get("yesCost", "none")).lower() in ("none", "", "0", "{0}")
             return {"chosenId": 1 if free else 0}
         if mode == "PLAY_FROM_EFFECT":
             # your own "may cast" (Scepter copy, cascade, impulse): free -> yes
             return {"chosenId": 1 if st.get("free") else 0}
-        if mode in ("untyped", "OptionalChoose") and any(
-                w in prompt for w in ("play", "cast", "copy")) and not any(
-                w in prompt for w in ("sacrifice", "pay life", "exile", "discard")):
-            return {"chosenId": 1}
         return {"chosenId": 0}
     if dtype == "PAY_UNLESS":
         return {"chosenId": 0}                   # decline: legal, spends nothing
@@ -279,8 +300,12 @@ def safe_default(req: dict) -> dict:
         return {"chosenId": pool[0] if pool else 0}  # mandatory: first legal
     if dtype == "CHOOSE_NUMBER":
         lo, hi = _bounds(req, 0, 0)
-        return {"chosen": hi}  # punt HIGH: for X costs, min would re-create the
-                               # Ballista-at-0 death; max is affordability-capped
+        st = req.get("state", {}) or {}
+        if st.get("puntHigh"):
+            return {"chosen": hi}  # X costs: max is affordability-capped; min
+                                   # would re-create the Ballista-at-0 death
+        return {"chosen": lo}      # bids/generic numbers (Wheel of Misfortune
+                                   # class): LOW is the safe side of a timeout
     return {"chosenId": 0}                        # CAST_SPELL / REACT / unknown
 
 

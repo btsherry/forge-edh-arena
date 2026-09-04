@@ -113,7 +113,7 @@ public class TutorSearchReachesMailboxTest {
                             done.add(n);
                             int chosen = 0;
                             java.util.regex.Matcher m = java.util.regex.Pattern
-                                    .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Craterhoof").matcher(body);
+                                    .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Craterhoof")));
                             if (m.find()) chosen = Integer.parseInt(m.group(1));
                             Files.createDirectories(outbox);
                             Path tmp = outbox.resolve(n.replace("req-", "resp-") + ".tmp");
@@ -237,12 +237,12 @@ public class TutorSearchReachesMailboxTest {
                                 resp = "{\"chosen\": [0]}";
                             } else if (body.contains("\"decisionType\":\"CHOOSE_CARD\"")) {
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Craterhoof").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Craterhoof")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "0") + "}";
                             } else if (body.contains("\"decisionType\":\"CAST_SPELL\"")) {
                                 // cast the Charm if offered, else pass
                                 java.util.regex.Matcher m = java.util.regex.Pattern
-                                        .compile("\"id\"\\s*:\\s*(\\d+)[^}]*Archdruid").matcher(body);
+                                        .compile("^(\\d+)$").matcher(String.valueOf(MailboxTestKit.idOf(body, "Archdruid")));
                                 resp = "{\"chosenId\": " + (m.find() ? m.group(1) : "0") + "}";
                             } else {
                                 resp = "{\"chosenId\": 0}";
@@ -281,5 +281,87 @@ public class TutorSearchReachesMailboxTest {
         Assert.assertTrue(seen.stream().anyMatch(x -> x.contains("CHOOSE_CARD")),
                 "library search never reached the seat — the seat's chosen mode was discarded");
         Assert.assertTrue(inHand, "Craterhoof should be in hand after the tutor resolves");
+    }
+
+    private static boolean has(Player p, ZoneType z, String name) {
+        for (Card c : p.getCardsIn(z)) {
+            if (name.equals(c.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * BL-11 second card (group {@code extended}). Primal Command is the same
+     * modal-tutor seam by script shape — {@code A:SP$ Charm | Choices$ ...}
+     * with a hidden-origin search mode ({@code DB$ ChangeZone | Origin$
+     * Library | Destination$ Hand | ChangeType$ Creature}) — but with
+     * {@code CharmNum$ 2}: the seat chains a TARGETED mode (put target
+     * noncreature permanent on top of its owner's library) together with the
+     * untargeted tutor. The fixed seam must aim only the chained mode that
+     * targets and still deliver the tutor's CHOOSE_CARD: Sol Ring ends on
+     * top of the opponent's library AND Craterhoof lands in hand.
+     */
+    @Test(groups = "extended", timeOut = 240_000)
+    public void primalCommandTwoModesReachTheSeatAndTutor() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            for (int i = 0; i < 5; i++) MailboxTestKit.put("Forest", k.seat, ZoneType.Battlefield);
+            MailboxTestKit.put("Primal Command", k.seat, ZoneType.Hand);
+            MailboxTestKit.put("Craterhoof Behemoth", k.seat, ZoneType.Library);
+            for (int i = 0; i < 12; i++) MailboxTestKit.put("Forest", k.seat, ZoneType.Library);
+            for (String n : new String[] {"Llanowar Elves", "Kogla, the Titan Ape", "Temur Sabertooth"}) {
+                MailboxTestKit.put(n, k.seat, ZoneType.Library);
+            }
+            MailboxTestKit.put("Sol Ring", k.opp, ZoneType.Battlefield);   // the targeted mode's prey
+            for (int i = 0; i < 2; i++) MailboxTestKit.put("Island", k.opp, ZoneType.Library);
+            final boolean[] played = {false};
+            k.startBrain(body -> {
+                if (body.contains("\"decisionType\":\"CHOOSE_MODE\"")) {
+                    String top = MailboxTestKit.idOf(body, "Put target noncreature permanent");
+                    String tutor = MailboxTestKit.idOf(body, "Search your library for a creature");
+                    return top != null && tutor != null
+                            ? "{\"chosen\": [" + top + ", " + tutor + "]}" : null;
+                }
+                if (body.contains("\"decisionType\":\"CHOOSE_ENTITY\"")) {
+                    String id = MailboxTestKit.idOf(body, "Sol Ring");
+                    return id != null ? "{\"chosenId\": " + id + "}" : null;
+                }
+                if (body.contains("\"decisionType\":\"CHOOSE_CARD\"")) {
+                    String id = MailboxTestKit.idOf(body, "Craterhoof");
+                    return id != null ? "{\"chosenId\": " + id + "}" : null;
+                }
+                if ((body.contains("\"decisionType\":\"CAST_SPELL\"")
+                        || body.contains("\"decisionType\":\"REACT\"")) && !played[0]) {
+                    String id = MailboxTestKit.idOf(body, "Primal Command");
+                    if (id != null) {
+                        played[0] = true;
+                        return "{\"chosenId\": " + id + "}";
+                    }
+                }
+                return null;
+            });
+            k.run(() -> played[0] && has(k.seat, ZoneType.Hand, "Craterhoof Behemoth"), 300);
+
+            boolean modeAsked = k.seen.stream().anyMatch(x -> x.contains("\"decisionType\":\"CHOOSE_MODE\""));
+            boolean searchAsked = k.seen.stream().anyMatch(x -> x.contains("\"decisionType\":\"CHOOSE_CARD\""));
+            boolean aimAsked = k.seen.stream().anyMatch(x -> x.contains("\"decisionType\":\"CHOOSE_ENTITY\"")
+                    && x.contains("Sol Ring"));
+            forge.game.card.CardCollectionView oppLib = k.opp.getCardsIn(ZoneType.Library);
+            String oppTop = oppLib.isEmpty() ? "(empty)" : oppLib.get(0).getName();
+            System.out.println("PRIMAL COMMAND test: cast=" + played[0] + " modeAsked=" + modeAsked
+                    + " aimAsked=" + aimAsked + " searchAsked=" + searchAsked
+                    + " hoofInHand=" + has(k.seat, ZoneType.Hand, "Craterhoof Behemoth")
+                    + " oppTop=" + oppTop + " reqs=" + k.seen.size());
+            Assert.assertTrue(played[0], "Primal Command was never cast through the mailbox");
+            Assert.assertTrue(modeAsked, "mode choice never reached the seat");
+            Assert.assertTrue(aimAsked, "the chained targeted mode must be aimed by the seat");
+            Assert.assertTrue(searchAsked,
+                    "library search never reached the seat — the seat's chosen modes were discarded");
+            Assert.assertTrue(has(k.seat, ZoneType.Hand, "Craterhoof Behemoth"),
+                    "Craterhoof should be in hand after the tutor mode resolves");
+            Assert.assertEquals(oppTop, "Sol Ring", "the targeted mode must have put Sol Ring on top");
+            Assert.assertFalse(has(k.opp, ZoneType.Battlefield, "Sol Ring"), "Sol Ring must have left the battlefield");
+        }
     }
 }

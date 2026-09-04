@@ -53,11 +53,33 @@ public class AiAssignmentDivergenceTest {
      * seeds for a divergence — mulligan thresholds alone should split within
      * a few seeds if the knob binds.
      */
+    /**
+     * Seed budget knob (harness-boil C, 2026-08-28): the search early-exits on
+     * the first diverging seed, so the property caps HEADROOM, not the normal
+     * path. Default trimmed per measured diverging seeds (printed below every
+     * run); REVERT to the original budgets with
+     * {@code -Darena.test.divergence.seedTries=10}. Deterministic engine ⇒
+     * the diverging seed is a constant of the codebase until decks/AI change;
+     * if a future change pushes divergence past the cap this test FAILS
+     * (never silently passes), and the revert flag restores the old search.
+     */
+    private static int seedBudget(int requested) {
+        Integer prop = Integer.getInteger("arena.test.divergence.seedTries");
+        return prop != null ? Math.min(prop, requested * 2) : requested;
+    }
+
     private boolean divergesAcrossSeeds(java.util.function.Function<Long, List<SeatSpec>> a,
             java.util.function.Function<Long, List<SeatSpec>> b, ArenaLimits limits, int seedTries)
             throws Exception {
-        for (long seed = 1; seed <= seedTries; seed++) {
-            if (!runAndHash(seed, a.apply(seed), limits).equals(runAndHash(seed, b.apply(seed), limits))) {
+        int budget = seedBudget(seedTries);
+        for (long seed = 1; seed <= budget; seed++) {
+            long t0 = System.currentTimeMillis();
+            boolean diverged = !runAndHash(seed, a.apply(seed), limits)
+                    .equals(runAndHash(seed, b.apply(seed), limits));
+            System.err.println("[divergence] seed " + seed + "/" + budget
+                    + " -> " + (diverged ? "DIVERGED" : "identical")
+                    + " (" + (System.currentTimeMillis() - t0) + " ms)");
+            if (diverged) {
                 return true;
             }
         }
@@ -76,8 +98,13 @@ public class AiAssignmentDivergenceTest {
 
     @Test
     public void simulationAiToggleChangesTheEventStream() throws Exception {
-        // 2-player vs goldfish so the sim seat actually takes turns under a low cap
-        ArenaLimits limits = new ArenaLimits(8, 300, 2000);
+        // 2-player vs goldfish so the sim seat actually takes turns under a low
+        // cap. Harness-boil C (2026-08-28, measured): the single seed-1 pair at
+        // cap 8 cost 114s — the simulation game IS the suite's biggest line
+        // item; divergence, not game length, is the guarantee. Cap is a knob:
+        // REVERT with -Darena.test.divergence.simTurnCap=8.
+        ArenaLimits limits = new ArenaLimits(
+                Integer.getInteger("arena.test.divergence.simTurnCap", 5), 300, 2000);
         boolean diverged = divergesAcrossSeeds(
                 s -> List.of(SeatSpec.of(decks.get(2)), SeatSpec.goldfish(decks.get(1))),
                 s -> List.of(new SeatSpec(decks.get(2), "Default", true, false),

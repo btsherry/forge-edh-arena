@@ -7,7 +7,7 @@ not cover the arena.
 
 ## Prerequisites
 
-- **JDK 17** (exactly 17; the project targets 17). Scripts honor `$JAVA_HOME`
+- **JDK 17+** (the project targets 17; the recorded green gates since late August ran on JDK 25 — both work). Scripts honor `$JAVA_HOME`
   if set, otherwise `java` on `PATH`.
 - **Maven 3.8+** and **git**.
 - **Network access for the first build** (Maven downloads Forge's dependencies
@@ -26,9 +26,50 @@ From the **repository root**:
 # First build (online — populates ~/.m2):
 mvn -pl forge-arena -am package
 
-# Subsequent builds can go offline:
+# STANDARD gate (harness boil, 2026-08-28) — parents build, their tests skip,
+# the arena suite still runs (arena's surefire deliberately ignores
+# -DskipTests via its own arena.skip.tests property):
+mvn -o -pl forge-arena -am package -DskipTests
+
+# FULL gate — required whenever the change-set touches a parent module
+# (forge-ai / forge-game / forge-core / forge-gui*) and on every
+# UPSTREAM-SYNC import; otherwise upstream tests re-verify nothing:
 mvn -o -pl forge-arena -am package
 ```
+
+Yes, `-DskipTests` running the arena tests looks paradoxical — it is
+deliberate (see the surefire comment in `forge-arena/pom.xml`): upstream
+modules honor the flag, the arena suite ignores it. `-Darena.skip.tests=true`
+is the explicit arena opt-out (used by `batch.sh`).
+
+Only `-DskipTests` is neutralised. **`-Dmaven.test.skip=true` DOES skip the
+arena suite** (and its test compilation) exactly as it does for every other
+module — the arena pom does not override that property. A build run with it
+is not a gate; never quote one as green.
+
+Two more surefire knobs (both added 2026-09-04, BL-25):
+
+- **`arena.excluded.groups`** (default `extended`). Tests tagged with the
+  TestNG group `extended` are skipped by the STANDARD gate so its time does
+  not grow; the FULL / release gate passes `-Darena.excluded.groups=none` to
+  run them. As of 2026-09-04 the group holds the two-card seam widenings, the malformed-answer
+  matrix (`FallbackMatrixTest`) and the launcher roster tests
+  (`GuiPilotMatchRosterTest`): 82 methods that the FULL gate runs and the
+  standard gate skips.
+- **`-Darena.fixtures.refresh=true`** — `ProtocolContractTest` compares the
+  requests the engine emits against the committed fixtures in
+  `forge-arena/runner/tests/fixtures/engine/*.json` and fails, naming the
+  decision types that drifted, instead of rewriting tracked files. After
+  reviewing a deliberate protocol change, run the test once with this flag
+  to rewrite them, then commit the fixtures.
+
+Test-suite knobs (both revertible, see docs/IMPLEMENTATION-PLAN.md §8):
+- `arena.mailbox.poll.ms` — surefire pins 5ms so E2E mailbox tests skip
+  live-game pacing (live default 75ms; never set outside tests).
+- `arena.test.divergence.simTurnCap` (default 5; REVERT with `=8`) and
+  `arena.test.divergence.seedTries` — AiAssignmentDivergenceTest knobs;
+  measured 2026-08-28: profile divergence at seed 5, sim divergence at
+  seed 1, cap 8→5 cut the sim game 114s→15s with the invariant intact.
 
 Two flags are load-bearing:
 
@@ -81,8 +122,12 @@ COPYFILE_DISABLE=1 tar -czf forge-light-llm-YYYYMMDD.tar.gz -C <repo>/.. forge-l
 
 `build-light-package.sh` is self-documenting (its header is the package
 manifest) and refuses to clobber an existing dest without `--force`. It ships
-compiled classes + the fat jar + the nine bundled decks; no source, no Maven,
-so the recipient never builds anything — they run it directly.
+compiled classes + the fat jar + the ten bundled decks; no source, no Maven,
+so the recipient never builds anything — they run it directly. Not shipped:
+`runner/tests/` (and with it `runner/replay.py`, which needs those fixtures),
+`runner/logs/`, ratings state, and every `decks/*/dossier/.cache/` directory
+(BL-18, 2026-09-04: the DeckCheck payloads there carry the account's
+username; the build fails if a `.cache` reaches the package tree).
 
 ## Runtime notes
 

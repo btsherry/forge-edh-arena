@@ -1,6 +1,10 @@
 #!/bin/sh
-# Launch the 3 autonomous AI seats (seats 1-3) against the standard table:
-#   seat 1 Purphoros / seat 2 Giada / seat 3 Urza  (human plays seat 0 in the GUI)
+# Launch the autonomous AI seats against the standard table (item R, Ben
+# 2026-09-04): the roster is Urza, Giada, Purphoros, Selvala in seat order.
+#   all-AI (ALL_SEATS=1): seat i plays roster[i].
+#   human game: the human plays seat 0 (default Selvala); seats 1-3 take the
+#   first three roster decks that are not the human's — Urza, Giada, Purphoros
+#   for the default. GuiPilotMatch applies the identical rule.
 # Each seat runs in a while-true restart loop — that plus the engine's
 # timeout->stock fallback is the whole supervision story. (Backend-model seats
 # get a crash-loop damper on top: 5 exits in 10 minutes stops the seat rather
@@ -58,10 +62,14 @@ is_backend() { case "$1" in or/*|oai/*) return 0 ;; *) return 1 ;; esac; }
 seat() { # seat_no deck model
   if is_backend "$3"; then damped=1; else damped=0; fi
   fails=0; win_start=$(date +%s)
+  mkdir -p "$DIR/logs/pids"
   while true; do
     python3 "$DIR/seat_runner.py" --seat "$1" --deck "$2" \
-      --model "$3" --effort "$EFFORT" --base "$BASE" $SPEC_FLAG $HOLD_FLAG
-    echo "[seat $1] runner exited ($?) — restarting in 2s" >&2
+      --model "$3" --effort "$EFFORT" --base "$BASE" $SPEC_FLAG $HOLD_FLAG &
+    child=$!
+    echo "$child" > "$DIR/logs/pids/seat-$1.pid"   # item 13e: arena-stop kills by PID
+    wait "$child"; rc=$?
+    echo "[seat $1] runner exited ($rc) — restarting in 2s" >&2
     if [ "$damped" = 1 ]; then
       now=$(date +%s)
       if [ $((now - win_start)) -gt 600 ]; then fails=0; win_start=$now; fi
@@ -80,13 +88,30 @@ seat() { # seat_no deck model
 # arena.seat.decks property (run-pilot-match.sh forwards ARENA_SEAT_DECKS), so
 # the engine's seats and the brains launched here move together. ALL_SEATS also
 # seats seat 0. PREFLIGHT_DECKS lets a caller (or a test) check an explicit set.
-TABLE="${ARENA_SEAT_DECKS:-selvala-heart-of-the-wilds purphoros-god-of-the-forge giada-font-of-hope urza-lord-high-artificer}"
+TABLE="${ARENA_SEAT_DECKS:-urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds}"
 # shellcheck disable=SC2086  # intentional word split: TABLE is a slug list
 set -- $TABLE
 [ $# -eq 4 ] || { echo "[run_table] ARENA_SEAT_DECKS must list exactly 4 deck slugs in seat order (got $#: $TABLE)" >&2; exit 1; }
 D0=$1; D1=$2; D2=$3; D3=$4
-AI_DECKS="$D1 $D2 $D3"
-[ "${ALL_SEATS:-0}" = "1" ] && AI_DECKS="$D0 $AI_DECKS"
+if [ "${ALL_SEATS:-0}" = "1" ]; then
+  AI_DECKS="$D0 $D1 $D2 $D3"        # all-AI: roster order IS seat order
+else
+  # Human game (item R): seats 1-3 = the first three roster decks that are not
+  # the human's. arena-play.sh passes the human's slug as ARENA_HUMAN_DECK;
+  # a hand launch without it assumes the default human deck.
+  HUMAN="${ARENA_HUMAN_DECK:-selvala-heart-of-the-wilds}"
+  AI_DECKS=""; n=0
+  for d in $D0 $D1 $D2 $D3; do
+    [ "$d" = "$HUMAN" ] && continue
+    [ "$n" -ge 3 ] && break
+    AI_DECKS="$AI_DECKS $d"; n=$((n + 1))
+  done
+  AI_DECKS="${AI_DECKS# }"
+  # shellcheck disable=SC2086
+  set -- $AI_DECKS
+  [ $# -eq 3 ] || { echo "[run_table] the roster must yield exactly 3 AI decks once the human's ($HUMAN) is removed (got $#: $AI_DECKS) — check ARENA_SEAT_DECKS for a repeated slug" >&2; exit 1; }
+  D1=$1; D2=$2; D3=$3               # the seats launched below
+fi
 AI_DECKS="${PREFLIGHT_DECKS:-$AI_DECKS}"
 
 # Startup preflight: every AI seat needs deck text + combos + a strategy primer
@@ -104,6 +129,83 @@ preflight_decks() {
     [ -f "$AROOT/decks/$d/dossier/deck-cards.json" ] || miss="$miss\n  [$d]  MISSING deck text  (decks/$d/dossier/deck-cards.json)"
     [ -f "$AROOT/decks/$d/dossier/combos.json" ]     || miss="$miss\n  [$d]  MISSING combos     (decks/$d/dossier/combos.json)"
     [ -f "$AROOT/docs/primers/$d-deckcheck.md" ]     || miss="$miss\n  [$d]  MISSING strategy   (docs/primers/$d-deckcheck.md)"
+    # Static .dck sanity (2026-09-01): two decks reached a live launch
+    # unloadable; catch the cheap-to-see defects (sections, 100 cards, DFC
+    # naming) at every launch. The authoritative loader probe runs at ingest.
+    err=$(python3 - "$AROOT/decks/$d.dck" "$AROOT/../forge-gui/res/cardsfolder" <<'PYCHK'
+import sys
+try:
+    lines = [l.strip() for l in open(sys.argv[1], encoding="utf-8") if l.strip()]
+except OSError:
+    print("dck file missing"); sys.exit(0)
+if "[Commander]" not in lines or "[metadata]" not in lines:
+    print("not a sectioned Commander .dck (raw export?)"); sys.exit(0)
+ci = lines.index("[Commander]")
+if ci + 1 >= len(lines) or lines[ci + 1].startswith("["):
+    print("empty [Commander] section"); sys.exit(0)
+n = 0
+for l in lines:
+    parts = l.split(None, 1)
+    if parts and parts[0].isdigit():
+        n += int(parts[0])
+if n != 100:
+    print(f"{n} cards, expected 100"); sys.exit(0)
+# DFC naming (2026-08-31, game 18): Forge names transform / modal-DFC /
+# adventure / disturb cards by their FRONT face; only true split cards keep
+# "A // B". A wrong form isn't a load error — CardPool inserts an UNSUPPORTED
+# placeholder, the count stays 100, and the match silently drops the card
+# (Sythis played 95). Resolve each "A // B" line against the card scripts.
+import os, glob, re
+folder = sys.argv[2] if len(sys.argv) > 2 else ""
+def slug(name):
+    name = name.lower().replace("'", "")
+    return re.sub(r"[^a-z0-9]+", "_", name).strip("_")
+if os.path.isdir(folder):
+    for l in lines:
+        parts = l.split(None, 1)
+        if len(parts) < 2 or not parts[0].isdigit():
+            continue
+        name = parts[1].split("|")[0].strip()
+        if " // " not in name:
+            continue
+        a, b = [x.strip() for x in name.split(" // ", 1)]
+        hits = glob.glob(os.path.join(folder, "*", slug(a) + "_" + slug(b) + ".txt"))
+        if not hits:
+            print(f"no card script for '{name}'"); sys.exit(0)
+        if "AlternateMode:Split" not in open(hits[0], encoding="utf-8", errors="replace").read():
+            print(f"'{name}' is a double-faced card: write its FRONT face '{a}' "
+                  f"(only split cards keep 'A // B'); the match would DROP it"); sys.exit(0)
+# Launch manifest (plan item 7, 2026-09-03): ingestion verified every card
+# against Forge ONCE and recorded the .dck's SHA-256 + a card-DB stamp. Here
+# we compare hashes in milliseconds — no JVM at launch, ever. Missing manifest
+# = never verified; changed .dck = verified deck is not the one on disk.
+import hashlib, json
+slugdir = os.path.dirname(sys.argv[1]); slug = os.path.splitext(os.path.basename(sys.argv[1]))[0]
+mpath = os.path.join(slugdir, slug, "dossier", "manifest.json")
+if not os.path.exists(mpath):
+    print("no launch manifest — run arena-add-deck.py (or --manifest-only) so the deck is "
+          "verified against Forge once"); sys.exit(0)
+try:
+    m = json.load(open(mpath))
+except (OSError, ValueError) as e:
+    print(f"unreadable launch manifest ({e}) — re-run arena-add-deck.py"); sys.exit(0)
+sha = hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest()
+if m.get("dck_sha256") != sha:
+    print("deck changed since ingest (sha mismatch) — re-run arena-add-deck.py so the "
+          "new list is verified"); sys.exit(0)
+if os.path.isdir(folder) and m.get("db_stamp"):
+    n_cards = sum(1 for _r, _d, fs in os.walk(folder) for f in fs if f.endswith(".txt"))
+    eds = os.path.join(os.path.dirname(folder), "editions")
+    try:
+        n_eds = sum(1 for f in os.listdir(eds) if f.endswith(".txt"))
+    except OSError:
+        n_eds = 0
+    if m["db_stamp"] != f"{n_cards}:{n_eds}":
+        print(f"WARN card database changed since ingest ({m['db_stamp']} -> {n_cards}:{n_eds}); "
+              f"re-ingest when convenient", file=sys.stderr)
+PYCHK
+)
+    [ -z "$err" ] || miss="$miss\n  [$d]  BAD .dck            ($err)"
   done
   if [ -n "$miss" ]; then
     printf '%b\n' "[run_table] PREFLIGHT FAILED — required files missing:$miss" >&2
@@ -136,7 +238,7 @@ preflight_models() {
   fi
   # Best-effort context fit against a previously saved /models probe: fail
   # only on a PROVEN misfit (dossier estimate > known context_length).
-  if [ -f "$DIR/logs/control/or-models.json" ]; then
+  if [ -f "$DIR/logs/cache/or-models.json" ]; then
     ARENA_PF_MODELS="$M1,$M2,$M3" ARENA_PF_M0="$M0" ARENA_PF_ALL="${ALL_SEATS:-0}" \
     ARENA_PF_DECKS="$D0 $D1 $D2 $D3" ARENA_PF_ROOT="$AROOT" \
     python3 - <<'PY' || return 1
@@ -151,7 +253,7 @@ else:
     seats = [1, 2, 3]
 try:
     rows = {r.get("id"): r for r in json.load(
-        open(os.path.join(root, "runner/logs/control/or-models.json")))["data"]}
+        open(os.path.join(root, "runner/logs/cache/or-models.json")))["data"]}
 except Exception:
     sys.exit(0)
 def est(seat):
@@ -202,8 +304,8 @@ preflight_models || exit 1
 # and to the next launch's context preflight.
 case "$M0 $M1 $M2 $M3" in
   *or/*)
-    mkdir -p "$DIR/logs/control"
-    python3 - "$DIR/logs/control/or-models.json" <<'PY' || \
+    mkdir -p "$DIR/logs/cache"   # item 13f: control/ is cleared by arena-stop; cache/ survives
+    python3 - "$DIR/logs/cache/or-models.json" <<'PY' || \
       echo "[run_table] /models probe failed (continuing — runtime latch is the backstop)" >&2
 import json, os, sys, urllib.request
 out = sys.argv[1]
@@ -224,13 +326,16 @@ PY
     ;;
 esac
 
-trap 'kill 0' INT TERM
+# Item 13e: on INT/TERM kill OUR seat runners (by PID file) and OUR loop
+# subshells — never `kill 0`, which signalled the launching shell's whole
+# process group.
+trap 'for f in "$DIR"/logs/pids/seat-*.pid; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; done; kill $(jobs -p) 2>/dev/null; exit 143' INT TERM
 if [ "${ALL_SEATS:-0}" = "1" ]; then
   seat 0 "$D0" "$M0" &   # all-AI mode: 4th brain takes seat 0
 fi
 seat 1 "$D1" "$M1" &
 seat 2 "$D2" "$M2" &
 seat 3 "$D3" "$M3" &
-echo "seatd table up (seats 1-3, model=$M1/$M2/$M3, timeout=${ARENA_MAILBOX_TIMEOUT}s)"
+echo "seatd table up (seats 1-3 = $D1 / $D2 / $D3, model=$M1/$M2/$M3, timeout=${ARENA_MAILBOX_TIMEOUT}s)"
 echo "logs: tail -f $DIR/logs/seat-*.log"
 wait

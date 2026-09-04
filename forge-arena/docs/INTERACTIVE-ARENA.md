@@ -13,20 +13,22 @@ won by the human via a Selvala + Umbral Mantle + Craterhoof combo turn.
 
 Second session 2026-08-06 (v2, "fast loop"): validated `REACT`, `CHOOSE_CARD`,
 and deck-aware casting live; **hardened the reactive gate**; and cut end-to-end
-latency (75ms outbox poll, 0.5s monitor, ~2s brain drain, brains self-serving
+latency (75ms outbox poll, 0.15s seat-daemon inbox poll — was 0.5s until 2026-08-13, ~2s brain drain, brains self-serving
 their own inboxes). The distilled learnings from both sessions
 live under **Operational learnings** below — read that and the **protocol
 contract** first if you are picking this up. (**Next architecture** further
 down is the retained PRE-SHIP design — historical, not a roadmap.)
 
-> Status (2026-08-19): SHIPPED — this seam is the core of the
-> **forge-light-llm** distributable (v1 2026-08-12 → v3.2 2026-08-19 on R2
-> as `-latest`, dated key `forge-light-llm-20260819.tar.gz`, source
-> `d9302fbf178`). User-facing docs: `packaging/README.md` + `packaging/PATCH-NOTES.md`.
-> Engineering inventory: [INVENTORY.md](INVENTORY.md). Upstream-merge safety:
-> [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md). Built on Card-Forge/forge (GPL-3.0);
-> non-commercial fan content under WotC's Fan Content Policy. Any distribution
-> is source-available under GPL-3.0.
+> Status (2026-09-04): SHIPPED — this seam is the core of the
+> **forge-light-llm** distributable (v1 2026-08-12 → v3.4 2026-09-04 on R2
+> as `-latest`, dated key `forge-light-llm-20260904b.tar.gz`). v3.3.3 (the
+> review fixes, source `5f72c0a8714`, dated key `…-20260904.tar.gz`) and v3.4
+> (advisor Chat field, auto-teardown at match end) both shipped 2026-09-04;
+> BUG-LOG BL-17 closed. User-facing docs: `packaging/README.md` +
+> `packaging/PATCH-NOTES.md`. Engineering inventory: [INVENTORY.md](INVENTORY.md).
+> Upstream-merge safety: [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md). Built on
+> Card-Forge/forge (GPL-3.0); non-commercial fan content under WotC's Fan
+> Content Policy. Any distribution is source-available under GPL-3.0.
 
 ## Why this exists
 
@@ -50,11 +52,11 @@ the merge-safety plan is [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md).
 
 | File | Role |
 |---|---|
-| `MailboxProtocol.java` | The file bus. Per-seat `inbox/`+`outbox/`; atomic writes (temp+rename); poll for the response; timeout → `null` (caller falls back to stock). Request/response wire records. No Forge imports — pure transport. |
-| `MailboxController.java` | `extends forge.ai.PlayerControllerAi`. Overrides the top-level decisions (`chooseSpellAbilityToPlay`, `mulliganKeepHand`, `declareAttackers`, `declareBlockers`) **plus high-value sub-choices** (`chooseSingleEntityForEffect`, `chooseEntitiesForEffect`, `chooseModeForAbility`, `chooseSingleCardForZoneChange`). Serializes a hidden-info-safe state and exchanges it over the bus. **Every override times out to `super` (stock AI)** so a silent/slow brain never hangs the game. |
-| `MailboxLobbyPlayer.java` | `extends forge.ai.LobbyPlayerAi`. Injects the controller via `IGameEntitiesFactory.createIngamePlayer` (the seam both headless and GUI paths converge on — `Game.java`), so a mailbox seat is honored in a GUI game with no engine/GUI patch. |
-| `GuiPilotMatch.java` | `main(...)` launcher: bootstraps the desktop GUI, seats a human at seat 0 and `MailboxLobbyPlayer`s at seats 1–3 (or all four in `--all-ai`), resolves the roster (`arena.seat.decks` / `ARENA_SEAT_DECKS`), and starts the match. |
-| `ObserverSnapshot.java` | Event-bus-driven public snapshot (`mailbox/observer-state.json`, ~200ms debounce): per-seat life/board/eliminated, whose turn — the pre-planning + dashboard + launch-liveness feed. |
+| `MailboxProtocol.java` | The file bus. Per-seat `inbox/`+`outbox/`; ONE instance per seat directory (`forSeat` caches; note 63); the constructor sweeps stale `resp-*`/`*.tmp` from the outbox (note 66); atomic writes (temp+rename); poll for the response; timeout → `null` (caller falls back to stock); heartbeat age check (note 58). Request/response wire records. No Forge imports — pure transport. |
+| `MailboxController.java` | `extends forge.ai.PlayerControllerAi`. Overrides the top-level decisions (`chooseSpellAbilityToPlay`, `mulliganKeepHand`, `declareAttackers`, `declareBlockers`) **plus high-value sub-choices** (`chooseSingleEntityForEffect`, `chooseEntitiesForEffect`, `chooseModeForAbility`, `chooseSingleCardForZoneChange`), and since 2026-09-04 `orderSimultaneousSa` and `chooseColor`/`chooseColorAllowColorless` (notes 61, 62). Serializes a hidden-info-safe state and exchanges it over the bus. **Every override times out to `super` (stock AI)** so a silent/slow brain never hangs the game. |
+| `MailboxLobbyPlayer.java` | `extends forge.ai.LobbyPlayerAi`. Injects the controller via `IGameEntitiesFactory.createIngamePlayer` (the seam both headless and GUI paths converge on — `Game.java`), so a mailbox seat is honored in a GUI game with no engine/GUI patch. `createMindSlaveController` routes a controlled seat to the master's bus with the master `Player` (note 63). |
+| `GuiPilotMatch.java` | `main(...)` launcher: bootstraps the desktop GUI, seats a human at seat 0 and `MailboxLobbyPlayer`s at seats 1–3 (or all four in `--all-ai`), builds the roster (`DECKS` = Urza, Giada, Purphoros, Selvala; `buildRoster` per note 71; override via `arena.seat.decks` / `ARENA_SEAT_DECKS`), verifies every deck loads at 100 real cards (`verifyRoster` → `mailbox/launch-status.json`), and starts the match. |
+| `ObserverSnapshot.java` | Event-bus-driven public snapshot (`mailbox/observer-state.json`): per-seat life/board/eliminated, whose turn — the pre-planning + dashboard + launch-liveness feed. Written on every event whose serialized state (timestamp aside) differs from the last write; no timer (note 64). |
 | `GameResultSpool.java` | At game end writes `runner/results/game-<ts>-<pid>.json` (placement groups from `Game.lostPlayers`, control typing by LobbyPlayer class) — the ELO applier's input. Skips cleanly when no absolute output dir is configured (tests). |
 | `AdvisorControllerHuman.java` / `AdvisorFeed.java` / `AdvisorLobbyPlayer.java` | The seat-0 **shadow feed** for the AI Advisor: mirrors the human's decision windows read-only through the same `buildState` projection (fairness lives in one place). No return channel — the advisor can never act or stall. |
 
@@ -102,8 +104,9 @@ Consequences:
   cost-reduction numbers, discards, face/state picks, and multi-card choices.
   The full current matrix — seat-owned vs deliberately-stock, with rationale —
   is [INVENTORY.md §2](INVENTORY.md). Still stock by choice: multi-target
-  spells, whole-DB card naming, trigger ordering, combat damage assignment,
-  and mana auto-tap source selection (except the TapCostPreference hook).
+  spells, whole-DB card naming, combat damage assignment, and mana auto-tap
+  source selection (except the TapCostPreference hook). Trigger ordering and
+  colour choice moved to the seat on 2026-09-04 (notes 61, 62).
 
 ### Fairness
 
@@ -127,7 +130,11 @@ knob seen from two places. The engine deletes both files once the response is re
 **Request** (`req-<n>.json`):
 ```json
 {
-  "seq": 12, "seat": 3, "turn": 22, "phase": "MAIN1",
+  "seq": 12, "gameId": "1756950000123-48211-1", "timeoutSec": 90,
+  "seat": 3, "turn": 22, "phase": "MAIN1",
+  /* gameId = one value per Game (start millis + pid + a per-process serial, note 68) —
+     the ONLY new-game signal a reader should trust (plan item 8); timeoutSec = the
+     engine's wait, so the runner budgets from what the engine will actually do (item 12) */
   "decisionType": "CAST_SPELL | REACT | MULLIGAN | DECLARE_ATTACKERS | DECLARE_BLOCKERS | CHOOSE_ENTITY | CHOOSE_ENTITIES | CHOOSE_MODE | CHOOSE_CARD | CHOOSE_CARDS | CHOOSE_NUMBER | PAY_UNLESS | CONFIRM",
   "prompt": "…",
   "state": {
@@ -146,10 +153,32 @@ knob seen from two places. The engine deletes both files once the response is re
     /* + "stackOwners":[seat...], "stackKinds":["trigger"|"spell"|...] — additive stack metadata */
     /* + "stackTargets":[["Name (id)"|"seat N",...],...] — each item's CHOSEN targets, whole chain incl.
        chained multi-target parts and charm-chosen modes; divided amounts appended as " [n]" (note 51) */
+    /* + "stackOracle":["<=300-char oracle text",...] — per stack item (note 52: REACT valuation off
+       ground truth, not model recall) */
     /* + "symmetryPieces":[{name,controllerSeat,untapped}], "untapNextSeat" — Winter-Orb-class facts */
     /* + effective keywords per card (indestructible/hexproof/ward/protection/evergreens, incl. granted) */
     /* + "confirmMode","triggerText","yesCost","chosenTargets" on CONFIRM(TRIGGER) */
     /* + "confirmMode":"PLAY_FROM_EFFECT" with "spell","free" on may-cast offers (note 49) */
+    /* + "manaSources":[{id,name,yield,colors,restricted?,sick?,cost?,count?}] — every UNTAPPED
+       producer the seat controls, one activation's yield on the live board (Cradle counts its
+       creatures), colors "any"|"colorless"|letters, identical basics collapsed with count;
+       "manaAvailableNow" = pool + unrestricted, non-sick, bare-tap yields (the number item 4's
+       refusal measures); "ritualsInHand":[{kind:"ritual",name,cost,yield,net,colors} |
+       {kind:"multiplier",name,cost}] — Mana-api spells with projected yield, TapsForMana /
+       ProduceMana effects flagged with no number (plan item 6; detection by mechanics only) */
+    /* + "lastRefused":{name,cost,needed,payableNow,kind,reason} on the CAST_SPELL window right
+       after the engine refused the seat's pick (unaffordable, or a failed modal cast); the prompt
+       carries the same sentence and that card is omitted from that ONE window (plan item 4) */
+    /* + "controllingSeat":N when this seat's decisions are being made by seat N's brain
+       (Mindslaver class, CR 721) — the request goes to seat N's mailbox and its prompt opens
+       with "YOU ARE CONTROLLING SEAT …" (plan item 11a); + "controllerBoard":{seat,life,
+       poison,hand,handSize,battlefield,graveyard,exile,commandZone,librarySize,manaPool,
+       manaAvailableNow,manaSources,untappedManaSourceCount} — the MASTER's own board incl.
+       its hand, on those requests only (CR 721.3, note 63) */
+    /* + "purpose":"TRIGGER_ORDER"|"COLOR" on the two CHOOSE_MODE windows of notes 61/62 */
+    /* + "hasCost":bool,"isMine":bool on EVERY CONFIRM — structured facts for the runner's
+       punt rule (yes only when free AND mine; plan item 10). Untyped confirms reach the
+       seat when their SOURCE is the seat's own spell/ability, never by message text (11d) */
   },
   "options": [ {"id":0,"label":"Pass (do nothing)","cost":null,"type":"PASS"}, … ]
 }
@@ -204,7 +233,9 @@ and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists
   activation or additional-cost cast) — you pick what YOU lose.
 - `CHOOSE_MODE` → `{"chosen":[<modeIndex>, …]}` — mode option ids are **indices**
   into `options`; must satisfy `min`/`max`; may repeat an index only when
-  `allowRepeat` is true.
+  `allowRepeat` is true. Since wave-2 (note 52) the same wire shape carries
+  every bounded indexed choice: `OPTIONAL COSTS` (Buyback/Kicker — min 0),
+  `PROTECTION`, `VOTE`, `CHOOSE A PILE`, `CHOOSE A VALUE`.
 - `CHOOSE_CARD` → `{"chosenId": <cardId>}` — the tutored/searched card (id `0` =
   choose none, offered only when optional). Also used for face/state picks
   (sequential ids).
@@ -212,7 +243,11 @@ and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists
   (Cultivate-class), discard selection, choose-N-for-effect; must satisfy
   `min`/`max`, no duplicates.
 - `CHOOSE_NUMBER` → `{"chosen": <int>}` within `min`..`max` — X announcements
-  on the cast path, cost-reduction amounts.
+  on the cast path, cost-reduction amounts, generic number choices, and
+  KEYWORD COST prompts (Multikicker-class: how many times to pay; max is
+  the affordable cap). `state.puntHigh` marks X-like requests whose TIMEOUT
+  default is max; unmarked requests (bids, Wheel of Misfortune class) time
+  out to MIN (wave-3: a punt of 99 on a bid was game-losing).
 - `PAY_UNLESS` → `{"chosenId": 0|1}` — 1 = pay (taxes like Rhystic/Sentinel,
   counter-unless, pay-the-difference tutors, sacrifice-unless upkeeps).
 - `CONFIRM` → `{"chosenId": 0|1}` — yes/no confirms; `state.confirmMode ==
@@ -221,6 +256,10 @@ and the `opponents` block. `command`/`graveyard`/`exile` remain plain name lists
   `state.confirmMode == "PLAY_FROM_EFFECT"` marks a may-cast offer (Isochron
   Scepter copies, Discover-class), with the offered `spell` text and whether
   it is `free` in state — on yes the seat also aims its targets (note 49).
+- Optional costs (Buyback/Kicker/Entwine) are NOT a window: affordable
+  variants appear as separate `[+ cost]` options in the CAST_SPELL list
+  (wave-3 — mailboxing chooseOptionalCosts spammed windows at
+  option-enumeration time and could hide the base spell).
 
 **Extra answer keys** (all optional, stripped before the wire): `turn_plan`
 (first own-main decision — quoted back later as advisory), `deviation`
@@ -237,11 +276,12 @@ attacker or blocker; a forced single sub-choice; a non-card entity option) are
 ## Running it
 
 ```sh
-# THE launcher (one-shot: preflight -> teardown -> seat runners -> advisor ->
-# GUI -> waits for liveness, prints one status line; react-autopass was
-# retired from launch 2026-08-17 — note 42):
-forge-arena/scripts/arena-play.sh --all-ai                       # 4 AI seats, spectator GUI
-forge-arena/scripts/arena-play.sh --human [deck.dck] [--advisor] # you at seat 0
+# THE launcher (one-shot: preflight -> teardown -> seat runners -> advisor
+# (human games, on by default) -> GUI -> waits for liveness, prints one
+# status line):
+forge-arena/scripts/arena-play.sh --all-ai                          # 4 AI seats, spectator GUI
+forge-arena/scripts/arena-play.sh --human [deck.dck] [--no-advisor] # you at seat 0
+#          --linger N | --no-autostop   (auto-teardown after game over: 120s human / 60s all-AI)
 #   knobs: --model haiku|sonnet|opus|fable  --effort low|medium|high|xhigh|max
 #          --timeout N   (defaults: opus / medium / 90s)
 forge-arena/scripts/arena-stop.sh    # teardown + ELO sweep + log archive
@@ -272,11 +312,13 @@ Any seat can instead run an **OpenRouter or OpenAI-compatible backend model**
 (`ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1"`) with $-and-call
 cost rails — see `packaging/README.md` §"Other models on the backend".
 
-## Known limitations (current, 2026-08-24)
+## Known limitations (current, 2026-09-04)
 
 1. **Deliberately-stock surfaces** — multi-target spells, whole-DB card
-   naming, trigger ordering, combat damage assignment, mana auto-tap source
-   selection (INVENTORY §2 has the rationale per row).
+   naming, combat damage assignment, convoke/improvise payment, colour picks
+   inside a payment context, mana auto-tap source selection (INVENTORY §2
+   has the rationale per row). Trigger ordering left this list 2026-09-04
+   (note 61).
 2. **Mixed-owner trigger cascades** (my trigger + your trigger alternating on
    the stack) still cost one model call per window — the own-trigger memo
    collapse correctly refuses to fire there. Bounded, safe, slow.
@@ -331,10 +373,11 @@ cost rails — see `packaging/README.md` §"Other models on the backend".
 - Teacher→student: feed caught misplays into both the agent briefs and the
   deterministic runner.
 
-**Track 4 — packaging & release — ✅ SHIPPED (v1 2026-08-12 → v3.2 2026-08-19)**
+**Track 4 — packaging & release — ✅ SHIPPED (v1 2026-08-12 → v3.4 2026-09-04)**
 as **forge-light-llm**: zero-setup tarball on R2
-(`-latest` alias), 9 bundled decks (Sythis + Liberator added for v3.2 —
-notes 45, 48), deck ingestion incl. DeckCheck auto-primer (note 44),
+(`-latest` alias), ten bundled decks (`build-light-package.sh` SLUGS: Sythis +
+Liberator added for v3.2 — notes 45, 48; Sheoldred's Sacrifice for v3.3.2 —
+PATCH-NOTES), deck ingestion incl. DeckCheck auto-primer (note 44),
 README + PATCH-NOTES,
 GPL-3.0 source-available. Build: `../BUILDING.md` +
 `packaging/build-light-package.sh` (the manifest).
@@ -430,12 +473,16 @@ user-facing docs live in `packaging/README.md`; per-file map in INVENTORY §4.
   Pilot attribution from `game.jsonl` decision records (majority model in the
   game window). Transport-contaminated games are **voided** (recorded with
   reason, ladders frozen; `ARENA_RATE_VOIDED=1` overrides).
-- **The AI Advisor** (human games, `--advisor`): a fourth brain on the seat-0
-  read-only shadow feed — advice before you act, table-aware mulligans, color
-  commentary, coach's memory, pause button; `advisor-0.jsonl` dataset.
+- **The AI Advisor** (human games; on by default since 08-17, `--no-advisor`
+  opts out): a fourth brain on the seat-0 read-only shadow feed — advice
+  before you act, table-aware mulligans, color commentary, coach's memory,
+  pause button, a **Chat** field (note 73); `advisor-0.jsonl` dataset.
+  Supervised by `runner/run_advisor.sh` since 09-04 (note 72).
 - **Smart autopass** (`ARENA_AUTOPASS`, default `casts`): stakes-based
   guarantees (own mains/combat/opponent-spell/floating-mana stops never
-  skipped) + `react-autopass.py` answering provably-no-op REACTs at ~200ms.
+  skipped) + the seat runners' allowlist fastpath answering provably-no-op
+  REACTs (the standalone `react-autopass.py` daemon that first did this was
+  retired from the launch 08-17 and deleted 09-04 — note 42).
 - **The deviation log**: every seat states its plan (`turn_plan`) and reports
   each thwarted line (`deviation {wanted, blocked_by}`) — grep `DEVIATION`
   for a play-quality review. The brief-tuning loop runs off this evidence.
@@ -542,7 +589,7 @@ Hard-won from two live sessions; read before optimizing anything.
     token cost. Retire it when the engine gate lands. **RETIRED from the launch
     2026-08-17 (Ben):** the resident runners' allowlist fastpath subsumed it —
     zero daemon absorptions across three consecutive games; script kept as a
-    manual fallback.
+    manual fallback until it was deleted 2026-09-04 (BL-15, note 42).
 13. **GAME-DECIDING GAP — the pre-damage combat instant window is not mailboxed.**
     Game 2, turn 21: Giada's brain planned blocks around **Flare of Fortitude** (free
     total fog: sac a white creature, prevent ALL damage) explicitly expecting a
@@ -889,8 +936,12 @@ Hard-won from two live sessions; read before optimizing anything.
 42. **Launch defaults locked — Ben's four rulings (2026-08-17).** The standard
     launch is now opinionated, and every entry point agrees: (1) `react-autopass`
     removed from `arena-play` — zero absorptions across three games, the resident
-    runners' allowlist fastpath subsumed it; the script stays a manual fallback
-    and `arena-stop` still reaps a hand-launched one (see note 12). (2) All model
+    runners' allowlist fastpath subsumed it. (The script lingered as a "manual
+    fallback" until 2026-09-04, when BL-15 deleted it; the claim that stood here
+    until then, that `arena-stop` "still reaps a hand-launched one", was false —
+    the stop script kills by PID file and its fallback patterns name only
+    `GuiPilotMatch`, `run_table.sh`, `run_advisor.sh`, `seat_runner.py` and
+    `advisor_runner.py`.) (2) All model
     defaults **sonnet → opus** (`run_table` `SEAT_MODEL`, `seat_runner --model`),
     so a bare `run_table` no longer silently launches sonnet. (3) Effort unified
     at **medium** everywhere (`SEAT_EFFORT`, `seat_runner --effort`; arena-play
@@ -1028,3 +1079,389 @@ Hard-won from two live sessions; read before optimizing anything.
     three seats no-blocked a lethal 190-power trample alpha with honest
     arithmetic. 289 decisions, 0 punts/lost/wedges. Sacrifice surfaces:
     still zero live windows after two hunts (test-guarded only).
+52. **Wave-2: the dual-audit sweep lands (2026-08-28).** All ten audit
+    findings (SEAM-AUDIT-2026-08-28.md) fixed in one rationalized change-set
+    on three shared mechanisms — `cardChoiceViaSeat`, `CHOOSE_NUMBER`, and
+    the `CHOOSE_MODE` index shape — plus ONE new forge-ai interface
+    (`PaymentPickPreference`) covering all four pitch-cost types. Now
+    seat-owned: cleanup discard + mulligan bottoming; scry/surveil/library
+    ORDER (answer order = final order, FIRST = top)/clash; generic numbers +
+    non-mana announces; retargeting spells (`chooseNewTargetsFor` — stock
+    returns null, a seat-cast Deflecting Swat was a silent no-op; single-
+    target changes seat-aimed, restore-on-decline mirrors the human
+    controller); optional costs (always mailboxed — one option is still a
+    real yes/no); protection type, votes, pile splits (FaceDown domain
+    False/One/True — review catch: the first cut leaked the hidden pile's
+    contents; fixed + regression-asserted); mixed Card+Player choices
+    (sequential synthetic ids); `stackOracle` serialization. Runner:
+    `_react_signature` gains phase + combat + stackTargets digests (a
+    correct early-combat pass no longer eats the post-blocks fog window —
+    audit finding 1), and the autopass allowlist skips any window whose
+    stackTargets name our stuff (note 12's dropped clause restored).
+    Deferred with rationale: `chooseSingleReplacementEffect` (spam risk),
+    routine tap-pick generalization (mana-loop pacing). Process: full diffs
+    side-by-side reviewed by Gemini pre-finalize — 1 BLOCKER refuted by code
+    inspection (`clearTargets()` REASSIGNS `targetChosen`, so save/restore
+    of the old TargetChoices is sound — the human controller's own pattern),
+    1 real FIX applied (pile visibility), 4 risk spots confirmed OK, verdict
+    SHIP. Tests: shared `MailboxTestKit` harness (direct-call style — the
+    fixture six older files each copy-pasted); 17 new Java + 7 new Python.
+53. **Harness boil (2026-08-28, Ben-approved A–D).** Full-gate census: P1
+    owned 73% of suite time (the full game IS those tests' oracle — hands
+    off); P2's cost was game-boots + poll pacing, not assertions. Landed:
+    (A) standard gate = `-DskipTests` (parents build, tests skip, arena
+    suite runs anyway — the pom's arena.skip.tests design); FULL gate on
+    parent-touching change-sets + syncs. (B) `arena.mailbox.poll.ms=5` in
+    surefire; interactive consolidations (12→1, 5→1, 3→1, 4→3, ~9→1 games)
+    — one merge (Blood+Edict) tried, timed out against the fixture's tiny
+    libraries, and was REVERTED per the anti-contortion rule. (C) measured,
+    revertible divergence-test knobs: sim turn cap 8→5 = 114s→15s with
+    divergence intact at seed 1 (`-Darena.test.divergence.simTurnCap=8`
+    reverts); profile divergence sits at seed 5, so seedTries stays ≥5.
+    (D) AiTabHarness relic deleted. Full policy: IMPLEMENTATION-PLAN §8 +
+    BUILDING.md.
+54. **Wave-3: adversarial validation of wave-2, all ten findings fixed
+    (2026-08-31).** Ben's mandated second pass — the wave-2 change-set plus
+    my ten local-review findings went to Gemini with FULL context (whole
+    seam + runner + every upstream call-site + repo map + explicit
+    context-request protocol). Verdict: 10/10 VALIDATED, zero context
+    requests, zero new findings, REJECT until fixed. Root-cause classes:
+    (1) planning/execution leakage — the engine reuses decision surfaces to
+    EVALUATE moves (getOriginalAndAltCostAbilities consults
+    chooseOptionalCosts at enumeration; DrawAi.willPayCosts visits cost
+    parts during scans); (2) human/AI path divergence (announceRequirements
+    is human-only; Multikicker actually flows through
+    chooseNumberForKeywordCost at execution time); (3) string-matching
+    fragility. Fixes: optional costs became CAST-WINDOW VARIANTS (override
+    returns empty during own enumeration, stock elsewhere; affordability
+    vetted at offer); payment hooks are DEFAULT-DENY outside an executing
+    cast (inPaymentContext — kills DrawAi and every unaudited planning
+    caller); shape-aware number punts (puntHigh); top-of-library order
+    reversed to engine parity (consumers stack one card at a time, LAST
+    ends on top — Gemini's wave-2 OK-note on this was WRONG);
+    chooseNumberForKeywordCost override (the real Chalice surface) with an
+    affordable cap; threat clause strips divided-damage suffixes and skips
+    own-owned stack items; kit DirectoryStream in try-with-resources;
+    redirect confirm keyed on ApiType.ChangeTargets, not localized text.
+    Proven by CastPathReachabilityTest: four END-TO-END casts through the
+    real window flow asserting RESULTING STATE (buyback returns to hand,
+    the discard payment takes the named card, Top's order physically
+    lands, Chalice enters with the chosen kicks). Debugging lesson: ZONE
+    MOVES CAN CREATE NEW CARD INSTANCES (sa.setHostCard(moveToStack(...)))
+    — a pre-cast test reference goes stale at cast; assert final state by
+    name+zone lookup, never by held reference. Honest scope note: hooks
+    now also deny during stock-fallback casts and unless-cost payments
+    (stock pays stock — fail-safe preserved, agency narrower; revisit if
+    live games show it mattering).
+55. **Deck loadability becomes a gated pipeline concern (2026-09-01).** Two
+    consecutive new decks failed at their FIRST live launch on `.dck`
+    defects invisible to the file-presence preflight: Y'shtola's raw
+    Moxfield export (no sections) and Sheoldred's transform commander
+    written as "A // B" (Forge names transform/MDFC/adventure cards by the
+    FRONT face; only split-layout cards keep the full name — the loader
+    silently resolves nothing, or worse, silently DROPS unresolvable main
+    cards). Three-tier fix: (1) `arena-add-deck` now REGENERATES the
+    registered .dck with layout-aware Forge names (Scryfall layout data)
+    and runs `DeckLoadProbe` — a real-DeckSerializer load asserting
+    commanders present and exactly 100 cards resolved — as step 4.5;
+    (2) launch preflight gains a cheap static check (sections, non-empty
+    [Commander], 100 copies) on every AI deck at every launch; (3)
+    `DeckLoadProbeTest` loads every shipped .dck in the suite — the net
+    that would have caught both bugs. `deckcheck-import` also writes
+    commander lines front-face. ArchUnit note: the probe lives in
+    `forge.arena.interactive` (it predicts GuiPilotMatch loadability) —
+    `prep` may not touch `forge.deck` per the EngineFacade boundary, and
+    the boundary test caught exactly that on the first draft.
+56. **Counting is not resolving — the 95-card game (2026-08-31, game 18).**
+    A live four-AI table (Giada/Sheoldred/Selvala/Sythis) showed Sythis
+    opening at library 88 + hand 7 = 95, and gui.out carried four
+    `An unsupported card was requested` lines: Katilda, Strength of the
+    Harvest, Bala Ged Recovery, Branchloft Pathway — modal-DFC / disturb
+    lines still written "A // B" in a deck ingested before note 55's
+    front-face rule. Urza's list had the same defect (Wandering Archaic; it
+    won game 17 playing 98). Why note 55's nets missed it: the loader does
+    NOT drop an unresolvable name — `CardPool.add` inserts CardDb's
+    UNSUPPORTED PLACEHOLDER (`CardRules.isUnsupported()`), so
+    `countAll()` still says 100 and only the match drops the card. Fix:
+    (1) `DeckLoadProbe.unsupportedNames()` scans the resolved pool and the
+    probe + `DeckLoadProbeTest` fail on any placeholder, naming it; (2) the
+    launch preflight's static check now resolves every "A // B" line
+    against the card scripts — `AlternateMode:Split` keeps the full name,
+    anything else must be the front face — no JVM, runs on every AI deck
+    every launch; (3) the five lines fixed, plus Sythis's `[metadata]`
+    Name (it still carried the Moxfield title). Also landed from the same
+    session: `scripts/arena-cardwatch.py`, a card-conservation watcher
+    that polls the transient seat requests (the only feed carrying every
+    zone) and prints per-seat nontoken totals on change — Sythis's 97
+    baseline (95 + commander + "Commander Effect") was the tell; its notes
+    explain the benign GAIN/DROP pairs from mid-resolution transit
+    snapshots. Advisor tab: the pause button now has three states (OFF —
+    not attached / ON / PAUSED) via `AiControlFile.advisorAttached()`; it
+    read "ON — click to pause" in advisor-less games because
+    `advisorEnabled()` is only the pause flag and defaults true.
+57. **Trigger-aim contract (2026-09-03, interactive plan item 1).** The
+    full review found two defects in `prepareTriggerViaSeat` /
+    `chooseTargetsFor`: (a) the id-0 "DECLINE this optional trigger" option
+    was offered for EVERY aimed trigger, so a brain could "decline" a
+    MANDATORY one — the code auto-aimed the first legal candidate to stack
+    it legally and `confirmTrigger` (true for mandatory) let it resolve
+    against a target the brain never chose; (b) a failed exchange (timeout,
+    malformed, unknown id) returned the same `false` as an explicit decline,
+    so a silent brain silently threw its own triggers away — the only
+    surface whose timeout did not fall to stock. Now: optionality is read
+    from the root `WrappedAbility` (`isMandatory()`), the decline option is
+    offered only for optional triggers, `chooseTargetsFor` records
+    ANSWERED / DECLINED / NO_ANSWER while aiming, and NO_ANSWER hands the
+    whole trigger to stock (`doTrigger`) with a "no usable answer at aim —
+    stock aims" log line. Explicit decline of an OPTIONAL trigger keeps the
+    rules-correct sequence (CR 603.3d: aim to stack legally, decline at
+    resolution). `TriggerAimContractTest` pins it with two cards from one
+    cast — Ravenous Chupacabra (mandatory) + Aura Shards (optional) — and
+    a silent-brain scenario via the kit's new `SILENT` responder.
+58. **Liveness, identity and budget as protocol facts (2026-09-03, plan
+    items 2, 3, 8, 10, 12).** Three things the runner used to GUESS are now
+    stated by the engine. (a) `gameId` on every request and feed file: a
+    fresh runner adopts the id it sees (rejoin), an id CHANGE resets memory
+    and sweeps the outbox, an already-answered request the engine was slow
+    to delete is skipped — the 3 s delete-race heuristic and the advisor's
+    file-number comparison were both wrong in reachable cases. (b)
+    `timeoutSec` on every request: the runner budgets from the engine's
+    actual wait, and `decide()` carries ONE deadline through init and the
+    decision call (the old code handed the same budget to both, so a lazy
+    re-init could block a seat for 2x the window). Timeout stays the explicit
+    `--timeout` flag — never derived from effort, never clamped; mismatches
+    are legitimate experiments. (c) `<seat-dir>/heartbeat`, touched every
+    5 s by a daemon thread in each runner (and the advisor): the engine stats
+    it once before blocking; older than 15 s (`arena.mailbox.heartbeat.stale.ms`)
+    means nobody is home and stock plays at once, one log line per
+    transition; absent (older runner) or unreadable = wait as always — the
+    gate can only shorten a wait. `observer-state.json` seats carry
+    `brainAlive` (true/false/null) and the ELO spool carries per-seat
+    `stockDecisions`. Also: a punt no longer feeds the REACT memo (only
+    `source == "model"` does), and the CONFIRM punt is structural — yes only
+    when `isMine && !hasCost` — replacing a word heuristic where "play"
+    matched "player".
+59. **Scryfall canonical, Forge at the boundary, 400 cards or no game
+    (2026-09-03, plan item 7).** The 09-01 DFC rule in arena-add-deck (layout
+    'split' keeps "A // B", everything else front face) was a whitelist, and
+    it already missed Rooms (layout 'room'; Forge keeps the combined name) —
+    the next ingest would have rewritten Sythis's correct Secret Arcade line
+    into a placeholder. Now: (a) Scryfall is canonical in every built file
+    (`deck-cards.json` entries carry `scryfall_id`, `set`,
+    `collector_number`; `name` stays Scryfall's); (b) Forge's name is looked
+    up in Forge's OWN database by `DeckLoadProbe --resolve` — the PRINTING
+    first (Scryfall set + collector number → edition entry → card DB), name
+    forms second (combined, then front face) — and stored as `forge_name`,
+    the only thing the .dck writer reads; (c) anything unresolved is a NAMED
+    failure before a single file is written (Forge lacks the newest sets and
+    some cards forever — the game must not start short, so neither may the
+    ingest); (d) ingest writes `dossier/manifest.json` (.dck SHA-256, card
+    count, a card-DB stamp, every resolution) and the launch preflight
+    compares the hash in milliseconds — missing manifest or changed .dck
+    refuses with the fix named, a changed DB stamp only warns; NO JVM at
+    launch, ever (Ben: "15 s at startup is way too long"); (e) start
+    invariant — GuiPilotMatch runs `playabilityProblems` on every loaded deck
+    and refuses a seat short of 100 real cards, writing
+    `mailbox/launch-status.json` so arena-play reports it at once; (f) end
+    invariant — GameResultSpool counts every owned card across all zones
+    (tokens/copies/emblems/effects excluded) and logs `CARD-CHECK` per seat or
+    `CARD-VANISH` on a shortfall, with `cards`/`deckSize` in the spool.
+    `--manifest-only` writes the manifest for a deck whose dossier another
+    tool built (the four Java-prepped decks), touching nothing else. Tests:
+    `DeckLoadProbeResolveTest` (Room + MDFC by printing, name-form fallback,
+    unresolved, placeholder named), `CardConservationTest`.
+60. **The wire contract, tested from both sides (2026-09-03, plan item 15).**
+    Fourteen decision types and ~25 state keys were specified in prose and
+    checked by `String.contains` in test brains; the Python punts were tested
+    against hand-written fixtures that agreed with the Python validator by
+    construction. Now `schemas/arena.mailbox-request.1.schema.json` states
+    the request shape (top-level fields, the state keys a reader may rely on,
+    per-type conditionals), `ProtocolContractTest` drives nine surfaces
+    through the real controller, validates every request the engine wrote
+    against it and writes one ENGINE-EMITTED fixture per type to
+    `runner/tests/fixtures/engine/`, and `test_engine_fixtures.py` feeds each
+    through `rules.safe_default` + `rules.validate`. A field the engine
+    renames now fails a Java test; a punt the engine would reject now fails a
+    Python test. Also in this item: the four seam tests still using the
+    probe regex INVENTORY §3 forbids (matching `"id":N` anywhere in the body)
+    moved to the kit's anchored option lookups (`idOf`/`idOfWhere`), and the
+    nine pre-kit classes whose scripted brains polled for 150 s past their
+    test now stop with the test (`legacyBrainAlive` + `@AfterMethod`).
+    `HeartbeatGateTest` is the suite's first dead-brain test.
+61. **Trigger ordering is the seat's (2026-09-04, BL-02, CR 603.3b).** Game
+    19: `orderSimultaneousSa` fired 6× for the sacrifice deck in batches of
+    2–22, every order chosen by stock. Now `MailboxController.
+    orderSimultaneousSa` groups the seat's simultaneous triggers by
+    `triggerKey` (host name + trigger text); with two or more DISTINCT groups
+    it opens a `CHOOSE_MODE` window with `state.purpose = "TRIGGER_ORDER"`,
+    one option per group (label `host — text`, suffix `×N` for N identical
+    triggers), `min = max = groups`, `allowRepeat = false`. The answer lists
+    the groups in RESOLUTION order — first listed resolves first — and
+    `orderViaSeat` reverses it into stack-push order. One group (a batch of
+    identical triggers) never opens a window, which is what keeps a
+    22-trigger death batch cheap. Anything but a full permutation (null,
+    repeat, out of range, wrong count, exception) → `super.
+    orderSimultaneousSa`, counted by `stockSurface`. Runner: no new
+    validator — CHOOSE_MODE's min = max plus the no-repeat rule already force
+    a permutation; the brief gained a paragraph. `TriggerOrderWindowTest`:
+    two pairs of death triggers on different cards (Midnight Reaper resolves
+    first; Grim Haruspex + Cruel Celebrant as the second pair), identical
+    triggers open no window, a silent brain falls to stock. Landed in
+    2bc78d92188 with the standard gate still to run. See it live:
+    `grep TRIGGER_ORDER runner/logs/seat-N.jsonl`.
+62. **Colour choice is the seat's outside payment (2026-09-04, BL-03).** Game
+    19: `chooseColor` / `chooseColorAllowColorless` was the most consulted
+    stock surface (27 consultations — engine asks, not decisions; W-1). Now
+    `colorViaSeat`: when NOT `inPaymentContext` and two or more colours are
+    legal (WUBRG filtered by the offered `ColorSet`, plus "colorless" when
+    the allow-colorless overload asks), a one-pick `CHOOSE_MODE` window with
+    `state.purpose = "COLOR"` and the colours' long names as option labels.
+    Payment-context consultations (the payer's planning scans and
+    tap-for-this-cost picks — the wave-3 F2 lesson) and single-colour asks
+    stay stock; null or malformed → stock. Gated on context, never on card.
+    `ColorChoiceWindowTest`: Voice of All + Story Circle by direct controller
+    call; a payment context opens nothing; silent → stock. Same commit and
+    gate status as note 61. The human seat's mono-colour autopick (advisor
+    QoL) is untouched.
+63. **One bus per seat directory, and the master's own board (2026-09-04,
+    BL-05, CR 721.3).** `MailboxProtocol.forSeat` now caches one instance per
+    normalized seat directory (`BUSES`). The request sequence lives on the
+    bus, and item 11a's Mindslaver controller had been built on a FRESH bus
+    for the master's directory — `seq` restarted at 1 and the runner rightly
+    skipped the reused file names as already answered. `MailboxLobbyPlayer.
+    createMindSlaveController` also passes the master `Player`; every
+    controlled request now carries `state.controllerBoard` — the master's own
+    `seat, life, poison, hand, handSize, battlefield, graveyard, exile,
+    commandZone, librarySize, manaPool, manaAvailableNow, manaSources,
+    untappedManaSourceCount` — the master's brain reading its own hand while
+    it plays the slave's cards; a seat playing itself carries no such key.
+    `MindSlaveRoutingTest` asserts both (the master's Sol Ring in hand is
+    visible); `StaleOutboxSweepTest` asserts `forSeat` identity. Schema gains
+    `controllerBoard`.
+64. **Observer snapshot: write on change, no timer (2026-09-04, BL-07).** The
+    200 ms debounce had no trailing edge — the last event of a burst was never
+    written — and `write` was unsynchronized. Ben: no scheduler. Now
+    `ObserverSnapshot.write` is `synchronized`, serializes on EVERY event,
+    strips the timestamp, and skips the write when the bytes equal the last
+    write (`lastKey`); game-over still forces one. `WRITES` counts for tests;
+    `ObserverSnapshotWriteTest`: two life changes in a row → the second is on
+    disk; identical events → no rewrite.
+65. **Decision log: two plain files, archived together (2026-09-04, BL-21;
+    reverts item 13h).** Item 13h made `game.jsonl` a symlink re-pointed per
+    game; `arena-digest.py` kept the old inode and went silent after game
+    one, `arena-stop` counted only the current game while printing
+    "(preserved)", and every plain `tail -f` broke. Ben: "avoid any solution
+    that risks file corruption, fragments or failures." Now
+    `runner.py:_game_log_paths` appends each record to `game.jsonl` — a PLAIN
+    append-only file for the whole session, the human `tail -f` target — AND
+    to `game-<gameId>.jsonl`, the per-game machine record
+    (`ratings.slice_game_log` reads every regular `game*.jsonl` beside it);
+    a symlink left by a pre-BL-21 runner is unlinked once. Transport events
+    are not rotated either: each carries `gameId` and the void check filters
+    by the spool's id (BL-09; unstamped events still count). `arena-stop.sh`
+    archives `game.jsonl` and `game-*.jsonl` with the seat logs whenever ANY
+    session log exists (the old test needed seat logs AND gui.out together)
+    and prints `N decisions across M game(s) (archived)`. `replay.py` prints
+    one line and exits 2 when `tests/fixtures` is absent — the package
+    excludes both the fixtures and the script.
+66. **Stale outbox swept at construction (2026-09-04, BL-22).** A JVM crash
+    leaves `resp-N.json` behind; a hand relaunch that skipped `arena-stop`
+    could let the new engine consume it as the answer to THIS game's request
+    N. `MailboxProtocol`'s constructor deletes `outbox/resp-*` and `*.tmp`
+    and logs `swept N stale outbox file(s) at start`; the runner's sweep on a
+    gameId change (note 58) stays. `StaleOutboxSweepTest`.
+67. **Brain calls load no settings (2026-09-04, BL-24).** `claude -p` ran with
+    default setting sources, so every decision loaded the operator's user and
+    project settings, hooks and plugins. Now every call passes
+    `--setting-sources ""` (probed: accepted, OAuth login unaffected; `--bare`
+    was ruled out — it disables OAuth and the seats run on the subscription).
+    NOT changed, per Ben ("running in / is not safe"; no hidden directories):
+    the working directory — calls still run from the repo / package root
+    (`brain.py` `self.root`), so the CLI still auto-discovers `CLAUDE.md` files
+    in the directories above it. The README's Requirements footnote says so;
+    `test_golden_claude.py` pins the argv.
+68. **Protocol edges (2026-09-04, BL-28; Gemini round two, verified).** (a)
+    `gameIdFor` is `millis-pid-serial` (`GAME_SERIAL`, an AtomicInteger): two
+    Games created in one millisecond of one JVM shared an id. Schema pattern
+    widened, the fixture normaliser keeps `"1-1"`, `ProtocolFieldsTest`
+    asserts distinct ids for back-to-back games. (b) `seat_runner.py`
+    installs SIGTERM/SIGINT handlers that call `brain.kill_child()` on the
+    tracked `Popen` (`brain._run` reports the child through `on_child`), so
+    teardown no longer orphans one in-flight `claude` call per seat. (c)
+    `runner.py`: when the request file has already vanished on a real inbox,
+    the budget is zero and the seat punts at once (`punt: request file
+    vanished`) — the mtime fallback used to grant a fresh window. Tests in
+    `test_round_two_runner.py` and `test_round_two_brain.py`.
+69. **Punts are unreplayable (2026-09-04, BL-20).** Sibling of item 3's memo
+    bug: cycle replay appended every answer to `_hist`, punts included, so a
+    punted CONFIRM inside a loop could replay as source `cycle` for up to 64
+    rounds, uncounted as punts. Now a punt is recorded with shape `None`,
+    `_cycle_try_arm` refuses any candidate cycle containing a non-replayable
+    step, and a runner exception clears the tape. Alongside (BL-08):
+    `_cycle_rebind` matches label + type + cost before the label-prefix
+    fallback, so one costed ability on a card cannot cross-bind to another.
+    `test_round_two_runner.py`.
+70. **Single legal defender filled in (2026-09-04, BL-23).** `rules.validate`
+    hard-rejected a DECLARE_ATTACKERS entry without `defender`, while the
+    engine's `chooseDefender` accepts that when exactly one defender is legal
+    — so with one opponent left a Java-legal answer punted to
+    `{"attackers": []}`. Now the sole legal id is filled in; with several
+    legal defenders the field is still required. `test_rules.py` +
+    `test_round_two_runner.py`.
+71. **Default rosters (2026-09-04, item R, Ben).** One rule, three
+    implementations that must agree: an all-AI table seats Urza, Giada,
+    Purphoros, Selvala in that order; a human game seats the human's deck at 0
+    (Selvala when none is named — ANY ingested deck otherwise) and then the
+    first three roster decks that are not the human's (Urza, Giada, Purphoros
+    for the default). Sources: `GuiPilotMatch.DECKS` + `buildRoster` (static
+    and GUI-free — extracted from `startCommanderMatch` with `verifyRoster`
+    and `slugOf`, the BL-12 prep; a missing deck file is a launch-status
+    problem), `run_table.sh` (`ARENA_HUMAN_DECK`, passed by `arena-play.sh`),
+    `advisor_runner.DEFAULT_TABLE` + `table_opponents`. `ARENA_SEAT_DECKS`
+    still overrides all three together. `test_round_two_ops.TableRosterRule`.
+    Same batch (BL-27): `arena-play.sh` and `run-pilot-match.sh` refuse a deck
+    file name containing whitespace with a one-line message, and
+    `arena-stop.sh` only signals PIDs whose command line names this checkout.
+72. **Advisor supervised, bounded and guarded (2026-09-04, BL-26 / BL-13).**
+    The advisor ran once under nohup; one I/O error ended it silently while
+    the engine kept filling its inbox. Now `arena-play.sh` starts
+    `runner/run_advisor.sh`, the same restart-loop shape as `run_table.sh`'s
+    seats (2 s damper; the loop's PID in `logs/pids/advisor-loop.pid`, the
+    child's rewritten to `logs/pids/advisor.pid` on every restart); its log
+    and stream writes are guarded with `except OSError`; `pending_context` is
+    bounded to `CONTEXT_MAX_LINES = 40`, dropping the oldest and saying how
+    many. Same batch, ratings: `sweep` lists spools UNDER the lock, a spool
+    another sweeper already renamed is not an error, and a malformed spool is
+    marked `.skipped` with the missing key named. `test_round_two_ops.py`.
+
+73. **Ask the advisor (2026-09-04, Ben).** The Advisor tab has a black text
+    field and a **Chat** button (Enter sends). `AiControlFile.askAdvisor` writes
+    `logs/control/ask/ask-<millis>-<serial>.json` atomically (temp +
+    ATOMIC_MOVE, whitespace/control characters collapsed, 500-char cap);
+    `advisor_runner._handle_asks` scans the directory every poll in numeric
+    order, deletes each file on pickup (the panel's "sent" signal — the
+    button reads *Sending…* until then, and says so after 20 s with nobody
+    home), folds any pending context, makes one direct call and streams
+    `[tN · you] q` / `[tN · advisor] a`; record kind `ask` in
+    `advisor-0.jsonl`. Questions are handled BEFORE the pause gate, so a
+    paused advisor still answers a typed question. Same one-way file channel
+    as every other advisor path — no socket, no engine thread, nothing the
+    game can wait on. Table talk between seats was considered and dropped
+    (prompt cost on every decision, hidden-information posture).
+
+74. **Auto-teardown when the match is fully finished (2026-09-04, Ben).**
+    Games used to loiter: after the outcome the JVM kept the match screen
+    up and every runner polled forever. `arena-play.sh` now starts
+    `scripts/arena-autostop.sh` (PID in `pids/autostop.pid`) once the match
+    is live: a plain sleep loop (no scheduler) that polls the observer
+    snapshot for the engine's own `gameOver: true` (a forced write on the
+    outcome event) or for the GUI JVM's PID to vanish (window closed), then
+    lingers `--linger N` seconds (default 120 in human games so the final
+    board can be read — 600 at first, shortened after game 22 — 60 all-AI;
+    10 when the GUI is already gone) and
+    `exec`s `arena-stop.sh` — the same kill/rate/archive/clear as a hand
+    stop. A hand stop always wins: `arena-stop` kills a waiting watcher by
+    its PID file (`ours()` marker), and a watcher that wakes to a cleared
+    mailbox exits without stopping anything. `--no-autostop` leaves the
+    table up. Tests: `runner/tests/test_autostop.py` drives the script through
+    its env hooks against a temp tree with a stub stop command.

@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arena:mailbox-request:1",
+  "title": "Mailbox decision request (engine -> seat brain)",
+  "description": "The wire shape MailboxController writes to <seat>/inbox/req-<n>.json (plan item 15, 2026-09-03). ProtocolContractTest emits one request per decision surface, validates it here, and writes it to runner/tests/fixtures/engine/ so the Python side validates its punts against what the engine actually sends. Additive fields are allowed everywhere; what is listed as required is what a reader may rely on.",
+  "type": "object",
+  "required": ["seq", "gameId", "timeoutSec", "seat", "turn", "phase", "decisionType", "prompt", "state", "options"],
+  "properties": {
+    "seq": { "type": "integer", "minimum": 1 },
+    "gameId": { "type": "string", "pattern": "^[0-9]+-[0-9]+(-[0-9]+)?$" },
+    "timeoutSec": { "type": "integer", "minimum": 1 },
+    "seat": { "type": "integer", "minimum": 0 },
+    "turn": { "type": "integer", "minimum": 0 },
+    "phase": { "type": "string" },
+    "decisionType": {
+      "type": "string",
+      "enum": ["CAST_SPELL", "REACT", "MULLIGAN", "DECLARE_ATTACKERS", "DECLARE_BLOCKERS",
+               "CHOOSE_ENTITY", "CHOOSE_ENTITIES", "CHOOSE_MODE", "CHOOSE_CARD", "CHOOSE_CARDS",
+               "CHOOSE_NUMBER", "PAY_UNLESS", "CONFIRM"]
+    },
+    "prompt": { "type": "string", "minLength": 1 },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "label": { "type": "string" },
+          "cost": { "type": ["string", "null"] },
+          "type": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "required": ["seat", "turn", "phase", "life", "poison", "commandZone", "manaPool",
+                   "untappedManaSourceCount", "manaSources", "manaAvailableNow",
+                   "handSize", "handLands", "librarySize", "ownBoardPower",
+                   "battlefield", "hand", "command", "graveyard", "exile", "opponents",
+                   "stack", "stackOwners", "stackKinds", "stackTargets", "stackOracle"],
+      "properties": {
+        "seat": { "type": "integer" },
+        "turn": { "type": "integer" },
+        "phase": { "type": "string" },
+        "life": { "type": "integer" },
+        "poison": { "type": "integer" },
+        "manaPool": { "type": "integer", "minimum": 0 },
+        "untappedManaSourceCount": { "type": "integer", "minimum": 0 },
+        "manaAvailableNow": { "type": "integer", "minimum": 0 },
+        "manaSources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "yield", "colors"],
+            "properties": {
+              "id": { "type": "integer" }, "name": { "type": "string" },
+              "yield": { "type": ["integer", "null"] }, "colors": { "type": "string" },
+              "restricted": { "type": "string" }, "sick": { "type": "boolean" },
+              "cost": { "type": "string" }, "count": { "type": "integer", "minimum": 2 }
+            }
+          }
+        },
+        "ritualsInHand": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "cost", "kind"],
+            "properties": { "kind": { "enum": ["ritual", "multiplier"] } }
+          }
+        },
+        "handSize": { "type": "integer", "minimum": 0 },
+        "handLands": { "type": "integer", "minimum": 0 },
+        "librarySize": { "type": "integer", "minimum": 0 },
+        "ownBoardPower": { "type": "integer", "minimum": 0 },
+        "battlefield": { "type": "array", "items": { "$ref": "#/$defs/card" } },
+        "hand": { "type": "array", "items": { "type": "object", "required": ["name", "manaCost", "types"] } },
+        "command": { "type": "array", "items": { "type": "string" } },
+        "graveyard": { "type": "array", "items": { "type": "string" } },
+        "exile": { "type": "array", "items": { "type": "string" } },
+        "commandZone": { "type": "array", "items": { "type": "object", "required": ["name", "timesCast", "nextCastTax"] } },
+        "opponents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["seat", "life", "poison", "creaturePower", "battlefield"],
+            "properties": { "battlefield": { "type": "array", "items": { "$ref": "#/$defs/card" } } }
+          }
+        },
+        "stack": { "type": "array", "items": { "type": "string" } },
+        "stackOwners": { "type": "array", "items": { "type": "integer" } },
+        "stackKinds": { "type": "array", "items": { "type": "string" } },
+        "stackTargets": { "type": "array", "items": { "type": "array", "items": { "type": "string" } } },
+        "stackOracle": { "type": "array", "items": { "type": "string", "maxLength": 300 } },
+        "min": { "type": "integer" }, "max": { "type": "integer" },
+        "controllingSeat": { "type": "integer" },
+        "controllerBoard": { "type": "object", "description": "Only on a controlled seat's request (controllingSeat set): the controlling master's own board, life, mana and hand — the master's brain reading its own cards (CR 721.3)." },
+        "purpose": { "type": "string", "enum": ["TRIGGER_ORDER", "COLOR"], "description": "CHOOSE_MODE only. TRIGGER_ORDER: list ALL indices in the order the trigger groups should RESOLVE (first listed resolves first). COLOR: the index of ONE colour." },
+        "lastRefused": { "type": "object", "required": ["name", "needed", "payableNow", "kind", "reason"] },
+        "hasCost": { "type": "boolean" }, "isMine": { "type": "boolean" },
+        "confirmMode": { "type": "string" }
+      }
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "decisionType": { "enum": ["CHOOSE_ENTITY", "CHOOSE_ENTITIES", "CHOOSE_MODE", "CHOOSE_CARD", "CHOOSE_CARDS", "CHOOSE_NUMBER", "PAY_UNLESS", "CONFIRM"] } } },
+      "then": { "properties": { "state": { "required": ["min", "max"] } } } },
+    { "if": { "properties": { "decisionType": { "const": "CONFIRM" } } },
+      "then": { "properties": { "state": { "required": ["confirmMode", "hasCost", "isMine"] } } } },
+    { "if": { "properties": { "decisionType": { "const": "PAY_UNLESS" } } },
+      "then": { "properties": { "state": { "required": ["unlessCost", "effectIsMine"] } } } },
+    { "if": { "properties": { "decisionType": { "const": "MULLIGAN" } } },
+      "then": { "properties": { "state": { "required": ["cardsToReturn"] } } } },
+    { "if": { "properties": { "decisionType": { "const": "DECLARE_ATTACKERS" } } },
+      "then": { "properties": { "state": { "required": ["defenders"] } } } },
+    { "if": { "properties": { "decisionType": { "const": "DECLARE_BLOCKERS" } } },
+      "then": { "properties": { "state": { "required": ["attackers"] } } } }
+  ],
+  "$defs": {
+    "card": {
+      "type": "object",
+      "required": ["id", "name", "types", "tapped"],
+      "properties": {
+        "id": { "type": "integer" }, "name": { "type": "string" },
+        "types": { "type": "string" }, "tapped": { "type": "boolean" },
+        "power": { "type": "integer" }, "toughness": { "type": "integer" }, "sick": { "type": "boolean" },
+        "keywords": { "type": "array", "items": { "type": "string" } },
+        "counters": { "type": "object" }, "auras": { "type": "array", "items": { "type": "string" } },
+        "abilities": { "type": "array" }
+      }
+    }
+  }
+}

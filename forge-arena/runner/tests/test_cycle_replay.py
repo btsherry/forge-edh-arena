@@ -34,7 +34,7 @@ class FakeBrain:
         self.script = list(script)   # answers to hand out, in order
         self.calls = 0
 
-    def decide(self, prompt, timeout_s, effort=None):
+    def decide(self, prompt, timeout_s=None, effort=None, deadline=None):
         self.calls += 1
         out = self.script.pop(0) if self.script else {"chosenId": 0}
         return out, {"latency_s": 0.01, "usage": None, "cache_read": 1, "raw": json.dumps(out)}
@@ -58,6 +58,7 @@ def make_runner():
     r.turn_intent = None
     r.combos = None
     r.react_seen = set()
+    r.order_memo = {}
     r.cycle = None
     r._hist = []
     r._last_turn = None
@@ -241,9 +242,10 @@ class OwnObjectCollapseTests(unittest.TestCase):
         # memo signature must NOT collapse a mixed-kind own stack
         req = own_req(9, "REACT", ["X"], ["A", "A", "B"], ["trigger", "trigger", "spell"])
         sig = r._react_signature(req)
-        self.assertNotIn("OWN-TRIGGERS", str(sig[1]),
+        # wave-2 inserted phase at sig[1]; the stack digest is sig[2]
+        self.assertNotIn("OWN-TRIGGERS", str(sig[2]),
                          "mixed kinds must not trigger the memo's own-collapse")
-        self.assertEqual(sig[1], ("A", "A", "B"), "memo keeps the exact multiset")
+        self.assertEqual(sig[2], ("A", "A", "B"), "memo keeps the exact multiset")
 
 
 if __name__ == "__main__":

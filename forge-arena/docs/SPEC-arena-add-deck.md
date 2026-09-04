@@ -139,6 +139,11 @@ to out-clever it; it **recommends DeckCheck first** and offers a local fallback.
   `DECKS[]` config-driven, not source-hardcoded — a tracked tier-2 item).
 - Optional `--verify`: load the deck in headless Forge to confirm it assembles a
   legal 100-card Commander deck (catches lint gaps the name-check missed).
+  *As built (2026-09-04 note): there is no `--verify` flag. The load check runs
+  on EVERY ingest as step 4.5 (`DeckLoadProbe` through Forge's real deck
+  loader), and `--manifest-only` re-verifies an already-registered `.dck` and
+  rewrites only its launch manifest. The shipped flags are the argparse block
+  in `scripts/arena-add-deck.py`.*
 
 ---
 
@@ -147,6 +152,9 @@ to out-clever it; it **recommends DeckCheck first** and offers a local fallback.
 arena add-deck path/to/mydeck.dck [--slug NAME] [--strict] [--primer a|b|skip]
                                   [--no-cache] [--verify]
 ```
+*(Spec shape. Shipped: `--slug`, `--strict`, `--primer a|b|skip`, `--deckcheck`,
+`--primer-timeout`, `--no-primer-rules`, `--primer-out`, `--no-cache`,
+`--manifest-only`; no `--verify`.)*
 - Interactive by default at step 5; `--primer` makes it scriptable for batch adds.
 - Idempotent: re-running refreshes the dossier/combos from cache (or `--no-cache`
   to re-fetch), and leaves an existing primer untouched unless asked.

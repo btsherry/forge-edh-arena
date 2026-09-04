@@ -692,22 +692,38 @@ public class ComputerUtilMana {
 
             saList.removeAll(saExcludeList);
 
-            SpellAbility saPayment = saList.isEmpty() ? null : chooseManaAbility(cost, sa, ai, toPay, saList, checkPlayable || !test);
+            SpellAbility chosenPayment = saList.isEmpty() ? null : chooseManaAbility(cost, sa, ai, toPay, saList, checkPlayable || !test);
 
-            if (saPayment != null && ComputerUtilCost.isSacrificeSelfCost(saPayment.getPayCosts()) && sa.isTargeting(saPayment.getHostCard())) {
+            if (chosenPayment != null && ComputerUtilCost.isSacrificeSelfCost(chosenPayment.getPayCosts()) && sa.isTargeting(chosenPayment.getHostCard())) {
                 // not a good idea to sac a card that you're targeting with the SA you're paying for
-                saExcludeList.add(saPayment);
+                saExcludeList.add(chosenPayment);
                 continue;
             }
 
-            if (saPayment != null && "BlackLotus".equals(saPayment.getParam("AILogic")) && !SpecialCardAi.BlackLotus.consider(ai, sa, cost)) {
+            if (chosenPayment != null && "BlackLotus".equals(chosenPayment.getParam("AILogic")) && !SpecialCardAi.BlackLotus.consider(ai, sa, cost)) {
                 // since we checked this already, do not loop indefinitely checking again
-                saExcludeList.add(saPayment);
+                saExcludeList.add(chosenPayment);
                 continue;
             }
+
+            // ARENA-PATCH (BL-01, 2026-09-04): a player with PayLifeInsteadOf:<C>
+            // (K'rrik's static) whose remaining sources cannot cover every
+            // remaining shard pays the <C> shards with life FIRST, keeping the
+            // sources for the shards life cannot pay. Stock spent the sources on
+            // the black pips first and then reported {3}{B}{B}{B} unpayable with
+            // three Swamps and 40 life. Fires only when sources are short, so a
+            // cost payable by mana alone never costs life.
+            if (chosenPayment != null && lifeKeywordCovers(ai, toPay)
+                    && sourcesShortOfShards(cost, sourcesForShards)
+                    && ai.canPayLife(phyLifeToPay, false, sa)
+                    && (ai.getLife() > phyLifeToPay || ai.cantLoseForZeroOrLessLife())) {
+                chosenPayment = null; // route this shard into the life branch below
+            }
+            final SpellAbility saPayment = chosenPayment;
 
             if (saPayment == null) {
-                boolean lifeInsteadOfBlack = toPay.isBlack() && ai.hasKeyword("PayLifeInsteadOf:B");
+                // ARENA-PATCH (BL-01): any single colour the keyword names, not only B
+                boolean lifeInsteadOfBlack = lifeKeywordCovers(ai, toPay);
                 if ((!toPay.isPhyrexian() && !lifeInsteadOfBlack) || !ai.canPayLife(phyLifeToPay, false, sa)
                         || (ai.getLife() <= phyLifeToPay && !ai.cantLoseForZeroOrLessLife())) {
                     // cannot pay
@@ -734,7 +750,7 @@ public class ComputerUtilMana {
                         sa.setSpendPhyrexianMana(true);
                     }
                 } else if (lifeInsteadOfBlack) {
-                    cost.decreaseShard(ManaCostShard.BLACK, 1);
+                    cost.decreaseShard(toPay, 1); // ARENA-PATCH (BL-01): the shard the keyword covers
                 }
 
                 if (!test) {
@@ -1092,6 +1108,62 @@ public class ComputerUtilMana {
         }
 
         return false;
+    }
+
+    /** ARENA-PATCH (BL-01): does the player's {@code PayLifeInsteadOf:<C>} keyword
+     *  (K'rrik's static grants {@code PayLifeInsteadOf:B}) cover this shard? Only
+     *  a plain mono-coloured shard qualifies — never generic, hybrid or Phyrexian. */
+    private static boolean lifeKeywordCovers(final Player ai, final ManaCostShard shard) {
+        if (shard == null || shard.isPhyrexian() || shard.isGeneric()) {
+            return false;
+        }
+        // Same shard semantics as the stock check it generalises
+        // (toPay.isBlack(): the shard carries that colour bit — hybrids included),
+        // so a K'rrik player pays {W/B} with life exactly as before.
+        return (shard.isWhite() && ai.hasKeyword("PayLifeInsteadOf:W"))
+                || (shard.isBlue() && ai.hasKeyword("PayLifeInsteadOf:U"))
+                || (shard.isBlack() && ai.hasKeyword("PayLifeInsteadOf:B"))
+                || (shard.isRed() && ai.hasKeyword("PayLifeInsteadOf:R"))
+                || (shard.isGreen() && ai.hasKeyword("PayLifeInsteadOf:G"));
+    }
+
+    /** ARENA-PATCH (BL-01): can the remaining sources still cover every remaining
+     *  shard? Counts each source once at its best single activation's yield
+     *  (Sol Ring = 2, a Swamp = 1); a source with no readable yield counts as 1.
+     *  An undercount only means life is offered a shard early, never a wrong
+     *  "unpayable". */
+    private static boolean sourcesShortOfShards(final ManaCostBeingPaid cost,
+            final Multimap<ManaCostShard, SpellAbility> sources) {
+        if (sources == null) {
+            return true;
+        }
+        final Set<Card> seen = new HashSet<>();
+        int mana = 0;
+        for (SpellAbility ma : sources.values()) {
+            final Card host = ma.getHostCard();
+            if (host == null || !seen.add(host)) {
+                continue;
+            }
+            // Live payment keeps a used source in the multimap until it can no
+            // longer be played; a tapped source with a tap cost is spent.
+            if (host.isTapped() && ma.getPayCosts() != null && ma.getPayCosts().hasTapCost()) {
+                continue;
+            }
+            int yield = 1;
+            try {
+                final String produced = ma.getParamOrDefault("Produced", "").trim();
+                // "Combo B G" / "Combo ColorIdentity" / "Any" are ONE mana of a
+                // choice of colours, not one per listed colour (a Signet is 1).
+                int perActivation = (produced.startsWith("Combo") || produced.equals("Any")
+                        || produced.equals("Special")) ? 1 : Math.max(1, produced.split(" ").length);
+                int amount = AbilityUtils.calculateAmount(host, ma.getParamOrDefault("Amount", "1"), ma);
+                yield = Math.max(1, perActivation * amount);
+            } catch (RuntimeException e) {
+                yield = 1;
+            }
+            mana += yield;
+        }
+        return mana < cost.getUnpaidShards().size();
     }
 
     private static ManaCostShard getNextShardToPay(ManaCostBeingPaid cost, Multimap<ManaCostShard, SpellAbility> sourcesForShards) {

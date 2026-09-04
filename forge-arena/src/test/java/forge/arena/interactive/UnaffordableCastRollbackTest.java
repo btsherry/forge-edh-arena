@@ -96,4 +96,56 @@ public class UnaffordableCastRollbackTest {
                 + game.getZoneOf(selvala) + ")");
         Assert.assertTrue(game.getStack().isEmpty(), "nothing should be left on the stack");
     }
+
+    /**
+     * BL-11 second card (group {@code extended}). The seam is the commander
+     * cast path itself (commander tax applied by CostAdjustment at payment,
+     * failed payment rolled back to the ORIGIN zone), not Selvala: Urza, Lord
+     * High Artificer — a legendary creature with a printed cost ({2}{U}{U})
+     * and an ETB trigger ({@code T:Mode$ ChangesZone | ... | Execute$
+     * TrigUrzaConstruct}) that must NOT fire — with two prior casts owes 8
+     * and holds 3 Islands.
+     */
+    @Test(groups = "extended", timeOut = 180_000)
+    public void failedUrzaPaymentReturnsToCommandZone() throws Exception {
+        ArenaBootstrap.initialize(new java.io.File("..", "forge-gui"));
+        List<RegisteredPlayer> players = Lists.newArrayList();
+        Deck d = new Deck();
+        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("opp", null)));
+        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("seat", null)));
+        GameRules rules = new GameRules(GameType.Commander);
+        Game game = new Game(players, rules, new Match(rules, players, "t"));
+        Player p = game.getPlayers().get(1);
+        game.setAge(GameStage.Play);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, p);
+        game.getPhaseHandler().onStackResolved();
+
+        Card urza = put("Urza, Lord High Artificer", p, ZoneType.Command);
+        p.addCommander(urza);
+        // two prior casts -> +4 tax; base {2}{U}{U} -> 8 total
+        p.incCommanderCast(urza);
+        p.incCommanderCast(urza);
+        for (int i = 0; i < 3; i++) {
+            put("Island", p, ZoneType.Battlefield);   // only 3 mana available
+        }
+        Assert.assertEquals(p.getCommanderCast(urza), 2);
+
+        forge.game.spellability.SpellAbility castSa = urza.getFirstSpellAbility();
+        castSa.setActivatingPlayer(p);
+        boolean played = forge.ai.ComputerUtil.handlePlayingSpellAbility(p, castSa, null);
+        Assert.assertFalse(played, "an 8-mana commander cast with 3 mana must not succeed");
+
+        Card after = null;
+        for (Card c : p.getCardsIn(ZoneType.Command)) {
+            if (c.getName().equals("Urza, Lord High Artificer")) {
+                after = c;
+            }
+        }
+        Assert.assertNotNull(after, "commander must return to the command zone after a failed payment "
+                + "(was: stack=" + game.getStack().size() + ", zones="
+                + game.getZoneOf(urza) + ")");
+        Assert.assertTrue(game.getStack().isEmpty(), "nothing should be left on the stack");
+        Assert.assertTrue(p.getCardsIn(ZoneType.Battlefield).size() == 3,
+                "no Construct token: the ETB must not have fired for a cast that never happened");
+    }
 }

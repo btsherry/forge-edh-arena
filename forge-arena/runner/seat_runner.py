@@ -81,10 +81,30 @@ def main() -> None:
         sys.exit(2)
     from seatd.runner import SeatRunner
     autopass = tuple(s.strip() for s in args.autopass.split(",") if s.strip())
-    SeatRunner(args.seat, args.deck, args.base, model=args.model,
-               effort=args.effort, timeout_s=args.timeout,
-               autopass=autopass, speculative=args.speculative,
-               react_hold=args.react_hold).run()
+    runner = SeatRunner(args.seat, args.deck, args.base, model=args.model,
+                        effort=args.effort, timeout_s=args.timeout,
+                        autopass=autopass, speculative=args.speculative,
+                        react_hold=args.react_hold)
+    install_signal_handlers(runner)
+    runner.run()
+
+
+def install_signal_handlers(runner) -> None:
+    """BL-28: teardown (arena-stop kills by PID) used to leave one in-flight
+    `claude` call per seat running to completion as an orphan. On SIGTERM or
+    SIGINT kill the tracked child, then exit. Nothing else: no shutdown
+    sequencing, no retries."""
+    import signal
+
+    def _on_signal(signum, frame):
+        try:
+            runner.brain.kill_child()
+        except Exception:  # noqa: BLE001 — exiting is the point
+            pass
+        sys.exit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _on_signal)
+    signal.signal(signal.SIGINT, _on_signal)
 
 
 if __name__ == "__main__":
