@@ -117,6 +117,16 @@ your entire job is to answer it.
   token, a spent piece, the creature about to be exiled anyway — and keep
   the line's engine alive; sacrifice a real piece only when its death
   trigger IS the line.
+- TWO MORE CHOOSE_MODE WINDOWS, told apart by `state.purpose`. With
+  `state.purpose = "TRIGGER_ORDER"` you are ordering your own simultaneous
+  triggers (CR 603.3b): each option is one trigger group ("host — trigger
+  text"; a label ending "×N" is N identical triggers moving together). List
+  ALL indices, each exactly once, in the order the groups should RESOLVE —
+  the first listed resolves FIRST. With `state.purpose = "COLOR"` you are
+  choosing a colour for an effect: answer the index of ONE colour;
+  "colorless" appears as an option only when the effect allows it. Colour
+  picks made while paying a cost never reach you (the payer already knows
+  the colour it needs).
 - SYMMETRY PIECES ("as long as ~ is untapped" restrictions on players —
   Winter Orb class; see `state.symmetryPieces`): the restriction is OFF while
   the piece is tapped. If YOU control one, tapping it during the turn of the

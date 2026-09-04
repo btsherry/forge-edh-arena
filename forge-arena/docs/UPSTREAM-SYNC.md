@@ -9,20 +9,21 @@ divergence list). Read both before ANY merge from upstream.*
 - We are a fork of [Card-Forge/forge](https://github.com/Card-Forge/forge)
   (`origin`), working on branch `arena`, pushed to `private`
   (btsherry/forge-edh-arena). **Never push to `origin`.**
-- Upstream base: `0eec0a16d0a` (2026-07-15). We are ~396 commits ahead
-  (2026-08-24 count); upstream is very active (daily card-script updates,
-  regular engine work).
+- Upstream base: `0eec0a16d0a` (2026-07-15). We are 439 commits ahead
+  (2026-09-04 count, `git rev-list --count`); upstream is very active (daily
+  card-script updates, regular engine work).
 - The early rule "all new code lives in forge-arena, no parent-module
   patches" was **deliberately dropped**. The full delta outside
-  `forge-arena/` (2026-08-24 re-audit) is **31 files**:
-  - **12 modified**: 9 upstream Java files (~263 changed lines —
+  `forge-arena/` (2026-09-04 recount, `git diff --name-status
+  0eec0a16d0a..HEAD -- . ':(exclude)forge-arena'`) is **32 files**:
+  - **12 modified**: 9 upstream Java files (301 insertions / 22 deletions —
     ComputerUtil, ComputerUtilMana, AiCostDecision, MyRandom, Combat,
     StaticAbilityTurnPhaseReversed, MagicStack, EDocID, CMatchUI), plus
     `forge-gui/res/defaults/match.xml`, root `pom.xml` (the
     `<module>forge-arena</module>` reactor line), and root `.gitignore`
     (arena transient-output block). pom.xml is a REAL conflict surface —
     upstream edits it routinely.
-  - **19 new (ours, zero conflict)**: 8 parent-module code files (2
+  - **20 new (ours, zero conflict)**: 9 parent-module code files (3
     forge-ai hook interfaces, 6 gui-desktop advisor/AI-panel files — see
     INVENTORY §1b), 10 `runs/*.json` batch templates, and the historical
     `UPSTREAM-PATCHES.md` deep-dive log at root.

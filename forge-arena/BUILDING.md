@@ -42,6 +42,27 @@ deliberate (see the surefire comment in `forge-arena/pom.xml`): upstream
 modules honor the flag, the arena suite ignores it. `-Darena.skip.tests=true`
 is the explicit arena opt-out (used by `batch.sh`).
 
+Only `-DskipTests` is neutralised. **`-Dmaven.test.skip=true` DOES skip the
+arena suite** (and its test compilation) exactly as it does for every other
+module — the arena pom does not override that property. A build run with it
+is not a gate; never quote one as green.
+
+Two more surefire knobs (both added 2026-09-04, BL-25):
+
+- **`arena.excluded.groups`** (default `extended`). Tests tagged with the
+  TestNG group `extended` are skipped by the STANDARD gate so its time does
+  not grow; the FULL / release gate passes `-Darena.excluded.groups=none` to
+  run them. As of 2026-09-04 the group is wired in the pom but no test in
+  the tree carries it yet — the two-card seam widenings, the malformed-answer
+  matrix and the launcher tests planned for it (BUG-LOG BL-11/12/25) are
+  pending.
+- **`-Darena.fixtures.refresh=true`** — `ProtocolContractTest` compares the
+  requests the engine emits against the committed fixtures in
+  `forge-arena/runner/tests/fixtures/engine/*.json` and fails, naming the
+  decision types that drifted, instead of rewriting tracked files. After
+  reviewing a deliberate protocol change, run the test once with this flag
+  to rewrite them, then commit the fixtures.
+
 Test-suite knobs (both revertible, see docs/IMPLEMENTATION-PLAN.md §8):
 - `arena.mailbox.poll.ms` — surefire pins 5ms so E2E mailbox tests skip
   live-game pacing (live default 75ms; never set outside tests).
@@ -102,7 +123,11 @@ COPYFILE_DISABLE=1 tar -czf forge-light-llm-YYYYMMDD.tar.gz -C <repo>/.. forge-l
 `build-light-package.sh` is self-documenting (its header is the package
 manifest) and refuses to clobber an existing dest without `--force`. It ships
 compiled classes + the fat jar + the ten bundled decks; no source, no Maven,
-so the recipient never builds anything — they run it directly.
+so the recipient never builds anything — they run it directly. Not shipped:
+`runner/tests/` (and with it `runner/replay.py`, which needs those fixtures),
+`runner/logs/`, ratings state, and every `decks/*/dossier/.cache/` directory
+(BL-18, 2026-09-04: the DeckCheck payloads there carry the account's
+username; the build fails if a `.cache` reaches the package tree).
 
 ## Runtime notes
 

@@ -45,8 +45,69 @@ findings, fixed one at a time.
   and, at game end, counts every owned card across all zones (`CARD-VANISH`
   on a shortfall).
 - **Packaging can no longer ship an incomplete `lib/`**; `react-autopass.py`
-  no longer ships; teardown kills by PID file; the shared decision log is one
-  file per game with `game.jsonl` pointing at the current one.
+  is gone (retired from the launch 2026-08-17, deleted now); teardown kills
+  by PID file.
+- **`game.jsonl` is a plain append-only file again.** An earlier cut of this
+  release swapped it for a per-game symlink, which silently broke every
+  `tail -f` and the digest after the first game. Now every decision is
+  appended to `game.jsonl` (the whole session, the `tail -f` target) AND to
+  `game-<gameId>.jsonl` (one file per game); `arena-stop.sh` archives both
+  with the seat logs and reports `N decisions across M game(s) (archived)`.
+- **The seat orders its own triggers** (CR 603.3b). When two or more of a
+  seat's triggers with different text go on the stack together, a
+  `CHOOSE_MODE` window with `state.purpose = "TRIGGER_ORDER"` asks for the
+  resolution order (first listed resolves first); identical triggers never
+  open a window, and a missing or malformed answer falls to stock ordering.
+- **The seat picks its colours.** "Choose a color" effects with two or more
+  legal colours reach the seat as a `CHOOSE_MODE` window with
+  `state.purpose = "COLOR"` ("colorless" offered only where the effect allows
+  it). Picks made while paying a cost stay with the engine's payer.
+- **Mindslaver-class control, completed.** All requests for one seat travel
+  on one bus (a controller opened for a controlled seat used to restart the
+  request numbering, and the runner rightly ignored the reused names); a
+  controlled seat's request carries `state.controllerBoard` — the master's
+  own life, mana, battlefield and hand — so the master's brain reads its own
+  cards while it plays yours (CR 721.3).
+- **Protocol edges.** The engine sweeps stale responses out of a seat's
+  outbox before its first request (a hand relaunch after a crash could
+  consume a dead game's answer); a game id can no longer collide when two
+  games start in the same millisecond of one JVM; a runner's model call is
+  killed at teardown instead of running on as an orphan; a request whose
+  file has already vanished punts at once instead of earning a fresh window;
+  an attack declaration that omits the defender is filled in when exactly
+  one defender is legal.
+- **Punts are never replayed.** A cycle (`repeat_cycle`) that contains a
+  punted decision refuses to arm, and a runner exception clears the tape.
+- **Observer snapshot never loses the last event.** `observer-state.json` is
+  rewritten on every event whose state changed (no timer), so the final
+  state of a burst is on disk.
+- **Brain calls load no settings.** Every `claude` call passes
+  `--setting-sources ""`: no user or project settings, hooks or plugins.
+  `CLAUDE.md` files above the install directory are still auto-discovered;
+  see the README footnote.
+- **Advisor supervised and bounded.** The Advisor runs in the same restart
+  loop as the seats (one I/O error used to end it silently for the rest of
+  the game); its between-calls context keeps the last 40 lines and says how
+  many it dropped; its log writes are guarded.
+- **Ratings sweep hardened.** Spools are listed under the lock, a spool
+  another sweeper already took is not an error, a malformed spool is marked
+  `.skipped` with the missing key named, and punt/wedge events are matched
+  to a game by `gameId` rather than by time window.
+- **Default table.** All-AI games seat Urza, Giada, Purphoros, Selvala in
+  that order; a human game seats you at 0 (Selvala unless you name a deck)
+  and the first three roster decks that are not yours behind you. Deck file
+  names with whitespace are refused with a message.
+- **Ingestion.** A leading number is a quantity only when it could be a count
+  in a 100-card deck ("1996 World Champion" is a card name); the packager no longer
+  ships `dossier/.cache/` (its DeckCheck payloads carried the account's
+  username) and fails if one reaches the package tree.
+- **Dashboards** count `hold`/`plan`/`cycle` as fast paths, tolerate records
+  written before the backend keys existed, and count torn log lines instead
+  of dropping them silently.
+
+Still pending for this release: the K'rrik-class payer fix (paying coloured
+pips with life when sources fall short, a forge-ai change behind the FULL
+gate) and the cut itself, which replaces the v3.3.2 tarball on the bucket.
 
 ## v3.3.2 — 2026-09-01
 

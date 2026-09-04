@@ -10,9 +10,20 @@ crafting deterministic game AI.
 As of v3.3 the seats own essentially every in-game decision — casting,
 targeting (including retargets and copy aiming), triggers, sacrifices and
 all cost payments, scry/surveil/library order, mulligan bottoming, cleanup
-discards, optional costs, votes and pile splits — each with a fail-safe:
-an invalid or late answer falls back to the stock game AI, never worse
-than a normal Forge opponent. See `PATCH-NOTES.md` for the full list.
+discards, optional costs, votes and pile splits — each with a fail-safe
+that has two halves. On the ENGINE side, an answer that is invalid, late,
+or missing falls to the stock game AI for that one decision. On the RUNNER
+side, a punt (the model timed out, its session wedged, or its reply was
+unparseable) is answered with a fixed per-type safe default: no blocks, no
+attackers, keep the hand, pass priority, decline pay-or-else, the first
+legal id for a mandatory pick and none for an optional one, yes to a
+CONFIRM only when the effect is the seat's own and free, and for
+CHOOSE_NUMBER the maximum on an X cost and the minimum otherwise. A punt
+never spends new mana and never acts for another player, but it is not
+stock play: a punted lethal DECLARE_BLOCKERS is "no blocks", where stock
+would have chosen blocks. The table is in
+`forge-arena/runner/seatd/seat-brief.md` and pinned to the code by a test.
+See `PATCH-NOTES.md` for the full list of surfaces.
 
 Built on [Forge](https://github.com/Card-Forge/forge) (GPL-3.0); the engine
 ships prebuilt — see `LICENSE`. Non-commercial fan project. Magic: The
@@ -24,12 +35,22 @@ Gathering is © Wizards of the Coast.
 - **JDK 17+** — `java` on PATH, or set `JAVA_HOME`
 - **Python 3.9+** — stdlib only, no pip installs
 - **Claude Code CLI** (`claude`), logged in — brains run on your Claude
-  subscription. *Optional:* without it every seat times out per decision and
-  falls back to Forge's built-in AI; the game still plays, just not LLM-driven.
+  subscription. *Optional:* without it every brain call fails and each seat's
+  runner answers its safe default (see above); the game still plays, just not
+  LLM-driven.
 - Network: only for ingesting **new** decks (Scryfall + Commander Spellbook)
   and primer generation. The ten bundled decks play offline.
 
 No install or setup step: unpack, run.
+
+Footnote on where you unpack it: every brain call runs the `claude` CLI from
+the package root (the directory holding `forge-arena/`) with
+`--setting-sources ""`, so none of
+your user or project settings, hooks or plugins load into a game. The CLI
+still auto-discovers `CLAUDE.md` files in the directories ABOVE the install
+directory and adds them to the model's context. Install outside such a tree,
+or accept that text as extra context: tools are disabled for the brains, so
+they cannot act on it.
 
 ## Quick start
 
@@ -45,7 +66,7 @@ forge-arena/scripts/arena-play.sh --human selvala-heart-of-the-wilds.dck   # or 
 # watch decisions land, live (the central all-seats log)
 tail -f forge-arena/runner/logs/game.jsonl
 
-# stop everything, archive this game's logs, clear the mailbox
+# stop everything, archive the session's logs, clear the mailbox
 forge-arena/scripts/arena-stop.sh
 ```
 
@@ -62,9 +83,12 @@ past the deadline). Any seat can be re-dialed mid-game — see
 
 ## The table
 
-Default roster, seats 0–3: Selvala, Purphoros, Giada, Urza. In `--human`
-mode you take seat 0 with **any** ingested deck (pass its `.dck` name); in
-`--all-ai` mode all four seats are brains.
+Default roster in `--all-ai` mode, seats 0–3: Urza, Giada, Purphoros,
+Selvala — all four seats are brains. In `--human` mode you take seat 0 with
+**any** ingested deck (pass its `.dck` name; Selvala when you pass none) and
+seats 1–3 get the first three roster decks that are not yours — Urza, Giada,
+Purphoros for the default. The launcher, the seat runners and the Advisor
+all apply that one rule.
 
 **Agents can pilot any deck.** Set `ARENA_SEAT_DECKS` to four deck slugs in
 seat order before launching — it repoints the engine's seats and the brains
@@ -99,7 +123,7 @@ forge-light-llm/forge-arena/decks/<slug>.dck                       playable deck
 forge-light-llm/forge-arena/decks/<slug>/dossier/deck-cards.json   full oracle text (the brain's card knowledge)
 forge-light-llm/forge-arena/decks/<slug>/dossier/combos.json       the deck's real combo lines
 forge-light-llm/forge-arena/decks/<slug>/dossier/manifest.json     launch manifest: .dck hash + every Scryfall→Forge name resolution
-forge-light-llm/forge-arena/decks/<slug>/dossier/.cache/           content-addressed API caches
+forge-light-llm/forge-arena/decks/<slug>/dossier/.cache/           content-addressed API caches (local only; never packaged)
 forge-light-llm/forge-arena/docs/primers/<slug>-deckcheck.md       strategy primer (see below)
 ```
 
@@ -107,8 +131,9 @@ Primer options — the pilot plays far better with a good one:
 **A** paste a [DeckCheck.co](https://deckcheck.co) review (recommended),
 **B** generate locally (`claude` fable/max with live EDHREC research — takes
 a few minutes), **skip** play from dossier + combos only. Re-runs are cheap:
-API responses are cached; `--no-cache` forces a refetch, `--verify` checks an
-existing deck. Then play it: `arena-play.sh --human my-deck.dck`.
+API responses are cached; `--no-cache` forces a refetch; `--manifest-only`
+re-verifies an already-registered `.dck` against Forge and rewrites just its
+launch manifest. Then play it: `arena-play.sh --human my-deck.dck`.
 
 Option A can auto-fetch — no copy/paste. Pass your DeckCheck deck URL or id
 with `--deckcheck <url-or-id>` and the tool pulls the structured analysis
@@ -257,7 +282,8 @@ Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 | `seat-N.log` | Human-readable decision stream for seat N — including `DEVIATION` lines whenever the brain's plan met reality ("wanted X — blocked by Y"); `grep DEVIATION` is the fastest play-quality review |
 | `seat-N.jsonl` | The same, structured (`deviation` and `turn_intent` fields on each record) |
 | `seat-N.usage.json` | Rolling token/cost snapshot for the seat |
-| `game.jsonl` | **The dataset.** One JSON object per decision, all seats, accumulating across games |
+| `game.jsonl` | **The dataset.** One JSON object per decision, all seats, one plain append-only file for the whole session (every game since the last `arena-stop.sh`) — the `tail -f` target |
+| `game-<gameId>.jsonl` | The same records, one file per game (each record carries its `gameId`) — the per-game machine record; the ratings sweep reads every `game*.jsonl` beside it |
 | `advisor-0.log` / `advisor-0.jsonl` | The Advisor tab's stream, and its structured twin — advice, color commentary, autopass notes, and your actual choices' seq pairing |
 | `gui.out`, `run_table.out`, `ratings.out`, `advisor_runner.out` | Engine, runner, ratings-sweep, and advisor supervision output |
 | `transport-events.jsonl` | Punt/wedge events from the seat runners — the ratings sweep voids games contaminated inside their window |
@@ -265,9 +291,11 @@ Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 | `control/seat-N.json`, `control/advisor.json` | The GUI↔runner control plane: AI-panel re-dials and the Advisor pause state (cleared at teardown) |
 | `archive/<timestamp>-stop/` | Every finished game's full log set, moved here by `arena-stop.sh` |
 
-Nothing is clobbered: `arena-stop.sh` rolls each game's logs (seat logs +
-engine/runner output) into a timestamped `archive/` folder, and `game.jsonl`
-is append-only. That makes game histories easy to share — the whole
+Nothing is clobbered: `arena-stop.sh` moves the session's whole log set
+(seat logs, engine/runner output, `game.jsonl` and the `game-<gameId>.jsonl`
+files) into a timestamped `archive/<stamp>-stop/` folder and prints
+`N decisions across M game(s) (archived)`; during a session `game.jsonl` is
+only ever appended to. That makes game histories easy to share — the whole
 `runner/logs/` tree is self-contained, so
 `tar czf my-arena-logs.tgz forge-arena/runner/logs/` captures everything if
 you're willing to contribute games.
@@ -300,8 +328,8 @@ alongside pending decisions.
 
 | Script | What it does |
 |---|---|
-| `scripts/arena-play.sh` | One-shot launch: teardown → preflight → seat brains → GUI; `--all-ai` or `--human [deck.dck]`, `--advisor` for the teaching panel |
-| `scripts/arena-stop.sh` | Full teardown: kill GUI + runners, archive seat logs, clear mailbox |
+| `scripts/arena-play.sh` | One-shot launch: preflight → teardown → seat brains → Advisor (human games) → GUI; `--all-ai` or `--human [deck.dck]`; the Advisor is on by default in `--human` games, `--no-advisor` opts out (`--advisor` is accepted and changes nothing) |
+| `scripts/arena-stop.sh` | Full teardown: kill GUI + runners (by PID file), rate the game, archive the session's logs (seat logs, `game.jsonl`, `game-*.jsonl`, engine/runner output), clear mailbox |
 | `scripts/arena-add-deck.py` | Bare `.dck` → playable seat (dossier + combos + lint + primer) |
 | `scripts/arena-status.py` | Ground-truth table snapshot from the engine: pending decision, all seats' life + board |
 | `scripts/arena-digest.py` | One compact line per game turn — an ambient "how's it going" feed |
@@ -311,7 +339,7 @@ alongside pending decisions.
 | `runner/arena-ctl.py` | Set any seat's model/effort mid-game |
 | `runner/status.py` | seatd health + narrative dashboard ("numbers over vibes") |
 | `runner/usage_report.py` | Per-seat token-burn report, works mid-game |
-| `runner/replay.py` | Offline brain replay against recorded fixtures — no engine, real model calls |
+| `runner/run_advisor.sh` | The Advisor's supervisor: restart loop around `advisor_runner.py` (arena-play calls it in `--human` games) |
 | `runner/advisor_runner.py` | The AI Advisor brain (launched by default in `--human` games; `--no-advisor` opts out): reads the seat-0 decision shadow feed, streams teaching + color commentary |
 
 ## Seat avatars
@@ -372,9 +400,10 @@ eliminations). Keep two lifecycles straight:
 - **Game processes** (GUI, seat runners, restart loops) are fully owned by
   the scripts — `arena-stop.sh` kills and archives them.
 - **Watchers the agent arms** (a digest monitor, a `tail -F` on the logs)
-  are deliberately NOT touched by teardown: `tail -F` re-attaches after log
-  rotation and `game.jsonl` is never cleared, so one watcher spans every
-  game in a session. Arm once per session, not per game.
+  are deliberately NOT touched by teardown. `arena-stop.sh` moves
+  `game.jsonl` into the archive and the next game's runners create a fresh
+  one; `tail -F` (follow by name) re-attaches to the new file, so one watcher
+  spans every game in a session. Arm once per session, not per game.
 
 Teardown order when you're done: `arena-stop.sh` → stop your own watchers →
 audit for strays with
@@ -389,8 +418,9 @@ output itself.
   outside this package (window layout, game settings) — the package itself
   stays read-only apart from `decks/`, `docs/primers/`, `runner/logs/`, and
   `mailbox/`.
-- `arena-stop.sh` rolls the game's logs into `archive/` and clears the
-  mailbox; `game.jsonl` is never cleared — it is the accumulating dataset.
+- `arena-stop.sh` moves the session's logs, `game.jsonl` included, into
+  `archive/` and clears the mailbox; nothing is deleted, so the accumulating
+  dataset is `runner/logs/archive/*/game.jsonl` plus the live file.
 - To fully remove: delete this directory. Nothing else is installed.
 
 ## Troubleshooting
