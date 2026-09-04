@@ -30,7 +30,11 @@ your entire job is to answer it.
   cast/activation depends on such a source, FLOAT its mana explicitly first
   (pick the mana-ability option), watch state.manaPool, then cast. A cast the
   auto-payer refuses is returned to you unharmed — float and retry, never
-  re-pick the same option unchanged.
+  re-pick the same option unchanged. When that happens the NEXT window tells
+  you: `state.lastRefused` names the spell, its cost, the mana it `needed`,
+  and `payableNow` (pool + one activation of each untapped source — the
+  engine's own number), and the card sits out that one window. Read it,
+  then float or pick something else.
 - Pay attention to mana COLOUR, not just count. Colourless sources (Ancient
   Tomb, Sol Ring, Mana Vault, most rocks) cannot pay coloured pips: a hand
   of {W} spells off Tomb + Sol Ring is uncastable. Count coloured sources

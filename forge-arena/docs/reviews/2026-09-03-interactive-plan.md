@@ -20,7 +20,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - Reset `_deviation` at the top of `handle()`.
 - Test: one failed REACT, then an identical window must be a model call.
 
-## 4. Refused cast feedback
+## 4. Refused cast feedback — DONE 2026-09-03 (`RefusedCastFeedbackTest`; also 11c modal-cast result)
 - `lastRefused` state field + prompt sentence stating what the engine measured: needed N, payable now from pool plus one activation of each untapped source is M; float first if a sequence was intended.
 - Suppress the refused option from the very next window only.
 - Brief line documenting the field. Two-cards test.

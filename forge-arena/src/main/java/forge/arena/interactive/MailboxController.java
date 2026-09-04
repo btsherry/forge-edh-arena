@@ -163,6 +163,15 @@ public final class MailboxController extends PlayerControllerAi
     private enum AimOutcome { ANSWERED, DECLINED, NO_ANSWER }
     private AimOutcome lastAimOutcome = AimOutcome.ANSWERED;
 
+    /** Item 4 (review 2026-09-03): the last cast this controller REFUSED
+     *  (unaffordable, or a modal cast that failed). Reported in the NEXT
+     *  window's state as {@code lastRefused} plus a prompt sentence, and that
+     *  card is left out of that one window's options. Before, the refusal
+     *  went to stderr only and the brain saw identical options with no note —
+     *  a model-call livelock on the same pick. */
+    private Map<String, Object> lastRefused = null;
+    private Card refusedHost = null;
+
     @Override
     public CardCollection preferredTapCards(SpellAbility ability) {
         Card piece = pendingTapPreference.get(ability);
@@ -453,14 +462,26 @@ public final class MailboxController extends PlayerControllerAi
         } else {
             prompt = "Instant-speed window — respond to what's on the stack, or pass.";
         }
+        Map<String, Object> windowState = buildState(turn);
+        final Card skipHost = refusedHost; // item 4: suppressed for THIS window only
+        if (lastRefused != null) {
+            windowState.put("lastRefused", lastRefused);
+            prompt += " NOTE: your last pick, " + lastRefused.get("name")
+                    + (lastRefused.get("cost") != null ? " (" + lastRefused.get("cost") + ")" : "")
+                    + ", was refused: " + lastRefused.get("reason")
+                    + " It is omitted from this window; choose something else or pass.";
+        }
         MailboxProtocol.Request req = new MailboxProtocol.Request(
                 seatIndex, turn, phaseName(game), decisionType, prompt)
-                .state(buildState(turn))
+                .state(windowState)
                 .option(0, "Pass (do nothing)", null, "PASS");
         Map<Integer, SpellAbility> byId = new LinkedHashMap<>();
         int id = 1;
         for (SpellAbility sa : playable) {
             Card host = sa.getHostCard();
+            if (skipHost != null && host == skipHost) {
+                continue; // item 4: the refused card sits out one window
+            }
             String name = host != null ? host.getName() : sa.getDescription();
             String cost = sa.getPayCosts() != null ? sa.getPayCosts().toSimpleString() : null;
             String lab = label(sa, host);
@@ -552,6 +573,10 @@ public final class MailboxController extends PlayerControllerAi
         }
 
         JsonNode resp = bus.exchange(req);
+        // item 4: the refusal has been reported and suppressed once; a fresh
+        // refusal (below, in playChosenSpellAbility) re-arms it for the next window
+        lastRefused = null;
+        refusedHost = null;
         if (resp == null) {
             // timeout / IO / silent brain — never hang; let stock decide
             return super.chooseSpellAbilityToPlay();
@@ -612,7 +637,8 @@ public final class MailboxController extends PlayerControllerAi
                 Card h = sa.getHostCard();
                 System.err.println("[mailbox seat " + seatIndex + "] REFUSED unaffordable cast: "
                         + (h != null ? h.getName() : sa) + " — cost not payable now (kept in zone)");
-                return true; // keep priority; brain gets a fresh window with the same options
+                noteRefusal(sa, h, "unaffordable");
+                return true; // keep priority; the next window reports the refusal (item 4)
             }
         }
         // (1) Announce mana X on the cast path (601.2b) — the stock AI path never
@@ -670,8 +696,9 @@ public final class MailboxController extends PlayerControllerAi
         // only handled TargetingPlayer, which is why modal targets were lost.)
         if (sa.getApi() == ApiType.Charm) {
             inPaymentContext = true;
+            boolean charmPlayed;
             try {
-            ComputerUtil.handlePlayingSpellAbility(getPlayer(), sa, () -> {
+            charmPlayed = ComputerUtil.handlePlayingSpellAbility(getPlayer(), sa, () -> {
                 // Target the CHAINED MODES, never the Charm shell. Calling
                 // chooseTargetsFor(sa) on the shell fell through to stock
                 // (no TargetRestrictions on a Charm) -> brains.doTrigger ->
@@ -696,7 +723,16 @@ public final class MailboxController extends PlayerControllerAi
             } finally {
                 inPaymentContext = false;
             }
-            return true;
+            if (!charmPlayed) {
+                // item 11c: the cast result was silently dropped before — a
+                // failed modal cast is reported like a refusal so the brain
+                // is not told "played" about a spell still in hand
+                Card h = sa.getHostCard();
+                System.err.println("[mailbox seat " + seatIndex + "] modal cast FAILED: "
+                        + (h != null ? h.getName() : sa) + " (payment/targeting)");
+                noteRefusal(sa, h, "cast failed");
+            }
+            return charmPlayed;
         }
         // (3) NON-modal targeted spell: pre-set targets BEFORE the cast so we
         // can gracefully keep the card in hand if none can be chosen (rather
@@ -761,6 +797,54 @@ public final class MailboxController extends PlayerControllerAi
             }
         }
         return played;
+    }
+
+    /**
+     * Item 4: record a refused/failed cast for the next window. The numbers
+     * are the ENGINE's — what it measured when it refused — so the brain is
+     * told the same thing the payer will say: cost needed vs mana payable
+     * right now from the pool plus ONE activation of each untapped source.
+     * Sequences (float first, then cast) are the brain's to plan; the
+     * sentence says so.
+     */
+    private void noteRefusal(SpellAbility sa, Card host, String kind) {
+        try {
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("name", host != null ? host.getName() : String.valueOf(sa));
+            String cost = sa.getPayCosts() != null ? sa.getPayCosts().toSimpleString() : null;
+            int tax = commanderTax(sa, host);
+            if (tax > 0) {
+                cost = (cost != null ? cost : "") + " + {" + tax + "} commander tax";
+            }
+            r.put("cost", cost);
+            int needed = -1;
+            try {
+                needed = (sa.getPayCosts() != null && sa.getPayCosts().getTotalMana() != null
+                        ? sa.getPayCosts().getTotalMana().getCMC() : 0) + tax;
+            } catch (RuntimeException ignore) {
+                // best effort
+            }
+            int payableNow = -1;
+            try {
+                payableNow = ComputerUtilMana.getAvailableManaEstimate(getPlayer());
+            } catch (RuntimeException ignore) {
+                // best effort
+            }
+            r.put("needed", needed);
+            r.put("payableNow", payableNow);
+            r.put("kind", kind);
+            r.put("reason", "unaffordable".equals(kind)
+                    ? "cost not payable right now — it needs " + (needed >= 0 ? needed : "?")
+                      + " mana (colors matter too); the pool plus ONE activation of each "
+                      + "untapped source yields " + (payableNow >= 0 ? payableNow : "?")
+                      + ". If you meant to generate mana first (rituals, untappers, "
+                      + "commander mana), activate those abilities, THEN cast."
+                    : "the cast failed at payment or targeting; the card is still in hand.");
+            lastRefused = r;
+            refusedHost = host;
+        } catch (RuntimeException ignore) {
+            // reporting must never break the cast path
+        }
     }
 
     /** True for a spell whose X the card doesn't set itself (mirrors

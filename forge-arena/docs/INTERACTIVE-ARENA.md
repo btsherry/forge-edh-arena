@@ -156,6 +156,9 @@ knob seen from two places. The engine deletes both files once the response is re
     /* + effective keywords per card (indestructible/hexproof/ward/protection/evergreens, incl. granted) */
     /* + "confirmMode","triggerText","yesCost","chosenTargets" on CONFIRM(TRIGGER) */
     /* + "confirmMode":"PLAY_FROM_EFFECT" with "spell","free" on may-cast offers (note 49) */
+    /* + "lastRefused":{name,cost,needed,payableNow,kind,reason} on the CAST_SPELL window right
+       after the engine refused the seat's pick (unaffordable, or a failed modal cast); the prompt
+       carries the same sentence and that card is omitted from that ONE window (plan item 4) */
     /* + "hasCost":bool,"isMine":bool on EVERY CONFIRM — structured facts for the runner's
        punt rule (yes only when free AND mine; plan item 10). Untyped confirms reach the
        seat when their SOURCE is the seat's own spell/ability, never by message text (11d) */
