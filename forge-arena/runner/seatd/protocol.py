@@ -13,9 +13,12 @@ Engine behavior this module encodes (from MailboxProtocol.java):
   written after that is a stale landmine for the NEXT game (seq resets to 1
   per engine process). Hence: re-check req existence before writing, confirm
   consumption after, and sweep our own outbox at startup.
-- Seqs are per-seat and monotonic from 1. A seq at-or-below the last seen one
-  (outside the just-answered delete race) means an engine restart: all game
-  memory must be wiped (`game_reset` flag).
+- Seqs are per-seat and monotonic from 1. Since plan item 8 (2026-09-03) the
+  engine stamps `gameId` on every request; a CHANGE of id is the one true
+  new-game signal (memory wiped, outbox swept, `game_reset` set). A fresh
+  runner adopts the first id it sees (rejoin, not reset). Only an unstamped
+  (older) engine falls back to the seq heuristic: a seq at-or-below the last
+  seen one, outside the delete race, is read as a restart.
 
 FAIRNESS (mechanical): paths are constructed ONLY from the seat id given at
 construction. The single cross-seat read in the entire codebase is the public
@@ -50,7 +53,10 @@ class SeatMailbox:
         self.timeout_s = float(timeout_s)
         self.last_seq = 0
         self._answered_at: dict[int, float] = {}
-        self.game_reset = False  # set when a seq regression is detected; caller clears
+        self.game_reset = False  # set when a new game is detected; caller clears
+        self.game_id: str | None = None      # item 8: the game this seat is serving
+        self.prev_game_id: str | None = None  # the one before the last reset (for logs)
+        self.swept_on_reset = 0               # stale resp files removed at the last reset
 
     # ---- startup hygiene -------------------------------------------------
 
@@ -102,15 +108,28 @@ class SeatMailbox:
             answered = self._answered_at.get(seq)
             if answered is not None and (now - answered) < _DELETE_RACE_S:
                 continue  # engine still mid-delete on this one
-            if answered is not None or seq <= self.last_seq:
-                # Reused or regressed seq outside the race window: engine restart.
-                self._reset_game_memory()
             try:
                 req = json.loads(p.read_text())
             except (json.JSONDecodeError, OSError):
                 return None  # engine writes atomically — partial read is transient
             if not isinstance(req, dict) or req.get("seq") != seq:
                 return None  # malformed or mid-rename; retry next tick
+            gid = req.get("gameId")
+            if isinstance(gid, str) and gid:
+                # Stamped engine (item 8): identity decides, seq never does.
+                if self.game_id is None:
+                    self.game_id = gid            # fresh runner: adopt, do not reset
+                elif gid != self.game_id:
+                    self.prev_game_id = self.game_id
+                    self._reset_game_memory()
+                    self.game_id = gid
+                elif answered is not None:
+                    continue  # same game, already answered; engine slow to delete
+                return req
+            # Unstamped engine: legacy seq heuristic.
+            if answered is not None or seq <= self.last_seq:
+                # Reused or regressed seq outside the race window: engine restart.
+                self._reset_game_memory()
             return req
         return None
 
@@ -118,6 +137,9 @@ class SeatMailbox:
         self.last_seq = 0
         self._answered_at.clear()
         self.game_reset = True
+        # item 8: a resp written for the previous game would be consumed as
+        # the answer to this game's first request (seq restarts at 1)
+        self.swept_on_reset = self.sweep_outbox()
 
     # ---- responding --------------------------------------------------------
 

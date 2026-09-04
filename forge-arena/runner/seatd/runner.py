@@ -221,7 +221,8 @@ class SeatRunner:
     def _record(self, req: dict, answer: dict, source: str, meta=None,
                 why: str | None = None, consumed: bool = True) -> None:
         stamp = self.board_stamp(req)
-        rec = {"ts": time.time(), "seat": self.seat, "seq": req.get("seq"),
+        rec = {"ts": time.time(), "seat": self.seat, "gameId": req.get("gameId"),
+               "seq": req.get("seq"),
                "turn": req.get("turn"), "phase": req.get("phase"),
                "type": req.get("decisionType"), "source": source,
                "model": self.brain.model, "effort": self.brain.effort,
@@ -616,7 +617,9 @@ class SeatRunner:
     def handle(self, req: dict) -> None:
         if self.mb.game_reset:
             self._usage_readout("game close")  # final readout for the ended game
-            self._say(f"[seat {self.seat}] NEW GAME detected — session + memory reset")
+            self._say(f"[seat {self.seat}] NEW GAME detected "
+                      f"({self.mb.prev_game_id or 'unstamped'} -> {self.mb.game_id or 'unstamped'}; "
+                      f"swept {self.mb.swept_on_reset} stale resp) — session + memory reset")
             self.mb.game_reset = False
             self.brain.reset()
             self.plan = None
@@ -633,6 +636,10 @@ class SeatRunner:
             self._hist = []
 
         seq, dtype = req.get("seq"), req.get("decisionType")
+        if not req.get("gameId") and not getattr(self, "_unstamped_warned", False):
+            self._unstamped_warned = True
+            self._say(f"[seat {self.seat}] engine requests carry no gameId (pre-item-8 "
+                      f"engine) — falling back to the seq heuristic for new-game detection")
         # Item 3: a deviation belongs to the model call that reported it. It
         # used to persist across fastpath/plan/cycle/punt records (no model
         # call) and get stamped onto every one of them.
