@@ -25,7 +25,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - Suppress the refused option from the very next window only.
 - Brief line documenting the field. Two-cards test.
 
-## 5. Advisor lifecycle
+## 5. Advisor lifecycle — DONE 2026-09-03 (`test_advisor_lifecycle.py`)
 - `AdvisorFeed` stamps `gameId` on every file; advisor resets only on id change (replaces seq comparison).
 - Resume consumes the backlog quietly (context only, no stale notes streamed), announces once.
 - New-game reset also resets `gov_turn` / `gov_budget`.
