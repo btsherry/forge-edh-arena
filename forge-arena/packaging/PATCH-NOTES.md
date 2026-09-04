@@ -2,7 +2,7 @@
 
 ## Unreleased — after v3.3.3
 
-- **Ask the advisor.** The Advisor tab gains a text field and an **Ask**
+- **Ask the advisor.** The Advisor tab gains a text field and a **Chat**
   button (Enter sends). Your question goes straight to the advisor brain and
   the answer lands in the same stream as `[t12 · you] …` / `[t12 · advisor] …`.
   One question at a time; answered even while the advisor is paused.

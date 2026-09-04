@@ -477,7 +477,7 @@ user-facing docs live in `packaging/README.md`; per-file map in INVENTORY §4.
 - **The AI Advisor** (human games; on by default since 08-17, `--no-advisor`
   opts out): a fourth brain on the seat-0 read-only shadow feed — advice
   before you act, table-aware mulligans, color commentary, coach's memory,
-  pause button, an **Ask** field (note 73); `advisor-0.jsonl` dataset.
+  pause button, a **Chat** field (note 73); `advisor-0.jsonl` dataset.
   Supervised by `runner/run_advisor.sh` since 09-04 (note 72).
 - **Smart autopass** (`ARENA_AUTOPASS`, default `casts`): stakes-based
   guarantees (own mains/combat/opponent-spell/floating-mana stops never
@@ -1435,8 +1435,8 @@ Hard-won from two live sessions; read before optimizing anything.
     another sweeper already renamed is not an error, and a malformed spool is
     marked `.skipped` with the missing key named. `test_round_two_ops.py`.
 
-73. **Ask the advisor (2026-09-04, Ben).** The Advisor tab has a text field
-    and an **Ask** button (Enter sends). `AiControlFile.askAdvisor` writes
+73. **Ask the advisor (2026-09-04, Ben).** The Advisor tab has a black text
+    field and a **Chat** button (Enter sends). `AiControlFile.askAdvisor` writes
     `logs/control/ask/ask-<millis>-<serial>.json` atomically (temp +
     ATOMIC_MOVE, whitespace/control characters collapsed, 500-char cap);
     `advisor_runner._handle_asks` scans the directory every poll in numeric

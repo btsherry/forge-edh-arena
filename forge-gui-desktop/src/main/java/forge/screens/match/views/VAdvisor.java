@@ -66,13 +66,20 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         scroll.setBorder(null);
         body.add(status, "growx");
         body.add(scroll, "grow, push");
-        // Ask the advisor (Ben, 2026-09-04): one field, one button. The text
+        // Chat with the advisor (Ben, 2026-09-04): one field, one button. The text
         // becomes logs/control/ask/ask-<ts>-<n>.json; the advisor runner
         // deletes the file when it picks the question up and answers in the
         // stream this panel already tails — one-way files, no engine thread.
         final JPanel askRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][]", "[]"));
         askRow.setOpaque(false);
-        askField.setToolTipText("Ask the advisor a question — Enter or Ask sends it");
+        askField.setToolTipText("Ask the advisor a question — Enter or Chat sends it");
+        // Black field on the dark dock (Ben, 2026-09-04): the skin's white
+        // JTextField glared beside the transparent feed.
+        askField.setOpaque(true);
+        askField.setBackground(Color.BLACK);
+        askField.setForeground(Color.WHITE);
+        askField.setCaretColor(Color.WHITE);
+        askField.setBorder(javax.swing.BorderFactory.createLineBorder(Color.DARK_GRAY));
         askButton.setFocusable(false);
         askButton.setMargin(new java.awt.Insets(1, 8, 1, 8));
         final java.awt.event.ActionListener sendAsk = e -> sendAsk();
@@ -101,7 +108,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             new javax.swing.JButton("Advisor: OFF");
 
     private final javax.swing.JTextField askField = new javax.swing.JTextField();
-    private final javax.swing.JButton askButton = new javax.swing.JButton("Ask");
+    private final javax.swing.JButton askButton = new javax.swing.JButton("Chat");
     /** The question file until the runner deletes it (= picked up). */
     private java.io.File pendingAsk;
     private long pendingSince;
@@ -130,7 +137,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         if (!forge.arena.interactive.AiControlFile.advisorAttached()) {
             askField.setEnabled(false);
             askButton.setEnabled(false);
-            askButton.setText("Ask");
+            askButton.setText("Chat");
             return;
         }
         askField.setEnabled(true);
@@ -143,7 +150,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             }
         }
         askButton.setEnabled(pendingAsk == null);
-        askButton.setText(pendingAsk == null ? "Ask" : "Sending…");
+        askButton.setText(pendingAsk == null ? "Chat" : "Sending…");
     }
 
     private void syncToggle() {

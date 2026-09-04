@@ -166,7 +166,7 @@ combos, primer, both rules digests) — watches your seat and teaches in the
   public plays — what mattered and what it means for your plan.
 - **It sees your choices** and teaches from the divergence when it matters —
   gently, and never with a dedicated interruption.
-- **Ask it anything**: the field at the bottom of the tab (Enter or **Ask**)
+- **Ask it anything**: the black field at the bottom of the tab (Enter or **Chat**)
   sends one question straight to the advisor; the answer appears in the
   same stream as `[t12 · you] …` / `[t12 · advisor] …`. One question at a
   time (the button reads *Sending…* until the runner picks it up), and a
