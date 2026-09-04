@@ -11,7 +11,8 @@ Traps encoded here (from the source-extracted contract, docs/INTERACTIVE-ARENA.m
 - CHOOSE_MODE ids are 0-based INDICES into options; 0 is a REAL mode. Everywhere
   else id 0 is reserved for pass/none and only legal when actually offered.
 - DECLARE_* are whole-assignment atomic: one bad pair discards ALL to stock;
-  defenders must ALWAYS be explicit (multiplayer ambiguity poisons the block).
+  a defender must be explicit unless exactly one is legal (BL-23: then it is
+  filled in, as the engine's chooseDefender does) — ambiguity poisons the block.
 - Ids must be bare JSON integers ('1' or 1.0 -> stock). Bools are not ints.
 - min/max/allowRepeat live in the request `state` and are strict.
 """

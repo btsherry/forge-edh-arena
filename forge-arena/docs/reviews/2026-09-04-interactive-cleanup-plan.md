@@ -171,4 +171,8 @@ Order of execution: P first (fast feedback, no JVM), then J1, then J2, then D. L
 
 ## Execution log
 
-Filled in as batches land: commit per batch, gate exit codes, live game.
+- **Batch P** committed `91cc85d9292` (Python suite 175 OK; packager dry run clean: no `.cache`, `replay.py` and `react-autopass.py` absent, `run_advisor.sh` present; `arena-stop.sh` hand-run archived a session's `game.jsonl` + per-game file and reported "569 decisions across 1 game(s)"). Pushed to `private`.
+- **Batch J1** committed `2bc78d92188` (WIP, gate pending). Targeted run of the eight new/changed interactive classes: 10/12 green first pass; the trigger-order test failed for two test-side reasons, both fixed in the next commit: placed permanents have no active triggers until a state check (the kit's `put` bypasses `GameAction`), and the kit's loop step resolves the top of the stack inside the step that pushed it, so the test now asserts RESOLUTION order through `GameEventSpellResolved`. Found along the way, fixed in J1: `MailboxProtocol.forSeat` created a fresh bus per call, so a Mindslaver controller restarted the request sequence at 1 and the runner skipped the reused names — one bus per seat directory now (BL-05 was live-broken, not just untested).
+- **Batch J2** committed `d1a03910f25` (WIP, FULL gate pending): payer patch + `LifeForManaPayerTest` green on the first run (3 Swamps → 6 life for Mikaeus; {2}{B} → no life; Sol Ring shape → 2–4 life; no keyword → refused).
+- Agents (Ben's authorization, up to four Fable): T = extended tests (BL-11/12/25), D = docs (BL-16/19/21/24, PATCH-NOTES, brief), R1 = adversarial review of P + J1. R2 reviews J2 before the FULL gate.
+- BL-24 probe: `claude -p --setting-sources ""` accepted, login unaffected; `cwd=/` also worked but was rejected by Ben ("running in / is not safe") — no working-directory change shipped.

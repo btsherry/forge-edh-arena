@@ -50,10 +50,11 @@ import forge.game.zone.ZoneType;
  * names (public).
  *
  * <p><b>Robustness:</b> the handler never throws — a snapshot failure must never
- * disrupt the game — and writes are atomic (temp file + rename) and debounced
- * (skipped if less than {@link #MIN_WRITE_INTERVAL_MS} since the last write) so
- * the bus firing many events in a burst does not thrash the disk. The final
- * event of a game (game outcome) always forces a write regardless of debounce.
+ * disrupt the game — and writes are atomic (temp file + rename). BL-07
+ * (2026-09-04): no debounce timer; every event serializes the snapshot and a
+ * write happens only when the state (timestamp aside) differs from the last
+ * write, so the last event of a burst is never lost and an event that changes
+ * nothing visible costs no I/O. The game-outcome event always forces a write.
  */
 public final class ObserverSnapshot {
 

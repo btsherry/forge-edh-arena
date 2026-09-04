@@ -2789,8 +2789,9 @@ public final class MailboxController extends PlayerControllerAi
      * seat (single-target -> CHOOSE_ENTITY; multi-target/odd -> stock, exactly
      * as chooseTargetsFor already does). Non-targeting triggers keep stock's
      * doTrigger setup untouched; copied spells keep stock's branch verbatim.
-     * ORDER of simultaneous triggers stays stock (orderSimultaneousSa) — a
-     * separate, smaller surface.
+     * ORDER of simultaneous triggers is the seat's since BL-02 (2026-09-04):
+     * {@link #orderSimultaneousSa} opens a CHOOSE_MODE window (purpose
+     * TRIGGER_ORDER) when the batch holds two or more distinct triggers.
      */
     @Override
     public void orderAndPlaySimultaneousSa(List<SpellAbility> activePlayerSAs) {

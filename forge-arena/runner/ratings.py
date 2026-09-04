@@ -89,10 +89,12 @@ def ladder_update(table: dict, seat_key: dict, pairs) -> dict:
 
 
 def slice_game_log(game_log: Path, t0: float, t1: float) -> list[dict]:
-    """Records in [t0, t1] across the shared log. Item 13h: the runners write
-    one game-<gameId>.jsonl per game and keep game.jsonl as a symlink to the
-    current one, so read every regular game*.jsonl beside it (the symlink
-    itself is skipped — it duplicates one of them)."""
+    """Records in [t0, t1] across every game*.jsonl beside the log, DEDUPED.
+    BL-21: the runners append each record to game.jsonl AND game-<gameId>.jsonl,
+    so a record is normally on disk twice; earlier layouts (item 13h's symlink,
+    the legacy flat file) hold it once. Identity is (ts, seat, seq, type), so
+    the same decision is counted once whatever the layout — without this the
+    per-seat modelDecisions doubled (docs-agent find, 2026-09-04)."""
     files = []
     if game_log.parent.is_dir():
         for p in sorted(game_log.parent.glob("game*.jsonl")):
@@ -102,6 +104,7 @@ def slice_game_log(game_log: Path, t0: float, t1: float) -> list[dict]:
     elif game_log.exists():
         files.append(game_log)
     out = []
+    seen = set()
     for p in files:
         try:
             lines = p.read_text().splitlines()
@@ -113,8 +116,13 @@ def slice_game_log(game_log: Path, t0: float, t1: float) -> list[dict]:
             except ValueError:
                 continue
             ts = r.get("ts")
-            if isinstance(ts, (int, float)) and t0 <= ts <= t1:
-                out.append(r)
+            if not (isinstance(ts, (int, float)) and t0 <= ts <= t1):
+                continue
+            key = (ts, r.get("seat"), r.get("seq"), r.get("type"))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(r)
     return out
 
 

@@ -39,6 +39,22 @@ class SweepHardening(unittest.TestCase):
         self.assertIsNone(ratings.spool_problem(good))
 
 
+class DualLogNotDoubleCounted(unittest.TestCase):
+    """BL-21 follow-up: a record present in game.jsonl AND game-<id>.jsonl is one decision."""
+
+    def test_records_in_both_files_count_once(self):
+        env = Env()
+        flat = env.game_log.read_text()
+        (env.tmp / "logs" / "game-1000000000000-1.jsonl").write_text(flat)  # the per-game copy
+        recs = ratings.slice_game_log(env.game_log, 1000_000_000.0, 1000_000_000.0 + 3600)
+        self.assertEqual(len(recs), len(flat.splitlines()), "each decision once, not twice")
+        env.add_spool(spool([[3], [2], [1], [0]]))
+        n, _ = env.run()
+        self.assertEqual(n, 1)
+        rec = json.loads((env.tmp / "ratings-history.jsonl").read_text().strip().splitlines()[-1])
+        self.assertEqual(rec["seats"][0]["modelDecisions"], {"mA": 6}, "6 decisions, not 12")
+
+
 class EventsByGameId(unittest.TestCase):
     def _events(self, env, events):
         (env.tmp / "logs" / "transport-events.jsonl").write_text(

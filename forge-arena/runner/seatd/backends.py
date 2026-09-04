@@ -62,7 +62,7 @@ def make(model, seat: int = 0, log=print):
 
 def probe_meta(model_id: str) -> dict:
     """Best-effort per-model metadata from the launch probe's saved /models
-    payload (run_table.sh writes logs/control/or-models.json). Returns
+    payload (run_table.sh writes logs/cache/or-models.json). Returns
     {} when unprobed. ':suffix' routing shortcuts (:nitro/:floor) fall back
     to the base id — they never appear in the listing (plan F-30)."""
     try:
