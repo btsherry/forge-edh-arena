@@ -1146,6 +1146,25 @@ Hard-won from two live sessions; read before optimizing anything.
     not attached / ON / PAUSED) via `AiControlFile.advisorAttached()`; it
     read "ON — click to pause" in advisor-less games because
     `advisorEnabled()` is only the pause flag and defaults true.
+57. **Trigger-aim contract (2026-09-03, interactive plan item 1).** The
+    full review found two defects in `prepareTriggerViaSeat` /
+    `chooseTargetsFor`: (a) the id-0 "DECLINE this optional trigger" option
+    was offered for EVERY aimed trigger, so a brain could "decline" a
+    MANDATORY one — the code auto-aimed the first legal candidate to stack
+    it legally and `confirmTrigger` (true for mandatory) let it resolve
+    against a target the brain never chose; (b) a failed exchange (timeout,
+    malformed, unknown id) returned the same `false` as an explicit decline,
+    so a silent brain silently threw its own triggers away — the only
+    surface whose timeout did not fall to stock. Now: optionality is read
+    from the root `WrappedAbility` (`isMandatory()`), the decline option is
+    offered only for optional triggers, `chooseTargetsFor` records
+    ANSWERED / DECLINED / NO_ANSWER while aiming, and NO_ANSWER hands the
+    whole trigger to stock (`doTrigger`) with a "no usable answer at aim —
+    stock aims" log line. Explicit decline of an OPTIONAL trigger keeps the
+    rules-correct sequence (CR 603.3d: aim to stack legally, decline at
+    resolution). `TriggerAimContractTest` pins it with two cards from one
+    cast — Ravenous Chupacabra (mandatory) + Aura Shards (optional) — and
+    a silent-brain scenario via the kit's new `SILENT` responder.
 53. **Harness boil (2026-08-28, Ben-approved A–D).** Full-gate census: P1
     owned 73% of suite time (the full game IS those tests' oracle — hands
     off); P2's cost was game-boots + poll pacing, not assertions. Landed:

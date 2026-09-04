@@ -133,6 +133,21 @@ public final class MailboxController extends PlayerControllerAi
      *  never to stock's silent aiming. */
     private int triggerAimDepth = 0;
 
+    /** Item 1 (review 2026-09-03): whether the trigger being aimed right now is
+     *  OPTIONAL. The id-0 "DECLINE this optional trigger" option is offered only
+     *  then — it used to be offered for every aimed trigger, so a brain could
+     *  "decline" a MANDATORY trigger, the code auto-aimed the first legal
+     *  candidate, and confirmTrigger (which returns true for mandatory) let it
+     *  resolve against a target the brain never chose. */
+    private boolean aimingOptionalTrigger = false;
+
+    /** Why the last trigger-aim exchange ended: a real pick, an explicit
+     *  decline, or no usable answer (timeout / malformed / unknown id). The
+     *  caller must tell the last two apart — a decline is honored, a failed
+     *  exchange falls to STOCK aiming like every other surface's timeout. */
+    private enum AimOutcome { ANSWERED, DECLINED, NO_ANSWER }
+    private AimOutcome lastAimOutcome = AimOutcome.ANSWERED;
+
     @Override
     public CardCollection preferredTapCards(SpellAbility ability) {
         Card piece = pendingTapPreference.get(ability);
@@ -848,6 +863,11 @@ public final class MailboxController extends PlayerControllerAi
      */
     @Override
     public boolean chooseTargetsFor(SpellAbility currentAbility) {
+        if (triggerAimDepth > 0) {
+            // paths that hand the part to stock below (multi-target, no
+            // restrictions, no candidates) count as answered — stock aimed it
+            lastAimOutcome = AimOutcome.ANSWERED;
+        }
         try {
             forge.game.spellability.TargetRestrictions tgt =
                     currentAbility.getTargetRestrictions();
@@ -913,12 +933,16 @@ public final class MailboxController extends PlayerControllerAi
                     "Choose the TARGET for " + host.getName() + " ("
                             + currentAbility + ").")
                     .state(state);
+            if (triggerAimDepth > 0) {
+                lastAimOutcome = AimOutcome.NO_ANSWER; // until a usable answer lands
+            }
             if (minT == 0) {
                 req.option(0, "No target (decline)", null, "NONE");
-            } else if (triggerAimDepth > 0) {
+            } else if (triggerAimDepth > 0 && aimingOptionalTrigger) {
                 // aiming one of the seat's own OPTIONAL triggers: declining is
                 // always legal (the trigger will be auto-aimed to stack legally
-                // and auto-declined at resolution — it does nothing)
+                // and auto-declined at resolution — it does nothing). A
+                // MANDATORY trigger gets no such option (item 1).
                 req.option(0, "DECLINE this optional trigger (it will do nothing)",
                         null, "NONE");
             }
@@ -964,15 +988,18 @@ public final class MailboxController extends PlayerControllerAi
                 if (chosen != null && chosen.isInt()) {
                     int cid = chosen.asInt();
                     if (cid == 0 && minT == 0) {
+                        lastAimOutcome = AimOutcome.ANSWERED;
                         return true; // legal decline; ability proceeds untargeted
                     }
-                    if (cid == 0 && triggerAimDepth > 0) {
+                    if (cid == 0 && triggerAimDepth > 0 && aimingOptionalTrigger) {
+                        lastAimOutcome = AimOutcome.DECLINED;
                         return false; // trigger decline: caller auto-aims + auto-declines
                     }
                     forge.game.GameObject pick = byId.get(cid);
                     if (pick != null) {
                         currentAbility.resetTargets();
                         if (currentAbility.getTargets().add(pick)) {
+                            lastAimOutcome = AimOutcome.ANSWERED;
                             return true;
                         }
                     }
@@ -982,8 +1009,9 @@ public final class MailboxController extends PlayerControllerAi
             // targeting must never crash the seat — stock is the floor
         }
         if (triggerAimDepth > 0) {
-            // inside trigger aiming, stock's silent aim would override the
-            // seat's intent — report failure and let the caller handle it
+            // inside trigger aiming: no usable answer. Report failure and let
+            // the caller fall to STOCK aiming (item 1) — never a silent decline.
+            lastAimOutcome = AimOutcome.NO_ANSWER;
             return false;
         }
         return super.chooseTargetsFor(currentAbility);
@@ -2600,6 +2628,7 @@ public final class MailboxController extends PlayerControllerAi
 
     /** Mirror of stock prepareSingleSa with the seat aiming targeting triggers. */
     private boolean prepareTriggerViaSeat(SpellAbility sa) {
+        final SpellAbility root = sa; // the WrappedAbility — optionality lives here
         Card host = sa.getHostCard();
         if (sa.getApi() == ApiType.Charm) {
             // modal trigger: mode choice already reaches the seat via
@@ -2628,7 +2657,13 @@ public final class MailboxController extends PlayerControllerAi
         if (!anyTargeting) {
             return getAi().doTrigger(sa, true); // stock setup for non-targeting triggers
         }
+        // Item 1: only an OPTIONAL trigger may be declined at aim time. The
+        // root is the WrappedAbility; isMandatory() == isTrigger() && !optional,
+        // so an un-wrapped trigger (should not occur) reads as mandatory — the
+        // safe direction.
+        final boolean optionalTrigger = !root.isMandatory();
         triggerAimDepth++;
+        aimingOptionalTrigger = optionalTrigger;
         try {
         for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
             if (!s.usesTargeting()) {
@@ -2639,6 +2674,17 @@ public final class MailboxController extends PlayerControllerAi
             Card h = s.getHostCard();
             forge.game.spellability.TargetRestrictions tr = s.getTargetRestrictions();
             int minT = (tr != null && h != null) ? tr.getMinTargets(h, s) : 0;
+            if (!aimed && lastAimOutcome == AimOutcome.NO_ANSWER) {
+                // No usable answer (timeout / malformed / unknown id): the
+                // whole trigger falls to STOCK aiming, exactly as every other
+                // surface degrades on a failed exchange. Before item 1 this
+                // path was treated as a decline — a silent brain silently
+                // threw its own triggers away.
+                System.err.println("[mailbox seat " + seatIndex + "] trigger "
+                        + (h != null ? h.getName() : "?") + ": no usable answer at "
+                        + "aim — stock aims (fallback)");
+                return getAi().doTrigger(sa, true);
+            }
             if (minT > 0 && !s.isTargetNumberValid()) {
                 // Game-12 finding 1: the brain declined (or the exchange
                 // failed) on a REQUIRED-target trigger. A targetless stack
@@ -2671,6 +2717,7 @@ public final class MailboxController extends PlayerControllerAi
         return true;
         } finally {
             triggerAimDepth--;
+            aimingOptionalTrigger = false;
         }
     }
 
