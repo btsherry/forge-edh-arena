@@ -70,7 +70,7 @@ public final class MailboxLobbyPlayer extends LobbyPlayerAi {
         ObserverSnapshot.ensureRegistered(slave.getGame(), baseDir);
         GameResultSpool.ensureRegistered(slave.getGame());
         return new MailboxController(slave.getGame(), slave, this,
-                MailboxProtocol.forSeat(baseDir, master.getId()), master.getId());
+                MailboxProtocol.forSeat(baseDir, master.getId()), master.getId(), master);
     }
 
     @Override

@@ -57,8 +57,12 @@ import forge.game.zone.ZoneType;
  */
 public final class ObserverSnapshot {
 
-    /** Debounce window: skip writing if the previous write was this recent. */
-    private static final long MIN_WRITE_INTERVAL_MS = 200L;
+    /** BL-07 (2026-09-04): no debounce timer. Every event serializes the
+     *  snapshot and writes it only when the state (timestamp aside) differs
+     *  from the last write — so the last event of a burst is never lost and a
+     *  22-trigger loop that changes nothing visible costs one write. */
+    static final java.util.concurrent.atomic.AtomicInteger WRITES =
+            new java.util.concurrent.atomic.AtomicInteger();
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -72,7 +76,7 @@ public final class ObserverSnapshot {
 
     private final Game game;
     private final Path outputFile;
-    private volatile long lastWriteMs;
+    private byte[] lastKey;  // last written snapshot, timestamp removed
 
     private ObserverSnapshot(Game game, Path outputFile) {
         this.game = game;
@@ -133,16 +137,21 @@ public final class ObserverSnapshot {
         }
     }
 
-    /** Build and atomically write the snapshot, honouring the debounce unless forced. */
-    private void write(boolean force) {
-        long now = System.currentTimeMillis();
-        if (!force && (now - lastWriteMs) < MIN_WRITE_INTERVAL_MS) {
-            return;
-        }
-        lastWriteMs = now;
+    /** Build the snapshot; write it when it differs from the last write (or
+     *  when forced). Synchronized: game events can arrive from more than one
+     *  thread and a torn pair of writes is the one thing this must never do. */
+    private synchronized void write(boolean force) {
         try {
-            byte[] bytes = MAPPER.writeValueAsBytes(buildSnapshot());
-            writeAtomic(outputFile, bytes);
+            Map<String, Object> snap = buildSnapshot();
+            Object ts = snap.remove("timestamp");
+            byte[] key = MAPPER.writeValueAsBytes(snap);
+            if (!force && lastKey != null && java.util.Arrays.equals(lastKey, key)) {
+                return;
+            }
+            lastKey = key;
+            snap.put("timestamp", ts);
+            writeAtomic(outputFile, MAPPER.writeValueAsBytes(snap));
+            WRITES.incrementAndGet();
         } catch (Throwable t) {
             // best effort; a failed snapshot must not disturb the game
         }

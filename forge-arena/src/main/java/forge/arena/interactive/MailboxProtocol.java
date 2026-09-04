@@ -111,6 +111,30 @@ public final class MailboxProtocol {
         } catch (IOException e) {
             throw new IllegalStateException("cannot create mailbox dirs under " + seatDir, e);
         }
+        sweepOutbox();
+    }
+
+    /** BL-22: nothing legitimate can be in the outbox before this bus writes
+     *  its first request, so a leftover {@code resp-N.json} (a crashed engine,
+     *  a hand relaunch that skipped arena-stop) is deleted here rather than
+     *  consumed as the answer to this game's request N. */
+    private void sweepOutbox() {
+        int n = 0;
+        try (java.nio.file.DirectoryStream<Path> ds = Files.newDirectoryStream(outbox)) {
+            for (Path p : ds) {
+                String name = p.getFileName().toString();
+                if (name.startsWith("resp-") || name.endsWith(".tmp")) {
+                    deleteQuietly(p);
+                    n++;
+                }
+            }
+        } catch (IOException ignore) {
+            // best effort — the sweep is protection, never a precondition
+        }
+        if (n > 0) {
+            System.err.println("[mailbox " + seatDir.getFileName() + "] swept " + n
+                    + " stale outbox file(s) at start");
+        }
     }
 
     /** Resolve the bus base dir from {@link #DIR_PROPERTY} (default forge-arena/mailbox). */
@@ -137,10 +161,18 @@ public final class MailboxProtocol {
         return forSeat(baseDir(), seatId);
     }
 
+    /** One bus per seat directory (BL-05, 2026-09-04): the request sequence
+     *  lives on the bus, so every controller that writes into a seat's inbox —
+     *  the seat's own and a Mindslaver-class controller routed to it — must
+     *  share ONE instance. A second instance restarted seq at 1 and reused
+     *  names the runner had already answered, which it rightly skips. */
+    private static final java.util.concurrent.ConcurrentMap<Path, MailboxProtocol> BUSES =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     /** A protocol rooted at {@code <base>/seat-<id>} with an explicit base dir. */
     public static MailboxProtocol forSeat(Path base, int seatId) {
-        return new MailboxProtocol(base.resolve("seat-" + seatId),
-                timeoutSeconds() * 1000L);
+        Path dir = base.resolve("seat-" + seatId).toAbsolutePath().normalize();
+        return BUSES.computeIfAbsent(dir, d -> new MailboxProtocol(d, timeoutSeconds() * 1000L));
     }
 
     /**

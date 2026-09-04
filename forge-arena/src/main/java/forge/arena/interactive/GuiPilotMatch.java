@@ -75,13 +75,20 @@ public final class GuiPilotMatch {
     private static final String DECKS_DIR_PROPERTY = "arena.decks.dir";
     private static final String SEAT_DECKS_PROPERTY = "arena.seat.decks";
 
-    /** The default four Commander decks; index 0 is the default human seat. */
-    private static final String[] DECKS = {
-            "selvala-heart-of-the-wilds.dck",
-            "purphoros-god-of-the-forge.dck",
-            "giada-font-of-hope.dck",
+    /** The default table (item R, Ben 2026-09-04), in seat order for an all-AI
+     *  game: Urza, Giada, Purphoros, Selvala. A human game seats the human's
+     *  deck at 0 and the first three roster decks that are not the human's
+     *  behind it — see {@link #buildRoster}. run_table.sh and the advisor
+     *  apply the same rule. */
+    static final String[] DECKS = {
             "urza-lord-high-artificer.dck",
+            "giada-font-of-hope.dck",
+            "purphoros-god-of-the-forge.dck",
+            "selvala-heart-of-the-wilds.dck",
     };
+
+    /** The deck the human plays when none is named. */
+    static final String DEFAULT_HUMAN_DECK = "selvala-heart-of-the-wilds.dck";
 
     private GuiPilotMatch() {
     }
@@ -130,7 +137,7 @@ public final class GuiPilotMatch {
 
     public static void main(String[] args) {
         final String[] decks = seatDecks();
-        String humanDeck = args.length > 0 ? args[0] : decks[0];
+        String humanDeck = args.length > 0 ? args[0] : DEFAULT_HUMAN_DECK;
         // --all-ai: EVERY seat (incl. 0) is a mailbox seat; the GUI attaches as
         // a pure spectator via HostedMatch's humanCount==0 watch path.
         final boolean allAi = "--all-ai".equals(humanDeck);
@@ -173,15 +180,25 @@ public final class GuiPilotMatch {
         });
     }
 
-    private static void startCommanderMatch(File decksDir, String humanDeckFile,
-            boolean allAi, String[] decks) {
-        // Seat order MUST stay in lockstep with run_table.sh, which launches the
-        // brains: seats 1-3 are always roster[1..3]. Under --all-ai every seat is
-        // a mailbox deck (the four roster entries in order). Under --human,
-        // seat 0 is the human's deck — ANY deck, including a freshly ingested
-        // one that isn't in the roster — and seats 1-3 are the three AI decks.
-        // Both sides derive the roster from ARENA_SEAT_DECKS (here via the
-        // arena.seat.decks property), so a lineup change moves them together.
+    /** Deck file name → slug ({@code path/x.dck} → {@code x}). */
+    static String slugOf(String deckFile) {
+        String base = deckFile;
+        final int slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
+        if (slash >= 0) {
+            base = base.substring(slash + 1);
+        }
+        return base.endsWith(".dck") ? base.substring(0, base.length() - 4) : base;
+    }
+
+    /**
+     * The seat-ordered roster (item R). All-AI: the four roster entries in
+     * order. Human: the human's deck at seat 0 — ANY deck, including a freshly
+     * ingested one — then the first three roster decks that are not the
+     * human's. run_table.sh (ARENA_HUMAN_DECK) and the advisor apply the same
+     * rule, so the brains and the seats move together. Exactly four seats or
+     * this throws: a pod short of a brain is the unbrained-seat hang.
+     */
+    static List<String> buildRoster(String[] decks, String humanDeckFile, boolean allAi) {
         List<String> ordered = new ArrayList<>();
         if (allAi) {
             for (String d : decks) {
@@ -189,17 +206,16 @@ public final class GuiPilotMatch {
             }
         } else {
             ordered.add(humanDeckFile);
-            for (int i = 1; i < decks.length; i++) {
-                ordered.add(decks[i]);
+            final String human = slugOf(humanDeckFile);
+            for (String d : decks) {
+                if (ordered.size() >= 4) {
+                    break;
+                }
+                if (!slugOf(d).equals(human)) {
+                    ordered.add(d);
+                }
             }
         }
-
-        // Fixed-4-pod guard. run_table.sh launches exactly one brain per AI seat
-        // (seats 1-3 under --human, 0-3 under --all-ai). If the roster drifts
-        // from four entries, the GUI would seat more or fewer players than there
-        // are brains — reviving the unbrained-seat hang this bug class already
-        // caused. Fail loud here rather than seat a broken pod; this also
-        // validates a malformed arena.seat.decks property.
         if (ordered.size() != 4) {
             throw new IllegalStateException(
                     "arena pod must be exactly 4 seats (1 human + 3 AI, or 4 AI"
@@ -208,6 +224,41 @@ public final class GuiPilotMatch {
                     + " must list exactly 4 decks, in seat order, matching"
                     + " runner/run_table.sh's ARENA_SEAT_DECKS).");
         }
+        return ordered;
+    }
+
+    /**
+     * Plan item 7, the start invariant, GUI-free so it can be tested (BL-12):
+     * every deck in {@code ordered} must load and hold 100 real cards. The
+     * first failure writes {@code launch-status.json} with {@code ok:false}
+     * naming the seat, the deck and the problems, and throws; success writes
+     * {@code ok:true}. A missing or unreadable deck file is a problem too.
+     */
+    static List<Deck> verifyRoster(File decksDir, List<String> ordered,
+            java.nio.file.Path statusFile) {
+        List<Deck> decks = new ArrayList<>();
+        for (int seat = 0; seat < ordered.size(); seat++) {
+            File deckFile = new File(decksDir, ordered.get(seat));
+            Deck deck = deckFile.isFile() ? DeckSerializer.fromFile(deckFile) : null;
+            List<String> problems = deck == null
+                    ? List.of("deck file missing or unreadable: " + deckFile)
+                    : DeckLoadProbe.playabilityProblems(deck);
+            if (!problems.isEmpty()) {
+                String msg = "seat " + seat + " deck " + deckFile.getName() + ": "
+                        + String.join("; ", problems);
+                writeLaunchStatus(statusFile, false, msg);
+                System.err.println("[arena] LAUNCH REFUSED — " + msg);
+                throw new IllegalStateException("launch refused: " + msg);
+            }
+            decks.add(deck);
+        }
+        writeLaunchStatus(statusFile, true, ordered.size() + " decks verified at 100 real cards each");
+        return decks;
+    }
+
+    private static void startCommanderMatch(File decksDir, String humanDeckFile,
+            boolean allAi, String[] decks) {
+        List<String> ordered = buildRoster(decks, humanDeckFile, allAi);
         // Stash the resolved seat-ordered SLUG roster for the ELO result spool
         // (plan F-23: the deck ladder keys on slugs, and display names don't
         // match runner-side slugs — this property is the authoritative join).
@@ -216,35 +267,17 @@ public final class GuiPilotMatch {
             if (i > 0) {
                 slugCsv.append(',');
             }
-            String base = ordered.get(i);
-            final int slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
-            if (slash >= 0) {
-                base = base.substring(slash + 1);
-            }
-            slugCsv.append(base.endsWith(".dck")
-                    ? base.substring(0, base.length() - 4) : base);
+            slugCsv.append(slugOf(ordered.get(i)));
         }
         System.setProperty("arena.seat.slugs", slugCsv.toString());
 
+        final java.nio.file.Path statusFile = MailboxProtocol.baseDir().resolve("launch-status.json");
+        final List<Deck> loaded = verifyRoster(decksDir, ordered, statusFile);
+
         List<RegisteredPlayer> players = new ArrayList<>();
         Map<RegisteredPlayer, IGuiGame> guis = new LinkedHashMap<>();
-        final java.nio.file.Path statusFile = MailboxProtocol.baseDir().resolve("launch-status.json");
         for (int seat = 0; seat < ordered.size(); seat++) {
-            File deckFile = new File(decksDir, ordered.get(seat));
-            Deck deck = DeckSerializer.fromFile(deckFile);
-            // Plan item 7, the start invariant: a game never starts with a
-            // seat short of 100 REAL cards. The loader counts placeholders for
-            // unresolvable names and the match drops them (Sythis played 95,
-            // game 18); the preflight's manifest check catches an edited .dck,
-            // this catches everything else, with the deck and the names.
-            List<String> problems = DeckLoadProbe.playabilityProblems(deck);
-            if (!problems.isEmpty()) {
-                String msg = "seat " + seat + " deck " + deckFile.getName() + ": "
-                        + String.join("; ", problems);
-                writeLaunchStatus(statusFile, false, msg);
-                System.err.println("[arena] LAUNCH REFUSED — " + msg);
-                throw new IllegalStateException("launch refused: " + msg);
-            }
+            Deck deck = loaded.get(seat);
             RegisteredPlayer rp = RegisteredPlayer.forCommander(deck);
             if (seat == 0 && !allAi) {
                 // seat 0 = HUMAN via the GUI player; its IGuiGame renders the game.
@@ -260,8 +293,6 @@ public final class GuiPilotMatch {
             }
             players.add(rp);
         }
-
-        writeLaunchStatus(statusFile, true, ordered.size() + " decks verified at 100 real cards each");
 
         // Cosmetic: give each seat a built-in avatar matched to its deck's colors
         // (proportional to pip composition; fail-safe — Forge's default avatar

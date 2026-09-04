@@ -143,7 +143,11 @@ public final class GameResultSpool {
             }
         }
         final StringBuilder sb = new StringBuilder(1024);
-        sb.append("{\"schema\": 1, \"startMillis\": ").append(startMillis)
+        // BL-09: the game id lets the ratings sweep attribute transport
+        // events (punts, wedges) to THIS game exactly, not by time window.
+        final String gameId = MailboxController.gameIdFor(game);
+        sb.append("{\"schema\": 1, \"gameId\": ").append(gameId == null ? "null" : "\"" + esc(gameId) + "\"")
+          .append(", \"startMillis\": ").append(startMillis)
           .append(", \"endMillis\": ").append(System.currentTimeMillis())
           .append(", \"turnsPlayed\": ").append(game.getPhaseHandler().getTurn())
           .append(", \"advisor\": ")

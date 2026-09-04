@@ -129,19 +129,29 @@ public class ProtocolContractTest {
                 Assert.assertTrue(firstByType.containsKey(must), "surface not exercised: " + must);
             }
 
-            // engine-emitted fixtures for the Python side. The per-run gameId
-            // is normalized (keeps the schema's shape) and a file is rewritten
-            // only when its content changed, so a green gate leaves the tree
-            // clean instead of touching ten fixtures every run.
+            // Engine-emitted fixtures for the Python side. The per-run gameId
+            // is normalized (keeps the schema's shape). BL-25: the gate COMPARES
+            // against the committed fixtures and fails on drift — a test must
+            // not rewrite tracked files. After reviewing a deliberate protocol
+            // change, refresh them with -Darena.fixtures.refresh=true.
+            boolean refresh = Boolean.getBoolean("arena.fixtures.refresh");
+            List<String> drift = new ArrayList<>();
             Files.createDirectories(ENGINE_FIXTURES);
             for (Map.Entry<String, JsonNode> e : firstByType.entrySet()) {
                 ((com.fasterxml.jackson.databind.node.ObjectNode) e.getValue()).put("gameId", "1-1");
                 Path out = ENGINE_FIXTURES.resolve(e.getKey().toLowerCase() + ".json");
                 String text = MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(e.getValue()) + "\n";
-                if (!Files.exists(out) || !Files.readString(out).equals(text)) {
-                    Files.writeString(out, text);
+                boolean same = Files.exists(out) && Files.readString(out).equals(text);
+                if (refresh) {
+                    if (!same) {
+                        Files.writeString(out, text);
+                    }
+                } else if (!same) {
+                    drift.add(e.getKey());
                 }
             }
+            Assert.assertTrue(drift.isEmpty(), "engine fixtures drifted for " + drift
+                    + " — review the protocol change, then refresh with -Darena.fixtures.refresh=true");
         }
     }
 }

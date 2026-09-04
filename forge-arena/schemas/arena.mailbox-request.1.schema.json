@@ -7,7 +7,7 @@
   "required": ["seq", "gameId", "timeoutSec", "seat", "turn", "phase", "decisionType", "prompt", "state", "options"],
   "properties": {
     "seq": { "type": "integer", "minimum": 1 },
-    "gameId": { "type": "string", "pattern": "^[0-9]+-[0-9]+$" },
+    "gameId": { "type": "string", "pattern": "^[0-9]+-[0-9]+(-[0-9]+)?$" },
     "timeoutSec": { "type": "integer", "minimum": 1 },
     "seat": { "type": "integer", "minimum": 0 },
     "turn": { "type": "integer", "minimum": 0 },
@@ -94,6 +94,8 @@
         "stackOracle": { "type": "array", "items": { "type": "string", "maxLength": 300 } },
         "min": { "type": "integer" }, "max": { "type": "integer" },
         "controllingSeat": { "type": "integer" },
+        "controllerBoard": { "type": "object", "description": "Only on a controlled seat's request (controllingSeat set): the controlling master's own board, life, mana and hand — the master's brain reading its own cards (CR 721.3)." },
+        "purpose": { "type": "string", "enum": ["TRIGGER_ORDER", "COLOR"], "description": "CHOOSE_MODE only. TRIGGER_ORDER: list ALL indices in the order the trigger groups should RESOLVE (first listed resolves first). COLOR: the index of ONE colour." },
         "lastRefused": { "type": "object", "required": ["name", "needed", "payableNow", "kind", "reason"] },
         "hasCost": { "type": "boolean" }, "isMine": { "type": "boolean" },
         "confirmMode": { "type": "string" }

@@ -21,7 +21,7 @@ import forge.game.zone.ZoneType;
  */
 public class ProtocolFieldsTest {
 
-    private static final Pattern GAME_ID = Pattern.compile("\"gameId\":\"([0-9]+-[0-9]+)\"");
+    private static final Pattern GAME_ID = Pattern.compile("\"gameId\":\"([0-9]+-[0-9]+-[0-9]+)\"");
 
     @Test(timeOut = 120_000)
     public void everyRequestCarriesGameIdAndTimeout() throws Exception {
@@ -49,6 +49,18 @@ public class ProtocolFieldsTest {
             }
             Assert.assertEquals(first, MailboxController.gameIdFor(k.game),
                     "the stamped id is the Game's id");
+        }
+    }
+
+    /** BL-28: two Games in one JVM (even in the same millisecond) never share an id. */
+    @Test(timeOut = 120_000)
+    public void distinctGamesGetDistinctIds() throws Exception {
+        try (MailboxTestKit a = new MailboxTestKit(false); MailboxTestKit b = new MailboxTestKit(false)) {
+            String ia = MailboxController.gameIdFor(a.game);
+            String ib = MailboxController.gameIdFor(b.game);
+            Assert.assertNotEquals(ia, ib, "ids must differ per Game");
+            Assert.assertEquals(ia, MailboxController.gameIdFor(a.game), "and stay stable per Game");
+            Assert.assertTrue(ia.matches("[0-9]+-[0-9]+-[0-9]+"), ia);
         }
     }
 

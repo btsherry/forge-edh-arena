@@ -102,16 +102,27 @@ public final class MailboxController extends PlayerControllerAi
      */
     MailboxController(Game game, Player p, LobbyPlayer lobby, MailboxProtocol bus,
             int controllingSeat) {
+        this(game, p, lobby, bus, controllingSeat, null);
+    }
+
+    /** @param controller the MASTER player when this controller plays another
+     *  player's cards (BL-05): its board rides along in every request as
+     *  {@code state.controllerBoard}; null for a seat playing itself. */
+    MailboxController(Game game, Player p, LobbyPlayer lobby, MailboxProtocol bus,
+            int controllingSeat, Player controller) {
         super(game, p, lobby);
         this.bus = bus;
         this.seatIndex = p.getId();
         this.controllingSeat = controllingSeat;
+        this.controllerPlayer = controller;
         bus.setGameId(gameIdFor(game));
         STOCK_FALLBACKS.put(p, new int[1]);
     }
 
     /** -1 for a seat playing its own cards; else the seat whose brain answers. */
     private final int controllingSeat;
+    /** The master player under Mindslaver-class control, else null (BL-05). */
+    private final Player controllerPlayer;
 
     /** Item 12: per controlled Player, how many decisions fell to stock
      *  because the brain did not answer (timeout, or absent heartbeat). Read
@@ -127,6 +138,19 @@ public final class MailboxController extends PlayerControllerAi
     /** All exchanges go through here: a null answer (timeout / absent brain /
      *  IO) is a stock fallback and is counted (item 12). */
     private JsonNode exchange(MailboxProtocol.Request req) {
+        if (controllingSeat >= 0 && controllerPlayer != null && req.state instanceof Map) {
+            // BL-05 / CR 721.3: the master decides with full sight of the
+            // controlled player's hidden information (the request's own state
+            // is theirs) AND of its own board — this is the master's brain
+            // reading its own hand, so nothing crosses a fairness line.
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> st = (Map<String, Object>) req.state;
+                st.put("controllerBoard", controllerBoard(req.turn));
+            } catch (RuntimeException ignore) {
+                // the board summary is help, never a precondition
+            }
+        }
         JsonNode resp = bus.exchange(req);
         if (resp == null) {
             int[] n = STOCK_FALLBACKS.get(getPlayer());
@@ -155,12 +179,34 @@ public final class MailboxController extends PlayerControllerAi
     private static final Map<Game, String> GAME_IDS =
             java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
 
+    /** BL-28: two Games created in the same millisecond of one JVM shared an
+     *  id; the serial makes the id unique per process. */
+    private static final java.util.concurrent.atomic.AtomicInteger GAME_SERIAL =
+            new java.util.concurrent.atomic.AtomicInteger();
+
     static String gameIdFor(Game game) {
         if (game == null) {
             return null;
         }
         return GAME_IDS.computeIfAbsent(game, g ->
-                System.currentTimeMillis() + "-" + ProcessHandle.current().pid());
+                System.currentTimeMillis() + "-" + ProcessHandle.current().pid()
+                        + "-" + GAME_SERIAL.incrementAndGet());
+    }
+
+    /** The master's own board for a controlled seat's request (BL-05): the
+     *  same projection the master's own requests carry, minus stack/opponents
+     *  (those are in the request already). Includes the master's hand. */
+    private Map<String, Object> controllerBoard(int turn) {
+        Map<String, Object> full = buildState(controllerPlayer, controllingSeat, turn);
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (String k : new String[] {"seat", "life", "poison", "hand", "handSize", "battlefield",
+                "graveyard", "exile", "commandZone", "librarySize", "manaPool",
+                "manaAvailableNow", "manaSources", "untappedManaSourceCount"}) {
+            if (full.containsKey(k)) {
+                out.put(k, full.get(k));
+            }
+        }
+        return out;
     }
 
     /**
@@ -3086,22 +3132,170 @@ public final class MailboxController extends PlayerControllerAi
 
     @Override
     public byte chooseColor(String message, SpellAbility sa, forge.card.ColorSet colors) {
+        Byte pick = colorViaSeat(message, sa != null ? sa.getHostCard() : null, colors, false);
+        if (pick != null) {
+            return pick;
+        }
         stockSurface("chooseColor");
         return super.chooseColor(message, sa, colors);
     }
 
     @Override
     public byte chooseColorAllowColorless(String message, Card card, forge.card.ColorSet colors) {
+        Byte pick = colorViaSeat(message, card, colors, true);
+        if (pick != null) {
+            return pick;
+        }
         stockSurface("chooseColorAllowColorless");
         return super.chooseColorAllowColorless(message, card, colors);
     }
 
+    /**
+     * BL-03 (2026-09-04): a colour choice reaches the seat as a one-pick
+     * {@code CHOOSE_MODE} window ({@code state.purpose = "COLOR"}) when it is a
+     * genuine choice — two or more legal colours — and it is NOT inside a
+     * payment context (the payer's planning scans and tap-for-this-cost picks
+     * already know the colour they need and stay on stock). Null or malformed
+     * → null here → the caller falls to stock. Gated on context, never on card.
+     */
+    private Byte colorViaSeat(String message, Card host, forge.card.ColorSet colors,
+            boolean allowColorless) {
+        if (inPaymentContext || colors == null) {
+            return null;
+        }
+        List<Byte> legal = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        for (byte c : forge.card.MagicColor.WUBRG) {
+            if (colors.hasAnyColor(c)) {
+                legal.add(c);
+                names.add(forge.card.MagicColor.toLongString(c));
+            }
+        }
+        if (allowColorless) {
+            legal.add(forge.card.MagicColor.COLORLESS);
+            names.add("colorless");
+        }
+        if (legal.size() < 2) {
+            return null;
+        }
+        try {
+            Game game = getGame();
+            int turn = game.getPhaseHandler().getTurn();
+            Map<String, Object> state = buildState(turn);
+            state.put("min", 1);
+            state.put("max", 1);
+            state.put("allowRepeat", false);
+            state.put("purpose", "COLOR");
+            MailboxProtocol.Request req = req(turn, "CHOOSE_MODE",
+                    "Choose a color for " + (host != null ? host.getName() : "an effect")
+                            + (message != null && !message.isEmpty() ? ": " + message : "")
+                            + " — answer the index of ONE color.").state(state);
+            for (int i = 0; i < names.size(); i++) {
+                req.option(i, names.get(i), null, "COLOR");
+            }
+            JsonNode resp = exchange(req);
+            if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()
+                    || resp.get("chosen").size() != 1) {
+                return null;
+            }
+            JsonNode idn = resp.get("chosen").get(0);
+            if (idn == null || !idn.isInt() || idn.asInt() < 0 || idn.asInt() >= legal.size()) {
+                return null;
+            }
+            return legal.get(idn.asInt());
+        } catch (RuntimeException e) {
+            return null; // the seam never decides by crashing — stock picks
+        }
+    }
+
     @Override
     public List<SpellAbility> orderSimultaneousSa(List<SpellAbility> activePlayerSAs) {
-        if (activePlayerSAs != null && activePlayerSAs.size() > 1) {
+        if (activePlayerSAs == null || activePlayerSAs.size() <= 1) {
+            return super.orderSimultaneousSa(activePlayerSAs);
+        }
+        // BL-02 (2026-09-04), CR 603.3b: the controller orders its simultaneous
+        // triggers. Group by description (host + trigger text): a batch of
+        // identical triggers has no order to choose and never opens a window,
+        // which is also what keeps a 22-trigger death batch cheap.
+        Map<String, List<SpellAbility>> groups = new LinkedHashMap<>();
+        for (SpellAbility sa : activePlayerSAs) {
+            groups.computeIfAbsent(triggerKey(sa), k -> new ArrayList<>()).add(sa);
+        }
+        if (groups.size() >= 2) {
+            try {
+                List<SpellAbility> ordered = orderViaSeat(groups);
+                if (ordered != null) {
+                    return ordered;
+                }
+            } catch (RuntimeException e) {
+                // the seam never decides by crashing — stock orders
+            }
             stockSurface("orderSimultaneousSa(" + activePlayerSAs.size() + ")");
         }
         return super.orderSimultaneousSa(activePlayerSAs);
+    }
+
+    /** Grouping key for a trigger: host name plus the trigger's own text. */
+    private static String triggerKey(SpellAbility sa) {
+        Card host = sa.getHostCard();
+        String desc = sa.getDescription();
+        if (desc == null || desc.isEmpty()) {
+            desc = sa.getStackDescription();
+        }
+        return (host != null ? host.getName() : "?") + " — "
+                + (desc != null && !desc.isEmpty() ? desc : String.valueOf(sa));
+    }
+
+    /**
+     * The trigger-order window: a {@code CHOOSE_MODE} request with
+     * {@code state.purpose = "TRIGGER_ORDER"}, one option per group (with its
+     * count), {@code min = max = groups}. The answer lists the groups in the
+     * order they should RESOLVE; the stack pushes in reverse, so the first to
+     * resolve is played last. Anything but a full permutation → null → stock.
+     */
+    private List<SpellAbility> orderViaSeat(Map<String, List<SpellAbility>> groups) {
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        int n = groups.size();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", n);
+        state.put("max", n);
+        state.put("allowRepeat", false);
+        state.put("purpose", "TRIGGER_ORDER");
+        MailboxProtocol.Request req = req(turn, "CHOOSE_MODE",
+                "ORDER your " + n + " simultaneous triggers: list ALL " + n
+                        + " indices in the order they should RESOLVE — the first listed"
+                        + " resolves FIRST (it goes on the stack last).").state(state);
+        List<List<SpellAbility>> byIndex = new ArrayList<>(groups.values());
+        int i = 0;
+        for (Map.Entry<String, List<SpellAbility>> e : groups.entrySet()) {
+            int count = e.getValue().size();
+            req.option(i++, e.getKey() + (count > 1 ? "  ×" + count : ""), null, "TRIGGER");
+        }
+        JsonNode resp = exchange(req);
+        if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+            return null;
+        }
+        List<Integer> order = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        for (JsonNode idn : resp.get("chosen")) {
+            if (idn == null || !idn.isInt()) {
+                return null;
+            }
+            int idx = idn.asInt();
+            if (idx < 0 || idx >= n || !seen.add(idx)) {
+                return null;
+            }
+            order.add(idx);
+        }
+        if (order.size() != n) {
+            return null;
+        }
+        List<SpellAbility> play = new ArrayList<>();
+        for (int k = n - 1; k >= 0; k--) {
+            play.addAll(byIndex.get(order.get(k)));
+        }
+        return play;
     }
 
     @Override
