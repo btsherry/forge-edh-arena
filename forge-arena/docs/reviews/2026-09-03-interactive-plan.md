@@ -54,7 +54,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - Seat runner resets/sweeps only on id change; drops the 3 s heuristic and `_answered_at`. Runner restart mid-game adopts the id (rejoin, not reset). Missing field → old heuristic + one log line.
 - One log line per id change with both ids and swept-file count; `game.jsonl` rows carry `gameId`.
 
-## 9. Packager
+## 9. Packager — DONE 2026-09-03 (negative proven with two fake classpath entries; lib/ identical to v3.3.2 except the classpath's own drift)
 - Missing-jar loop moved out of the pipe subshell; collect all missing, fail naming them; assert `lib/` count equals classpath count; fix the README `&& cp ||` misreport.
 - Prove the negative with a fake classpath entry; diff `lib/` listing against v3.3.2.
 

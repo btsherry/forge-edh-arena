@@ -36,7 +36,7 @@ y-shtola-night-s-blessed sythis-harvests-hand liberator-urzas-battlethopter
 sheoldreds-sacrifice"
 
 FATJAR=$(ls "$REPO"/forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)
-CP_TXT="$REPO/forge-arena/target/classpath.txt"
+CP_TXT="${ARENA_PACKAGE_CP_TXT:-$REPO/forge-arena/target/classpath.txt}"  # override: negative test only
 CLASSES="$REPO/forge-arena/target/classes"
 
 # ---- preflight: refuse to package stale or missing build artifacts ----------
@@ -62,10 +62,28 @@ echo "[1/9] lib/ — every jar from classpath.txt (order within lib/* is JVM-"
 echo "      unspecified; the fat jar precedes lib/* in -cp so its classes win"
 echo "      duplicates exactly as in the source tree)"
 mkdir -p "$DEST/lib"
-tr ':' '\n' < "$CP_TXT" | while IFS= read -r jar; do
-  [ -f "$jar" ] || { echo "ERROR: classpath entry missing: $jar" >&2; exit 1; }
+# Plan item 9 (2026-09-03): the old `tr | while read` loop ran in a pipe
+# SUBSHELL, so its `exit 1` ended the subshell, not the script — a missing
+# jar printed ERROR and the build went on to ship an incomplete lib/ that
+# died at first launch elsewhere. Collect first, then fail naming them all.
+missing=""; want=0
+while IFS= read -r jar; do
+  [ -n "$jar" ] || continue
+  want=$((want + 1))
+  [ -f "$jar" ] || missing="$missing
+  $jar"
+done <<EOF_CP
+$(tr ':' '\n' < "$CP_TXT")
+EOF_CP
+[ -z "$missing" ] || { echo "ERROR: classpath entries missing:$missing" >&2; exit 1; }
+while IFS= read -r jar; do
+  [ -n "$jar" ] || continue
   cp "$jar" "$DEST/lib/"
-done
+done <<EOF_CP
+$(tr ':' '\n' < "$CP_TXT")
+EOF_CP
+have=$(ls "$DEST/lib" | wc -l | tr -d ' ')
+[ "$have" -eq "$want" ] || { echo "ERROR: lib/ holds $have jars, classpath lists $want" >&2; exit 1; }
 
 echo "[2/9] engine — fat jar + desktop pom (the launcher greps its JVM args)"
 mkdir -p "$DEST/forge-gui-desktop/target"
@@ -139,8 +157,11 @@ for f in arena-play.sh arena-stop.sh run-pilot-match.sh run-gui.sh \
 done
 
 echo "[9/9] top level — README (from packaging/), LICENSE, provenance stamp"
-[ -f "$DIR/README.md" ] && cp "$DIR/README.md" "$DEST/README.md" \
-  || echo "  WARN: $DIR/README.md not written yet — package has no README"
+if [ -f "$DIR/README.md" ]; then
+  cp "$DIR/README.md" "$DEST/README.md"   # a failed cp now fails the build (set -e), not "WARN: missing"
+else
+  echo "  WARN: $DIR/README.md not written yet — package has no README"
+fi
 [ -f "$DIR/PATCH-NOTES.md" ] && cp "$DIR/PATCH-NOTES.md" "$DEST/PATCH-NOTES.md"
 cp "$REPO/LICENSE" "$DEST/LICENSE"
 { echo "forge-light-llm — built $(date -u '+%Y-%m-%d %H:%M UTC')"
