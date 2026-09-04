@@ -633,6 +633,10 @@ class SeatRunner:
             self._hist = []
 
         seq, dtype = req.get("seq"), req.get("decisionType")
+        # Item 3: a deviation belongs to the model call that reported it. It
+        # used to persist across fastpath/plan/cycle/punt records (no model
+        # call) and get stamped onto every one of them.
+        self._deviation = None
 
         # Guard #4: any opponent instant-speed action during our own turn shows
         # up as a REACT req — it invalidates the executable plan wholesale (the
@@ -720,8 +724,10 @@ class SeatRunner:
                 req, plan=plan_text, observer=self.mb.read_observer(),
                 speculative=self.speculative, react_hold=self.react_hold,
                 combo_status=rules.combo_status_line(self.combos, req))
-            # Cap at the deadline (raised to 240 so fable/high effort isn't
-            # truncated on long-timeout games; normal 90s games stay budget-bound).
+            # Item 2: the brain gets the DEADLINE, not a duration — init and
+            # the decision call each spend only what remains of it (the old
+            # min(budget, 240) handed the same budget to both, so a lazy
+            # re-init could block the seat for 2x the window).
             # Option B (2026-08-17): a REACT where every stack item is the
             # seat's OWN trigger (measured 7+/game at 8-16s each, never once a
             # real play) thinks at effort low — full authority retained, never
@@ -745,7 +751,7 @@ class SeatRunner:
                     fast_eff = "low"
                     self._say(f"[seat {self.seat}] free own-trigger CONFIRM -> "
                               f"effort low for this window")
-            out, meta = self.brain.decide(prompt, timeout_s=min(budget, 240.0),
+            out, meta = self.brain.decide(prompt, deadline=deadline,
                                           effort=fast_eff)
             clean = rules.validate(req, out) if out is not None else None
             if isinstance(out, dict) and isinstance(out.get("why"), str):
@@ -817,7 +823,12 @@ class SeatRunner:
             self._wedges_seen = wedges
             self._transport_event("wedge")
 
-        if dtype == "REACT" and answer == {"chosenId": 0}:
+        # Item 3: only a REAL model pass feeds the same-turn memo. A punt
+        # (timeout / wedge / invalid / short budget) also answers {"chosenId":0}
+        # but the brain never saw the window — memoizing it auto-passed every
+        # identical window for the rest of the turn under a "why" that claimed
+        # otherwise, and hid the punts from the ratings void counter.
+        if source == "model" and dtype == "REACT" and answer == {"chosenId": 0}:
             self.react_seen.add(self._react_signature(req))
 
         ok = self.mb.respond(req, answer)
