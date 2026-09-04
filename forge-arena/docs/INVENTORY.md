@@ -174,7 +174,9 @@ preflight → teardown → runners → advisor (`runner/run_advisor.sh`, human
 games) → GUI → liveness; refuses deck names with whitespace),
 `arena-stop.sh` (teardown by PID file + ELO sweep + archive of the session's
 log set incl. `game.jsonl`/`game-*.jsonl`; fallback `pkill` patterns anchored
-on this checkout), `run-pilot-match.sh` (GUI JVM launcher), `run-gui.sh`,
+on this checkout), `arena-autostop.sh` (started by arena-play once the match is
+live: waits for the engine's `gameOver` or the GUI JVM to vanish, lingers
+`--linger` seconds, execs `arena-stop.sh`; a hand stop always wins), `run-pilot-match.sh` (GUI JVM launcher), `run-gui.sh`,
 `arena-add-deck.py` (ingester), `arena-status.py`, `arena-cardwatch.py` (live
 card-conservation watcher — per-seat nontoken totals across zones,
 2026-08-31), `arena-digest.py` (counts torn lines). `react-autopass.py` was
@@ -201,8 +203,9 @@ round-trip for onboarding a deck for local testing — spends credits, uses the
 | `mailbox/seat-0-advisor/inbox/` | `AdvisorFeed` (Java, one-way shadow of the human seat's windows) | `advisor_runner.py` | per-game; cleared at stop. The advisor has NO outbox — read-only by construction. |
 | `runner/logs/control/seat-N.json` | runner (`_init_control` seeds it) + the GUI AI panel (writes re-dials) | runner polls mtime → applies model/effort at next decision | per-game; `control/` cleared at stop. |
 | `runner/logs/control/advisor.json` | the Advisor tab's pause button | `advisor_runner.py` (paused = no scanning, no calls) | cleared at stop → every session starts enabled. |
+| `runner/logs/control/ask/ask-<millis>-<serial>.json` | the Advisor tab's Ask field (`AiControlFile.askAdvisor`) | `advisor_runner._handle_asks` (deleted on pickup, answered in the stream, before the pause gate) | per question; `control/` cleared at stop. |
 | `runner/logs/cache/or-models.json` | run_table's keyless OpenRouter `/models` probe (5s cap, warn-and-continue) | backends.py (context/completion limits) + next launch's context preflight | refreshed per launch when any `or/` seat is rostered; `cache/` survives arena-stop (only `control/` is cleared — item 13f). |
-| `runner/logs/pids/*.pid` | arena-play (`run_table`, `advisor-loop`, `gui`), run_table (`seat-N`), run_advisor (`advisor`) | `arena-stop.sh` (kills only PIDs whose command line names this checkout) | removed at stop. |
+| `runner/logs/pids/*.pid` | arena-play (`run_table`, `advisor-loop`, `gui`, `autostop`), run_table (`seat-N`), run_advisor (`advisor`) | `arena-stop.sh` (kills only PIDs whose command line names this checkout) | removed at stop. |
 | `runner/logs/seat-N.{log,jsonl}` | seat daemon | humans, forensics, ELO attribution | moved to `logs/archive/<ts>-stop/` by arena-stop. gitignored. |
 | `runner/logs/game.jsonl` | all seats (single-line appends) | humans (`tail -f`), `arena-digest.py`, `status.py`, `arena-status.py`, ELO attribution | plain append-only file for the whole session (BL-21 reverted item 13h's symlink); moved to the archive by arena-stop together with the per-game files; never rotated during a session. gitignored. |
 | `runner/logs/game-<gameId>.jsonl` | all seats (the same record, per game) | `ratings.py` (`slice_game_log` reads every regular `game*.jsonl` beside it) | one file per game; archived at stop. |

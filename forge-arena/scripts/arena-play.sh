@@ -7,7 +7,12 @@
 # Usage:
 #   arena-play.sh --all-ai [--timeout N] [--model M] [--effort E]
 #   arena-play.sh --human [deck.dck] [--timeout N] [--model M] [--effort E] [--no-advisor]
+#   ... [--linger N] [--no-autostop]
 # Defaults: model=opus effort=medium timeout=90; human deck=selvala-heart-of-the-wilds.dck
+# Auto-teardown (2026-09-04, Ben): once the engine reports gameOver (or the GUI
+#   JVM is gone) a sleep-loop watcher lingers --linger seconds (default 60 all-AI,
+#   600 human — time to read the final board) and runs arena-stop.sh. --no-autostop
+#   leaves the table up until you stop it by hand.
 # Human games run the seat-0 AI Advisor BY DEFAULT (2026-08-17, Ben) — teaching
 #   commentary in the GUI's Advisor tab + autopass (ARENA_AUTOPASS=off|strict|casts,
 #   default casts). --no-advisor opts out; a non-ingested human deck auto-disables
@@ -24,6 +29,7 @@ LOGS="$ROOT/runner/logs"
 
 MODE=""; HUMAN_DECK="selvala-heart-of-the-wilds.dck"
 MODEL="opus"; EFFORT="medium"; TIMEOUT="90"; ADVISOR=""
+LINGER=""; AUTOSTOP=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --all-ai) MODE="all-ai"; shift ;;
@@ -33,6 +39,10 @@ while [ $# -gt 0 ]; do
               [ $# -ge 2 ] || { echo "arena: $1 needs a value" >&2; exit 2; }   # item 13g
               case "$1" in --model) MODEL="$2" ;; --effort) EFFORT="$2" ;; --timeout) TIMEOUT="$2" ;; esac
               shift 2 ;;
+    --linger) [ $# -ge 2 ] || { echo "arena: --linger needs a value (seconds)" >&2; exit 2; }
+              case "$2" in ''|*[!0-9]*) echo "arena: --linger takes a whole number of seconds (got '$2')" >&2; exit 2 ;; esac
+              LINGER="$2"; shift 2 ;;
+    --no-autostop) AUTOSTOP=0; shift ;;
     --advisor) ADVISOR=1; shift ;;      # explicit on (the default for --human)
     --no-advisor) ADVISOR=0; shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -62,6 +72,8 @@ if [ "$ADVISOR" = "1" ]; then
   fi
 fi
 [ -n "$MODE" ] || { echo "specify --all-ai or --human [deck]" >&2; exit 2; }
+# Linger default: a spectator table has nobody reading the board; a human does.
+[ -n "$LINGER" ] || { [ "$MODE" = "human" ] && LINGER=600 || LINGER=60; }
 
 # Item R (Ben, 2026-09-04): run_table.sh seats the AI decks from the roster
 # rule (all-AI: roster order; human: the first three roster decks that are not
@@ -126,6 +138,15 @@ done
 if [ -f "$ROOT/mailbox/observer-state.json" ]; then
   seats=$(python3 "$ROOT/runner/arena-ctl.py" status 2>/dev/null | grep -c "model=")
   echo "arena live [$MODE]: $seats AI seats @ $MODEL/$EFFORT, timeout=${TIMEOUT}s"$([ "$MODE" = human ] && echo ", human=$HUMAN_DECK")
+  # 6) auto-teardown once the match has clearly concluded (Ben, 2026-09-04):
+  # a plain sleep-loop watcher (no scheduler) waits for the engine's gameOver
+  # flag or the GUI JVM to vanish, lingers, then runs arena-stop.sh exactly as
+  # a hand stop would. arena-stop kills a waiting watcher by this PID file.
+  if [ "$AUTOSTOP" = 1 ]; then
+    nohup "$DIR/arena-autostop.sh" "$LINGER" >"$LOGS/autostop.out" 2>&1 &
+    echo $! > "$LOGS/pids/autostop.pid"
+    echo "  auto-stop: ${LINGER}s after game over (--linger N / --no-autostop)"
+  fi
 else
   echo "arena launch: runners up but match not live after ~150s — check $LOGS/gui.out"
   exit 1

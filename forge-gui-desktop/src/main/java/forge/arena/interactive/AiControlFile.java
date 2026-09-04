@@ -193,6 +193,81 @@ public final class AiControlFile {
         }
     }
 
+    // ---- ask the advisor (Ben, 2026-09-04): one field, one button ----------
+
+    /** {@code logs/control/ask/} — one file per question typed into the
+     *  Advisor tab's field. The advisor runner deletes each file the moment it
+     *  picks the question up (that deletion is the panel's "sent" signal) and
+     *  answers in the stream the panel already tails — the same one-way file
+     *  channel as everything else, never a socket, never an engine thread.
+     *  arena-stop clears {@code control/} whole, so no question outlives its
+     *  table. */
+    public static File askDir() {
+        return new File(logsDir(), "control/ask");
+    }
+
+    /** A question is one line in the stream and one prompt line for the
+     *  brain; anything longer is a paste, not a question. */
+    public static final int ASK_MAX_CHARS = 500;
+    private static final java.util.concurrent.atomic.AtomicInteger ASK_SERIAL =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    /** Whitespace and control characters collapse to single spaces; trimmed;
+     *  capped at {@link #ASK_MAX_CHARS}. */
+    public static String sanitizeAsk(final String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String s = raw.replaceAll("[\\s\\p{Cntrl}]+", " ").trim();
+        if (s.length() > ASK_MAX_CHARS) {
+            s = s.substring(0, ASK_MAX_CHARS);
+        }
+        return s;
+    }
+
+    /** Publish one question as {@code ask-<millis>-<serial>.json} (the runner
+     *  answers in that order). Returns the file, or {@code null} when the text
+     *  is empty or the directory cannot be written (no runner logs dir). */
+    public static File askAdvisor(final String raw) {
+        final String text = sanitizeAsk(raw);
+        if (text.isEmpty()) {
+            return null;
+        }
+        final File dir = askDir();
+        try {
+            dir.mkdirs();
+            final long ts = System.currentTimeMillis();
+            final File f = new File(dir, String.format("ask-%d-%03d.json", ts, ASK_SERIAL.incrementAndGet()));
+            final File tmp = new File(dir, f.getName() + ".tmp");
+            Files.write(tmp.toPath(), ("{\"ask\": " + jsonString(text) + ", \"ts\": " + ts + "}")
+                    .getBytes(StandardCharsets.UTF_8));
+            Files.move(tmp.toPath(), f.toPath(), StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+            return f;
+        } catch (final IOException e) {
+            return null;
+        }
+    }
+
+    /** Minimal JSON string literal — this class deliberately carries no JSON
+     *  dependency (see the ELO reader below). */
+    static String jsonString(final String s) {
+        final StringBuilder sb = new StringBuilder(s.length() + 2).append('"');
+        for (int i = 0; i < s.length(); i++) {
+            final char c = s.charAt(i);
+            if (c == '"') {
+                sb.append("\\\"");
+            } else if (c == '\\') {
+                sb.append("\\\\");
+            } else if (c < 0x20) {
+                sb.append(String.format("\\u%04x", (int) c));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.append('"').toString();
+    }
+
     // ---- ELO digest line (plan §13.4; flat regex only — no JSON dependency) --
 
     /** Per-seat ELO line from logs/elo/seat-N.json, or {@code null} if the

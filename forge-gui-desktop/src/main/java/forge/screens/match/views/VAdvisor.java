@@ -30,7 +30,8 @@ import net.miginfocom.swing.MigLayout;
  * Streaming teaching commentary from the seat-0 advisor brain. Pure file
  * I/O: the advisor runner appends to {@code logs/advisor-0.log} and this
  * panel tails it on a Swing timer — advice, turn color commentary, and
- * auto-pass narrations all land here. Works only when the advisor runner is
+ * auto-pass narrations all land here — and answers to the questions typed
+ * into the field below the feed. Works only when the advisor runner is
  * attached ({@code arena-play.sh --advisor}); shows offline otherwise.
  */
 public class VAdvisor implements IVDoc<CAdvisor> {
@@ -65,6 +66,21 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         scroll.setBorder(null);
         body.add(status, "growx");
         body.add(scroll, "grow, push");
+        // Ask the advisor (Ben, 2026-09-04): one field, one button. The text
+        // becomes logs/control/ask/ask-<ts>-<n>.json; the advisor runner
+        // deletes the file when it picks the question up and answers in the
+        // stream this panel already tails — one-way files, no engine thread.
+        final JPanel askRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][]", "[]"));
+        askRow.setOpaque(false);
+        askField.setToolTipText("Ask the advisor a question — Enter or Ask sends it");
+        askButton.setFocusable(false);
+        askButton.setMargin(new java.awt.Insets(1, 8, 1, 8));
+        final java.awt.event.ActionListener sendAsk = e -> sendAsk();
+        askField.addActionListener(sendAsk);
+        askButton.addActionListener(sendAsk);
+        askRow.add(askField, "growx");
+        askRow.add(askButton);
+        body.add(askRow, "growx, gaptop 2");
         // In-game advisor on/off (plan §13b): writes logs/control/advisor.json,
         // which advisor_runner honors at its next poll (paused = no scanning,
         // no model calls; the engine's one-way feed keeps writing harmlessly).
@@ -84,6 +100,52 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     private final javax.swing.JButton toggle =
             new javax.swing.JButton("Advisor: OFF");
 
+    private final javax.swing.JTextField askField = new javax.swing.JTextField();
+    private final javax.swing.JButton askButton = new javax.swing.JButton("Ask");
+    /** The question file until the runner deletes it (= picked up). */
+    private java.io.File pendingAsk;
+    private long pendingSince;
+    private static final long ASK_PICKUP_MS = 20_000;
+
+    private void sendAsk() {
+        if (pendingAsk != null) {
+            return; // one question at a time — the button says "Sending…"
+        }
+        final String typed = askField.getText();
+        if (forge.arena.interactive.AiControlFile.sanitizeAsk(typed).isEmpty()) {
+            return;
+        }
+        final java.io.File f = forge.arena.interactive.AiControlFile.askAdvisor(typed);
+        if (f == null) {
+            text.append("\n[advisor] could not send — the runner logs directory is not writable.\n");
+            return;
+        }
+        askField.setText("");
+        pendingAsk = f;
+        pendingSince = System.currentTimeMillis();
+        syncAsk();
+    }
+
+    private void syncAsk() {
+        if (!forge.arena.interactive.AiControlFile.advisorAttached()) {
+            askField.setEnabled(false);
+            askButton.setEnabled(false);
+            askButton.setText("Ask");
+            return;
+        }
+        askField.setEnabled(true);
+        if (pendingAsk != null) {
+            if (!pendingAsk.exists()) {
+                pendingAsk = null;   // picked up — the answer arrives in the stream
+            } else if (System.currentTimeMillis() - pendingSince > ASK_PICKUP_MS) {
+                pendingAsk = null;   // nobody home; let the human retry
+                text.append("\n[advisor] nobody picked up your question — is the advisor running?\n");
+            }
+        }
+        askButton.setEnabled(pendingAsk == null);
+        askButton.setText(pendingAsk == null ? "Ask" : "Sending…");
+    }
+
     private void syncToggle() {
         // Three states, not two: an all-AI or --no-advisor game has no advisor
         // to pause, and advisorEnabled() (the pause flag) defaults to true —
@@ -101,6 +163,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
 
     private void poll() {
         syncToggle();
+        syncAsk();
         final String fresh = tail.readNew();
         if (!fresh.isEmpty()) {
             text.append(fresh);

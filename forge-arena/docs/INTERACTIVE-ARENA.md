@@ -282,6 +282,7 @@ attacker or blocker; a forced single sub-choice; a non-card entity option) are
 # status line):
 forge-arena/scripts/arena-play.sh --all-ai                          # 4 AI seats, spectator GUI
 forge-arena/scripts/arena-play.sh --human [deck.dck] [--no-advisor] # you at seat 0
+#          --linger N | --no-autostop   (auto-teardown after game over: 600s human / 60s all-AI)
 #   knobs: --model haiku|sonnet|opus|fable  --effort low|medium|high|xhigh|max
 #          --timeout N   (defaults: opus / medium / 90s)
 forge-arena/scripts/arena-stop.sh    # teardown + ELO sweep + log archive
@@ -476,8 +477,8 @@ user-facing docs live in `packaging/README.md`; per-file map in INVENTORY §4.
 - **The AI Advisor** (human games; on by default since 08-17, `--no-advisor`
   opts out): a fourth brain on the seat-0 read-only shadow feed — advice
   before you act, table-aware mulligans, color commentary, coach's memory,
-  pause button; `advisor-0.jsonl` dataset. Supervised by
-  `runner/run_advisor.sh` since 09-04 (note 72).
+  pause button, an **Ask** field (note 73); `advisor-0.jsonl` dataset.
+  Supervised by `runner/run_advisor.sh` since 09-04 (note 72).
 - **Smart autopass** (`ARENA_AUTOPASS`, default `casts`): stakes-based
   guarantees (own mains/combat/opponent-spell/floating-mana stops never
   skipped) + the seat runners' allowlist fastpath answering provably-no-op
@@ -1433,3 +1434,34 @@ Hard-won from two live sessions; read before optimizing anything.
     many. Same batch, ratings: `sweep` lists spools UNDER the lock, a spool
     another sweeper already renamed is not an error, and a malformed spool is
     marked `.skipped` with the missing key named. `test_round_two_ops.py`.
+
+73. **Ask the advisor (2026-09-04, Ben).** The Advisor tab has a text field
+    and an **Ask** button (Enter sends). `AiControlFile.askAdvisor` writes
+    `logs/control/ask/ask-<millis>-<serial>.json` atomically (temp +
+    ATOMIC_MOVE, whitespace/control characters collapsed, 500-char cap);
+    `advisor_runner._handle_asks` scans the directory every poll in numeric
+    order, deletes each file on pickup (the panel's "sent" signal — the
+    button reads *Sending…* until then, and says so after 20 s with nobody
+    home), folds any pending context, makes one direct call and streams
+    `[tN · you] q` / `[tN · advisor] a`; record kind `ask` in
+    `advisor-0.jsonl`. Questions are handled BEFORE the pause gate, so a
+    paused advisor still answers a typed question. Same one-way file channel
+    as every other advisor path — no socket, no engine thread, nothing the
+    game can wait on. Table talk between seats was considered and dropped
+    (prompt cost on every decision, hidden-information posture).
+
+74. **Auto-teardown when the match is fully finished (2026-09-04, Ben).**
+    Games used to loiter: after the outcome the JVM kept the match screen
+    up and every runner polled forever. `arena-play.sh` now starts
+    `scripts/arena-autostop.sh` (PID in `pids/autostop.pid`) once the match
+    is live: a plain sleep loop (no scheduler) that polls the observer
+    snapshot for the engine's own `gameOver: true` (a forced write on the
+    outcome event) or for the GUI JVM's PID to vanish (window closed), then
+    lingers `--linger N` seconds (default 600 in human games so the final
+    board can be read, 60 all-AI; 10 when the GUI is already gone) and
+    `exec`s `arena-stop.sh` — the same kill/rate/archive/clear as a hand
+    stop. A hand stop always wins: `arena-stop` kills a waiting watcher by
+    its PID file (`ours()` marker), and a watcher that wakes to a cleared
+    mailbox exits without stopping anything. `--no-autostop` leaves the
+    table up. Tests: `runner/tests/test_autostop.py` drives the script through
+    its env hooks against a temp tree with a stub stop command.

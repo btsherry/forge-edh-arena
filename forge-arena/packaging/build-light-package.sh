@@ -157,7 +157,7 @@ fi
 echo "[8/9] scripts — play/stop/launch/ingest/observe/cardwatch (batch, canary, prep,"
 echo "      smoke and the discovery harnesses stay home)"
 mkdir -p "$DEST/forge-arena/scripts"
-for f in arena-play.sh arena-stop.sh run-pilot-match.sh run-gui.sh \
+for f in arena-play.sh arena-stop.sh arena-autostop.sh run-pilot-match.sh run-gui.sh \
          arena-add-deck.py arena-status.py arena-digest.py arena-cardwatch.py; do
   cp "$REPO/forge-arena/scripts/$f" "$DEST/forge-arena/scripts/"
 done

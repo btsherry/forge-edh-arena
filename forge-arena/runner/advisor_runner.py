@@ -11,6 +11,9 @@ stall the game. Discipline:
     the newest is advised (advising yesterday's window helps nobody).
   - The human's actual choices ride along as context for the next call —
     the brain teaches from divergence but never gets a dedicated call for it.
+  - QUESTIONS ARE ANSWERED FIRST, EVEN WHILE PAUSED: the Advisor tab's field
+    writes logs/control/ask/ask-<ts>-<n>.json; each is one direct call, answered
+    in the stream as [you] / [advisor] lines (Ben, 2026-09-04).
 
 Usage:
   advisor_runner.py --deck <slug> [--model opus] [--effort low]
@@ -39,6 +42,7 @@ POLL_S = 0.25  # advice feels snappier; cost is a stat() at 4Hz
 DEFAULT_TABLE = ("urza-lord-high-artificer giada-font-of-hope "
                  "purphoros-god-of-the-forge selvala-heart-of-the-wilds")
 CONTEXT_MAX_LINES = 40  # BL-13: bound on lines carried between advice calls
+ASK_MAX_CHARS = 500     # a question is one line; the GUI caps at the same value
 
 
 def table_opponents(own_deck: str, roster: list[str]) -> list[str]:
@@ -95,6 +99,8 @@ class AdvisorRunner:
         self._usage = log_dir / "seat-0.usage.json"
         self._control = log_dir / "control" / "seat-0.json"
         self._control_mtime = 0.0
+        self._asks = log_dir / "control" / "ask"   # questions from the Advisor tab
+        self._last_turn = None                      # for the [tN · you] label
         arena_root = Path(__file__).resolve().parent.parent
         self.brain = SeatBrain(0, deck, model=model, effort=effort,
                                log=self._say, brief="advisor-brief.md",
@@ -372,6 +378,8 @@ class AdvisorRunner:
             self._maybe_new_game(body, n, kind)
             self.last_seq = max(self.last_seq, n)
             consumed += 1
+            if kind in ("req", "digest") and body.get("turn") is not None:
+                self._last_turn = body.get("turn")
             if kind == "req":
                 reqs.append(body)
             elif kind == "digest":
@@ -424,6 +432,71 @@ class AdvisorRunner:
                 self._commentate(d)
         return consumed
 
+    # ---- questions from the Advisor tab (Ben, 2026-09-04) -------------------------
+
+    def _scan_asks(self) -> list[Path]:
+        """logs/control/ask/ask-<millis>-<serial>.json, oldest first (numeric
+        order, not lexical). Each file is one question typed into the field."""
+        try:
+            files = [p for p in self._asks.iterdir()
+                     if p.name.startswith("ask-") and p.name.endswith(".json")]
+        except OSError:
+            return []
+
+        def key(p: Path) -> tuple[int, int, str]:
+            parts = p.name[4:-5].split("-")
+            try:
+                return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0, p.name
+            except ValueError:
+                return 0, 0, p.name
+        return sorted(files, key=key)
+
+    def _handle_asks(self) -> int:
+        """Answer every pending question, in order. Called BEFORE the pause
+        gate: a typed question is an explicit request, so a paused advisor
+        still answers it (and only it). The file is deleted the moment it is
+        read — that deletion is the panel's "sent" signal — so a torn write
+        is retried next poll and a malformed one is dropped, never re-read."""
+        n = 0
+        for p in self._scan_asks():
+            body = self._load(p)
+            if body is None:
+                continue  # partial write — next poll
+            try:
+                p.unlink()
+            except OSError:
+                pass
+            text = body.get("ask") if isinstance(body, dict) else None
+            text = " ".join(str(text).split()) if isinstance(text, str) else ""
+            if not text:
+                self._record("ask_rejected", {"file": p.name})
+                continue
+            self._answer_ask(text[:ASK_MAX_CHARS])
+            n += 1
+        return n
+
+    def _answer_ask(self, text: str) -> None:
+        turn = self._last_turn if self._last_turn is not None else "?"
+        ctx = ""
+        if self.pending_context:
+            head = (f"- … {self._context_dropped} earlier line(s) dropped\n"
+                    if self._context_dropped else "")
+            ctx = "SINCE LAST TIME:\n" + head + "\n".join(self.pending_context) + "\n\n"
+            self.pending_context = []
+            self._context_dropped = 0
+        prompt = (f"{ctx}THE HUMAN AT YOUR SEAT ASKS: {text}\n\n"
+                  "Answer them directly (1-4 sentences, plain text). Ground it in the "
+                  "most recent board state you were shown; if it needs something you "
+                  "have not seen, say so rather than guess.")
+        self._stream_write(f"\n[t{turn} · you] {text}\n")
+        answer, meta = self.brain.decide(prompt, self.timeout)
+        reply = (meta.get("raw") or "").strip()
+        self._stream_write(f"[t{turn} · advisor] "
+                           + (reply or "(no answer — the call timed out or failed; ask again)")
+                           + "\n")
+        self._record("ask", {"turn": self._last_turn, "text": text, "answer": reply,
+                             "latency_s": meta.get("latency_s")})
+
     # ---- main loop ---------------------------------------------------------------
 
     def run(self) -> None:
@@ -448,6 +521,7 @@ class AdvisorRunner:
         threading.Thread(target=beat, name="advisor-heartbeat", daemon=True).start()
         while True:
             self._apply_control()
+            self._handle_asks()   # questions first, pause or not (see docstring)
             # In-game on/off toggle (plan 13b): the Advisor tab's button writes
             # logs/control/advisor.json; disabled = no scanning, no model calls
             # (the engine's one-way feed keeps writing, harmlessly). arena-stop

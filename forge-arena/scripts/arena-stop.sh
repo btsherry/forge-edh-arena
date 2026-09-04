@@ -22,7 +22,7 @@ PIDS="$LOGS/pids"
 # matching the checkout path would silently skip every kill when the launching
 # and stopping invocations spelled the path differently (/private aliasing,
 # case) — and then wipe the mailbox under a live game.
-ours() { ps -p "$1" -o command= 2>/dev/null | grep -qE "seat_runner\.py|advisor_runner\.py|GuiPilotMatch|run_table\.sh|run_advisor\.sh"; }
+ours() { ps -p "$1" -o command= 2>/dev/null | grep -qE "seat_runner\.py|advisor_runner\.py|GuiPilotMatch|run_table\.sh|run_advisor\.sh|arena-autostop\.sh"; }
 skipped=0
 if [ -d "$PIDS" ] && ls "$PIDS"/*.pid >/dev/null 2>&1; then
   for f in "$PIDS"/*.pid; do
@@ -32,7 +32,7 @@ if [ -d "$PIDS" ] && ls "$PIDS"/*.pid >/dev/null 2>&1; then
   sleep 1
   for f in "$PIDS"/*.pid; do p=$(cat "$f" 2>/dev/null); [ -n "$p" ] && ours "$p" && kill -9 "$p" 2>/dev/null; rm -f "$f"; done
   [ "$skipped" -gt 0 ] && echo "arena-stop: $skipped PID file(s) pointed at a live process that is not an arena process — left alone (stale PID reused)"
-  left=$(pgrep -f "seat_runner.py --seat|advisor_runner.py|GuiPilotMatch" | wc -l | tr -d ' ')
+  left=$(pgrep -f "seat_runner.py --seat|advisor_runner.py|GuiPilotMatch|arena-autostop.sh" | wc -l | tr -d ' ')
   [ "$left" -gt 0 ] && echo "note: $left arena process(es) not covered by a PID file are still running (another table, or a hand launch) — left alone" >&2
 else
   # BL-27: the fallback patterns are anchored on this checkout's path so a
@@ -42,6 +42,7 @@ else
   pkill -f "$ROOT/runner/run_advisor.sh" 2>/dev/null
   pkill -f "$ROOT/runner/seat_runner.py" 2>/dev/null
   pkill -f "$ROOT/runner/advisor_runner.py" 2>/dev/null
+  pkill -f "$ROOT/scripts/arena-autostop.sh" 2>/dev/null
   sleep 1
 fi
 
@@ -68,7 +69,7 @@ if [ "$have_logs" = 1 ]; then
   # clobber a past game's record — every game's full log set survives intact.
   mv "$LOGS"/seat-*.log "$LOGS"/seat-*.jsonl "$LOGS"/seat-*.usage.json \
      "$LOGS"/advisor-0.log "$LOGS"/advisor-0.jsonl "$LOGS"/advisor_runner.out \
-     "$LOGS"/gui.out "$LOGS"/run_table.out \
+     "$LOGS"/gui.out "$LOGS"/run_table.out "$LOGS"/autostop.out \
      "$LOGS"/game.jsonl "$LOGS"/game-*.jsonl \
      "$LOGS"/ratings.out "$LOGS"/transport-events.jsonl \
      "$ROOT"/runner/results/*.rated \
