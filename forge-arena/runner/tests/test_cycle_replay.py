@@ -58,6 +58,7 @@ def make_runner():
     r.turn_intent = None
     r.combos = None
     r.react_seen = set()
+    r.order_memo = {}
     r.cycle = None
     r._hist = []
     r._last_turn = None

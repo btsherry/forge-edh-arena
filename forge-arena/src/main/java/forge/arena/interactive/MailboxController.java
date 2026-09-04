@@ -3144,9 +3144,9 @@ public final class MailboxController extends PlayerControllerAi
 
     @Override
     public byte chooseColor(String message, SpellAbility sa, forge.card.ColorSet colors) {
-        Byte pick = colorViaSeat(message, sa != null ? sa.getHostCard() : null, colors, false);
-        if (pick != null) {
-            return pick;
+        List<Byte> pick = colorsViaSeat(message, sa, sa != null ? sa.getHostCard() : null, colors, 1, 1, false);
+        if (pick != null && pick.size() == 1) {
+            return pick.get(0);
         }
         stockSurface("chooseColor");
         return super.chooseColor(message, sa, colors);
@@ -3154,12 +3154,32 @@ public final class MailboxController extends PlayerControllerAi
 
     @Override
     public byte chooseColorAllowColorless(String message, Card card, forge.card.ColorSet colors) {
-        Byte pick = colorViaSeat(message, card, colors, true);
-        if (pick != null) {
-            return pick;
+        List<Byte> pick = colorsViaSeat(message, null, card, colors, 1, 1, true);
+        if (pick != null && pick.size() == 1) {
+            return pick.get(0);
         }
         stockSurface("chooseColorAllowColorless");
         return super.chooseColorAllowColorless(message, card, colors);
+    }
+
+    /** The hook "as CARDNAME enters, choose a color" and every other
+     *  {@code ChooseColor} effect actually reach (review 2026-09-04): the
+     *  plural form with a count range. Same window, {@code min}/{@code max}
+     *  as offered. */
+    @Override
+    public forge.card.ColorSet chooseColors(String message, SpellAbility sa, int min, int max,
+            forge.card.ColorSet options) {
+        List<Byte> pick = colorsViaSeat(message, sa, sa != null ? sa.getHostCard() : null, options,
+                min, max, false);
+        if (pick != null) {
+            int mask = 0;
+            for (byte b : pick) {
+                mask |= b;
+            }
+            return forge.card.ColorSet.fromMask(mask);
+        }
+        stockSurface("chooseColors(" + min + "-" + max + ")");
+        return super.chooseColors(message, sa, min, max, options);
     }
 
     /**
@@ -3170,9 +3190,15 @@ public final class MailboxController extends PlayerControllerAi
      * already know the colour they need and stay on stock). Null or malformed
      * → null here → the caller falls to stock. Gated on context, never on card.
      */
-    private Byte colorViaSeat(String message, Card host, forge.card.ColorSet colors,
-            boolean allowColorless) {
-        if (inPaymentContext || colors == null) {
+    private List<Byte> colorsViaSeat(String message, SpellAbility sa, Card host,
+            forge.card.ColorSet colors, int min, int max, boolean allowColorless) {
+        // The payer's planning scans and tap-for-this-cost picks stay on stock;
+        // a MANA ability's own colour choice does not (review 2026-09-04): the
+        // auto-payer narrows those to one colour via express choice (no window
+        // below), so the only mana choice that reaches here with 2+ colours is
+        // the brain's deliberate float — its pick, not stock's hand heuristic.
+        boolean manaChoice = sa != null && sa.getApi() == ApiType.Mana;
+        if ((inPaymentContext && !manaChoice) || colors == null) {
             return null;
         }
         List<Byte> legal = new ArrayList<>();
@@ -3187,34 +3213,42 @@ public final class MailboxController extends PlayerControllerAi
             legal.add(forge.card.MagicColor.COLORLESS);
             names.add("colorless");
         }
-        if (legal.size() < 2) {
-            return null;
+        int lo = Math.max(1, Math.min(min, legal.size()));
+        int hi = Math.max(lo, Math.min(max, legal.size()));
+        if (legal.size() < 2 || lo >= legal.size()) {
+            return null; // no genuine choice
         }
         try {
             Game game = getGame();
             int turn = game.getPhaseHandler().getTurn();
             Map<String, Object> state = buildState(turn);
-            state.put("min", 1);
-            state.put("max", 1);
+            state.put("min", lo);
+            state.put("max", hi);
             state.put("allowRepeat", false);
             state.put("purpose", "COLOR");
             MailboxProtocol.Request req = req(turn, "CHOOSE_MODE",
-                    "Choose a color for " + (host != null ? host.getName() : "an effect")
+                    "Choose " + (hi == 1 ? "a color" : lo + "-" + hi + " colors") + " for "
+                            + (host != null ? host.getName() : "an effect")
                             + (message != null && !message.isEmpty() ? ": " + message : "")
-                            + " — answer the index of ONE color.").state(state);
+                            + " — answer the index" + (hi == 1 ? " of ONE color." : "es.")).state(state);
             for (int i = 0; i < names.size(); i++) {
                 req.option(i, names.get(i), null, "COLOR");
             }
             JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()
-                    || resp.get("chosen").size() != 1) {
+                    || resp.get("chosen").size() < lo || resp.get("chosen").size() > hi) {
                 return null;
             }
-            JsonNode idn = resp.get("chosen").get(0);
-            if (idn == null || !idn.isInt() || idn.asInt() < 0 || idn.asInt() >= legal.size()) {
-                return null;
+            List<Byte> out = new ArrayList<>();
+            Set<Integer> seen = new HashSet<>();
+            for (JsonNode idn : resp.get("chosen")) {
+                if (idn == null || !idn.isInt() || idn.asInt() < 0 || idn.asInt() >= legal.size()
+                        || !seen.add(idn.asInt())) {
+                    return null;
+                }
+                out.add(legal.get(idn.asInt()));
             }
-            return legal.get(idn.asInt());
+            return out;
         } catch (RuntimeException e) {
             return null; // the seam never decides by crashing — stock picks
         }
@@ -3229,20 +3263,21 @@ public final class MailboxController extends PlayerControllerAi
         // triggers. Group by description (host + trigger text): a batch of
         // identical triggers has no order to choose and never opens a window,
         // which is also what keeps a 22-trigger death batch cheap.
-        Map<String, List<SpellAbility>> groups = new LinkedHashMap<>();
-        for (SpellAbility sa : activePlayerSAs) {
-            groups.computeIfAbsent(triggerKey(sa), k -> new ArrayList<>()).add(sa);
-        }
-        if (groups.size() >= 2) {
-            try {
+        try {
+            Map<String, List<SpellAbility>> groups = new LinkedHashMap<>();
+            for (SpellAbility sa : activePlayerSAs) {
+                groups.computeIfAbsent(triggerKey(sa), k -> new ArrayList<>()).add(sa);
+            }
+            if (groups.size() >= 2) {
                 List<SpellAbility> ordered = orderViaSeat(groups);
                 if (ordered != null) {
                     return ordered;
                 }
-            } catch (RuntimeException e) {
-                // the seam never decides by crashing — stock orders
+                stockSurface("orderSimultaneousSa(" + activePlayerSAs.size() + ")");
             }
-            stockSurface("orderSimultaneousSa(" + activePlayerSAs.size() + ")");
+        } catch (RuntimeException e) {
+            // the seam never decides by crashing (grouping included) — stock orders
+            stockSurface("orderSimultaneousSa(" + activePlayerSAs.size() + ") threw");
         }
         return super.orderSimultaneousSa(activePlayerSAs);
     }

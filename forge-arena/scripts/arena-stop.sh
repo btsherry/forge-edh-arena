@@ -17,13 +17,21 @@ LOGS="$ROOT/runner/logs"
 # fallback for a table launched before PID files existed.
 PIDS="$LOGS/pids"
 # BL-27 hardening: a PID file may be stale (a runner restarted, the number
-# reused by an unrelated process). Only signal a PID whose command line
-# belongs to THIS checkout.
-ours() { ps -p "$1" -o command= 2>/dev/null | grep -qF -- "$ROOT"; }
+# reused by an unrelated process). Only signal a PID whose command line is an
+# arena process. The marker is path-INDEPENDENT on purpose (review 2026-09-04):
+# matching the checkout path would silently skip every kill when the launching
+# and stopping invocations spelled the path differently (/private aliasing,
+# case) — and then wipe the mailbox under a live game.
+ours() { ps -p "$1" -o command= 2>/dev/null | grep -qE "forge-arena|GuiPilotMatch"; }
+skipped=0
 if [ -d "$PIDS" ] && ls "$PIDS"/*.pid >/dev/null 2>&1; then
-  for f in "$PIDS"/*.pid; do p=$(cat "$f" 2>/dev/null); [ -n "$p" ] && ours "$p" && kill "$p" 2>/dev/null; done
+  for f in "$PIDS"/*.pid; do
+    p=$(cat "$f" 2>/dev/null); [ -n "$p" ] || continue
+    if ours "$p"; then kill "$p" 2>/dev/null; elif ps -p "$p" >/dev/null 2>&1; then skipped=$((skipped + 1)); fi
+  done
   sleep 1
   for f in "$PIDS"/*.pid; do p=$(cat "$f" 2>/dev/null); [ -n "$p" ] && ours "$p" && kill -9 "$p" 2>/dev/null; rm -f "$f"; done
+  [ "$skipped" -gt 0 ] && echo "arena-stop: $skipped PID file(s) pointed at a live process that is not an arena process — left alone (stale PID reused)"
   left=$(pgrep -f "seat_runner.py --seat|advisor_runner.py|GuiPilotMatch" | wc -l | tr -d ' ')
   [ "$left" -gt 0 ] && echo "note: $left arena process(es) not covered by a PID file are still running (another table, or a hand launch) — left alone" >&2
 else
@@ -37,9 +45,11 @@ else
   sleep 1
 fi
 
-# ELO sweep BEFORE the archive: the applier attributes pilots from game.jsonl
-# (never archived) and needs unconsumed spool files in runner/results/. Rated
-# and skipped spools then ride into the archive; unrated ones stay for the
+# ELO sweep BEFORE the archive: the applier attributes pilots from the game
+# logs (archived below with everything else — a spool left unrated finds its
+# game later by id in archive/*/game-<id>.jsonl) and needs unconsumed spool
+# files in runner/results/. Rated and skipped spools then ride into the
+# archive; unrated ones stay for the
 # next sweep. Never blocks teardown.
 python3 "$ROOT/runner/ratings.py" >>"$LOGS/ratings.out" 2>&1 || true
 

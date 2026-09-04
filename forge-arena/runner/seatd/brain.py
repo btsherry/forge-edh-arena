@@ -86,8 +86,11 @@ def _run(cmd, *, input, timeout, cwd, on_child=None):
     try:
         out, err = child.communicate(input, timeout=timeout)
     except subprocess.TimeoutExpired:
+        # kill, then wait() — never communicate(): a grandchild that inherited
+        # the pipes would keep communicate() blocked with no timeout (CPython's
+        # subprocess.run does exactly this on POSIX for the same reason)
         child.kill()
-        child.communicate()
+        child.wait()
         raise
     finally:
         if on_child is not None:

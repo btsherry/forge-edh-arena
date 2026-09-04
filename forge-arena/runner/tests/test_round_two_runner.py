@@ -153,3 +153,66 @@ class SingleLegalDefender(unittest.TestCase):
         # explicit stays explicit
         out = rules.validate(self._req([1, 2]), {"attackers": [{"attacker": 302, "defender": 1}]})
         self.assertEqual(out, {"attackers": [{"attacker": 302, "defender": 1}]})
+
+
+class TriggerOrderMemo(unittest.TestCase):
+    """BL-02 follow-up (review 2026-09-04): the same set of trigger groups is
+    ordered once per game; identical later windows replay the model's order
+    with no call (Purphoros + Impact Tremors would otherwise ask every ETB)."""
+
+    def _win(self, seq, labels):
+        return {"seq": seq, "turn": 4, "phase": "MAIN1", "decisionType": "CHOOSE_MODE",
+                "prompt": "ORDER", "state": {"min": len(labels), "max": len(labels),
+                                             "allowRepeat": False, "purpose": "TRIGGER_ORDER"},
+                "options": [{"id": i, "label": lab, "cost": None, "type": "TRIGGER"}
+                            for i, lab in enumerate(labels)]}
+
+    def test_same_groups_replay_in_the_models_order_with_new_indices(self):
+        r = mk()
+        r.brain.script = [{"chosen": [1, 0]}]          # Tremors first, then Purphoros
+        r.handle(self._win(1, ["Purphoros — 2 damage", "Impact Tremors — 1 damage"]))
+        self.assertEqual(r.mb.responses[-1][1], {"chosen": [1, 0]})
+        # next creature: the engine offers the groups in the other order
+        r.handle(self._win(2, ["Impact Tremors — 1 damage", "Purphoros — 2 damage"]))
+        self.assertEqual(r.brain.calls, 1, "no second model call")
+        self.assertEqual(r.mb.responses[-1][1], {"chosen": [0, 1]}, "Tremors still resolves first")
+        self.assertTrue(any("[memo]" in ln for ln in r.log_lines))
+
+    def test_a_new_group_is_a_new_question(self):
+        r = mk()
+        r.brain.script = [{"chosen": [1, 0]}, {"chosen": [2, 0, 1]}]
+        r.handle(self._win(1, ["A — x", "B — y"]))
+        r.handle(self._win(2, ["A — x", "B — y", "C — z"]))
+        self.assertEqual(r.brain.calls, 2)
+
+    def test_punt_is_never_memoized(self):
+        r = mk()
+        r.brain.script = [None, {"chosen": [1, 0]}]
+        r.handle(self._win(1, ["A — x", "B — y"]))          # punt -> {"chosen": []} hand-back
+        self.assertEqual(r.mb.responses[-1][1], {"chosen": []})
+        r.handle(self._win(2, ["A — x", "B — y"]))
+        self.assertEqual(r.brain.calls, 2, "the punt was not remembered as an order")
+
+
+class PurposeWindowPunts(unittest.TestCase):
+    """BL-02/03 windows: a punt hands the pick back to the engine's stock
+    logic via the documented empty list; a model may say the same."""
+
+    def test_safe_default_and_validate(self):
+        from seatd import rules
+        order = {"decisionType": "CHOOSE_MODE", "prompt": "x",
+                 "state": {"min": 2, "max": 2, "purpose": "TRIGGER_ORDER"},
+                 "options": [{"id": 0, "label": "a"}, {"id": 1, "label": "b"}]}
+        color = {"decisionType": "CHOOSE_MODE", "prompt": "x",
+                 "state": {"min": 1, "max": 1, "purpose": "COLOR"},
+                 "options": [{"id": 0, "label": "white"}, {"id": 1, "label": "green"}]}
+        plain = {"decisionType": "CHOOSE_MODE", "prompt": "x", "state": {"min": 1, "max": 1},
+                 "options": [{"id": 0, "label": "a"}, {"id": 1, "label": "b"}]}
+        self.assertEqual(rules.safe_default(order), {"chosen": []})
+        self.assertEqual(rules.safe_default(color), {"chosen": []})
+        self.assertEqual(rules.safe_default(plain), {"chosen": [0]}, "ordinary modes keep the first-min rule")
+        self.assertEqual(rules.validate(order, {"chosen": []}), {"chosen": []})
+        self.assertEqual(rules.validate(color, {"chosen": []}), {"chosen": []})
+        self.assertIsNone(rules.validate(plain, {"chosen": []}), "an empty list is not legal for a real mode choice")
+        self.assertEqual(rules.validate(order, {"chosen": [1, 0]}), {"chosen": [1, 0]})
+        self.assertIsNone(rules.validate(order, {"chosen": [1]}), "a partial order is not a permutation")

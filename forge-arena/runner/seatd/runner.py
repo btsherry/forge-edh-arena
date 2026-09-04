@@ -50,6 +50,12 @@ class SeatRunner:
         # Consumed locally under the four-part guard; discarded on any divergence.
         self.plan: dict | None = None
         self.react_seen: set[tuple] = set()
+        # BL-02 follow-up: a trigger-order answer for the SAME set of trigger
+        # groups is replayed for the rest of the game (Purphoros + Impact
+        # Tremors would otherwise ask on every creature). Keyed by the sorted
+        # option labels; the answer is stored as labels in resolution order and
+        # rebound to the new window's indices. Fed only by real model answers.
+        self.order_memo: dict[tuple, list[str]] = {}
         # Cycle replay (backlog item 3, 2026-08-17): the brain may declare
         # "repeat_cycle": N on a decision it has answered identically before
         # this turn; the runner replays the recorded cycle's answers for
@@ -621,7 +627,43 @@ class SeatRunner:
                     return True
         return False
 
+    @staticmethod
+    def _order_key(req: dict) -> tuple | None:
+        """Identity of a TRIGGER_ORDER window: the sorted group labels."""
+        st = req.get("state", {}) or {}
+        if req.get("decisionType") != "CHOOSE_MODE" or st.get("purpose") != "TRIGGER_ORDER":
+            return None
+        return tuple(sorted(str(o.get("label", "")) for o in req.get("options", []) or []))
+
+    def _order_replay(self, req: dict) -> dict | None:
+        """Rebind a remembered resolution order (labels) to this window's indices."""
+        key = self._order_key(req)
+        labels = self.order_memo.get(key) if key is not None else None
+        if not labels:
+            return None
+        by_label = {str(o.get("label", "")): o.get("id") for o in req.get("options", []) or []}
+        try:
+            ids = [by_label[lab] for lab in labels]
+        except KeyError:
+            return None
+        return {"chosen": ids}
+
+    def _order_remember(self, req: dict, answer: dict) -> None:
+        key = self._order_key(req)
+        if key is None or not isinstance(answer, dict):
+            return
+        by_id = {o.get("id"): str(o.get("label", "")) for o in req.get("options", []) or []}
+        try:
+            self.order_memo[key] = [by_id[i] for i in answer.get("chosen", [])]
+        except (KeyError, TypeError):
+            pass
+
     def _fastpath(self, req: dict) -> tuple[dict, str] | None:
+        if req.get("decisionType") == "CHOOSE_MODE":
+            replay = self._order_replay(req)
+            if replay is not None and rules.validate(req, replay) is not None:
+                return replay, "memo"
+            return None
         if req.get("decisionType") != "REACT":
             return None
         non_pass = [o for o in req.get("options", []) if o.get("id") != 0]
@@ -700,11 +742,13 @@ class SeatRunner:
             self.plan = None
             self.hold = None
             self.react_seen.clear()
+            self.order_memo.clear()
             self.cycle = None
             self._hist = []
         if self._last_turn != req.get("turn"):
             self._last_turn = req.get("turn")
             self.react_seen.clear()
+            self.order_memo.clear()
             self.hold = None  # hold posture is single-turn
             self.turn_intent = None
             self.cycle = None   # loops never survive a turn boundary
@@ -930,6 +974,8 @@ class SeatRunner:
         # otherwise, and hid the punts from the ratings void counter.
         if source == "model" and dtype == "REACT" and answer == {"chosenId": 0}:
             self.react_seen.add(self._react_signature(req))
+        if source == "model" and dtype == "CHOOSE_MODE":
+            self._order_remember(req, answer)
 
         ok = self.mb.respond(req, answer)
         lat = f" {meta['latency_s']}s" if meta and meta.get("latency_s") else ""

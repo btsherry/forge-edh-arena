@@ -126,6 +126,33 @@ def slice_game_log(game_log: Path, t0: float, t1: float) -> list[dict]:
     return out
 
 
+def slice_archived_game(game_log: Path, game_id, t0: float, t1: float) -> list[dict]:
+    """Records of ONE archived game: archive/*/game-<gameId>.jsonl beside the
+    log's directory. Empty when unstamped or absent."""
+    if not isinstance(game_id, str) or not game_id:
+        return []
+    archive = game_log.parent / "archive"
+    if not archive.is_dir():
+        return []
+    out = []
+    for p in sorted(archive.glob(f"*/game-{game_id}.jsonl")):
+        try:
+            lines = p.read_text().splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            ts = r.get("ts")
+            if isinstance(ts, (int, float)) and t0 <= ts <= t1:
+                out.append(r)
+        if out:
+            break
+    return out
+
+
 def attribute(spool: dict, window_recs: list[dict], log=print):
     """Per-seat pilot resolution. Returns (seat->pilot|None, seat->counts,
     error string or None). AI seats attribute by model-decision majority and
@@ -262,8 +289,13 @@ def process_spool(spool: dict, tables: dict, game_log: Path, log=print,
         return None
     t0 = spool["startMillis"] / 1000.0 - WINDOW_SLACK_S
     t1 = spool["endMillis"] / 1000.0 + WINDOW_SLACK_S
-    pilots, counts, err = attribute(spool, slice_game_log(game_log, t0, t1),
-                                    log=log)
+    recs = slice_game_log(game_log, t0, t1)
+    if not recs:
+        # BL-21: the session's logs move to archive/<stamp>-stop/ at teardown;
+        # a spool the sweep could not rate then (lock busy, a crash) must still
+        # find its game — by game id, in the archive, one exact file.
+        recs = slice_archived_game(game_log, spool.get("gameId"), t0, t1)
+    pilots, counts, err = attribute(spool, recs, log=log)
     if err:
         log(f"[ratings] SKIP: {err}")
         return None

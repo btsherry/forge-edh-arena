@@ -220,6 +220,11 @@ def validate(req: dict, out) -> dict | None:
         arr = out.get("chosen")
         if not isinstance(arr, list):
             return None
+        if arr == [] and (req.get("state", {}) or {}).get("purpose") in ("TRIGGER_ORDER", "COLOR"):
+            # BL-02/03 windows: an empty list is the documented "you decide" —
+            # the engine treats it as non-conforming and its stock logic orders
+            # / picks (the engine-side fallback); legal for a model to say too.
+            return {"chosen": []}
         lo, hi = _bounds(req, 1, 1)
         allow_repeat = bool((req.get("state", {}) or {}).get(
             "allowRepeat", req.get("allowRepeat", False)))
@@ -255,6 +260,11 @@ def safe_default(req: dict) -> dict:
     if dtype == "DECLARE_BLOCKERS":
         return {"blocks": []}
     if dtype == "CHOOSE_MODE":
+        if (req.get("state", {}) or {}).get("purpose") in ("TRIGGER_ORDER", "COLOR"):
+            # the new windows (2026-09-04): a punt hands the pick back to the
+            # engine's stock logic (which is what every other timeout does)
+            # rather than resolving triggers in offered order or naming white
+            return {"chosen": []}
         lo, _ = _bounds(req, 1, 1)
         return {"chosen": list(range(lo))}       # first `min` indices
     if dtype in ("CHOOSE_ENTITIES", "CHOOSE_CARDS"):

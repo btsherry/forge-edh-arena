@@ -123,10 +123,13 @@ your entire job is to answer it.
   text"; a label ending "×N" is N identical triggers moving together). List
   ALL indices, each exactly once, in the order the groups should RESOLVE —
   the first listed resolves FIRST. With `state.purpose = "COLOR"` you are
-  choosing a colour for an effect: answer the index of ONE colour;
-  "colorless" appears as an option only when the effect allows it. Colour
-  picks made while paying a cost never reach you (the payer already knows
-  the colour it needs).
+  choosing colour(s) for an effect: answer `state.min`..`state.max` indices
+  (usually exactly one); "colorless" appears as an option only when the
+  effect allows it. The payer's own colour picks while paying a cost never
+  reach you (it already knows the colour it needs); the colour of mana YOU
+  float deliberately does. On either window, `{"chosen": []}` hands the
+  pick back to the engine's stock logic — legal when you have no
+  preference, and what the runner answers for you if you fail to answer.
 - SYMMETRY PIECES ("as long as ~ is untapped" restrictions on players —
   Winter Orb class; see `state.symmetryPieces`): the restriction is OFF while
   the piece is tapped. If YOU control one, tapping it during the turn of the

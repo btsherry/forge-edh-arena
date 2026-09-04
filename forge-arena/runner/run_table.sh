@@ -109,6 +109,7 @@ else
   AI_DECKS="${AI_DECKS# }"
   # shellcheck disable=SC2086
   set -- $AI_DECKS
+  [ $# -eq 3 ] || { echo "[run_table] the roster must yield exactly 3 AI decks once the human's ($HUMAN) is removed (got $#: $AI_DECKS) — check ARENA_SEAT_DECKS for a repeated slug" >&2; exit 1; }
   D1=$1; D2=$2; D3=$3               # the seats launched below
 fi
 AI_DECKS="${PREFLIGHT_DECKS:-$AI_DECKS}"

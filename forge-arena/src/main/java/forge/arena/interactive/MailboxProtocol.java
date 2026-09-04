@@ -296,7 +296,8 @@ public final class MailboxProtocol {
      */
     public static final class Request {
         public long seq;
-        /** Identity of the game this request belongs to (start millis + pid);
+        /** Identity of the game this request belongs to (start millis + pid + a
+         *  per-process serial, BL-28);
          *  null only from an engine that predates item 8. */
         public String gameId;
         /** Seconds the engine will wait for the answer before stock plays. */
