@@ -20,16 +20,15 @@ contract** first if you are picking this up. (**Next architecture** further
 down is the retained PRE-SHIP design — historical, not a roadmap.)
 
 > Status (2026-09-04): SHIPPED — this seam is the core of the
-> **forge-light-llm** distributable (v1 2026-08-12 → v3.3.2 2026-09-01 on R2
-> as `-latest`, dated key `forge-light-llm-20260901.tar.gz`, source
-> `0a1cfac3061`). v3.3.3 is PENDING (BUG-LOG BL-17): the "Unreleased" section
-> of PATCH-NOTES is written, the 2026-09-04 interactive batch (2bc78d92188)
-> awaits its Maven gate, and the K'rrik-class payer fix (BL-01) is not
-> started. User-facing docs: `packaging/README.md` + `packaging/PATCH-NOTES.md`.
-> Engineering inventory: [INVENTORY.md](INVENTORY.md). Upstream-merge safety:
-> [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md). Built on Card-Forge/forge (GPL-3.0);
-> non-commercial fan content under WotC's Fan Content Policy. Any distribution
-> is source-available under GPL-3.0.
+> **forge-light-llm** distributable (v1 2026-08-12 → v3.4 2026-09-04 on R2
+> as `-latest`, dated key `forge-light-llm-20260904b.tar.gz`). v3.3.3 (the
+> review fixes, source `5f72c0a8714`, dated key `…-20260904.tar.gz`) and v3.4
+> (advisor Chat field, auto-teardown at match end) both shipped 2026-09-04;
+> BUG-LOG BL-17 closed. User-facing docs: `packaging/README.md` +
+> `packaging/PATCH-NOTES.md`. Engineering inventory: [INVENTORY.md](INVENTORY.md).
+> Upstream-merge safety: [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md). Built on
+> Card-Forge/forge (GPL-3.0); non-commercial fan content under WotC's Fan
+> Content Policy. Any distribution is source-available under GPL-3.0.
 
 ## Why this exists
 
@@ -374,7 +373,7 @@ cost rails — see `packaging/README.md` §"Other models on the backend".
 - Teacher→student: feed caught misplays into both the agent briefs and the
   deterministic runner.
 
-**Track 4 — packaging & release — ✅ SHIPPED (v1 2026-08-12 → v3.3.2 2026-09-01; v3.3.3 pending)**
+**Track 4 — packaging & release — ✅ SHIPPED (v1 2026-08-12 → v3.4 2026-09-04)**
 as **forge-light-llm**: zero-setup tarball on R2
 (`-latest` alias), ten bundled decks (`build-light-package.sh` SLUGS: Sythis +
 Liberator added for v3.2 — notes 45, 48; Sheoldred's Sacrifice for v3.3.2 —

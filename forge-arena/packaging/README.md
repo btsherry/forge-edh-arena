@@ -1,106 +1,96 @@
 # forge-light-llm
 
-Four-player Commander (EDH) games where the seats are piloted by LLM
-"brains" — Claude models making every decision over a file-based mailbox
-protocol — with a human optionally taking seat 0 in the desktop GUI. Every
-decision is logged with the board state the model saw, the options it was
-given, what it chose, and why: a growing dataset for deck analysis and for
-crafting deterministic game AI.
+Four-player Commander (EDH) where the seats are piloted by LLM "brains":
+Claude models making every in-game decision over a file-based mailbox, with
+you optionally in seat 0 of the desktop GUI. Every decision is logged with
+the board the model saw, the options it had, what it chose and why: a
+growing dataset for deck analysis and for crafting deterministic game AI.
+Two uses: watch four brains play any deck you hand them, or pilot your own
+deck with an AI coach at your shoulder.
 
-As of v3.3 the seats own essentially every in-game decision — casting,
-targeting (including retargets and copy aiming), triggers, sacrifices and
-all cost payments, scry/surveil/library order, mulligan bottoming, cleanup
-discards, optional costs, votes and pile splits — each with a fail-safe
-that has two halves. On the ENGINE side, an answer that is invalid, late,
-or missing falls to the stock game AI for that one decision. On the RUNNER
-side, a punt (the model timed out, its session wedged, or its reply was
-unparseable) is answered with a fixed per-type safe default: no blocks, no
-attackers, keep the hand, pass priority, decline pay-or-else, the first
-legal id for a mandatory pick and none for an optional one, yes to a
-CONFIRM only when the effect is the seat's own and free, and for
-CHOOSE_NUMBER the maximum on an X cost and the minimum otherwise. A punt
-never spends new mana and never acts for another player, but it is not
-stock play: a punted lethal DECLARE_BLOCKERS is "no blocks", where stock
-would have chosen blocks. The table is in
-`forge-arena/runner/seatd/seat-brief.md` and pinned to the code by a test.
-See `PATCH-NOTES.md` for the full list of surfaces.
+As of v3.4 the seats own essentially every decision: casting, targeting
+(retargets and copy aiming included), triggers and their order, colour
+choices, sacrifices and every cost payment, scry/surveil/library order,
+mulligan bottoming, cleanup discards, optional costs, votes, pile splits. Two fail-safes back that up. On the
+engine side an invalid, late or missing answer falls to Forge's stock AI for
+that one decision. On the runner side a punt (timeout, wedged session,
+unparseable reply) answers a fixed per-type safe default: pass, no attackers,
+no blocks, keep the hand, decline pay-or-else, the first legal id for a
+mandatory pick and none for an optional one, yes to a CONFIRM only when the
+effect is the seat's own and free, and for CHOOSE_NUMBER the maximum on an X
+cost and the minimum otherwise. A punt never spends new mana
+and never acts for another player, but it is not stock play: a punted lethal
+block is "no blocks". The table is in `forge-arena/runner/seatd/seat-brief.md`
+and pinned by a test; `PATCH-NOTES.md` lists every surface.
 
 Built on [Forge](https://github.com/Card-Forge/forge) (GPL-3.0); the engine
-ships prebuilt — see `LICENSE`. Non-commercial fan project. Magic: The
+ships prebuilt, see `LICENSE`. Non-commercial fan project. Magic: The
 Gathering is © Wizards of the Coast.
 
 ## Requirements
 
 - macOS or Linux (POSIX shell; developed on macOS)
-- **JDK 17+** — `java` on PATH, or set `JAVA_HOME`
-- **Python 3.9+** — stdlib only, no pip installs
-- **Claude Code CLI** (`claude`), logged in — brains run on your Claude
-  subscription. *Optional:* without it every brain call fails and each seat's
-  runner answers its safe default (see above); the game still plays, just not
+- **JDK 17+** on PATH, or `JAVA_HOME` set
+- **Python 3.9+**, stdlib only, no pip installs
+- **Claude Code CLI** (`claude`), logged in. Brains run on your Claude
+  subscription, not the API. *Optional:* without it every brain call fails
+  and each seat plays its safe default; the game still plays, just not
   LLM-driven.
-- Network: only for ingesting **new** decks (Scryfall + Commander Spellbook)
-  and primer generation. The ten bundled decks play offline.
+- Network only to ingest a **new** deck (Scryfall, Commander Spellbook) or
+  generate a primer. The ten bundled decks play offline.
 
-No install or setup step: unpack, run.
+No install step: unpack and run.
 
-Footnote on where you unpack it: every brain call runs the `claude` CLI from
+**Where you unpack it matters a little.** Every brain call runs `claude` from
 the package root (the directory holding `forge-arena/`) with
-`--setting-sources ""`, so none of
-your user or project settings, hooks or plugins load into a game. The CLI
-still auto-discovers `CLAUDE.md` files in the directories ABOVE the install
-directory and adds them to the model's context. Install outside such a tree,
-or accept that text as extra context: tools are disabled for the brains, so
-they cannot act on it.
+`--setting-sources ""`, so none of your settings, hooks
+or plugins load into a game. The CLI still auto-discovers `CLAUDE.md` files in
+the directories *above* the install and adds them to the model's context.
+Install outside such a tree, or accept that text as extra context; the brains
+have no tools, so they cannot act on it.
 
 ## Quick start
 
 From the package root:
 
 ```sh
-# all-AI: four brains play, the GUI opens as a spectator view
-forge-arena/scripts/arena-play.sh --all-ai
-
-# you + three brains: you are seat 0 in the GUI
-forge-arena/scripts/arena-play.sh --human selvala-heart-of-the-wilds.dck   # or {your-deck-name.dck}
-
-# watch decisions land, live (the central all-seats log)
-tail -f forge-arena/runner/logs/game.jsonl
-
-# stop everything, archive the session's logs, clear the mailbox
-forge-arena/scripts/arena-stop.sh
+forge-arena/scripts/arena-play.sh --all-ai                          # four brains, spectator GUI
+forge-arena/scripts/arena-play.sh --human selvala-heart-of-the-wilds.dck   # you at seat 0 (+ AI Advisor)
+tail -f forge-arena/runner/logs/game.jsonl                          # every decision, live
+forge-arena/scripts/arena-stop.sh                                   # stop now, archive, clear
 ```
-
-**Bring your own deck:** one command turns any Commander list into a
-fully-briefed AI pilot — see [Ingesting a new deck](#ingesting-a-new-deck).
-Pilot it yourself with an AI table, or hand it to a brain and watch it play
-its own game plan.
 
 Defaults: `--model opus --effort medium`, 90 s decision timeout. Knobs:
 `--model haiku|sonnet|opus|fable`, `--effort low|medium|high|xhigh|max`,
-`--timeout N` (use `--timeout 300` at xhigh/max effort or seats will punt
-past the deadline). Any seat can be re-dialed mid-game — see
-[The AI panel](#the-ai-panel).
+`--timeout N` (use 300 at xhigh/max or seats punt past the deadline). Any
+seat can be re-dialed mid-game from [the AI panel](#the-ai-panel).
+
+**The table tears itself down when the match is over.** Once the engine
+reports game over, or you close the game window, the launcher lingers
+`--linger N` seconds (default 120 in human games so you can read the final
+board, 60 all-AI) and runs the same stop as `arena-stop.sh`: kill, rate,
+archive, clear. `--no-autostop` leaves the table up; a hand stop always wins.
+
+**Bring your own deck**: one command turns any Commander list into a fully
+briefed pilot, see [Ingesting a new deck](#ingesting-a-new-deck).
 
 ## The table
 
-Default roster in `--all-ai` mode, seats 0–3: Urza, Giada, Purphoros,
-Selvala — all four seats are brains. In `--human` mode you take seat 0 with
-**any** ingested deck (pass its `.dck` name; Selvala when you pass none) and
-seats 1–3 get the first three roster decks that are not yours — Urza, Giada,
-Purphoros for the default. The launcher, the seat runners and the Advisor
-all apply that one rule.
+Default roster, seats 0–3: Urza, Giada, Purphoros, Selvala. In `--human`
+mode you take seat 0 with any ingested deck (pass its `.dck` name; Selvala
+when you pass none) and seats 1–3 get the first three roster decks that are
+not yours. The launcher, the runners and the Advisor apply that one rule.
 
-**Agents can pilot any deck.** Set `ARENA_SEAT_DECKS` to four deck slugs in
-seat order before launching — it repoints the engine's seats and the brains
-together, and preflight checks the new lineup automatically:
+Any deck can sit at any seat. `ARENA_SEAT_DECKS` takes four slugs in seat
+order and repoints the engine and the brains together; preflight checks the
+new lineup:
 
 ```sh
 ARENA_SEAT_DECKS="swords-plunder purphoros-god-of-the-forge giada-font-of-hope urza-lord-high-artificer" \
   forge-arena/scripts/arena-play.sh --all-ai
 ```
 
-Ten decks ship in `forge-light-llm/forge-arena/decks/`; every deck there —
-bundled or ingested — can sit at any seat.
+Ten decks ship in `forge-light-llm/forge-arena/decks/`.
 
 ## Ingesting a new deck
 
@@ -108,213 +98,172 @@ bundled or ingested — can sit at any seat.
 python3 forge-arena/scripts/arena-add-deck.py path/to/my-deck.dck
 ```
 
-Six steps, all visible, no API keys needed: parse the `.dck` → resolve
-oracle text (Scryfall) → fetch real combos (Commander Spellbook) →
-implementability lint against Forge's card database (warns on cards the
-engine may not fully script; `--strict` refuses them) → a load probe
-through Forge's REAL deck loader (catches format and double-faced-name
-defects before they can ruin a launch; the registered `.dck` is rewritten
-with Forge's own card names) → strategy primer → write. The pilot ends up knowing YOUR deck's actual game plan — its real
-loops, what to tutor for, how to close — not a generic archetype read.
-Outputs, per deck:
+Six visible steps, no API keys: parse the `.dck`; resolve oracle text
+(Scryfall); fetch the deck's real combos (Commander Spellbook); lint every
+card against Forge's database (warns on cards the engine may not fully
+script, `--strict` refuses them); probe the list through Forge's real deck
+loader, which catches format and double-faced-name defects before a launch
+and rewrites the registered `.dck` with Forge's own card names; write the
+strategy primer. The pilot ends up knowing *your* deck's game plan, loops and
+tutor targets, not an archetype read. Outputs:
 
 ```
-forge-light-llm/forge-arena/decks/<slug>.dck                       playable deck registration
-forge-light-llm/forge-arena/decks/<slug>/dossier/deck-cards.json   full oracle text (the brain's card knowledge)
-forge-light-llm/forge-arena/decks/<slug>/dossier/combos.json       the deck's real combo lines
-forge-light-llm/forge-arena/decks/<slug>/dossier/manifest.json     launch manifest: .dck hash + every Scryfall→Forge name resolution
-forge-light-llm/forge-arena/decks/<slug>/dossier/.cache/           content-addressed API caches (local only; never packaged)
-forge-light-llm/forge-arena/docs/primers/<slug>-deckcheck.md       strategy primer (see below)
+forge-light-llm/forge-arena/decks/<slug>.dck                        playable registration
+forge-light-llm/forge-arena/decks/<slug>/dossier/deck-cards.json    full oracle text (the brain's card knowledge)
+forge-light-llm/forge-arena/decks/<slug>/dossier/combos.json        the deck's combo lines
+forge-light-llm/forge-arena/decks/<slug>/dossier/manifest.json      launch manifest: .dck hash + every Scryfall→Forge name resolution
+forge-light-llm/forge-arena/decks/<slug>/dossier/.cache/            API caches (local only, never packaged)
+forge-light-llm/forge-arena/docs/primers/<slug>-deckcheck.md        strategy primer
 ```
 
-Primer options — the pilot plays far better with a good one:
-**A** paste a [DeckCheck.co](https://deckcheck.co) review (recommended),
-**B** generate locally (`claude` fable/max with live EDHREC research — takes
-a few minutes), **skip** play from dossier + combos only. Re-runs are cheap:
-API responses are cached; `--no-cache` forces a refetch; `--manifest-only`
-re-verifies an already-registered `.dck` against Forge and rewrites just its
-launch manifest. Then play it: `arena-play.sh --human my-deck.dck`.
-
-Option A can auto-fetch — no copy/paste. Pass your DeckCheck deck URL or id
-with `--deckcheck <url-or-id>` and the tool pulls the structured analysis
-(prose + bracket + CRISPI ratings) straight from DeckCheck's public endpoint
-and renders it as the primer. Related flags: `--primer-out PATH` (write the
-primer somewhere other than `docs/primers/<slug>-deckcheck.md`),
-`--primer-timeout SECS` (default 2700 for the local fable/max run in option B),
-and `--no-primer-rules` (faster option-B generation — omits the rules digests
-from the fable prompt, at some cost to loop-precision). Double-faced (MDFC)
-card names resolve correctly during ingest.
+**Primer options.** The pilot plays far better with a good one. **A**
+(recommended) paste a [DeckCheck.co](https://deckcheck.co) review, or pass
+`--deckcheck <url-or-id>` to pull the structured analysis (prose, bracket,
+CRISPI ratings) straight from DeckCheck's public endpoint. **B** generate
+locally with `claude` fable/max and live EDHREC research (a few minutes;
+`--primer-timeout SECS`, default 2700; `--no-primer-rules` omits the rules
+digests from that prompt, faster at some cost to loop-precision). **Skip**
+and play from dossier plus combos. Re-runs are cheap: API responses are
+cached; `--no-cache` forces a refetch; `--primer-out PATH` writes the primer
+somewhere other than `docs/primers/<slug>-deckcheck.md`; `--manifest-only`
+re-verifies an already registered `.dck` and rewrites only its manifest.
+Then: `arena-play.sh --human my-deck.dck`.
 
 ## The AI Advisor (human games)
 
-```sh
-forge-arena/scripts/arena-play.sh --human my-deck.dck   # Advisor is ON by default; --no-advisor to opt out
-#   ... [--linger N] [--no-autostop]   # auto-teardown after game over (default 120 s human, 60 s all-AI)
-```
+A fourth brain, loaded exactly like the opponents (your dossier, combos,
+primer, both rules digests), watches your seat and teaches in the **Advisor
+tab** of the lower-left dock. On by default in `--human` games;
+`--no-advisor` opts out. Your deck must be ingested and `claude` logged in.
 
-A fourth brain — loaded exactly like the opponents (your deck's dossier,
-combos, primer, both rules digests) — watches your seat and teaches in the
-**Advisor tab** (lower-left dock, beside the Prompt tab):
+- **Advice before you act.** A humanly random one to three of your decisions
+  per turn, spread across the phases and always board-aware (mulligans
+  always), are mirrored to the advisor as the prompt opens; its one-to-three
+  sentence read lands in the tab while you are still deciding. It speaks
+  selectively rather than at every window; the end-of-turn commentary catches
+  what a turn's picks skipped.
+- **Colour commentary.** One line per completed turn on the table's public
+  plays and what they mean for your plan.
+- **It sees your choices** and teaches from the divergence, without a
+  dedicated interruption.
+- **Chat.** The black field at the bottom of the tab (Enter or **Chat**) sends
+  one question straight to the advisor; the exchange appears in the same
+  stream as `[t12 · you] …` / `[t12 · advisor] …`. One question at a time
+  (the button reads *Sending…* until it is picked up), answered even while
+  the advisor is paused.
+- **Pause.** The tab's button pauses and resumes the coach mid-game (no
+  advice, no model calls) without a teardown; the AI panel's seat-0 row shows
+  `advisor paused` meanwhile. An advised game rates as `human+advisor`
+  regardless of pausing.
+- **Strictly read-only.** The advisor's feed has no return channel; it cannot
+  act or stall the game. Advice that arrives late is skipped, never waited on.
 
-- **Advice before you act**: a humanly-random handful of your decisions each
-  turn (roughly one to three, spread across the phases and always board-aware,
-  with mulligans always covered) are mirrored to the advisor the moment the
-  prompt opens; its 1–3 sentence read appears in the tab while you're still
-  deciding. It speaks selectively rather than at every window — the end-of-turn
-  recap (below) catches anything a given turn's picks skipped.
-- **Color commentary**: one line per completed turn covering the table's
-  public plays — what mattered and what it means for your plan.
-- **It sees your choices** and teaches from the divergence when it matters —
-  gently, and never with a dedicated interruption.
-- **Ask it anything**: the black field at the bottom of the tab (Enter or **Chat**)
-  sends one question straight to the advisor; the answer appears in the
-  same stream as `[t12 · you] …` / `[t12 · advisor] …`. One question at a
-  time (the button reads *Sending…* until the runner picks it up), and a
-  question is answered even while the advisor is paused — it is the one
-  thing you asked for.
-- The advisor is **strictly read-only**: it has no way to act or to stall
-  the game (its feed has no return channel). Advice arriving late is
-  advice skipped, never a pause.
+The advisor uses the game's `--model` / `--effort` and can be re-dialed from
+the AI panel's seat-0 row.
 
-Requirements: the deck you pilot must be ingested (`arena-add-deck.py`),
-and the `claude` CLI logged in. The advisor uses the game's `--model` /
-`--effort` and can be re-dialed mid-game from the AI panel's seat-0 row.
-
-**Pause button.** Advised games get an on/off button at the bottom of the
-**Advisor tab**: pause mid-game (no advice, no model calls) and resume when
-you want the coach back — no teardown. The AI panel's seat-0 row shows
-`advisor paused` while it's off. An advised game (the `--human` default)
-rates as `human+advisor` on the ladders regardless of mid-game pausing.
-
-**Autopass** rides along (default `casts` mode): priority stops where you
-have nothing castable — or only utility activations like tap abilities —
-pass automatically, each narrated in the Advisor tab as
-`⏭ (auto-passed — …)`. The stakes-based guarantees, learned from live play:
-your own **main phases are never auto-passed** by any layer, ever; neither
-are combat declare steps, stops with an opponent's spell on the stack, any
-stop while you have **mana floating** (unspent pool mana signals intent),
-or the whole turn after an **equipment drops** with its equip affordable.
-`ARENA_AUTOPASS=strict` wakes you for ANY legal action;
-`ARENA_AUTOPASS=off` disables it. Any doubt in the scan fails open to
-showing the prompt.
-
-**Bonus quality-of-life** (mono-colored commanders): arbitrary any-color
-mana picks (Gemstone Caverns, City of Brass…) auto-answer with your
-commander's color — one receipt in the Advisor tab, then silence.
-Multicolor commanders keep the dialog.
+**Autopass** rides along (default `casts`): priority stops where you have
+nothing castable, or only utility activations like tap abilities, pass
+automatically, each
+narrated in the tab as `⏭ (auto-passed — …)`. Hard guarantees: your own main
+phases are never auto-passed, nor combat declare steps, nor a stop with an
+opponent's spell on the stack, nor any stop while you have mana floating, nor
+the turn after an equipment lands with its equip affordable. Any doubt fails
+open to showing the prompt. `ARENA_AUTOPASS=strict` wakes you for every
+legal action; `ARENA_AUTOPASS=off` disables it. Mono-coloured commanders also
+get any-colour mana picks (Gemstone Caverns, City of Brass…) auto-answered in
+the commander's colour, with one receipt in the tab; multicolour commanders
+keep the dialog.
 
 ## The AI panel
 
-The match screen's **upper-left dock** opens on the **AI** tab (its siblings
-— Stack, Combat, Log, Dependencies — are one click away). It is the live
-control surface for the brains:
+The match screen's upper-left dock opens on the **AI** tab (Stack, Combat,
+Log and Dependencies are one click away): the live control surface for the
+brains.
 
-- **Per-seat model/effort steppers** — click ◀ ▶ to re-dial any seat
-  mid-game (haiku → sonnet → opus → fable; low → max). Changes apply at that
-  seat's next decision; the same knob is scriptable via `runner/arena-ctl.py`.
-- **Liveness dot per seat** — green: decided within the last minute; yellow:
-  within five; gray: offline or not yet started.
-- **Per-seat usage line** — calls, output tokens, cache-hit rate, and the
-  API-equivalent cost of the seat so far.
-- **Table total** — the same figures summed across all four seats
-  (subscription transport: the dollar figure is what the game *would* have
-  cost on the API, not a charge).
+- **Model and effort steppers per seat.** ◀ ▶ re-dials any seat mid-game
+  (haiku → sonnet → opus → fable; low → max); applies at that seat's next
+  decision. Scriptable via `runner/arena-ctl.py`.
+- **Liveness dot per seat.** Green: decided within the last minute. Yellow:
+  within five. Grey: offline or not started.
+- **Usage per seat and for the table.** Calls, output tokens, cache-hit rate
+  and the API-equivalent cost. On the subscription transport that dollar
+  figure is what the game *would* have cost, not a charge.
 
-The default match layout is tuned for manual piloting: the three opponents
-share a tabbed cell across the top, your battlefield sits beneath them, and
-your hand gets a full-width window under that. Like everything in the dock,
-every window can be dragged and re-tabbed in-engine; layout changes persist
-in your Forge preferences, not in the package.
+The default layout is tuned for piloting: the three opponents share a tabbed
+cell across the top, your battlefield beneath, your hand full width below.
+Every window drags and re-tabs in-engine; layout persists in your Forge
+preferences, not in the package.
 
 ## Local ELO ladders
 
-Every finished game feeds three local ratings ladders automatically — **by
-pilot** (each model, plus `human` and `human+advisor` as their own pilots),
-**by deck**, and **by pilot×deck pair**. A 4-player game scores as six
-pairwise 1v1s by finish order (simultaneous eliminations tie), starting at
-1000 with K=40 for a pilot's first ten games. Nothing to configure:
+Every finished game feeds three ladders: by pilot (each model, plus `human`
+and `human+advisor`), by deck, and by pilot × deck. A four-player game
+scores as six pairwise results by finish order (simultaneous eliminations
+tie), from 1000 with K=40 for a pilot's first ten games. Teardown rates the
+game and updates `forge-arena/runner/ratings.json` and
+`ratings-history.jsonl`; the AI panel shows each seat's line (`ELO pilot 1042
+· deck 987 · pair 1010 · n=12`). Aborted or torn-down-mid-game sessions rate
+nothing, inconsistent
+bookkeeping is skipped loudly, and games degraded by transport failure (a
+wedged session, punt pile-ups) are **voided**: recorded with the reason, but
+the ladders never move on a contaminated result (`ARENA_RATE_VOIDED=1`
+overrides). Ratings are per-installation state: package rebuilds preserve
+them and they never ship in the tarball.
 
-- The engine records placements at game end; teardown
-  (`arena-stop.sh`) rates the game and updates
-  `forge-arena/runner/ratings.json` (current ladders) and
-  `ratings-history.jsonl` (per-game record, plottable).
-- The AI panel shows each seat's line — `ELO pilot 1042 · deck 987 ·
-  pair 1010 · n=12` — refreshed after each rated game.
-- Aborted/torn-down-mid-game sessions rate nothing; a game whose seat/deck
-  bookkeeping looks inconsistent is skipped loudly rather than mis-rated.
-- Games degraded by transport failure (a seat's model session wedging, punt
-  pile-ups) are **voided**: recorded in the history with the reason, but the
-  ladders never move on a contaminated result. `ARENA_RATE_VOIDED=1` rates
-  them anyway.
-- Ratings are per-installation state: package rebuilds preserve them, and
-  they never ship in the tarball.
+## What each brain receives at start-up
 
-## What each agent receives at start-up
+Each seat's runner opens one `claude` session per game and sends these files
+verbatim, in this order, all bundled:
 
-At every game launch, each seat's runner opens a fresh `claude` session and
-sends one initialization prompt — these files, verbatim and in this order
-(all bundled in the package):
+1. `forge-light-llm/forge-arena/runner/seatd/seat-brief.md`: the standing seat brief
+   (accuracy and fairness rules, answer format, mana discipline, combo duty).
+2. `forge-light-llm/forge-arena/docs/research/mtg-rules-summary.md`: the comprehensive-rules
+   digest (turn structure, priority, the stack, combat, keywords, Commander).
+3. `forge-light-llm/forge-arena/docs/research/mtg-rules-digest-conversion.md`: loops and
+   shortcuts (CR 732), mana pools, X spells, win/loss state-based actions.
+4. A seat-identity line: which seat, which deck.
+5. `…/decks/<slug>/dossier/deck-cards.json`, the full oracle text, never
+   summarized, under `DECK DOSSIER`.
+6. `…/decks/<slug>/dossier/combos.json`, the real Commander Spellbook combos
+   (pieces, prerequisites, steps, result), under `DECK COMBOS`.
+7. `…/docs/primers/<slug>-deckcheck.md` under `STRATEGY PRIMER`.
+8. *"Reply exactly: READY"*.
 
-1. `forge-light-llm/forge-arena/runner/seatd/seat-brief.md` — the standing
-   seat brief: accuracy and fairness rules, answer format, mana discipline,
-   combo duty.
-2. `forge-light-llm/forge-arena/docs/research/mtg-rules-summary.md` — the
-   general comprehensive-rules digest: turn structure, priority, the stack,
-   combat, keywords, Commander rules.
-3. `forge-light-llm/forge-arena/docs/research/mtg-rules-digest-conversion.md`
-   — the deeper digest of loops/shortcuts (CR 732), mana pools, X spells,
-   and win/loss state-based actions.
-4. A seat-identity line: which seat it is and which deck it pilots.
-5. `…/decks/<slug>/dossier/deck-cards.json` — the deck's full oracle text,
-   never summarized, under the heading `DECK DOSSIER`.
-6. `…/decks/<slug>/dossier/combos.json` — the deck's real Commander
-   Spellbook combos (pieces, prerequisites, steps, what they produce), under
-   `DECK COMBOS`.
-7. `…/docs/primers/<slug>-deckcheck.md` — the strategy primer, under
-   `STRATEGY PRIMER`.
-8. The closing instruction: *"Reply exactly: READY"*.
+The session runs with tools disabled and model/effort pinned, and persists
+for the whole game, so the rules-plus-dossier context is paid once and
+prompt-cached thereafter. `run_table.sh --preflight` verifies items 1–3 and
+5–7 for every AI seat before a game starts.
 
-The session runs with tools disabled and the seat's model/effort pinned, and
-persists for the whole game — every subsequent decision resumes it, so the
-big rules-plus-dossier context is paid once and prompt-cached thereafter.
-`run_table.sh --preflight` verifies items 1–3 and 5–7 exist for every AI
-seat before any game starts.
-
-## Logs & data out
+## Logs and data out
 
 Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 
 | File | Contents |
 |---|---|
-| `seat-N.log` | Human-readable decision stream for seat N — including `DEVIATION` lines whenever the brain's plan met reality ("wanted X — blocked by Y"); `grep DEVIATION` is the fastest play-quality review |
-| `seat-N.jsonl` | The same, structured (`deviation` and `turn_intent` fields on each record) |
-| `seat-N.usage.json` | Rolling token/cost snapshot for the seat |
-| `game.jsonl` | **The dataset.** One JSON object per decision, all seats, one plain append-only file for the whole session (every game since the last `arena-stop.sh`) — the `tail -f` target |
-| `game-<gameId>.jsonl` | The same records, one file per game (each record carries its `gameId`) — the per-game machine record; the ratings sweep reads every `game*.jsonl` beside it |
-| `advisor-0.log` / `advisor-0.jsonl` | The Advisor tab's stream, and its structured twin — advice, color commentary, autopass notes, and your actual choices' seq pairing |
-| `gui.out`, `run_table.out`, `ratings.out`, `advisor_runner.out` | Engine, runner, ratings-sweep, and advisor supervision output |
-| `transport-events.jsonl` | Punt/wedge events from the seat runners — the ratings sweep voids games contaminated inside their window |
+| `game.jsonl` | **The dataset.** One JSON object per decision, all seats, one plain append-only file for the whole session (every game since the last stop); the `tail -f` target |
+| `game-<gameId>.jsonl` | The same records, one file per game (each record carries its `gameId`); the ratings sweep reads these |
+| `seat-N.log` / `seat-N.jsonl` | Seat N's decision stream, readable and structured (`deviation` and `turn_intent` fields per record), with `DEVIATION` lines whenever the plan met reality ("wanted X — blocked by Y"); `grep DEVIATION` is the fastest play-quality review |
+| `seat-N.usage.json` | Rolling token and cost snapshot |
+| `advisor-0.log` / `advisor-0.jsonl` | The Advisor tab's stream and its structured twin: advice, commentary, autopass notes, your Chat exchanges, and your actual choices paired to their decision seq |
+| `gui.out`, `run_table.out`, `ratings.out`, `advisor_runner.out`, `autostop.out` | Engine, runners, ratings sweep, advisor supervisor, auto-teardown watcher |
+| `transport-events.jsonl` | Punt and wedge events; the ratings sweep voids games contaminated inside their window |
 | `elo/seat-N.json` | Per-seat rating digest the AI panel reads |
-| `control/seat-N.json`, `control/advisor.json`, `control/ask/` | The GUI↔runner control plane: AI-panel re-dials, the Advisor pause state, and the Advisor tab's questions (one file each, deleted on pickup; all cleared at teardown) |
-| `archive/<timestamp>-stop/` | Every finished game's full log set, moved here by `arena-stop.sh` |
+| `control/seat-N.json`, `control/advisor.json`, `control/ask/` | The GUI↔runner control plane: seat re-dials, the Advisor pause state, Chat questions (one file each, deleted on pickup); cleared at teardown |
+| `archive/<timestamp>-stop/` | Every finished game's full log set, moved here at stop |
 
-Nothing is clobbered: `arena-stop.sh` moves the session's whole log set
-(seat logs, engine/runner output, `game.jsonl` and the `game-<gameId>.jsonl`
-files) into a timestamped `archive/<stamp>-stop/` folder and prints
-`N decisions across M game(s) (archived)`; during a session `game.jsonl` is
-only ever appended to. That makes game histories easy to share — the whole
-`runner/logs/` tree is self-contained, so
-`tar czf my-arena-logs.tgz forge-arena/runner/logs/` captures everything if
-you're willing to contribute games.
+Nothing is clobbered. Stop moves the session's whole log set into a
+timestamped archive folder and prints `N decisions across M game(s)
+(archived)`; during a session `game.jsonl` is only appended to. The
+`runner/logs/` tree is self-contained, so `tar czf my-arena-logs.tgz
+forge-arena/runner/logs/` captures everything if you want to share games.
 
-`seat-N.log` — what a decision looks like:
+A decision in `seat-N.log`:
 
 ```
-18:48:28 [seat 0] seq=1 MULLIGAN turn=0  -> {"keep": true} [model 6.87s]  # Three lands incl. Ancient Tomb, Sanctum Weaver ramp, Selvala castable T3; free mull not worth losing playable hand.
 18:49:19 [seat 0] seq=2 CAST_SPELL turn=1 MAIN1 -> {"chosenId": 5} [model 9.06s]  # T1 Forest; green source needed for Sanctum Weaver next turn, Tomb saved for artifacts.
 ```
 
-`game.jsonl` — one decision record (truncated; `board` carries the full
+The same kind of record in `game.jsonl` (truncated; `board` carries the
 public state the model saw):
 
 ```json
@@ -325,121 +274,102 @@ public state the model saw):
  "board": {...}}
 ```
 
-The engine also maintains
-`forge-light-llm/forge-arena/mailbox/observer-state.json` — a ground-truth
-snapshot (turn, phase, per-seat life/hand-size/library/board, winner when the
-game ends) refreshed as the game runs; `arena-status.py` pretty-prints it
-alongside pending decisions.
+The engine also keeps `forge-light-llm/forge-arena/mailbox/observer-state.json`, a
+ground-truth snapshot (turn, phase, per-seat life, hand, library and board,
+`gameOver` and the winner) refreshed as the game runs; `arena-status.py`
+pretty-prints it with the pending decisions.
 
 ## Scripts
 
 | Script | What it does |
 |---|---|
-| `scripts/arena-play.sh` | One-shot launch: preflight → teardown → seat brains → Advisor (human games) → GUI; `--all-ai` or `--human [deck.dck]`; the Advisor is on by default in `--human` games, `--no-advisor` opts out (`--advisor` is accepted and changes nothing); the table tears itself down after game over (`--linger N` seconds, default 120 human / 60 all-AI; `--no-autostop`) |
-| `scripts/arena-stop.sh` | Full teardown: kill GUI + runners (by PID file), rate the game, archive the session's logs (seat logs, `game.jsonl`, `game-*.jsonl`, engine/runner output), clear mailbox |
-| `scripts/arena-autostop.sh` | The auto-teardown watcher `arena-play.sh` starts: waits for the engine's `gameOver` (or the GUI window to close), lingers, then runs `arena-stop.sh`; a hand stop always wins |
-| `scripts/arena-add-deck.py` | Bare `.dck` → playable seat (dossier + combos + lint + primer) |
-| `scripts/arena-status.py` | Ground-truth table snapshot from the engine: pending decision, all seats' life + board |
-| `scripts/arena-digest.py` | One compact line per game turn — an ambient "how's it going" feed |
-| `scripts/run-pilot-match.sh` | The underlying GUI launcher (arena-play calls it); direct use for custom setups |
-| `scripts/run-gui.sh` | Plain Forge desktop GUI, no mailbox seats — sanity checks |
-| `runner/run_table.sh` | Starts the per-seat brain daemons (arena-play calls it); `--preflight` verifies every seat's files |
-| `runner/arena-ctl.py` | Set any seat's model/effort mid-game |
-| `runner/status.py` | seatd health + narrative dashboard ("numbers over vibes") |
-| `runner/usage_report.py` | Per-seat token-burn report, works mid-game |
-| `runner/run_advisor.sh` | The Advisor's supervisor: restart loop around `advisor_runner.py` (arena-play calls it in `--human` games) |
-| `runner/advisor_runner.py` | The AI Advisor brain (launched by default in `--human` games; `--no-advisor` opts out): reads the seat-0 decision shadow feed, streams teaching + color commentary |
+| `scripts/arena-play.sh` | One-shot launch: preflight → teardown → brains → Advisor (human) → GUI → auto-teardown watcher. `--all-ai` or `--human [deck.dck]`; `--no-advisor` (`--advisor` accepted, no-op); `--linger N`, `--no-autostop` |
+| `scripts/arena-stop.sh` | Stop now: kill GUI and runners by PID file, rate the game, archive the session's logs, clear the mailbox |
+| `scripts/arena-autostop.sh` | The watcher `arena-play.sh` starts: waits for the engine's `gameOver` or the window to close, lingers, runs `arena-stop.sh` |
+| `scripts/arena-add-deck.py` | Bare `.dck` → playable seat (dossier, combos, lint, load probe, primer) |
+| `scripts/arena-status.py` | Ground-truth table snapshot: pending decision, every seat's life and board |
+| `scripts/arena-digest.py` | One compact line per game turn, immediate lines for punts and eliminations; follows the log for ambient monitoring |
+| `scripts/arena-cardwatch.py` | Live card-count check per seat against the deck's 100 |
+| `scripts/run-pilot-match.sh`, `scripts/run-gui.sh` | The underlying GUI launcher, and plain Forge without seats |
+| `runner/run_table.sh` | Starts the per-seat brain daemons; `--preflight` verifies every seat's files |
+| `runner/arena-ctl.py` | Set any seat's model or effort mid-game |
+| `runner/status.py`, `runner/usage_report.py` | Seat health dashboard; per-seat token-burn report, works mid-game |
+| `runner/run_advisor.sh`, `runner/advisor_runner.py` | The Advisor's supervisor and the Advisor brain |
 
-## Seat avatars
-
-Each seat's portrait is a built-in Forge avatar matched to its deck's colors —
-derived from the deck's mana-pip mix (mono-red → a red head, a three-color deck →
-its heaviest color, and so on), with per-color variety so the four seats differ
-and the picks change between launches. Purely cosmetic; falls back to Forge's
-default avatar on any hiccup and never affects the game.
+Seat portraits are built-in Forge avatars matched to each deck's mana-pip
+mix (mono-red gets a red head, a three-colour deck its heaviest colour),
+varied per launch so the four seats differ. Cosmetic only: any hiccup falls
+back to Forge's default avatar and never affects the game.
 
 ## Other models on the backend (optional, API-billed)
 
-By default every AI seat runs Claude through your `claude` login — no key,
-no API bill. Optionally, any seat can instead run **any OpenRouter model**
-or **any OpenAI-compatible endpoint** (Ollama, LM Studio, vLLM). This is
-opt-in per seat and changes nothing when unused.
+By default every AI seat runs Claude through your `claude` login: no key, no
+bill. Any seat can instead run an **OpenRouter** model or an
+**OpenAI-compatible** endpoint (Ollama, LM Studio, vLLM). Opt-in per seat;
+nothing changes when unused:
 
 ```sh
-# seat order 0-3; empty entries keep the default Claude model.
-# seat 1 -> Gemini via OpenRouter, seat 3 -> local Ollama, rest Claude:
-export OPENROUTER_API_KEY=sk-or-...       # or/ seats bill THIS key
-export ARENA_OAI_BASE_URL=http://localhost:11434/v1   # for oai/ seats
+export OPENROUTER_API_KEY=sk-or-...                    # or/ seats bill THIS key
+export ARENA_OAI_BASE_URL=http://localhost:11434/v1    # for oai/ seats
 ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1" \
-  forge-arena/scripts/arena-play.sh --human my-deck.dck
+  forge-arena/scripts/arena-play.sh --human my-deck.dck   # seats 0-3; empty = Claude
 ```
 
-Model strings: bare names (`haiku|sonnet|opus|fable`) = Claude CLI;
-`or/<vendor>/<model>` = OpenRouter (needs `OPENROUTER_API_KEY`; **real
-API billing**); `oai/<model>` = your `ARENA_OAI_BASE_URL` endpoint
-(`ARENA_OAI_API_KEY` optional — keyless local endpoints work). Seat 0 takes
-a backend model only in `--all-ai` games; the Advisor is Claude-only.
-Backend entries join the AI panel's model stepper (shown as
-`or:gemini-2.5-pro`, full name in the tooltip), and their usage lines say
-**API-BILLED** — never "subscription-covered".
+Model strings: bare `haiku|sonnet|opus|fable` = Claude CLI;
+`or/<vendor>/<model>` = OpenRouter (needs `OPENROUTER_API_KEY`; **real API
+billing**); `oai/<model>` = your `ARENA_OAI_BASE_URL` endpoint
+(`ARENA_OAI_API_KEY` optional; keyless local endpoints work). Seat 0 takes a backend model
+only in `--all-ai` games; the Advisor is Claude-only. Backend seats join the
+AI panel's stepper (shown as `or:gemini-2.5-pro`, full name in the tooltip)
+and their usage lines say **API-BILLED**, never "subscription-covered".
 
-**Cost rails, and their honest limits.** Each backend seat stops calling out
-(and plays on safe defaults) at `ARENA_MAX_SEAT_COST_USD` per game (default
-**$5.00**, `0` = unlimited) and at `ARENA_MAX_SEAT_CALLS` HTTP attempts
-(default 250) — the call cap is the rail that still works when a route
-reports no cost figures. Do the arithmetic before picking a pricey model:
-every call re-sends the seat's full context (a ~50–100K-token deck dossier
-plus recent history — depth tunable via `ARENA_BACKEND_HISTORY`, default 8),
-so an Opus-class model at $15/M input costs **~$2+ per decision** and hits
-the $5 cap within a couple of turns, while a ~$1/M model plays most of a
-game under it. Two caveats: OpenRouter **BYOK** routes report only
-OpenRouter's fee as cost (~5% of real spend), and `oai/` endpoints report
-none — in both cases set a hard limit on the provider key itself; that
-limit, not ours, is the real rail. Timeouts/latches degrade a backend seat
-to safe defaults exactly like a Claude timeout — the game never stalls.
+**Cost rails and their limits.** A backend seat stops calling out and plays
+safe defaults at `ARENA_MAX_SEAT_COST_USD` per game (default $5, `0` =
+unlimited) and at `ARENA_MAX_SEAT_CALLS` HTTP attempts (default 250; the rail
+that still works when a route reports no cost). Every call re-sends the seat's
+full context (a 50–100K-token dossier plus recent history,
+`ARENA_BACKEND_HISTORY` deep, default 8), so an Opus-class model at $15/M
+input costs ~$2+ per decision and hits the cap within a couple of turns,
+while a $1/M model plays most of a game under it. OpenRouter BYOK routes
+report only OpenRouter's fee (~5% of real spend) and `oai/` endpoints report
+nothing: set a hard limit on the provider key itself, because that limit, not
+ours, is the real rail there. Timeouts and latches degrade a backend seat to
+safe defaults exactly like a Claude timeout; the game never stalls.
 
 ## Driving it from an agent session
 
-The scripts are friendly to being driven by a Claude Code (or similar) agent
-session — `arena-digest.py` exists precisely to be wrapped in a background
-monitor (one compact line per turn, immediate lines for punts and
-eliminations). Keep two lifecycles straight:
+The scripts suit a Claude Code (or similar) agent driving the table.
+`arena-digest.py` is built to be wrapped in a background monitor. Two
+lifecycles: **game processes** (GUI, runners, the auto-teardown watcher) are
+owned by the scripts and ended by `arena-stop.sh`, or by the watcher when the
+match is over; **watchers the agent arms** (a digest monitor, `tail -F` on
+the logs) are deliberately left alone by teardown, re-attach to the next
+game's fresh `game.jsonl` by name, and are yours to stop. Arm them once per
+session, not per game. Teardown order when you are done: `arena-stop.sh` (or
+let the watcher do it), then stop your own watchers, then audit for strays
+with `pgrep -fl 'GuiPilotMatch|seat_runner|run_table|arena-autostop|arena-digest'`
+(empty = clean). `arena-stop.sh` prints a note whenever observers are still
+running, so a driving agent sees the reminder in the teardown output.
 
-- **Game processes** (GUI, seat runners, restart loops) are fully owned by
-  the scripts — `arena-stop.sh` kills and archives them.
-- **Watchers the agent arms** (a digest monitor, a `tail -F` on the logs)
-  are deliberately NOT touched by teardown. `arena-stop.sh` moves
-  `game.jsonl` into the archive and the next game's runners create a fresh
-  one; `tail -F` (follow by name) re-attaches to the new file, so one watcher
-  spans every game in a session. Arm once per session, not per game.
+## Lifecycle and troubleshooting
 
-Teardown order when you're done: `arena-stop.sh` → stop your own watchers →
-audit for strays with
-`pgrep -fl 'GuiPilotMatch|seat_runner|run_table|arena-digest'` (empty =
-clean). `arena-stop.sh` prints a note whenever observer processes are still
-watching the logs, so a driving agent sees the reminder in the teardown
-output itself.
-
-## Lifecycle notes
-
-- First GUI launch creates Forge's standard user-preference directories
-  outside this package (window layout, game settings) — the package itself
-  stays read-only apart from `decks/`, `docs/primers/`, `runner/logs/`, and
-  `mailbox/`.
-- `arena-stop.sh` moves the session's logs, `game.jsonl` included, into
-  `archive/` and clears the mailbox; nothing is deleted, so the accumulating
-  dataset is `runner/logs/archive/*/game.jsonl` plus the live file.
-- To fully remove: delete this directory. Nothing else is installed.
-
-## Troubleshooting
-
-- **"PREFLIGHT FAILED — required files missing"** — a seat's deck lacks its
-  dossier or primer; the message names each gap and the fix is
-  `arena-add-deck.py <deck.dck>`.
-- **Seats keep punting / falling back to stock AI** — `claude` not logged in,
-  or effort too high for the timeout: raise `--timeout` (300 for xhigh/max).
-- **`java` errors at launch** — need JDK 17+; set `JAVA_HOME` if your PATH
-  java is older.
-- **GUI must be started via the scripts** — the engine resolves `res/`
-  (card database, skins) relative to its working directory; the launchers
-  handle that.
+- The package stays read-only apart from `decks/`, `docs/primers/`,
+  `runner/logs/` and `mailbox/`. First GUI launch creates Forge's standard
+  preference directories outside it. To remove: delete this directory;
+  nothing else is installed.
+- Nothing is deleted at stop; the accumulating dataset is
+  `runner/logs/archive/*/game*.jsonl` plus the live files.
+- **"PREFLIGHT FAILED — required files missing"**: a seat's deck lacks its
+  dossier or primer; the
+  message names each gap, the fix is `arena-add-deck.py <deck.dck>`.
+- **Seats keep punting or falling to stock**: `claude` not logged in, or the
+  effort too high for the timeout (use `--timeout 300` at xhigh/max). If every
+  seat starts punting within two seconds at once, your Claude subscription
+  has hit its session limit; stop the table and wait for the reset.
+- **The table vanished after the game**: that is the auto-teardown; the logs
+  are in `archive/`. Use `--linger N` or `--no-autostop` to change it.
+- **`java` errors at launch**: JDK 17+ is required; set `JAVA_HOME` if the
+  PATH java is older.
+- **Start the GUI through the scripts**: the engine resolves `res/` (card
+  database, skins) relative to its working directory and the launchers handle
+  that.

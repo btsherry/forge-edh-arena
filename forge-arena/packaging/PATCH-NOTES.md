@@ -1,17 +1,23 @@
 # forge-light-llm — Patch Notes
 
-## Unreleased — after v3.3.3
+## v3.4 — 2026-09-04
 
-- **Ask the advisor.** The Advisor tab gains a text field and a **Chat**
-  button (Enter sends). Your question goes straight to the advisor brain and
-  the answer lands in the same stream as `[t12 · you] …` / `[t12 · advisor] …`.
-  One question at a time; answered even while the advisor is paused.
+Feature release on top of the v3.3.3 reliability work, validated in a live
+human game (Selvala vs Urza, Giada, Purphoros: 238 model decisions, zero
+punts; the human won).
+
+- **Chat with the advisor.** The Advisor tab gains a black text field and a
+  **Chat** button (Enter sends). Your question goes straight to the advisor
+  brain and the exchange lands in the same stream as `[t12 · you] …` /
+  `[t12 · advisor] …`. One question at a time; answered even while the
+  advisor is paused.
 - **Tables tear themselves down when the match is over.** Once the engine
-  reports game over (or the game window is closed), `arena-play.sh` lingers
+  reports game over, or you close the game window, `arena-play.sh` lingers
   (`--linger N`; default 120 s in human games so you can read the final
   board, 60 s all-AI) and then runs the same stop as `arena-stop.sh`: kill,
   rate, archive, clear. `--no-autostop` keeps the old behaviour; a hand stop
   always wins.
+- **README rewritten**: shorter, same content, one place for each fact.
 
 ## v3.3.3 — 2026-09-04
 

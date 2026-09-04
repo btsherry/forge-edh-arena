@@ -230,8 +230,8 @@ two rules digests named below.
 
 | Doc | Audience | State (2026-09-04) |
 |---|---|---|
-| `packaging/README.md` | package users | refreshed 2026-09-04 (fallback halves, rosters, log files, `--setting-sources` footnote) |
-| `packaging/PATCH-NOTES.md` | package users | v1→v3.3.2 + "Unreleased — after v3.3.2" (the v3.3.3 cut is pending, BL-17) |
+| `packaging/README.md` | package users | rewritten 2026-09-04 for v3.4 (3676→~2800 words, same facts: fail-safe halves, rosters, ingest, Advisor incl. Chat, AI panel, ELO, start-up payload, logs, scripts, backends, agent driving, auto-teardown, `--setting-sources` footnote) |
+| `packaging/PATCH-NOTES.md` | package users | v1→v3.4; v3.3.3 (review fixes) and v3.4 (Chat field, auto-teardown) both cut 2026-09-04; the top section is always the shipped version, an "Unreleased — after vX" section exists only while work sits unshipped |
 | `../BUILDING.md` | developers | refreshed 2026-09-04 (`extended` group, fixture refresh flag, `maven.test.skip`) |
 | `docs/INTERACTIVE-ARENA.md` | seam engineers | field notes through 72 (2026-09-04) |
 | `docs/BUG-LOG.md` | everyone | the outstanding-items ledger (opened 2026-09-04): interactive open items, watch items, deferred headless findings, closed-this-pass with commits |
