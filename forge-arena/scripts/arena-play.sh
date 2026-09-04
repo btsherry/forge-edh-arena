@@ -29,9 +29,10 @@ while [ $# -gt 0 ]; do
     --all-ai) MODE="all-ai"; shift ;;
     --human)  MODE="human"; shift
               case "${1:-}" in *.dck) HUMAN_DECK="$1"; shift ;; esac ;;
-    --model)  MODEL="$2"; shift 2 ;;
-    --effort) EFFORT="$2"; shift 2 ;;
-    --timeout) TIMEOUT="$2"; shift 2 ;;
+    --model|--effort|--timeout)
+              [ $# -ge 2 ] || { echo "arena: $1 needs a value" >&2; exit 2; }   # item 13g
+              case "$1" in --model) MODEL="$2" ;; --effort) EFFORT="$2" ;; --timeout) TIMEOUT="$2" ;; esac
+              shift 2 ;;
     --advisor) ADVISOR=1; shift ;;      # explicit on (the default for --human)
     --no-advisor) ADVISOR=0; shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -46,9 +47,12 @@ fi
 # The advisor brain needs the human deck's dossier + primer (same preflight
 # the AI seats get). Missing → the game still launches, just unadvised.
 if [ "$ADVISOR" = "1" ]; then
-  HUMAN_SLUG="${HUMAN_DECK%.dck}"
-  if ! PREFLIGHT_DECKS="$HUMAN_SLUG" "$ROOT/runner/run_table.sh" --preflight >/dev/null 2>&1; then
-    echo "arena: --advisor disabled — deck '$HUMAN_SLUG' is not ingested (run arena-add-deck.py first)." >&2
+  HUMAN_SLUG=$(basename "$HUMAN_DECK" .dck)   # item 13g: a path prefix used to break the slug
+  if ! pf_err=$(PREFLIGHT_DECKS="$HUMAN_SLUG" "$ROOT/runner/run_table.sh" --preflight 2>&1 >/dev/null); then
+    # item 13g: say WHAT failed — this used to report every preflight failure
+    # (a missing OpenRouter key, a backend model on seat 0) as "not ingested"
+    echo "arena: --advisor disabled — preflight for deck '$HUMAN_SLUG' failed:" >&2
+    printf '%s\n' "$pf_err" | sed 's/^/    /' >&2
     ADVISOR=0
   fi
 fi
@@ -67,10 +71,12 @@ fi
 
 # 1) clean slate (reuses arena-stop for teardown+archive+clear)
 "$DIR/arena-stop.sh" >/dev/null 2>&1
+mkdir -p "$LOGS/pids"   # item 13e: every process this launch starts leaves a PID file
 
 # 2) seat runners (all four for all-ai; seats 1-3 for human)
 env $ALL SEAT_MODEL="$MODEL" SEAT_EFFORT="$EFFORT" ARENA_MAILBOX_TIMEOUT="$TIMEOUT" \
   nohup "$ROOT/runner/run_table.sh" >"$LOGS/run_table.out" 2>&1 &
+echo $! > "$LOGS/pids/run_table.pid"
 sleep 3
 
 # 2.5) advisor brain (human mode only): reads the seat-0 shadow feed the GUI
@@ -81,12 +87,13 @@ if [ "$ADVISOR" = "1" ]; then
   nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
     python3 "$ROOT/runner/advisor_runner.py" --deck "$HUMAN_SLUG" \
     --model "$MODEL" --effort "$EFFORT" >"$LOGS/advisor_runner.out" 2>&1 &
+  echo $! > "$LOGS/pids/advisor.pid"
 fi
 
 # (react-autopass daemon RETIRED from the launch 2026-08-17: its allowlist
-# fastpath lives in the seat runners now — zero windows absorbed across the
-# last three games. scripts/react-autopass.py remains for manual fallback;
-# arena-stop still reaps it if launched by hand.)
+# fastpath lives in the seat runners now. scripts/react-autopass.py stays in
+# the repo for manual experiments only — not shipped, not reaped (item 13d):
+# it writes into EVERY seat's outbox with no threat check.)
 
 # 3) GUI (spectator for all-ai, human seat 0 otherwise)
 if [ "$MODE" = "all-ai" ]; then GUI_ARG="--all-ai"; else GUI_ARG="$HUMAN_DECK"; fi
@@ -94,6 +101,7 @@ ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" \
   ARENA_AUTOPASS="${ARENA_AUTOPASS:-casts}" \
   nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
   "$DIR/run-pilot-match.sh" "$GUI_ARG" >"$LOGS/gui.out" 2>&1 &
+echo $! > "$LOGS/pids/gui.pid"   # run-pilot-match execs java, so this IS the JVM
 
 # 4) wait until the match is actually live
 i=0

@@ -31,7 +31,7 @@ import urllib.request
 from pathlib import Path
 
 OR_BASE = "https://openrouter.ai/api/v1"
-_PROBE_FILE = Path(__file__).parents[1] / "logs" / "control" / "or-models.json"
+_PROBE_FILE = Path(__file__).parents[1] / "logs" / "cache" / "or-models.json"  # item 13f
 
 # max_tokens = answer room + effort-derived reasoning headroom (plan F-14).
 _ANSWER_TOKENS = 4096

@@ -102,5 +102,42 @@ class EngineTimeoutAdoption(unittest.TestCase):
         self.assertEqual(r.timeout_s, 90.0)
 
 
+class RunnerHygiene(unittest.TestCase):
+    """Plan item 13: (a) an exception inside a decision never kills the runner
+    — it logs, answers the safe default, and records a punt; (h) the shared
+    log is one file per game with game.jsonl a symlink to the current one."""
+
+    def test_exception_in_decision_becomes_a_recorded_punt(self):
+        r = runner()
+
+        def boom(prompt, **kw):
+            raise RuntimeError("model client exploded")
+        r.brain.decide = boom
+        r.handle(react(1))   # must not raise
+        rows = [json.loads(l) for l in r._jsonl_path.read_text().splitlines()]
+        self.assertEqual(rows[-1]["source"], "punt")
+        self.assertIn("runner exception", rows[-1]["why"])
+        self.assertIn("INTERNAL ERROR", r._log_path.read_text())
+
+    def test_game_log_rotates_per_game_with_a_current_symlink(self):
+        r = runner()
+        r.brain.decide = lambda prompt, **kw: ({"chosenId": 0}, dict(META))
+        req = react(1)
+        req["gameId"] = "1756950000123-4242"
+        r.handle(req)
+        per_game = r._game_log.with_name("game-1756950000123-4242.jsonl")
+        self.assertTrue(per_game.exists(), "records go to the per-game file")
+        self.assertTrue(r._game_log.is_symlink(), "game.jsonl is a symlink")
+        self.assertEqual(r._game_log.resolve(), per_game.resolve())
+        self.assertEqual(len(per_game.read_text().splitlines()), 1)
+        # a second game: the symlink moves, the first file stays
+        req2 = react(1, turn=1)
+        req2["gameId"] = "1756950009999-4242"
+        r.handle(req2)
+        self.assertEqual(r._game_log.resolve(),
+                         r._game_log.with_name("game-1756950009999-4242.jsonl").resolve())
+        self.assertTrue(per_game.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

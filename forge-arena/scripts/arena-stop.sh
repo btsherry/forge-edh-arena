@@ -10,12 +10,23 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$DIR/.." && pwd)          # forge-arena/
 LOGS="$ROOT/runner/logs"
 
-pkill -f "GuiPilotMatch" 2>/dev/null
-pkill -f "run_table.sh" 2>/dev/null
-pkill -f "seat_runner.py --seat" 2>/dev/null
-pkill -f "advisor_runner.py" 2>/dev/null
-pkill -f "react-autopass.py" 2>/dev/null
-sleep 1
+# Item 13e: kill by PID file (written by arena-play.sh / run_table.sh), so a
+# stop touches only THIS table's processes. The command-line patterns are the
+# fallback for a table launched before PID files existed.
+PIDS="$LOGS/pids"
+if [ -d "$PIDS" ] && ls "$PIDS"/*.pid >/dev/null 2>&1; then
+  for f in "$PIDS"/*.pid; do p=$(cat "$f" 2>/dev/null); [ -n "$p" ] && kill "$p" 2>/dev/null; done
+  sleep 1
+  for f in "$PIDS"/*.pid; do p=$(cat "$f" 2>/dev/null); [ -n "$p" ] && kill -9 "$p" 2>/dev/null; rm -f "$f"; done
+  left=$(pgrep -f "seat_runner.py --seat|advisor_runner.py|GuiPilotMatch" | wc -l | tr -d ' ')
+  [ "$left" -gt 0 ] && echo "note: $left arena process(es) not covered by a PID file are still running (another table, or a hand launch) — left alone" >&2
+else
+  pkill -f "GuiPilotMatch" 2>/dev/null
+  pkill -f "run_table.sh" 2>/dev/null
+  pkill -f "seat_runner.py --seat" 2>/dev/null
+  pkill -f "advisor_runner.py" 2>/dev/null
+  sleep 1
+fi
 
 # ELO sweep BEFORE the archive: the applier attributes pilots from game.jsonl
 # (never archived) and needs unconsumed spool files in runner/results/. Rated
@@ -31,7 +42,7 @@ if ls "$LOGS"/seat-*.log "$LOGS"/gui.out >/dev/null 2>&1; then
   # clobber a past game's record — every game's full log set survives intact.
   mv "$LOGS"/seat-*.log "$LOGS"/seat-*.jsonl "$LOGS"/seat-*.usage.json \
      "$LOGS"/advisor-0.log "$LOGS"/advisor-0.jsonl "$LOGS"/advisor_runner.out \
-     "$LOGS"/react-autopass.out "$LOGS"/gui.out "$LOGS"/run_table.out \
+     "$LOGS"/gui.out "$LOGS"/run_table.out \
      "$LOGS"/ratings.out "$LOGS"/transport-events.jsonl \
      "$ROOT"/runner/results/*.rated \
      "$ROOT"/runner/results/*.skipped "$ROOT"/runner/results/*.voided "$A/" 2>/dev/null

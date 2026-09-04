@@ -63,14 +63,14 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - `safe_default` says yes only when free and mine; everything else declines. A punt never spends new mana, regardless of pool (sole existing exception: committed X announces). Word lists removed; stopgap word-boundary tightening until the field lands.
 - Add `CONFIRM`, `PAY_UNLESS`, `CHOOSE_CARDS` fixtures to the punt-legality test.
 
-## 11. Four controller defects
+## 11. Four controller defects — DONE 2026-09-03 (a `MindSlaveRoutingTest`, b `PayUnlessSeatPaymentTest`, c with item 4, d with the fields commit)
 - a. Mind-slave: slave's controller routes to the master's mailbox; requests carry `controllingSeat` and a prompt line.
 - b. Pay-unless: set `inPaymentContext` around `payComputerCosts`.
 - c. Charm: return the real cast result; failures surface via `lastRefused`.
 - d. Untyped confirms: gate by "source is the seat's own spell/ability", not by the word "play"; carry `hasCost`/`isMine`.
 - Two-cards tests for a and b.
 
-## 12. Silent brain (simplified form)
+## 12. Silent brain (simplified form) — DONE 2026-09-03 (`HeartbeatGateTest`; runner half b66d90ec75a)
 - Runner touches `seat-N/heartbeat` every 5 s (advisor too).
 - Engine stats it once per request before blocking; older than 15 s → stock immediately, one log line per transition each way. Unreadable/stat failure → treat as alive (gate can only shorten a wait).
 - No engine-side breaker: item 2 makes wedged models punt on time; runner wedge recovery stays the single layer.
@@ -78,7 +78,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - Both launch scripts default to 90; engine stamps its timeout on each request (consistency only, never derivation).
 - Dead-brain test doubles as the missing "never hangs" test.
 
-## 13. Runner and launcher hygiene
+## 13. Runner and launcher hygiene — DONE 2026-09-03 (a/h `RunnerHygiene` tests; e exercised with stand-in PIDs)
 - a. `handle()` guarded: log traceback, answer `safe_default`, continue.
 - b. `.resolve()` on the combos path; warn when absent.
 - c. `ratings.py`: write ladders per spool, rename last.

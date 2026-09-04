@@ -89,17 +89,32 @@ def ladder_update(table: dict, seat_key: dict, pairs) -> dict:
 
 
 def slice_game_log(game_log: Path, t0: float, t1: float) -> list[dict]:
-    if not game_log.exists():
-        return []
+    """Records in [t0, t1] across the shared log. Item 13h: the runners write
+    one game-<gameId>.jsonl per game and keep game.jsonl as a symlink to the
+    current one, so read every regular game*.jsonl beside it (the symlink
+    itself is skipped — it duplicates one of them)."""
+    files = []
+    if game_log.parent.is_dir():
+        for p in sorted(game_log.parent.glob("game*.jsonl")):
+            if p.is_symlink():
+                continue
+            files.append(p)
+    elif game_log.exists():
+        files.append(game_log)
     out = []
-    for line in game_log.read_text().splitlines():
+    for p in files:
         try:
-            r = json.loads(line)
-        except ValueError:
+            lines = p.read_text().splitlines()
+        except OSError:
             continue
-        ts = r.get("ts")
-        if isinstance(ts, (int, float)) and t0 <= ts <= t1:
-            out.append(r)
+        for line in lines:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            ts = r.get("ts")
+            if isinstance(ts, (int, float)) and t0 <= ts <= t1:
+                out.append(r)
     return out
 
 
@@ -308,6 +323,12 @@ def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
                 # the record survives for review; the ladders never move
                 p.rename(p.with_name(p.name + ".voided"))
                 continue
+            # Item 13c: persist the ladders BEFORE marking the spool rated —
+            # a crash between the two used to leave history saying "rated"
+            # while ratings.json never moved, with the spool unprocessable.
+            tmp = ratings_path.with_name(ratings_path.name + ".tmp")
+            tmp.write_text(json.dumps(tables, indent=1, sort_keys=True))
+            tmp.replace(ratings_path)
             p.rename(p.with_name(p.name + ".rated"))
             last_record = rec
             rated += 1
@@ -316,12 +337,8 @@ def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
             log(f"[ratings] rated {p.name}: "
                 + ", ".join(f"{k} {v['before']:.0f}->{v['after']:.0f}"
                             for k, v in rec["changes"]["models"].items()))
-        if rated:
-            tmp = ratings_path.with_name(ratings_path.name + ".tmp")
-            tmp.write_text(json.dumps(tables, indent=1, sort_keys=True))
-            tmp.replace(ratings_path)
-            if last_record:
-                write_digests(tables, last_record, elo_dir)
+        if rated and last_record:
+            write_digests(tables, last_record, elo_dir)
         return rated
     finally:
         fcntl.flock(lf, fcntl.LOCK_UN)

@@ -58,10 +58,14 @@ is_backend() { case "$1" in or/*|oai/*) return 0 ;; *) return 1 ;; esac; }
 seat() { # seat_no deck model
   if is_backend "$3"; then damped=1; else damped=0; fi
   fails=0; win_start=$(date +%s)
+  mkdir -p "$DIR/logs/pids"
   while true; do
     python3 "$DIR/seat_runner.py" --seat "$1" --deck "$2" \
-      --model "$3" --effort "$EFFORT" --base "$BASE" $SPEC_FLAG $HOLD_FLAG
-    echo "[seat $1] runner exited ($?) — restarting in 2s" >&2
+      --model "$3" --effort "$EFFORT" --base "$BASE" $SPEC_FLAG $HOLD_FLAG &
+    child=$!
+    echo "$child" > "$DIR/logs/pids/seat-$1.pid"   # item 13e: arena-stop kills by PID
+    wait "$child"; rc=$?
+    echo "[seat $1] runner exited ($rc) — restarting in 2s" >&2
     if [ "$damped" = 1 ]; then
       now=$(date +%s)
       if [ $((now - win_start)) -gt 600 ]; then fails=0; win_start=$now; fi
@@ -185,7 +189,7 @@ preflight_models() {
   fi
   # Best-effort context fit against a previously saved /models probe: fail
   # only on a PROVEN misfit (dossier estimate > known context_length).
-  if [ -f "$DIR/logs/control/or-models.json" ]; then
+  if [ -f "$DIR/logs/cache/or-models.json" ]; then
     ARENA_PF_MODELS="$M1,$M2,$M3" ARENA_PF_M0="$M0" ARENA_PF_ALL="${ALL_SEATS:-0}" \
     ARENA_PF_DECKS="$D0 $D1 $D2 $D3" ARENA_PF_ROOT="$AROOT" \
     python3 - <<'PY' || return 1
@@ -200,7 +204,7 @@ else:
     seats = [1, 2, 3]
 try:
     rows = {r.get("id"): r for r in json.load(
-        open(os.path.join(root, "runner/logs/control/or-models.json")))["data"]}
+        open(os.path.join(root, "runner/logs/cache/or-models.json")))["data"]}
 except Exception:
     sys.exit(0)
 def est(seat):
@@ -251,8 +255,8 @@ preflight_models || exit 1
 # and to the next launch's context preflight.
 case "$M0 $M1 $M2 $M3" in
   *or/*)
-    mkdir -p "$DIR/logs/control"
-    python3 - "$DIR/logs/control/or-models.json" <<'PY' || \
+    mkdir -p "$DIR/logs/cache"   # item 13f: control/ is cleared by arena-stop; cache/ survives
+    python3 - "$DIR/logs/cache/or-models.json" <<'PY' || \
       echo "[run_table] /models probe failed (continuing — runtime latch is the backstop)" >&2
 import json, os, sys, urllib.request
 out = sys.argv[1]
@@ -273,7 +277,10 @@ PY
     ;;
 esac
 
-trap 'kill 0' INT TERM
+# Item 13e: on INT/TERM kill OUR seat runners (by PID file) and OUR loop
+# subshells — never `kill 0`, which signalled the launching shell's whole
+# process group.
+trap 'for f in "$DIR"/logs/pids/seat-*.pid; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; done; kill $(jobs -p) 2>/dev/null; exit 143' INT TERM
 if [ "${ALL_SEATS:-0}" = "1" ]; then
   seat 0 "$D0" "$M0" &   # all-AI mode: 4th brain takes seat 0
 fi

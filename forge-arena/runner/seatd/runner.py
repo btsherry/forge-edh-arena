@@ -49,18 +49,6 @@ class SeatRunner:
         #   {"turn": int, "steps": [{"card","why"}], "idx": int}
         # Consumed locally under the four-part guard; discarded on any divergence.
         self.plan: dict | None = None
-        # Deck combos (CommanderSpellbook included-combos distillation) for the
-        # per-decision COMBO STATUS line. Ship-pattern source: dossier/combos.json
-        # only — no project-internal combo-program/advisory artifacts.
-        self.combos: list = []
-        try:
-            combos_p = (Path(__file__).parents[2] / "decks" / deck
-                        / "dossier" / "combos.json")
-            if combos_p.exists():
-                self.combos = (json.loads(combos_p.read_text()).get("combos")
-                               or [])
-        except (OSError, json.JSONDecodeError):
-            self.combos = []
         self.react_seen: set[tuple] = set()
         # Cycle replay (backlog item 3, 2026-08-17): the brain may declare
         # "repeat_cycle": N on a decision it has answered identically before
@@ -96,6 +84,24 @@ class SeatRunner:
         if self.brain.backend is not None:
             self._seed_spend()
         self._init_control()
+        # Deck combos (CommanderSpellbook included-combos distillation) for the
+        # per-decision COMBO STATUS line. Ship-pattern source: dossier/combos.json
+        # only — no project-internal combo-program/advisory artifacts. Item 13b:
+        # resolve() like the siblings (a relative __file__ found nothing and
+        # every prompt silently lost its combo grounding), and SAY when absent.
+        self.combos: list = []
+        combos_p = (Path(__file__).resolve().parents[2] / "decks" / deck
+                    / "dossier" / "combos.json")
+        try:
+            if combos_p.exists():
+                self.combos = (json.loads(combos_p.read_text()).get("combos") or [])
+            else:
+                self._say(f"[seat {seat}] WARN combos.json missing at {combos_p} — "
+                          f"COMBO STATUS lines will be absent from every prompt")
+        except (OSError, json.JSONDecodeError) as e:
+            self.combos = []
+            self._say(f"[seat {seat}] WARN combos.json unreadable ({e}) — "
+                      f"COMBO STATUS lines will be absent")
 
     def _seed_spend(self) -> None:
         p = self._jsonl_path.parent / f"seat-{self.seat}.usage.json"
@@ -218,6 +224,38 @@ class SeatRunner:
         except OSError:
             pass  # never let bookkeeping hurt the game
 
+    def _game_log_for(self, gid) -> Path:
+        """game-<gid>.jsonl, with game.jsonl kept as a symlink to it (atomic
+        replace, so four seats racing to point it are harmless). A legacy
+        regular game.jsonl is set aside as game-legacy-<mtime>.jsonl once.
+        No gid (unstamped engine): the flat file, exactly as before."""
+        if not isinstance(gid, str) or not gid:
+            return self._game_log
+        link = self._game_log
+        target = link.with_name(f"game-{gid}.jsonl")
+        try:
+            if link.is_symlink():
+                if os.readlink(link) == target.name:
+                    return target
+            elif link.exists():
+                try:
+                    link.rename(link.with_name(
+                        f"game-legacy-{int(link.stat().st_mtime)}.jsonl"))
+                except OSError:
+                    pass  # another seat moved it first
+            tmp = link.with_name(f"{link.name}.{os.getpid()}.tmp")
+            try:
+                os.symlink(target.name, tmp)
+                os.replace(tmp, link)
+            except OSError:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+        except OSError:
+            pass
+        return target
+
     def _record(self, req: dict, answer: dict, source: str, meta=None,
                 why: str | None = None, consumed: bool = True) -> None:
         stamp = self.board_stamp(req)
@@ -263,8 +301,11 @@ class SeatRunner:
             tmp_p.write_text(json.dumps(cum, indent=1))
             os.replace(tmp_p, usage_p)
             # Shared narrative line (append-only; single-line writes are atomic
-            # enough on a local fs; no seat ever reads this file).
-            with self._game_log.open("a") as f:
+            # enough on a local fs; no seat ever reads this file). Item 13h:
+            # one file per game (game-<gameId>.jsonl) with game.jsonl a symlink
+            # to the current one, so the live readers keep their path and the
+            # dataset stops being one unbounded file every sweep re-reads.
+            with self._game_log_for(req.get("gameId")).open("a") as f:
                 f.write(json.dumps({
                     "ts": rec["ts"], "seat": self.seat, "deck": self.deck,
                     "turn": rec["turn"], "phase": rec["phase"],
@@ -617,6 +658,25 @@ class SeatRunner:
             self.handle(req)
 
     def handle(self, req: dict) -> None:
+        """Item 13a: nothing raised inside a decision may kill the runner — a
+        crash restarts it 2 s later with a fresh session and a full dossier
+        re-send, and the game memory is gone. Log the traceback, answer the
+        safe default on time, carry on."""
+        try:
+            self._handle_inner(req)
+        except Exception:  # noqa: BLE001 — surviving anything is the point
+            import traceback
+            self._say(f"[seat {self.seat}] seq={req.get('seq')} INTERNAL ERROR in "
+                      f"handle() — answering the safe default:\n{traceback.format_exc()}")
+            try:
+                answer = rules.safe_default(req)
+                ok = self.mb.respond(req, answer)
+                self._transport_event("punt")
+                self._record(req, answer, "punt", why="punt: runner exception", consumed=ok)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _handle_inner(self, req: dict) -> None:
         if self.mb.game_reset:
             self._usage_readout("game close")  # final readout for the ended game
             self._say(f"[seat {self.seat}] NEW GAME detected "

@@ -306,7 +306,6 @@ alongside pending decisions.
 | `scripts/arena-digest.py` | One compact line per game turn — an ambient "how's it going" feed |
 | `scripts/run-pilot-match.sh` | The underlying GUI launcher (arena-play calls it); direct use for custom setups |
 | `scripts/run-gui.sh` | Plain Forge desktop GUI, no mailbox seats — sanity checks |
-| `scripts/react-autopass.py` | Manual-fallback daemon for no-op REACT windows (retired from the standard launch — the seat runners' allowlist fastpath covers it) |
 | `runner/run_table.sh` | Starts the per-seat brain daemons (arena-play calls it); `--preflight` verifies every seat's files |
 | `runner/arena-ctl.py` | Set any seat's model/effort mid-game |
 | `runner/status.py` | seatd health + narrative dashboard ("numbers over vibes") |

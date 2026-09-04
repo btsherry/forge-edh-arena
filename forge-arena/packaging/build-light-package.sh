@@ -148,11 +148,11 @@ if [ -n "$KEEP" ]; then
 fi
 
 echo "[8/9] scripts — play/stop/launch/ingest/observe/cardwatch (batch, canary, prep,"
-echo "      smoke, discovery harnesses, react-autopass stay home)"
+echo "      smoke, discovery harnesses and react-autopass stay home — item 13d:"
+echo "      react-autopass writes into EVERY seat's outbox with no threat check)"
 mkdir -p "$DEST/forge-arena/scripts"
 for f in arena-play.sh arena-stop.sh run-pilot-match.sh run-gui.sh \
-         arena-add-deck.py arena-status.py arena-digest.py arena-cardwatch.py \
-         react-autopass.py; do
+         arena-add-deck.py arena-status.py arena-digest.py arena-cardwatch.py; do
   cp "$REPO/forge-arena/scripts/$f" "$DEST/forge-arena/scripts/"
 done
 
