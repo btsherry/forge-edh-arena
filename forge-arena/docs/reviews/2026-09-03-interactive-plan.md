@@ -31,7 +31,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - New-game reset also resets `gov_turn` / `gov_budget`.
 - First advisor tests: interleaved numbering must not reset; id change must; resume must not re-stream.
 
-## 6. Mana table in state
+## 6. Mana table in state — DONE 2026-09-03 (`ManaTableTest`)
 - `manaSources`: per untapped source — id, name, yield now (live board), colors, `restricted`, `sick`, `cost` beyond tap. Identical basics collapsed with `count`.
 - `manaAvailableNow` = pool + unrestricted, non-sick, tap-only yields (same quantity the engine's refusal uses).
 - `ritualsInHand`: spells whose chain has a Mana part — cost, projected yield on current board, net, colors. Multipliers/modifiers (mana-event triggers or replacements) listed with `kind: "multiplier"` and no number.
@@ -49,7 +49,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - Align `run_table.sh` static check with the resolver as a fast pre-check that defers to the manifest.
 - Live check: re-ingest Sythis; Room line survives; probe reports 100 clean.
 
-## 8. Game identity in the mailbox
+## 8. Game identity in the mailbox — DONE 2026-09-03 (engine a783291a475; seat reader `GameIdentityTests`; advisor reader lands with item 5)
 - `gameId` (start millis + pid, once per `Game`) on every request and feed file.
 - Seat runner resets/sweeps only on id change; drops the 3 s heuristic and `_answered_at`. Runner restart mid-game adopts the id (rejoin, not reset). Missing field → old heuristic + one log line.
 - One log line per id change with both ids and swept-file count; `game.jsonl` rows carry `gameId`.
@@ -58,7 +58,7 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - Missing-jar loop moved out of the pipe subshell; collect all missing, fail naming them; assert `lib/` count equals classpath count; fix the README `&& cp ||` misreport.
 - Prove the negative with a fake classpath entry; diff `lib/` listing against v3.3.2.
 
-## 10. CONFIRM punt
+## 10. CONFIRM punt — DONE 2026-09-03 (engine fields a783291a475; `safe_default` structural; confirm/pay_unless/choose_cards fixtures)
 - Engine adds `hasCost` and `isMine` to `OptionalChoose`/untyped confirms.
 - `safe_default` says yes only when free and mine; everything else declines. A punt never spends new mana, regardless of pool (sole existing exception: committed X announces). Word lists removed; stopgap word-boundary tightening until the field lands.
 - Add `CONFIRM`, `PAY_UNLESS`, `CHOOSE_CARDS` fixtures to the punt-legality test.

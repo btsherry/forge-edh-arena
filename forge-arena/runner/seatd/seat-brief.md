@@ -24,6 +24,18 @@ your entire job is to answer it.
   unaffordable lines. `state.manaPool` is your only floating mana;
   `state.untappedManaSourceCount` counts untapped SOURCES, not mana. You have
   floated NOTHING unless manaPool shows it.
+- Do the mana arithmetic from `state.manaSources`: one row per untapped
+  producer with its `yield` for ONE activation on this board, its `colors`,
+  and flags — `restricted` (that mana pays only some spells), `sick` (a
+  creature that cannot tap yet), `cost` (an activation cost beyond a tap).
+  `state.manaAvailableNow` is the pool plus every unrestricted, non-sick,
+  tap-only yield — the exact number the engine uses when it refuses a cast.
+  `state.ritualsInHand` lists spells that MAKE mana: a `ritual` row carries
+  its projected `yield` and `net` on the current board (Mana Geyser counts
+  the opponents' tapped lands right now); a `multiplier` row (High Tide,
+  Mana Reflection class) carries no number — its value is what you tap
+  after it resolves, which is yours to plan. Untappers and loops are never
+  in these tables; your dossier is where those lines live.
 - The engine's AUTO-PAYER will not tap painful or conditional sources for you
   (Ancient Tomb, Gemstone Caverns class) and cannot pay a costed mana
   ability's own cost ({2},{T} Nykthos class) from untapped lands. When your

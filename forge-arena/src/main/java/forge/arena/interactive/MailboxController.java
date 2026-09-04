@@ -3095,6 +3095,26 @@ public final class MailboxController extends PlayerControllerAi
         // SOURCE COUNT as floating mana ("seven floating mana") and wasted its
         // X spell. The name now says what it is.
         state.put("untappedManaSourceCount", view.untappedManaSources());
+        // Item 6 (2026-09-03): the brain had floating mana exactly and every
+        // other source as a HEADCOUNT — it could not sum its mana, see colors,
+        // or tell a restricted source from a general one. Two tables, all
+        // engine-computed on the live board, detected from mechanics only:
+        // manaSources (each untapped producer, one activation's yield) plus
+        // manaAvailableNow (the same quantity the refusal in item 4 measures),
+        // and ritualsInHand (spells that add mana, with projected yield, and
+        // multipliers/modifiers flagged with no number — their value depends
+        // on what the brain taps afterwards).
+        try {
+            List<Map<String, Object>> sources = manaSources(me);
+            state.put("manaSources", sources);
+            state.put("manaAvailableNow", manaAvailableNow(me, sources));
+            List<Map<String, Object>> rituals = ritualsInHand(me);
+            if (!rituals.isEmpty()) {
+                state.put("ritualsInHand", rituals);
+            }
+        } catch (RuntimeException ignore) {
+            // projection extras must never break state building
+        }
         state.put("handSize", view.handSize());
         state.put("handLands", view.handLands());
         state.put("librarySize", view.librarySize());
@@ -3430,6 +3450,227 @@ public final class MailboxController extends PlayerControllerAi
         }
         int yield = manaAbilityYield(sa, host);
         return yield >= 0 && yield <= 1; // unknown (-1) => show it, to be safe
+    }
+
+    // ---- item 6: mana tables ------------------------------------------------
+
+    /**
+     * One row per UNTAPPED permanent the seat controls that has a mana
+     * ability: id, name, yield (one activation, on this board), colors,
+     * and — only when present — {@code restricted} (mana usable for a subset
+     * of spells: Mishra's Workshop class), {@code sick} (a creature that
+     * cannot tap this turn), {@code cost} (payment beyond a bare tap: Nykthos
+     * {2}, Selvala {G}). Identical rows collapse with a {@code count}, so
+     * eight Forests are one line. The bare-tap ability is preferred when a
+     * permanent has several; otherwise the first.
+     */
+    static List<Map<String, Object>> manaSources(Player me) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Card c : me.getCardsIn(ZoneType.Battlefield)) {
+            if (c.isTapped()) {
+                continue;
+            }
+            FCollectionView<SpellAbility> mas = c.getManaAbilities();
+            if (mas == null || mas.isEmpty()) {
+                continue;
+            }
+            SpellAbility best = null;
+            boolean bestBare = false;
+            String restricted = null;
+            for (SpellAbility ma : mas) {
+                if (ma == null) {
+                    continue;
+                }
+                if (restricted == null && ma.hasParam("RestrictValid")) {
+                    restricted = ma.getParam("RestrictValid");
+                }
+                Cost cost = ma.getPayCosts();
+                boolean bare = cost == null
+                        || (cost.hasTapCost() && cost.hasOnlySpecificCostType(CostTap.class));
+                if (best == null || (bare && !bestBare)) {
+                    best = ma;
+                    bestBare = bare;
+                }
+            }
+            if (best == null) {
+                continue;
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", c.getId());
+            row.put("name", c.getName());
+            int yield = manaAbilityYield(best, c);
+            row.put("yield", yield >= 0 ? yield : null);
+            row.put("colors", producedColors(best));
+            if (restricted != null) {
+                row.put("restricted", restricted);
+            }
+            if (c.isCreature() && c.hasSickness()) {
+                row.put("sick", true);
+            }
+            if (!bestBare && best.getPayCosts() != null) {
+                row.put("cost", best.getPayCosts().toSimpleString());
+            }
+            rows.add(row);
+        }
+        // collapse identical rows (same everything but id) into one with a count
+        List<Map<String, Object>> collapsed = new ArrayList<>();
+        Map<String, Map<String, Object>> byKey = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            StringBuilder key = new StringBuilder();
+            for (Map.Entry<String, Object> e : row.entrySet()) {
+                if (!"id".equals(e.getKey())) {
+                    key.append(e.getKey()).append('=').append(e.getValue()).append('|');
+                }
+            }
+            Map<String, Object> prev = byKey.get(key.toString());
+            if (prev == null) {
+                byKey.put(key.toString(), row);
+                collapsed.add(row);
+            } else {
+                Object n = prev.get("count");
+                prev.put("count", (n instanceof Integer ? (Integer) n : 1) + 1);
+            }
+        }
+        return collapsed;
+    }
+
+    /**
+     * Pool plus one activation of every unrestricted, non-sick, bare-tap
+     * source — exactly what the refusal in item 4 calls "payable now".
+     * Sources needing a payment or a sequence are listed but not summed.
+     */
+    static int manaAvailableNow(Player me, List<Map<String, Object>> sources) {
+        int total = me.getManaPool().totalMana();
+        for (Map<String, Object> row : sources) {
+            if (row.containsKey("restricted") || row.containsKey("sick")
+                    || row.containsKey("cost")) {
+                continue;
+            }
+            Object y = row.get("yield");
+            int per = y instanceof Integer ? (Integer) y : 1; // unknown: count one
+            Object n = row.get("count");
+            total += per * (n instanceof Integer ? (Integer) n : 1);
+        }
+        return total;
+    }
+
+    /**
+     * Spells in hand that make mana. {@code kind:"ritual"} — the spell's
+     * effect chain has a Mana part (Dark Ritual, Mana Geyser, Jeska's Will):
+     * cost, projected {@code yield} on the current board, {@code net}, colors.
+     * {@code kind:"multiplier"} — the spell installs an effect that changes
+     * what mana events produce (High Tide, Bubbling Muck via a TapsForMana
+     * trigger; Mana Reflection, Nyxbloom via a ProduceMana replacement): no
+     * number, because the value depends on what the brain taps afterwards.
+     * Detected from the card's abilities, triggers and replacements, never
+     * from names.
+     */
+    static List<Map<String, Object>> ritualsInHand(Player me) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Card c : me.getCardsIn(ZoneType.Hand)) {
+            for (SpellAbility sa : c.getSpellAbilities()) {
+                if (sa == null || !sa.isSpell()) {
+                    continue;
+                }
+                boolean manaPart = false;
+                for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
+                    if (cur.getApi() == ApiType.Mana) {
+                        manaPart = true;
+                        break;
+                    }
+                }
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", c.getId());
+                row.put("name", c.getName());
+                String cost = c.getManaCost() != null ? c.getManaCost().toString() : "";
+                row.put("cost", cost);
+                if (manaPart) {
+                    int yield = manaAbilityYield(sa, c);
+                    int cmc = c.getManaCost() != null ? c.getManaCost().getCMC() : 0;
+                    row.put("kind", "ritual");
+                    row.put("yield", yield >= 0 ? yield : null);
+                    row.put("net", yield >= 0 ? yield - cmc : null);
+                    row.put("colors", producedColors(sa));
+                    rows.add(row);
+                    break;
+                }
+                if (isManaMultiplier(sa, c)) {
+                    row.put("kind", "multiplier");
+                    rows.add(row);
+                    break;
+                }
+            }
+        }
+        return rows;
+    }
+
+    /** A spell whose installed effect, or whose permanent, alters mana
+     *  production: a TapsForMana trigger or a ProduceMana replacement. */
+    private static boolean isManaMultiplier(SpellAbility sa, Card c) {
+        try {
+            for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
+                for (String key : new String[] {"Triggers", "ReplacementEffects", "StaticAbilities"}) {
+                    String names = cur.getParam(key);
+                    if (names == null) {
+                        continue;
+                    }
+                    for (String n : names.split(",")) {
+                        String sv = c.getSVar(n.trim());
+                        if (sv != null && (sv.contains("TapsForMana") || sv.contains("ProduceMana"))) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            for (forge.game.trigger.Trigger t : c.getTriggers()) {
+                if (t.getMode() == forge.game.trigger.TriggerType.TapsForMana) {
+                    return true;
+                }
+            }
+            for (forge.game.replacement.ReplacementEffect re : c.getReplacementEffects()) {
+                if (re.getMode() == forge.game.replacement.ReplacementType.ProduceMana) {
+                    return true;
+                }
+            }
+        } catch (RuntimeException ignore) {
+            // detection is best-effort
+        }
+        return false;
+    }
+
+    /** Colors a mana chain produces right now: the active branch's mana part
+     *  (condition-forked scripts, Gemstone Caverns class), else the root's.
+     *  "any" / "colorless" / letters such as "G" or "WU". */
+    private static String producedColors(SpellAbility sa) {
+        try {
+            forge.game.spellability.AbilityManaPart mp = null;
+            for (SpellAbility tail = sa; tail != null; tail = tail.getSubAbility()) {
+                forge.game.spellability.AbilityManaPart tp = tail.getManaPart();
+                if (tp != null && (mp == null || tail.metConditions())) {
+                    mp = tp;
+                    if (tail.metConditions()) {
+                        break;
+                    }
+                }
+            }
+            if (mp == null) {
+                return "?";
+            }
+            if (mp.isAnyMana()) {
+                return "any";
+            }
+            String p = mp.getOrigProduced() != null ? mp.getOrigProduced() : "";
+            if (p.startsWith("Combo")) {
+                p = p.substring(5);
+            }
+            p = p.replace("Any", "any").replace(" ", "");
+            if ("C".equals(p)) {
+                return "colorless";
+            }
+            return p.isEmpty() ? "?" : p;
+        } catch (RuntimeException e) {
+            return "?";
+        }
     }
 
     /** Current total mana yield of a mana-ability chain evaluated against the

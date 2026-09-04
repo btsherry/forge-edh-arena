@@ -156,6 +156,13 @@ knob seen from two places. The engine deletes both files once the response is re
     /* + effective keywords per card (indestructible/hexproof/ward/protection/evergreens, incl. granted) */
     /* + "confirmMode","triggerText","yesCost","chosenTargets" on CONFIRM(TRIGGER) */
     /* + "confirmMode":"PLAY_FROM_EFFECT" with "spell","free" on may-cast offers (note 49) */
+    /* + "manaSources":[{id,name,yield,colors,restricted?,sick?,cost?,count?}] — every UNTAPPED
+       producer the seat controls, one activation's yield on the live board (Cradle counts its
+       creatures), colors "any"|"colorless"|letters, identical basics collapsed with count;
+       "manaAvailableNow" = pool + unrestricted, non-sick, bare-tap yields (the number item 4's
+       refusal measures); "ritualsInHand":[{kind:"ritual",name,cost,yield,net,colors} |
+       {kind:"multiplier",name,cost}] — Mana-api spells with projected yield, TapsForMana /
+       ProduceMana effects flagged with no number (plan item 6; detection by mechanics only) */
     /* + "lastRefused":{name,cost,needed,payableNow,kind,reason} on the CAST_SPELL window right
        after the engine refused the seat's pick (unaffordable, or a failed modal cast); the prompt
        carries the same sentence and that card is omitted from that ONE window (plan item 4) */
