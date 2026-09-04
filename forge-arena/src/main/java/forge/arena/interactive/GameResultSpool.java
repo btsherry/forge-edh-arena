@@ -136,7 +136,11 @@ public final class GameResultSpool {
               .append(", \"name\": \"").append(esc(p.getName()))
               .append("\", \"slug\": \"")
               .append(esc(seat >= 0 && seat < slugs.length ? slugs[seat] : ""))
-              .append("\", \"control\": \"").append(controlOf(p)).append("\"}");
+              .append("\", \"control\": \"").append(controlOf(p))
+              // item 12: decisions that fell to stock because the brain did not
+              // answer — the void check can read this directly
+              .append("\", \"stockDecisions\": ").append(MailboxController.stockFallbacksFor(p))
+              .append("}");
         }
         sb.append("], \"placementGroups\": ").append(intGroups(placement))
           .append(", \"lostGroupTurns\": ").append(ints(lostGroupTurns))

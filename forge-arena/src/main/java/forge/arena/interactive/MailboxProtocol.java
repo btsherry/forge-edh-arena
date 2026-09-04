@@ -50,9 +50,39 @@ public final class MailboxProtocol {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final long DEFAULT_TIMEOUT_SEC = 300L;
 
+    /** System property: heartbeat staleness (ms) beyond which the brain is
+     *  treated as absent and stock plays at once (item 12). Default 15 s —
+     *  well above the runner's 5 s beat and its 2 s restart loop. */
+    public static final String HEARTBEAT_STALE_PROPERTY = "arena.mailbox.heartbeat.stale.ms";
+
+    /** Age in ms of {@code <seatDir>/heartbeat}, or -1 when there is no file. */
+    public static long heartbeatAgeMillis(Path seatDir) {
+        try {
+            Path hb = seatDir.resolve("heartbeat");
+            if (!Files.exists(hb)) {
+                return -1L;
+            }
+            return System.currentTimeMillis() - Files.getLastModifiedTime(hb).toMillis();
+        } catch (IOException | RuntimeException e) {
+            return -1L;
+        }
+    }
+
+    /** Liveness verdict for a seat dir: TRUE fresh, FALSE stale, null unknown
+     *  (no heartbeat file — a pre-item-12 runner, or none launched). */
+    public static Boolean brainAlive(Path seatDir) {
+        long age = heartbeatAgeMillis(seatDir);
+        if (age < 0) {
+            return null;
+        }
+        return age <= Long.getLong(HEARTBEAT_STALE_PROPERTY, 15_000L);
+    }
+
+    private final Path seatDir;
     private final Path inbox;
     private final Path outbox;
     private final long timeoutMillis;
+    private boolean absentLogged = false;
     // Outbox pickup latency: how soon the engine notices the brain's written
     // response and unblocks. 75ms keeps the game feeling responsive without
     // meaningful CPU cost (the poll is a single file stat on a tiny dir).
@@ -71,6 +101,7 @@ public final class MailboxProtocol {
     }
 
     private MailboxProtocol(Path seatDir, long timeoutMillis) {
+        this.seatDir = seatDir;
         this.inbox = seatDir.resolve("inbox");
         this.outbox = seatDir.resolve("outbox");
         this.timeoutMillis = timeoutMillis;
@@ -119,6 +150,25 @@ public final class MailboxProtocol {
      * missing or malformed brain — a silent brain must never hang the game.
      */
     public JsonNode exchange(Request request) {
+        // Item 12: one stat before blocking. A stale heartbeat means nobody is
+        // home — skip the wait, stock plays now, one log line per transition.
+        // No file (older runner, or none) or an unreadable stat = unknown =
+        // wait as always: the gate can only ever SHORTEN a wait.
+        Boolean alive = brainAlive(seatDir);
+        if (Boolean.FALSE.equals(alive)) {
+            if (!absentLogged) {
+                absentLogged = true;
+                System.err.println("[mailbox " + seatDir.getFileName() + "] brain absent "
+                        + "(heartbeat " + (heartbeatAgeMillis(seatDir) / 1000) + "s stale) — "
+                        + "stock plays until it returns");
+            }
+            return null;
+        }
+        if (absentLogged) {
+            absentLogged = false;
+            System.err.println("[mailbox " + seatDir.getFileName() + "] brain back — "
+                    + "resuming normal waits");
+        }
         long n = seq.incrementAndGet();
         request.seq = n;
         request.gameId = gameId;

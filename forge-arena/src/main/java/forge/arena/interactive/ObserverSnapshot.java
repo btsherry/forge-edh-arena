@@ -181,6 +181,11 @@ public final class ObserverSnapshot {
             s.put("poison", p.getPoisonCounters());
             s.put("handSize", p.getCardsIn(ZoneType.Hand).size());
             s.put("librarySize", p.getCardsIn(ZoneType.Library).size());
+            // item 12: liveness of this seat's brain from its heartbeat file
+            // (true fresh / false stale / null no runner) — a dead seat reads
+            // as dead on the dashboard instead of as a slow game
+            s.put("brainAlive", MailboxProtocol.brainAlive(
+                    outputFile.getParent().resolve("seat-" + p.getId())));
             List<Map<String, Object>> board = new ArrayList<>();
             for (Card c : p.getCardsIn(ZoneType.Battlefield)) {
                 board.add(cardState(c));

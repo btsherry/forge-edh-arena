@@ -56,9 +56,21 @@ public final class MailboxLobbyPlayer extends LobbyPlayerAi {
         return p;
     }
 
+    /**
+     * Item 11a (review 2026-09-03): under Mindslaver / Worst Fears / Emrakul
+     * the MASTER decides (CR 721). This used to build a controller on the
+     * slave's own bus, so the slave's brain kept playing itself. Now the
+     * slave's decisions go to the master's mailbox, stamped with
+     * {@code controllingSeat} and a prompt line. When the master is not a
+     * mailbox seat (the human), its own lobby player mints the controller and
+     * this method is never consulted.
+     */
     @Override
     public PlayerController createMindSlaveController(Player master, Player slave) {
-        return controllerFor(slave);
+        ObserverSnapshot.ensureRegistered(slave.getGame(), baseDir);
+        GameResultSpool.ensureRegistered(slave.getGame());
+        return new MailboxController(slave.getGame(), slave, this,
+                MailboxProtocol.forSeat(baseDir, master.getId()), master.getId());
     }
 
     @Override

@@ -90,10 +90,63 @@ public final class MailboxController extends PlayerControllerAi
     private final int seatIndex;
 
     MailboxController(Game game, Player p, LobbyPlayer lobby, MailboxProtocol bus) {
+        this(game, p, lobby, bus, -1);
+    }
+
+    /**
+     * Item 11a: a controller for {@code p} whose decisions are answered by
+     * ANOTHER seat's brain ({@code controllingSeat} — Mindslaver, Worst
+     * Fears, Emrakul class: CR 721, the controlling player decides). The bus
+     * is the master's; every request carries {@code state.controllingSeat}
+     * and a prompt line saying whose cards are being played.
+     */
+    MailboxController(Game game, Player p, LobbyPlayer lobby, MailboxProtocol bus,
+            int controllingSeat) {
         super(game, p, lobby);
         this.bus = bus;
         this.seatIndex = p.getId();
+        this.controllingSeat = controllingSeat;
         bus.setGameId(gameIdFor(game));
+        STOCK_FALLBACKS.put(p, new int[1]);
+    }
+
+    /** -1 for a seat playing its own cards; else the seat whose brain answers. */
+    private final int controllingSeat;
+
+    /** Item 12: per controlled Player, how many decisions fell to stock
+     *  because the brain did not answer (timeout, or absent heartbeat). Read
+     *  by GameResultSpool at game end; weak keys so finished games collect. */
+    private static final Map<Player, int[]> STOCK_FALLBACKS =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    static int stockFallbacksFor(Player p) {
+        int[] n = STOCK_FALLBACKS.get(p);
+        return n == null ? 0 : n[0];
+    }
+
+    /** All exchanges go through here: a null answer (timeout / absent brain /
+     *  IO) is a stock fallback and is counted (item 12). */
+    private JsonNode exchange(MailboxProtocol.Request req) {
+        JsonNode resp = bus.exchange(req);
+        if (resp == null) {
+            int[] n = STOCK_FALLBACKS.get(getPlayer());
+            if (n != null) {
+                n[0]++;
+            }
+        }
+        return resp;
+    }
+
+    /** Every request is built here (item 11a): a controlled seat's request
+     *  says so in its prompt, so the master's brain knows it is playing
+     *  someone else's cards this turn. */
+    private MailboxProtocol.Request req(int turn, String type, String prompt) {
+        if (controllingSeat >= 0) {
+            prompt = "YOU ARE CONTROLLING SEAT " + seatIndex + " THIS TURN (Mindslaver-class; "
+                    + "you are seat " + controllingSeat + "). The state below is THEIRS and you "
+                    + "decide for them with THEIR cards. " + prompt;
+        }
+        return new MailboxProtocol.Request(seatIndex, turn, phaseName(getGame()), type, prompt);
     }
 
     /** One id per Game instance (item 8): start millis + JVM pid, assigned on
@@ -471,8 +524,7 @@ public final class MailboxController extends PlayerControllerAi
                     + ", was refused: " + lastRefused.get("reason")
                     + " It is omitted from this window; choose something else or pass.";
         }
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), decisionType, prompt)
+        MailboxProtocol.Request req = req(turn, decisionType, prompt)
                 .state(windowState)
                 .option(0, "Pass (do nothing)", null, "PASS");
         Map<Integer, SpellAbility> byId = new LinkedHashMap<>();
@@ -572,7 +624,7 @@ public final class MailboxController extends PlayerControllerAi
             id++;
         }
 
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         // item 4: the refusal has been reported and suppressed once; a fresh
         // refusal (below, in playChosenSpellAbility) re-arms it for the next window
         lastRefused = null;
@@ -898,10 +950,9 @@ public final class MailboxController extends PlayerControllerAi
                   + "re-cast for a real X."
                 : "Answer -1 to CANCEL the cast instead (do that when max is far "
                   + "below your intent; float mana, then re-cast).";
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_NUMBER", prompt)
+        MailboxProtocol.Request req = req(turn, "CHOOSE_NUMBER", prompt)
                 .state(state);
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp != null) {
             JsonNode chosen = resp.get("chosen");
             if (chosen != null && chosen.isInt()) {
@@ -1027,8 +1078,7 @@ public final class MailboxController extends PlayerControllerAi
             Map<String, Object> state = buildState(turn);
             state.put("min", minT);
             state.put("max", 1);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_ENTITY",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_ENTITY",
                     "Choose the TARGET for " + host.getName() + " ("
                             + currentAbility + ").")
                     .state(state);
@@ -1081,7 +1131,7 @@ public final class MailboxController extends PlayerControllerAi
                 byId.put(id, e);
                 id++;
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp != null) {
                 JsonNode chosen = resp.get("chosenId");
                 if (chosen != null && chosen.isInt()) {
@@ -1123,13 +1173,12 @@ public final class MailboxController extends PlayerControllerAi
         Map<String, Object> state = buildState(turn);
         state.put("cardsToReturn", cardsToReturn);
         state.put("hand", ownZone(ZoneType.Hand));
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "MULLIGAN",
+        MailboxProtocol.Request req = req(turn, "MULLIGAN",
                 "Keep this hand, or mulligan?")
                 .state(state)
                 .option(1, "Keep", null, "KEEP")
                 .option(0, "Mulligan", null, "MULLIGAN");
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null) {
             return super.mulliganKeepHand(firstPlayer, cardsToReturn);
         }
@@ -1170,8 +1219,7 @@ public final class MailboxController extends PlayerControllerAi
         int turn = game.getPhaseHandler().getTurn();
         Map<String, Object> state = buildState(turn);
         state.put("defenders", defenderList(defenders));
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "DECLARE_ATTACKERS",
+        MailboxProtocol.Request req = req(turn, "DECLARE_ATTACKERS",
                 "Assign attackers to defenders (empty = attack with nobody).")
                 .state(state);
         Map<Integer, Card> byId = new LinkedHashMap<>();
@@ -1180,7 +1228,7 @@ public final class MailboxController extends PlayerControllerAi
             byId.put(c.getId(), c);
         }
 
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("attackers") == null || !resp.get("attackers").isArray()) {
             super.declareAttackers(attacker, combat);
             return;
@@ -1256,8 +1304,7 @@ public final class MailboxController extends PlayerControllerAi
             attackerById.put(c.getId(), c);
         }
         state.put("attackers", atkList);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "DECLARE_BLOCKERS",
+        MailboxProtocol.Request req = req(turn, "DECLARE_BLOCKERS",
                 "Assign blockers to attackers (empty = no blocks).")
                 .state(state);
         Map<Integer, Card> blockerById = new LinkedHashMap<>();
@@ -1266,7 +1313,7 @@ public final class MailboxController extends PlayerControllerAi
             blockerById.put(c.getId(), c);
         }
 
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("blocks") == null || !resp.get("blocks").isArray()) {
             super.declareBlockers(defender, combat);
             return;
@@ -1340,8 +1387,7 @@ public final class MailboxController extends PlayerControllerAi
         Map<String, Object> state = buildState(turn);
         state.put("min", isOptional ? 0 : 1);
         state.put("max", 1);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_ENTITY",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_ENTITY",
                 (title != null && !title.isEmpty() ? title : "Choose one")
                         + (isOptional ? " (or none)" : ""))
                 .state(state);
@@ -1360,7 +1406,7 @@ public final class MailboxController extends PlayerControllerAi
             req.option(oid, entityLabel(e), null, entityType(e));
             byId.put(oid, e);
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null) {
             return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional, relatedPlayer, params);
         }
@@ -1406,8 +1452,7 @@ public final class MailboxController extends PlayerControllerAi
         Map<String, Object> state = buildState(turn);
         state.put("min", lo);
         state.put("max", hi);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_ENTITIES",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_ENTITIES",
                 (title != null && !title.isEmpty() ? title : "Choose")
                         + " (" + lo + "-" + hi + ")")
                 .state(state);
@@ -1421,7 +1466,7 @@ public final class MailboxController extends PlayerControllerAi
             req.option(oid, entityLabel(e), null, entityType(e));
             byId.put(oid, e);
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
             return super.chooseEntitiesForEffect(optionList, min, max, delayedReveal, sa, title, relatedPlayer, params);
         }
@@ -1545,8 +1590,7 @@ public final class MailboxController extends PlayerControllerAi
         Map<String, Object> state = buildState(turn);
         state.put("min", lo);
         state.put("max", hi);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_ENTITIES",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_ENTITIES",
                 prompt + " (answer {\"chosen\": [ids]})")
                 .state(state);
         Map<Integer, Card> byId = new LinkedHashMap<>();
@@ -1559,7 +1603,7 @@ public final class MailboxController extends PlayerControllerAi
                     c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
             byId.put(oid, c);
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
             return null;
         }
@@ -1602,8 +1646,7 @@ public final class MailboxController extends PlayerControllerAi
         state.put("max", num);
         state.put("allowRepeat", allowRepeat);
         Card host = sa != null ? sa.getHostCard() : null;
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_MODE",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_MODE",
                 "Choose mode(s) for " + (host != null ? host.getName() : "ability")
                         + " (" + lo + "-" + num + (allowRepeat ? ", may repeat" : "") + ")")
                 .state(state);
@@ -1615,7 +1658,7 @@ public final class MailboxController extends PlayerControllerAi
             }
             req.option(i, desc != null && !desc.isEmpty() ? desc : ("mode " + i), null, "MODE");
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
             return super.chooseModeForAbility(sa, possible, min, num, allowRepeat);
         }
@@ -1664,8 +1707,7 @@ public final class MailboxController extends PlayerControllerAi
         state.put("min", isOptional ? 0 : 1);
         state.put("max", 1);
         state.put("destination", destination != null ? destination.name() : null);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_CARD",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_CARD",
                 (selectPrompt != null && !selectPrompt.isEmpty() ? selectPrompt : "Choose a card")
                         + (destination != null ? " -> " + destination.name() : ""))
                 .state(state);
@@ -1682,7 +1724,7 @@ public final class MailboxController extends PlayerControllerAi
                     c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
             byId.put(oid, c);
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null) {
             return super.chooseSingleCardForZoneChange(destination, origin, sa, fetchList, delayedReveal, selectPrompt, isOptional, decider);
         }
@@ -1731,8 +1773,7 @@ public final class MailboxController extends PlayerControllerAi
             state.put("min", lo);
             state.put("max", hi);
             Card src = sa != null ? sa.getHostCard() : null;
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_CARDS",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_CARDS",
                     "DISCARD " + lo + "-" + hi + " from "
                             + (p == getPlayer() ? "YOUR hand" : p.getName() + "'s cards")
                             + (src != null ? " [source: " + src.getName() + "]" : "")
@@ -1748,7 +1789,7 @@ public final class MailboxController extends PlayerControllerAi
                         c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
                 byId.put(oid, c);
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
                 return super.chooseCardsToDiscardFrom(p, sa, validCards, min, max, visibleToChooser);
             }
@@ -1787,8 +1828,7 @@ public final class MailboxController extends PlayerControllerAi
             Map<String, Object> state = buildState(turn);
             state.put("min", 1);
             state.put("max", 1);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_CARD",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_CARD",
                     "CHOOSE FACE: " + (message != null ? message : "pick a face")
                             + (sa != null && sa.getHostCard() != null
                                 ? " [source: " + sa.getHostCard().getName() + "]" : ""))
@@ -1803,7 +1843,7 @@ public final class MailboxController extends PlayerControllerAi
                 byId.put(id, f);
                 id++;
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp != null && resp.get("chosenId") != null && resp.get("chosenId").isInt()) {
                 forge.card.ICardFace pick = byId.get(resp.get("chosenId").asInt());
                 if (pick != null) {
@@ -1829,8 +1869,7 @@ public final class MailboxController extends PlayerControllerAi
             Map<String, Object> state = buildState(turn);
             state.put("min", 1);
             state.put("max", 1);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_CARD",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_CARD",
                     "CHOOSE STATE/SIDE: " + (message != null ? message : "pick a state")
                             + (sa != null && sa.getHostCard() != null
                                 ? " [source: " + sa.getHostCard().getName() + "]" : ""))
@@ -1844,7 +1883,7 @@ public final class MailboxController extends PlayerControllerAi
                 byId.put(id, st);
                 id++;
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp != null && resp.get("chosenId") != null && resp.get("chosenId").isInt()) {
                 forge.game.card.CardState pick = byId.get(resp.get("chosenId").asInt());
                 if (pick != null) {
@@ -1887,11 +1926,10 @@ public final class MailboxController extends PlayerControllerAi
         state.put("min", min);
         state.put("max", max);
         state.put("puntHigh", puntHigh);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_NUMBER",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_NUMBER",
                 prompt + " (answer {\"chosen\": <n>})")
                 .state(state);
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp != null && resp.get("chosen") != null && resp.get("chosen").isInt()) {
             int n = resp.get("chosen").asInt();
             if (n >= min && n <= max) {
@@ -1915,15 +1953,14 @@ public final class MailboxController extends PlayerControllerAi
         state.put("min", min);
         state.put("max", max);
         state.put("allowRepeat", false);
-        MailboxProtocol.Request req = new MailboxProtocol.Request(
-                seatIndex, turn, phaseName(game), "CHOOSE_MODE",
+        MailboxProtocol.Request req = req(turn, "CHOOSE_MODE",
                 prompt + " (" + min + "-" + max + ")")
                 .state(state);
         for (int i = 0; i < labels.size(); i++) {
             String l = labels.get(i);
             req.option(i, l != null && !l.isEmpty() ? l : ("choice " + i), null, "CHOICE");
         }
-        JsonNode resp = bus.exchange(req);
+        JsonNode resp = exchange(req);
         if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
             return null;
         }
@@ -2136,14 +2173,13 @@ public final class MailboxController extends PlayerControllerAi
             String otext = c != null && c.getRules() != null ? c.getRules().getOracleText() : "";
             state.put("spell", (c != null ? c.getName() : "?") + " — "
                     + (otext.length() > 200 ? otext.substring(0, 200) : otext));
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CONFIRM",
+            MailboxProtocol.Request req = req(turn, "CONFIRM",
                     "TOP OR BOTTOM: put " + (c != null ? c.getName() : "the card")
                             + " on TOP of your library? (No = bottom)")
                     .state(state)
                     .option(0, "No (bottom)", null, "NO")
                     .option(1, "Yes (top)", null, "YES");
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp != null && resp.get("chosenId") != null && resp.get("chosenId").isInt()
                     && (resp.get("chosenId").asInt() == 0 || resp.get("chosenId").asInt() == 1)) {
                 return resp.get("chosenId").asInt() == 1;
@@ -2420,8 +2456,7 @@ public final class MailboxController extends PlayerControllerAi
             Map<String, Object> state = buildState(turn);
             state.put("min", lo);
             state.put("max", hi);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_CARDS",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_CARDS",
                     (title != null && !title.isEmpty() ? title : "Choose cards")
                             + " (choose " + lo + "-" + hi
                             + "; answer {\"chosen\": [ids]})")
@@ -2436,7 +2471,7 @@ public final class MailboxController extends PlayerControllerAi
                         c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
                 byId.put(oid, c);
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
                 return super.chooseCardsForEffect(sourceList, sa, title, min, max, isOptional, params);
             }
@@ -2537,12 +2572,11 @@ public final class MailboxController extends PlayerControllerAi
                             : " (an OPPONENT's effect taxing you — e.g. a counter-unless-you-pay, "
                              + "Rhystic Study, Propaganda)")
                     + ". Paying uses your floating mana first, then untapped sources.";
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "PAY_UNLESS", prompt)
+            MailboxProtocol.Request req = req(turn, "PAY_UNLESS", prompt)
                     .state(state)
                     .option(0, "Decline — do not pay; let the effect happen", null, "NONE")
                     .option(1, "Pay " + cost.toSimpleString(), cost.toSimpleString(), "PAY");
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosenId") == null || !resp.get("chosenId").isInt()) {
                 return super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
             }
@@ -2550,7 +2584,15 @@ public final class MailboxController extends PlayerControllerAi
                 return false;
             }
             forge.game.cost.CostPayment pay = new forge.game.cost.CostPayment(cost, sa);
-            return pay.payComputerCosts(new forge.ai.AiCostDecision(me, sa, true));
+            // Item 11b: the seat owns WHICH permanent/card pays (sacrifice,
+            // discard, exile...) here too — the payment hooks only answer
+            // inside a payment context, and this call never opened one.
+            inPaymentContext = true;
+            try {
+                return pay.payComputerCosts(new forge.ai.AiCostDecision(me, sa, true));
+            } finally {
+                inPaymentContext = false;
+            }
         } catch (RuntimeException e) {
             return super.payCostToPreventEffect(cost, sa, alreadyPaid, allPayers);
         }
@@ -2579,8 +2621,7 @@ public final class MailboxController extends PlayerControllerAi
             state.put("min", lo);
             state.put("max", hi);
             state.put("destination", destination != null ? destination.name() : null);
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CHOOSE_CARDS",
+            MailboxProtocol.Request req = req(turn, "CHOOSE_CARDS",
                     (selectPrompt != null && !selectPrompt.isEmpty() ? selectPrompt : "Choose cards")
                             + (destination != null ? " -> " + destination.name() : "")
                             + " (choose " + lo + "-" + hi + "; answer {\"chosen\": [ids]})")
@@ -2595,7 +2636,7 @@ public final class MailboxController extends PlayerControllerAi
                         c.getManaCost() != null ? c.getManaCost().toString() : null, typeHint(c));
                 byId.put(oid, c);
             }
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
                 return super.chooseCardsForZoneChange(destination, origin, sa, fetchList, min, max, delayedReveal, selectPrompt, decider);
             }
@@ -2658,12 +2699,11 @@ public final class MailboxController extends PlayerControllerAi
             String prompt = "CONFIRM (" + (mode != null ? mode.name() : "question") + "): "
                     + (message != null ? message : "?")
                     + (host != null ? "  [source: " + host.getName() + "]" : "");
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CONFIRM", prompt)
+            MailboxProtocol.Request req = req(turn, "CONFIRM", prompt)
                     .state(state)
                     .option(0, "No", null, "NO")
                     .option(1, "Yes", null, "YES");
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosenId") == null || !resp.get("chosenId").isInt()) {
                 return super.confirmAction(sa, mode, message, options, cardToShow, params);
             }
@@ -2869,12 +2909,11 @@ public final class MailboxController extends PlayerControllerAi
                                     ? tgtSA.getPayCosts().toSimpleString() : "?") + ")")
                         + " — " + (desc.length() > 140 ? desc.substring(0, 140) : desc)
                         + "  1 = cast it, 0 = decline.";
-                MailboxProtocol.Request req = new MailboxProtocol.Request(
-                        seatIndex, turn, phaseName(game), "CONFIRM", prompt)
+                MailboxProtocol.Request req = req(turn, "CONFIRM", prompt)
                         .state(state)
                         .option(0, "No — decline the play", null, "NO")
                         .option(1, free ? "Yes — cast it for free" : "Yes — cast it", null, "YES");
-                JsonNode resp = bus.exchange(req);
+                JsonNode resp = exchange(req);
                 if (resp == null || resp.get("chosenId") == null
                         || !resp.get("chosenId").isInt()) {
                     return super.playSaFromPlayEffect(tgtSA);
@@ -3002,13 +3041,12 @@ public final class MailboxController extends PlayerControllerAi
                         + " (pool now " + me.getManaPool().totalMana() + ")." : "  Saying YES costs nothing.")
                     + (tgts.isEmpty() ? "" : "  Targets already chosen: " + tgts + ".")
                     + "  1 = yes (do it" + (hasCost ? ", pay" : "") + "), 0 = no.";
-            MailboxProtocol.Request req = new MailboxProtocol.Request(
-                    seatIndex, turn, phaseName(game), "CONFIRM", prompt)
+            MailboxProtocol.Request req = req(turn, "CONFIRM", prompt)
                     .state(state)
                     .option(0, "No — decline the trigger", null, "NO")
                     .option(1, "Yes" + (hasCost ? " — pay " + yesCost.toSimpleString() + " and do it" : " — do it"),
                             hasCost ? yesCost.toSimpleString() : null, "YES");
-            JsonNode resp = bus.exchange(req);
+            JsonNode resp = exchange(req);
             if (resp == null || resp.get("chosenId") == null || !resp.get("chosenId").isInt()) {
                 return super.confirmTrigger(wrapper);
             }
@@ -3021,7 +3059,11 @@ public final class MailboxController extends PlayerControllerAi
     // ---- state projection (hidden-info-safe) -------------------------------
 
     private Map<String, Object> buildState(int turn) {
-        return buildState(getPlayer(), seatIndex, turn);
+        Map<String, Object> st = buildState(getPlayer(), seatIndex, turn);
+        if (controllingSeat >= 0) {
+            st.put("controllingSeat", controllingSeat); // item 11a
+        }
+        return st;
     }
 
     /**

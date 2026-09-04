@@ -166,6 +166,9 @@ knob seen from two places. The engine deletes both files once the response is re
     /* + "lastRefused":{name,cost,needed,payableNow,kind,reason} on the CAST_SPELL window right
        after the engine refused the seat's pick (unaffordable, or a failed modal cast); the prompt
        carries the same sentence and that card is omitted from that ONE window (plan item 4) */
+    /* + "controllingSeat":N when this seat's decisions are being made by seat N's brain
+       (Mindslaver class, CR 721) — the request goes to seat N's mailbox and its prompt opens
+       with "YOU ARE CONTROLLING SEAT …" (plan item 11a) */
     /* + "hasCost":bool,"isMine":bool on EVERY CONFIRM — structured facts for the runner's
        punt rule (yes only when free AND mine; plan item 10). Untyped confirms reach the
        seat when their SOURCE is the seat's own spell/ability, never by message text (11d) */
@@ -1163,6 +1166,29 @@ Hard-won from two live sessions; read before optimizing anything.
     not attached / ON / PAUSED) via `AiControlFile.advisorAttached()`; it
     read "ON — click to pause" in advisor-less games because
     `advisorEnabled()` is only the pause flag and defaults true.
+58. **Liveness, identity and budget as protocol facts (2026-09-03, plan
+    items 2, 3, 8, 10, 12).** Three things the runner used to GUESS are now
+    stated by the engine. (a) `gameId` on every request and feed file: a
+    fresh runner adopts the id it sees (rejoin), an id CHANGE resets memory
+    and sweeps the outbox, an already-answered request the engine was slow
+    to delete is skipped — the 3 s delete-race heuristic and the advisor's
+    file-number comparison were both wrong in reachable cases. (b)
+    `timeoutSec` on every request: the runner budgets from the engine's
+    actual wait, and `decide()` carries ONE deadline through init and the
+    decision call (the old code handed the same budget to both, so a lazy
+    re-init could block a seat for 2x the window). Timeout stays the explicit
+    `--timeout` flag — never derived from effort, never clamped; mismatches
+    are legitimate experiments. (c) `<seat-dir>/heartbeat`, touched every
+    5 s by a daemon thread in each runner (and the advisor): the engine stats
+    it once before blocking; older than 15 s (`arena.mailbox.heartbeat.stale.ms`)
+    means nobody is home and stock plays at once, one log line per
+    transition; absent (older runner) or unreadable = wait as always — the
+    gate can only shorten a wait. `observer-state.json` seats carry
+    `brainAlive` (true/false/null) and the ELO spool carries per-seat
+    `stockDecisions`. Also: a punt no longer feeds the REACT memo (only
+    `source == "model"` does), and the CONFIRM punt is structural — yes only
+    when `isMine && !hasCost` — replacing a word heuristic where "play"
+    matched "player".
 57. **Trigger-aim contract (2026-09-03, interactive plan item 1).** The
     full review found two defects in `prepareTriggerViaSeat` /
     `chooseTargetsFor`: (a) the id-0 "DECLINE this optional trigger" option
