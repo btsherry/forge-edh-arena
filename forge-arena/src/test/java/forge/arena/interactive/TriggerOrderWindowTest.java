@@ -46,11 +46,57 @@ public class TriggerOrderWindowTest {
         return k.seen.stream().filter(b -> b.contains(PURPOSE)).count();
     }
 
-    /** A creature of the seat's dies; the death triggers wait for ordering. */
+    /** Resolution order is the contract ("first listed resolves FIRST"): the
+     *  kit's loop step can resolve the top of the stack inside the very step
+     *  that pushed it, so the stack itself is not a reliable witness. */
+    static final class Resolved {
+        final java.util.List<String> hosts = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
+        @com.google.common.eventbus.Subscribe
+        public void on(forge.game.event.GameEventSpellResolved e) {
+            try {
+                hosts.add(e.spell().getHostCard().getName());
+            } catch (RuntimeException ignore) {
+                // a view without a host: not one of ours
+            }
+        }
+    }
+
+    private static java.util.List<String> ours(Resolved r, String... names) {
+        java.util.Set<String> want = new java.util.HashSet<>(java.util.Arrays.asList(names));
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String h : r.hosts) {
+            if (want.contains(h)) {
+                out.add(h);
+            }
+        }
+        return out;
+    }
+
+    /** Cards placed straight into a zone have no ACTIVE triggers until the
+     *  engine's next state check re-registers them (GameAction does that on
+     *  its own zone moves; the kit's put() bypasses it). */
+    private static void settle(MailboxTestKit k) {
+        k.game.getAction().checkStateEffects(true);
+    }
+
+    /** Step the phase loop until {@code done}, WITHOUT the kit's stack-empty
+     *  requirement — we need to stop while the ordered triggers sit on the stack. */
+    private static void stepUntil(MailboxTestKit k, java.util.function.BooleanSupplier done, int max) {
+        for (int i = 0; i < max && !done.getAsBoolean() && !k.game.isGameOver(); i++) {
+            k.game.getPhaseHandler().mainLoopStep();
+        }
+    }
+
+    /** A creature of the seat's dies; the death triggers are ordered, pushed
+     *  and resolved. */
     private static void killABear(MailboxTestKit k) {
+        settle(k);
         Card bear = MailboxTestKit.put("Grizzly Bears", k.seat, ZoneType.Battlefield);
+        settle(k);
         k.game.getAction().moveToGraveyard(bear, null);
-        k.run(() -> !k.game.getStack().isEmpty(), 40);
+        stepUntil(k, () -> !k.game.getStack().isEmpty(), 40);
+        k.run(() -> k.game.getStack().isEmpty(), 60);
     }
 
     @Test(timeOut = 180_000)
@@ -58,7 +104,9 @@ public class TriggerOrderWindowTest {
         try (MailboxTestKit k = new MailboxTestKit(false)) {
             final String[] resolveFirst = {"Midnight Reaper"};
             k.startBrain(body -> body.contains(PURPOSE) ? orderAnswer(body, resolveFirst[0]) : null);
-            for (int i = 0; i < 4; i++) {
+            Resolved resolved = new Resolved();
+            k.game.subscribeToEvents(resolved);
+            for (int i = 0; i < 8; i++) {
                 MailboxTestKit.put("Swamp", k.seat, ZoneType.Library);
             }
 
@@ -68,31 +116,32 @@ public class TriggerOrderWindowTest {
             MailboxTestKit.put("Midnight Reaper", k.seat, ZoneType.Battlefield);
             killABear(k);
             Assert.assertEquals(windows(k), 1, "one TRIGGER_ORDER window for two distinct triggers");
-            Assert.assertFalse(k.game.getStack().isEmpty(), "triggers are on the stack");
-            Assert.assertEquals(k.game.getStack().peekAbility().getHostCard().getName(), "Midnight Reaper",
-                    "the first to RESOLVE is on top of the stack");
+            Assert.assertEquals(ours(resolved, "Midnight Reaper", "Zulaport Cutthroat"),
+                    java.util.List.of("Midnight Reaper", "Zulaport Cutthroat"),
+                    "the seat's order IS the resolution order");
             String w = k.seen.stream().filter(b -> b.contains(PURPOSE)).findFirst().get();
             Assert.assertTrue(w.contains("\"min\":2") && w.contains("\"max\":2"), "min = max = groups: " + w);
-            // let them resolve
-            k.run(() -> k.game.getStack().isEmpty(), 60);
 
-            // pair B: Grim Haruspex + Cruel Celebrant, four distinct groups; Celebrant first
+            // pair B: Grim Haruspex + Cruel Celebrant join — four distinct groups; Celebrant first
+            resolved.hosts.clear();
             resolveFirst[0] = "Cruel Celebrant";
             MailboxTestKit.put("Grim Haruspex", k.seat, ZoneType.Battlefield);
             MailboxTestKit.put("Cruel Celebrant", k.seat, ZoneType.Battlefield);
             killABear(k);
             Assert.assertEquals(windows(k), 2);
-            Assert.assertEquals(k.game.getStack().peekAbility().getHostCard().getName(), "Cruel Celebrant");
-            k.run(() -> k.game.getStack().isEmpty(), 60);
+            java.util.List<String> order = ours(resolved, "Midnight Reaper", "Zulaport Cutthroat",
+                    "Grim Haruspex", "Cruel Celebrant");
+            Assert.assertEquals(order.size(), 4, "all four triggers resolved: " + order);
+            Assert.assertEquals(order.get(0), "Cruel Celebrant", "the first listed resolves first: " + order);
 
-            // identical triggers: two Zulaports only — no window, both on the stack
+            // identical triggers: two Zulaports only — no window, both still resolve
             clearBattlefield(k);
+            resolved.hosts.clear();
             MailboxTestKit.put("Zulaport Cutthroat", k.seat, ZoneType.Battlefield);
             MailboxTestKit.put("Zulaport Cutthroat", k.seat, ZoneType.Battlefield);
             killABear(k);
             Assert.assertEquals(windows(k), 2, "identical triggers never open a window");
-            Assert.assertEquals(k.game.getStack().size(), 2, "…and both still go on the stack");
-            k.run(() -> k.game.getStack().isEmpty(), 60);
+            Assert.assertEquals(ours(resolved, "Zulaport Cutthroat").size(), 2, "…and both still resolved");
         }
     }
 
@@ -107,9 +156,12 @@ public class TriggerOrderWindowTest {
             for (int i = 0; i < 4; i++) {
                 MailboxTestKit.put("Swamp", k.seat, ZoneType.Library);
             }
+            Resolved resolved = new Resolved();
+            k.game.subscribeToEvents(resolved);
             killABear(k);
             Assert.assertEquals(windows(k), 1, "the window was opened");
-            Assert.assertEquals(k.game.getStack().size(), 2, "stock ordered both triggers onto the stack");
+            Assert.assertEquals(ours(resolved, "Midnight Reaper", "Zulaport Cutthroat").size(), 2,
+                    "stock ordered and resolved both triggers");
         } finally {
             if (prev == null) {
                 System.clearProperty(MailboxProtocol.TIMEOUT_PROPERTY);

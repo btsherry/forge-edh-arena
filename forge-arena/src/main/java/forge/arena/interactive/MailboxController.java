@@ -610,6 +610,17 @@ public final class MailboxController extends PlayerControllerAi
             } catch (RuntimeException ignore) {
                 // label decoration must never break option building
             }
+            // BL-01 (2026-09-04): a life-for-mana static (PayLifeInsteadOf:<C>,
+            // K'rrik) makes a cost payable with life when sources are short —
+            // the payer now does that — so state the true bill before the pick.
+            try {
+                String lifeHint = lifeForPipsHint(sa, host, windowState);
+                if (lifeHint != null) {
+                    lab += lifeHint;
+                }
+            } catch (RuntimeException ignore) {
+                // label decoration must never break option building
+            }
             // Ground the float decision: any visible mana ability that would
             // add 2+ RIGHT NOW says so (Cradle, Selvala, Tomb...), so the
             // brain prices the float without doing SVar math itself.
@@ -3233,6 +3244,47 @@ public final class MailboxController extends PlayerControllerAi
             stockSurface("orderSimultaneousSa(" + activePlayerSAs.size() + ")");
         }
         return super.orderSimultaneousSa(activePlayerSAs);
+    }
+
+    /** BL-01: when the seat has {@code PayLifeInsteadOf:<C>} and this spell's
+     *  cost has {@code <C>} pips that mana available now cannot cover, the label
+     *  says how many pips life can pay and at what price. Null otherwise. */
+    private String lifeForPipsHint(SpellAbility sa, Card host, Map<String, Object> windowState) {
+        if (host == null || !sa.isSpell() || sa.getPayCosts() == null
+                || sa.getPayCosts().getTotalMana() == null) {
+            return null;
+        }
+        forge.card.mana.ManaCost mc = sa.getPayCosts().getTotalMana();
+        Object avail = windowState.get("manaAvailableNow");
+        int available = avail instanceof Number ? ((Number) avail).intValue() : -1;
+        if (available < 0 || mc.getCMC() <= available) {
+            return null;
+        }
+        Player me = getPlayer();
+        for (byte c : forge.card.MagicColor.WUBRG) {
+            String letter = forge.card.MagicColor.toShortString(c);
+            if (!me.hasKeyword("PayLifeInsteadOf:" + letter)) {
+                continue;
+            }
+            int pips = 0;
+            for (forge.card.mana.ManaCostShard sh : mc) {
+                if (sh.isMonoColor() && !sh.isPhyrexian() && letter.equals(shardLetter(sh))) {
+                    pips++;
+                }
+            }
+            if (pips == 0) {
+                continue;
+            }
+            return " [{" + letter + "} pips may be paid with 2 life each (K'rrik-class static): "
+                    + pips + " pip(s) = " + (2 * pips) + " life; mana available now "
+                    + available + " for a cost of " + mc.getCMC() + "]";
+        }
+        return null;
+    }
+
+    private static String shardLetter(forge.card.mana.ManaCostShard sh) {
+        return sh.isWhite() ? "W" : sh.isBlue() ? "U" : sh.isBlack() ? "B"
+                : sh.isRed() ? "R" : sh.isGreen() ? "G" : null;
     }
 
     /** Grouping key for a trigger: host name plus the trigger's own text. */
