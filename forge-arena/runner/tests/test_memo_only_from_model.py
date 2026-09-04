@@ -80,5 +80,27 @@ class MemoOnlyFromModel(unittest.TestCase):
                           "a model-free decision must not carry a stale deviation")
 
 
+class EngineTimeoutAdoption(unittest.TestCase):
+    """Plan item 12: the engine's timeoutSec on a request is the budget source."""
+
+    def test_runner_adopts_the_engine_timeout(self):
+        r = runner()
+        r.brain.decide = lambda prompt, **kw: ({"chosenId": 0}, dict(META))
+        self.assertEqual(r.timeout_s, 90.0)
+        req = react(1)
+        req["timeoutSec"] = 300
+        r.handle(req)
+        self.assertEqual(r.timeout_s, 300.0)
+        self.assertEqual(r.mb.timeout_s, 300.0)
+
+    def test_unstamped_request_keeps_the_launch_timeout(self):
+        r = runner()
+        r.brain.decide = lambda prompt, **kw: ({"chosenId": 0}, dict(META))
+        req = react(1)
+        req.pop("timeoutSec", None)
+        r.handle(req)
+        self.assertEqual(r.timeout_s, 90.0)
+
+
 if __name__ == "__main__":
     unittest.main()

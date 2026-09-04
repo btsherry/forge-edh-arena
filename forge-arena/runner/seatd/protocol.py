@@ -177,6 +177,42 @@ class SeatMailbox:
             return False
         return True  # engine is slow but still coming; resp is valid
 
+    # ---- liveness (plan item 12) ---------------------------------------------
+
+    HEARTBEAT_S = 5.0
+
+    def heartbeat(self, now: float | None = None) -> bool:
+        """Touch <seat-dir>/heartbeat at most every HEARTBEAT_S seconds. The
+        engine stats it once per request before blocking: a stale beat means
+        nobody is home and stock plays at once instead of waiting the full
+        timeout. Returns True when a touch happened."""
+        now = time.time() if now is None else now
+        last = getattr(self, "_last_beat", 0.0)
+        if now - last < self.HEARTBEAT_S:
+            return False
+        try:
+            hb = self.inbox.parent / "heartbeat"
+            hb.parent.mkdir(parents=True, exist_ok=True)
+            hb.touch()
+            self._last_beat = now
+            return True
+        except OSError:
+            return False
+
+    def start_heartbeat_thread(self) -> None:
+        """Beat from a daemon thread so the file stays fresh while the main
+        loop blocks in a model/init call (the pre-warm alone can take a
+        minute). Liveness then means exactly 'this process is alive'."""
+        import threading
+
+        def loop():
+            while True:
+                self.heartbeat()
+                time.sleep(self.HEARTBEAT_S)
+
+        t = threading.Thread(target=loop, name=f"seat-{self.seat}-heartbeat", daemon=True)
+        t.start()
+
     # ---- public observer ----------------------------------------------------
 
     def read_observer(self) -> dict | None:

@@ -605,6 +605,8 @@ class SeatRunner:
         self._say(f"[seat {self.seat}] runner up — deck={self.deck} "
                   f"model={self.brain.model} timeout={self.timeout_s}s"
                   + (f" (swept {swept} stale)" if swept else ""))
+        self.mb.start_heartbeat_thread()  # item 12: "somebody is home", every 5s,
+                                          # beating through the pre-warm below too
         self.brain.ensure_session()  # pre-warm: dossier loads before turn 0
         while True:
             self._apply_control()
@@ -636,6 +638,15 @@ class SeatRunner:
             self._hist = []
 
         seq, dtype = req.get("seq"), req.get("decisionType")
+        # Item 12: the engine publishes its wait on every request. It is the
+        # one timeout knob; budget from what the engine will actually do
+        # rather than from a copy passed through the environment.
+        eng_t = req.get("timeoutSec")
+        if isinstance(eng_t, (int, float)) and eng_t > 0 and float(eng_t) != self.timeout_s:
+            self._say(f"[seat {self.seat}] engine timeout is {eng_t:.0f}s "
+                      f"(runner had {self.timeout_s:.0f}s) — budgeting from the engine's value")
+            self.timeout_s = float(eng_t)
+            self.mb.timeout_s = float(eng_t)
         if not req.get("gameId") and not getattr(self, "_unstamped_warned", False):
             self._unstamped_warned = True
             self._say(f"[seat {self.seat}] engine requests carry no gameId (pre-item-8 "

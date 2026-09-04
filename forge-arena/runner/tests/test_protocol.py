@@ -213,3 +213,22 @@ class GameIdentityTests(unittest.TestCase):
         req = self.mb.pending_request()
         self.assertEqual(req["seq"], 1)
         self.assertFalse(self.mb.game_reset, "identity wins over numbering")
+
+
+class HeartbeatTests(unittest.TestCase):
+    """Plan item 12: the runner touches <seat-dir>/heartbeat at most every 5s."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.mb = SeatMailbox(2, Path(self.tmp.name), timeout_s=90.0)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_heartbeat_is_written_and_rate_limited(self):
+        hb = self.mb.inbox.parent / "heartbeat"
+        self.assertTrue(self.mb.heartbeat(now=1000.0))
+        self.assertTrue(hb.exists())
+        self.assertFalse(self.mb.heartbeat(now=1003.0), "under 5s: no touch")
+        self.assertTrue(self.mb.heartbeat(now=1005.0), "5s later: touch")
+        self.assertEqual(hb.parent, self.mb.inbox.parent, "lives beside inbox/outbox, own seat only")
