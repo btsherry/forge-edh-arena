@@ -34,6 +34,13 @@ final class AdvisorFeed {
     private final AtomicLong seq = new AtomicLong();
     private final ThreadPoolExecutor writer;
     private volatile boolean overflowWarned;
+    /** Item 8: stamped on every feed file so the advisor resets on an id
+     *  change, never on the (non-monotonic) file numbers. */
+    private volatile String gameId;
+
+    void setGameId(String id) {
+        this.gameId = id;
+    }
 
     AdvisorFeed(Path base, int seatId) {
         this.inbox = base.resolve("seat-" + seatId + "-advisor").resolve("inbox");
@@ -54,6 +61,7 @@ final class AdvisorFeed {
     long publish(MailboxProtocol.Request request) {
         long n = seq.incrementAndGet();
         request.seq = n;
+        request.gameId = gameId;
         enqueue("req-" + n + ".json", request);
         return n;
     }
@@ -61,6 +69,7 @@ final class AdvisorFeed {
     /** Publish what the human actually chose for request {@code n}. */
     void publishChosen(long n, String decisionType, Object chosen) {
         Map<String, Object> body = new LinkedHashMap<>();
+        body.put("gameId", gameId);
         body.put("seq", n);
         body.put("decisionType", decisionType);
         body.put("chosen", chosen);
@@ -74,6 +83,7 @@ final class AdvisorFeed {
     void publishDigest(int completedTurn, java.util.List<String> logLines) {
         long n = seq.incrementAndGet();
         Map<String, Object> body = new LinkedHashMap<>();
+        body.put("gameId", gameId);
         body.put("seq", n);
         body.put("turn", completedTurn);
         body.put("digest", logLines);
@@ -84,6 +94,7 @@ final class AdvisorFeed {
     void publishNote(int turn, String phase, String text) {
         long n = seq.incrementAndGet();
         Map<String, Object> body = new LinkedHashMap<>();
+        body.put("gameId", gameId);
         body.put("seq", n);
         body.put("turn", turn);
         body.put("phase", phase);

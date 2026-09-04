@@ -61,6 +61,14 @@ public final class MailboxProtocol {
     // paying live-game pacing; live launches never set it and keep 75.
     private final long pollMillis = Long.getLong("arena.mailbox.poll.ms", 75L);
     private final AtomicLong seq = new AtomicLong();
+    /** Interactive plan item 8: the game this bus serves, stamped on every
+     *  request so the brain resets on an id CHANGE, never on a seq guess. */
+    private volatile String gameId;
+
+    /** Set once by the controller when the in-game Player (and thus the Game) exists. */
+    public void setGameId(String id) {
+        this.gameId = id;
+    }
 
     private MailboxProtocol(Path seatDir, long timeoutMillis) {
         this.inbox = seatDir.resolve("inbox");
@@ -113,6 +121,10 @@ public final class MailboxProtocol {
     public JsonNode exchange(Request request) {
         long n = seq.incrementAndGet();
         request.seq = n;
+        request.gameId = gameId;
+        // item 12: the engine's wait is the ONE timeout knob — publish it so
+        // the runner derives its budget from what the engine will actually do
+        request.timeoutSec = timeoutMillis / 1000L;
         Path reqFile = inbox.resolve("req-" + n + ".json");
         Path respFile = outbox.resolve("resp-" + n + ".json");
         try {
@@ -202,6 +214,11 @@ public final class MailboxProtocol {
      */
     public static final class Request {
         public long seq;
+        /** Identity of the game this request belongs to (start millis + pid);
+         *  null only from an engine that predates item 8. */
+        public String gameId;
+        /** Seconds the engine will wait for the answer before stock plays. */
+        public long timeoutSec;
         public int seat;
         public int turn;
         public String phase;

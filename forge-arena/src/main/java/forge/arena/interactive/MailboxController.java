@@ -93,6 +93,21 @@ public final class MailboxController extends PlayerControllerAi
         super(game, p, lobby);
         this.bus = bus;
         this.seatIndex = p.getId();
+        bus.setGameId(gameIdFor(game));
+    }
+
+    /** One id per Game instance (item 8): start millis + JVM pid, assigned on
+     *  first ask and shared by every seat's bus and the advisor feed. Weak
+     *  keys let finished games collect. */
+    private static final Map<Game, String> GAME_IDS =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    static String gameIdFor(Game game) {
+        if (game == null) {
+            return null;
+        }
+        return GAME_IDS.computeIfAbsent(game, g ->
+                System.currentTimeMillis() + "-" + ProcessHandle.current().pid());
     }
 
     /**
@@ -2537,10 +2552,11 @@ public final class MailboxController extends PlayerControllerAi
             }
             boolean changeTargets = sa != null
                     && sa.getApi() == ApiType.ChangeTargets; // F10: API, not text
-            if (mode == null && !changeTargets && (message == null
-                    || !message.toLowerCase().contains("play"))) {
-                // untyped confirms other than "do you want to play X" or a
-                // ChangeTargets redirect (wave-2/3) stay stock
+            // Item 11d: an untyped confirm reaches the seat when its SOURCE is
+            // the seat's own spell/ability (an engine fact) — not when the
+            // message happens to contain "play". Everything else stays stock.
+            boolean mine = sa != null && sa.getActivatingPlayer() == getPlayer();
+            if (mode == null && !changeTargets && !mine) {
                 return super.confirmAction(sa, mode, message, options, cardToShow, params);
             }
             Game game = getGame();
@@ -2550,6 +2566,11 @@ public final class MailboxController extends PlayerControllerAi
             state.put("min", 1);
             state.put("max", 1);
             state.put("confirmMode", mode != null ? mode.name() : "untyped");
+            // Item 10: structure for the runner's punt rule ("yes only when
+            // free AND mine"). The effect's cost was paid at cast/activation;
+            // saying yes here spends nothing further.
+            state.put("hasCost", false);
+            state.put("isMine", mine);
             String prompt = "CONFIRM (" + (mode != null ? mode.name() : "question") + "): "
                     + (message != null ? message : "?")
                     + (host != null ? "  [source: " + host.getName() + "]" : "");
@@ -2749,6 +2770,8 @@ public final class MailboxController extends PlayerControllerAi
                 state.put("confirmMode", "PLAY_FROM_EFFECT");
                 state.put("spell", host != null ? host.getName() : String.valueOf(tgtSA));
                 state.put("free", free);
+                state.put("hasCost", !free); // item 10: structured punt facts
+                state.put("isMine", true);
                 String desc;
                 try {
                     desc = tgtSA.getStackDescription();
@@ -2876,6 +2899,8 @@ public final class MailboxController extends PlayerControllerAi
             }
             state.put("triggerText", trigText);
             state.put("yesCost", hasCost ? yesCost.toSimpleString() : "none");
+            state.put("hasCost", hasCost); // item 10: structured punt facts
+            state.put("isMine", true);     // it is the seat's own trigger
             List<String> tgts = new ArrayList<>();
             for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
                 if (s.usesTargeting()) {

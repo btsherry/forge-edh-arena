@@ -10,12 +10,12 @@ Standing rules: seam fixes must be general (mechanics/script metadata, never car
 - Optional trigger explicitly declined keeps today's rules-correct auto-aim + decline-at-resolution (CR 603.3d).
 - Test: one mandatory and one optional targeted trigger; scripted decline and scripted silence.
 
-## 2. Decision budget
+## 2. Decision budget — DONE 2026-09-03 (`test_budget_deadline.py`)
 - Timeout is its own explicit `--timeout` flag, independent of effort. No derivation from effort, no clamp on the in-game effort dial. Mismatches are legitimate experiments.
 - `decide()` receives the request deadline; `ensure_session` gets time remaining, `_call` gets what is left after init; punt on time under the five-second floor. Delete the 240 s literal; the clock never restarts.
 - Log line when init consumed the window (seconds spent, seconds left).
 
-## 3. Punt memo
+## 3. Punt memo — DONE 2026-09-03 (`test_memo_only_from_model.py`)
 - Feed the REACT memo only from `source == "model"`.
 - Reset `_deviation` at the top of `handle()`.
 - Test: one failed REACT, then an identical window must be a model call.

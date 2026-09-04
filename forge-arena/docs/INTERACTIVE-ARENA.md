@@ -127,7 +127,11 @@ knob seen from two places. The engine deletes both files once the response is re
 **Request** (`req-<n>.json`):
 ```json
 {
-  "seq": 12, "seat": 3, "turn": 22, "phase": "MAIN1",
+  "seq": 12, "gameId": "1756950000123-48211", "timeoutSec": 90,
+  "seat": 3, "turn": 22, "phase": "MAIN1",
+  /* gameId = one value per Game (start millis + pid) — the ONLY new-game signal a
+     reader should trust (plan item 8); timeoutSec = the engine's wait, so the runner
+     budgets from what the engine will actually do (item 12) */
   "decisionType": "CAST_SPELL | REACT | MULLIGAN | DECLARE_ATTACKERS | DECLARE_BLOCKERS | CHOOSE_ENTITY | CHOOSE_ENTITIES | CHOOSE_MODE | CHOOSE_CARD | CHOOSE_CARDS | CHOOSE_NUMBER | PAY_UNLESS | CONFIRM",
   "prompt": "…",
   "state": {
@@ -152,6 +156,9 @@ knob seen from two places. The engine deletes both files once the response is re
     /* + effective keywords per card (indestructible/hexproof/ward/protection/evergreens, incl. granted) */
     /* + "confirmMode","triggerText","yesCost","chosenTargets" on CONFIRM(TRIGGER) */
     /* + "confirmMode":"PLAY_FROM_EFFECT" with "spell","free" on may-cast offers (note 49) */
+    /* + "hasCost":bool,"isMine":bool on EVERY CONFIRM — structured facts for the runner's
+       punt rule (yes only when free AND mine; plan item 10). Untyped confirms reach the
+       seat when their SOURCE is the seat's own spell/ability, never by message text (11d) */
   },
   "options": [ {"id":0,"label":"Pass (do nothing)","cost":null,"type":"PASS"}, … ]
 }

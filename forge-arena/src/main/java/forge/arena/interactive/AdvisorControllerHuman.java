@@ -56,6 +56,9 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
         this.feed = feed;
         this.castsAutopass = castsAutopass;
         this.seatIndex = p.getId();
+        if (feed != null) {
+            feed.setGameId(MailboxController.gameIdFor(game)); // item 8
+        }
     }
 
     /** Mind-slave variant — keeps the shadow alive under Mindslaver effects. */
@@ -65,6 +68,9 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
         this.feed = feed;
         this.castsAutopass = castsAutopass;
         this.seatIndex = p.getId();
+        if (feed != null) {
+            feed.setGameId(MailboxController.gameIdFor(p.getGame())); // item 8
+        }
     }
 
     // ---- priority ----------------------------------------------------------
