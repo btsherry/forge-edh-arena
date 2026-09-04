@@ -22,7 +22,7 @@ PIDS="$LOGS/pids"
 # matching the checkout path would silently skip every kill when the launching
 # and stopping invocations spelled the path differently (/private aliasing,
 # case) — and then wipe the mailbox under a live game.
-ours() { ps -p "$1" -o command= 2>/dev/null | grep -qE "forge-arena|GuiPilotMatch"; }
+ours() { ps -p "$1" -o command= 2>/dev/null | grep -qE "seat_runner\.py|advisor_runner\.py|GuiPilotMatch|run_table\.sh|run_advisor\.sh"; }
 skipped=0
 if [ -d "$PIDS" ] && ls "$PIDS"/*.pid >/dev/null 2>&1; then
   for f in "$PIDS"/*.pid; do

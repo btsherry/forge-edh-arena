@@ -153,10 +153,7 @@ public final class MailboxController extends PlayerControllerAi
         }
         JsonNode resp = bus.exchange(req);
         if (resp == null) {
-            int[] n = STOCK_FALLBACKS.get(getPlayer());
-            if (n != null) {
-                n[0]++;
-            }
+            countStockFallback();
         }
         return resp;
     }
@@ -3235,6 +3232,11 @@ public final class MailboxController extends PlayerControllerAi
                 req.option(i, names.get(i), null, "COLOR");
             }
             JsonNode resp = exchange(req);
+            if (resp != null && resp.get("chosen") != null && resp.get("chosen").isArray()
+                    && resp.get("chosen").size() == 0) {
+                countStockFallback(); // the documented hand-back: stock picks
+                return null;
+            }
             if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()
                     || resp.get("chosen").size() < lo || resp.get("chosen").size() > hi) {
                 return null;
@@ -3323,15 +3325,38 @@ public final class MailboxController extends PlayerControllerAi
                 : sh.isRed() ? "R" : sh.isGreen() ? "G" : null;
     }
 
-    /** Grouping key for a trigger: host name plus the trigger's own text. */
+    /** Grouping key for a trigger: host name plus the TRIGGER's own text
+     *  (its TriggerDescription with CARDNAME substituted). Never the stack
+     *  description: that carries per-instance text such as
+     *  "[Zone Changer: Grizzly Bears]", which made N copies of one death
+     *  trigger N distinct groups (review 2026-09-04) — a 22-trigger death
+     *  became a 22-option permutation and the runner's memo never matched. */
     private static String triggerKey(SpellAbility sa) {
         Card host = sa.getHostCard();
-        String desc = sa.getDescription();
+        String desc = null;
+        forge.game.trigger.Trigger t = sa.getTrigger();
+        if (t != null) {
+            desc = t.toString(true);
+        }
+        if (desc == null || desc.isEmpty()) {
+            desc = sa.getDescription();
+        }
         if (desc == null || desc.isEmpty()) {
             desc = sa.getStackDescription();
         }
         return (host != null ? host.getName() : "?") + " — "
                 + (desc != null && !desc.isEmpty() ? desc : String.valueOf(sa));
+    }
+
+    /** Item 12 counter: a decision that fell to stock. Called for a null bus
+     *  answer and for the documented hand-back ({@code "chosen": []}) on the
+     *  trigger-order and colour windows (review 2026-09-04: those punts were
+     *  invisible to {@code stockDecisions}). */
+    private void countStockFallback() {
+        int[] n = STOCK_FALLBACKS.get(getPlayer());
+        if (n != null) {
+            n[0]++;
+        }
     }
 
     /**
@@ -3362,6 +3387,10 @@ public final class MailboxController extends PlayerControllerAi
         }
         JsonNode resp = exchange(req);
         if (resp == null || resp.get("chosen") == null || !resp.get("chosen").isArray()) {
+            return null;
+        }
+        if (resp.get("chosen").size() == 0) {
+            countStockFallback(); // the documented hand-back: stock orders
             return null;
         }
         List<Integer> order = new ArrayList<>();

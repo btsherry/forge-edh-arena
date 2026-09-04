@@ -157,8 +157,19 @@ class SingleLegalDefender(unittest.TestCase):
 
 class TriggerOrderMemo(unittest.TestCase):
     """BL-02 follow-up (review 2026-09-04): the same set of trigger groups is
-    ordered once per game; identical later windows replay the model's order
-    with no call (Purphoros + Impact Tremors would otherwise ask every ETB)."""
+    ordered once per TURN; identical later windows that turn replay the
+    model's order with no call (Purphoros + Impact Tremors would otherwise ask
+    on every creature); the next turn asks again."""
+
+    def test_next_turn_asks_again(self):
+        r = mk()
+        r.brain.script = [{"chosen": [1, 0]}, {"chosen": [0, 1]}]
+        w = self._win(1, ["A — x", "B — y"])
+        r.handle(w)
+        w2 = self._win(2, ["A — x", "B — y"]); w2["turn"] = 5
+        r.handle(w2)
+        self.assertEqual(r.brain.calls, 2, "a new turn is a new question")
+        self.assertEqual(r.mb.responses[-1][1], {"chosen": [0, 1]})
 
     def _win(self, seq, labels):
         return {"seq": seq, "turn": 4, "phase": "MAIN1", "decisionType": "CHOOSE_MODE",

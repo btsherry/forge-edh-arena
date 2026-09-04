@@ -60,8 +60,10 @@ the 2026-09-04 blind second review, fixed item by item behind the FULL gate
   resolution order (first listed resolves first); identical triggers never
   open a window, and a missing or malformed answer falls to stock ordering.
   The runner remembers the answer for the same set of trigger groups for the
-  rest of the game, so a Purphoros table is asked once per group set, not on
-  every creature. On this window and the colour window a punt hands the pick
+  rest of the turn, so a Purphoros table is asked once per group set per
+  turn, not on every creature. Trigger groups are keyed by the trigger's own
+  text, never by which creature set it off, so twenty deaths at once are one
+  group. On this window and the colour window a punt hands the pick
   back to the engine's stock logic (`{"chosen": []}`) rather than inventing
   an order.
 - **The seat picks its colours.** "Choose a color" effects with two or more

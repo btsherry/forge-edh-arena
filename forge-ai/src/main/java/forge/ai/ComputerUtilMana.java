@@ -1114,12 +1114,17 @@ public class ComputerUtilMana {
      *  (K'rrik's static grants {@code PayLifeInsteadOf:B}) cover this shard? Only
      *  a plain mono-coloured shard qualifies — never generic, hybrid or Phyrexian. */
     private static boolean lifeKeywordCovers(final Player ai, final ManaCostShard shard) {
-        if (shard == null || !shard.isMonoColor() || shard.isPhyrexian()) {
+        if (shard == null || shard.isPhyrexian() || shard.isGeneric()) {
             return false;
         }
-        final String c = shard.isWhite() ? "W" : shard.isBlue() ? "U" : shard.isBlack() ? "B"
-                : shard.isRed() ? "R" : shard.isGreen() ? "G" : null;
-        return c != null && ai.hasKeyword("PayLifeInsteadOf:" + c);
+        // Same shard semantics as the stock check it generalises
+        // (toPay.isBlack(): the shard carries that colour bit — hybrids included),
+        // so a K'rrik player pays {W/B} with life exactly as before.
+        return (shard.isWhite() && ai.hasKeyword("PayLifeInsteadOf:W"))
+                || (shard.isBlue() && ai.hasKeyword("PayLifeInsteadOf:U"))
+                || (shard.isBlack() && ai.hasKeyword("PayLifeInsteadOf:B"))
+                || (shard.isRed() && ai.hasKeyword("PayLifeInsteadOf:R"))
+                || (shard.isGreen() && ai.hasKeyword("PayLifeInsteadOf:G"));
     }
 
     /** ARENA-PATCH (BL-01): can the remaining sources still cover every remaining
@@ -1135,14 +1140,24 @@ public class ComputerUtilMana {
         final Set<Card> seen = new HashSet<>();
         int mana = 0;
         for (SpellAbility ma : sources.values()) {
-            if (ma.getHostCard() == null || !seen.add(ma.getHostCard())) {
+            final Card host = ma.getHostCard();
+            if (host == null || !seen.add(host)) {
+                continue;
+            }
+            // Live payment keeps a used source in the multimap until it can no
+            // longer be played; a tapped source with a tap cost is spent.
+            if (host.isTapped() && ma.getPayCosts() != null && ma.getPayCosts().hasTapCost()) {
                 continue;
             }
             int yield = 1;
             try {
-                int produced = Math.max(1, ma.getParamOrDefault("Produced", "").trim().split(" ").length);
-                int amount = AbilityUtils.calculateAmount(ma.getHostCard(), ma.getParamOrDefault("Amount", "1"), ma);
-                yield = Math.max(1, produced * amount);
+                final String produced = ma.getParamOrDefault("Produced", "").trim();
+                // "Combo B G" / "Combo ColorIdentity" / "Any" are ONE mana of a
+                // choice of colours, not one per listed colour (a Signet is 1).
+                int perActivation = (produced.startsWith("Combo") || produced.equals("Any")
+                        || produced.equals("Special")) ? 1 : Math.max(1, produced.split(" ").length);
+                int amount = AbilityUtils.calculateAmount(host, ma.getParamOrDefault("Amount", "1"), ma);
+                yield = Math.max(1, perActivation * amount);
             } catch (RuntimeException e) {
                 yield = 1;
             }

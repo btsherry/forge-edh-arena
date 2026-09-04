@@ -290,6 +290,11 @@ def process_spool(spool: dict, tables: dict, game_log: Path, log=print,
     t0 = spool["startMillis"] / 1000.0 - WINDOW_SLACK_S
     t1 = spool["endMillis"] / 1000.0 + WINDOW_SLACK_S
     recs = slice_game_log(game_log, t0, t1)
+    gid = spool.get("gameId")
+    if isinstance(gid, str) and gid:
+        # a stamped spool takes only its own game's records; the time window
+        # alone could pick up a later session's records (review 2026-09-04)
+        recs = [r for r in recs if r.get("gameId") in (None, gid)]
     if not recs:
         # BL-21: the session's logs move to archive/<stamp>-stop/ at teardown;
         # a spool the sweep could not rate then (lock busy, a crash) must still

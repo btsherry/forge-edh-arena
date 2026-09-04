@@ -121,6 +121,8 @@ public class TriggerOrderWindowTest {
                     "the seat's order IS the resolution order");
             String w = k.seen.stream().filter(b -> b.contains(PURPOSE)).findFirst().get();
             Assert.assertTrue(w.contains("\"min\":2") && w.contains("\"max\":2"), "min = max = groups: " + w);
+            Assert.assertFalse(w.contains("Zone Changer"),
+                    "groups are keyed by the trigger's own text, never the dying creature: " + w);
 
             // pair B: Grim Haruspex + Cruel Celebrant join — four distinct groups; Celebrant first
             resolved.hosts.clear();
@@ -142,6 +144,23 @@ public class TriggerOrderWindowTest {
             killABear(k);
             Assert.assertEquals(windows(k), 2, "identical triggers never open a window");
             Assert.assertEquals(ours(resolved, "Zulaport Cutthroat").size(), 2, "…and both still resolved");
+
+            // the sacrifice deck's normal batch: several creatures die AT ONCE, so
+            // each Zulaport fires once per death with a different "zone changer" —
+            // still ONE group (review 2026-09-04), still no window
+            resolved.hosts.clear();
+            settle(k);
+            Card b1 = MailboxTestKit.put("Grizzly Bears", k.seat, ZoneType.Battlefield);
+            Card b2 = MailboxTestKit.put("Grizzly Bears", k.seat, ZoneType.Battlefield);
+            Card b3 = MailboxTestKit.put("Grizzly Bears", k.seat, ZoneType.Battlefield);
+            settle(k);
+            k.game.getAction().moveToGraveyard(b1, null);
+            k.game.getAction().moveToGraveyard(b2, null);
+            k.game.getAction().moveToGraveyard(b3, null);
+            stepUntil(k, () -> !k.game.getStack().isEmpty(), 40);
+            k.run(() -> k.game.getStack().isEmpty(), 80);
+            Assert.assertEquals(windows(k), 2, "six copies of one trigger from three deaths never open a window");
+            Assert.assertEquals(ours(resolved, "Zulaport Cutthroat").size(), 6, "…and all six resolved");
         }
     }
 

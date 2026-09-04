@@ -18,6 +18,8 @@ Conventions still in force: seam fixes are general (mechanics, never card names)
 - **W-2** A resumed Claude session hung three times in a row (game 19, seat 1, 72 s each) before the wedge rule fired. Three punts is ~3.6 minutes of stock play at 90 s. If it recurs, lower `WEDGE_FAILS` to 2 or shorten the second attempt.
 - **W-3** Ratings void any game with a wedge; with wedges now cheap (item 2), consider voiding only when punts exceed the threshold.
 - **W-4** `manaAvailableNow` counts one activation per source; the brain still misjudged Gemstone Caverns once (t42) — confirm the `restricted`/condition flags read right for condition-forked sources.
+- **W-6** Two colour paths can open a COLOR window mid-payment by design of the Mana-api bypass (review 2026-09-04): `ManaEffect.handleSpecialMana` for EnchantedManaCost / EachColoredManaSymbol producers (Elemental Resonance, Charmed Pendant — neither in a shipped deck) and `specifyManaCombo` once per mana for a multi-mana combo source when the brain floats it deliberately. Watch the STOCK-SURFACE/COLOR counts; if a shipped deck hits it, narrow the bypass to Amount 1.
+- **W-7** `chooseColors` with `min = 0` ("UpTo" colour effects, no shipped script uses one) cannot answer "no colour" except through the hand-back to stock.
 - **W-5** Heartbeat liveness means "process alive", not "loop can answer": through a 60–90 s pre-warm or a crash-restart loop the engine waits the full timeout per decision. This is the simplified item-12 design Ben affirmed; measure before changing (round two, Fable C B10).
 
 ## Headless harness (Project 1) — deferred by decision 2026-09-03, recorded for reference

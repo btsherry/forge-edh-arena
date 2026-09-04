@@ -127,6 +127,20 @@ public class LifeForManaPayerTest {
         Assert.assertTrue(me.getLife() >= 36 && me.getLife() <= 38,
                 "five mana from sources leaves at most one or two pips to life, got life " + me.getLife());
 
+        // a Combo producer (Choked Estuary: "Combo U B") is ONE mana, not two
+        // (review 2026-09-04): 4 Swamps + the Estuary = 5 real for a cost of 6,
+        // so exactly one pip goes to life; the old count (6) said "not short",
+        // spent the Swamps on {B}{B}{B} and refused the generic.
+        me.setLife(40, null);
+        board(true, 4);
+        put("Choked Estuary", me, ZoneType.Battlefield);
+        game.getAction().checkStateEffects(true);
+        SpellAbility mikaeusT = inHand("Mikaeus, the Unhallowed");
+        Assert.assertTrue(ComputerUtilCost.canPayCost(mikaeusT, me, false),
+                "five real mana + life must be payable");
+        Assert.assertTrue(ComputerUtilMana.payManaCost(mikaeusT.getPayCosts(), me, mikaeusT, false));
+        Assert.assertEquals(me.getLife(), 38, "one pip to life, the dual land counted once");
+
         // the gate is the keyword: no K'rrik, same board -> stock still refuses
         me.setLife(40, null);
         board(false, 3);

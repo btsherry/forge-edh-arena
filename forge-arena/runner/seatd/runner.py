@@ -51,8 +51,10 @@ class SeatRunner:
         self.plan: dict | None = None
         self.react_seen: set[tuple] = set()
         # BL-02 follow-up: a trigger-order answer for the SAME set of trigger
-        # groups is replayed for the rest of the game (Purphoros + Impact
-        # Tremors would otherwise ask on every creature). Keyed by the sorted
+        # groups is replayed for the rest of the TURN (Purphoros + Impact
+        # Tremors would otherwise ask on every creature). Cleared with the other
+        # per-turn memos at the turn boundary and on a new game: a stale order
+        # across turns is wrong more often than it is cheap. Keyed by the sorted
         # option labels; the answer is stored as labels in resolution order and
         # rebound to the new window's indices. Fed only by real model answers.
         self.order_memo: dict[tuple, list[str]] = {}
