@@ -158,4 +158,70 @@ public class UnlessCostReachesMailboxTest {
                 + "(defect: stock refuses to pay for non-creatures -> graveyard)");
         Assert.assertFalse(vaultInGy, "Mana Vault must not be binned");
     }
+
+    private static boolean has(Player p, ZoneType z, String name) {
+        for (Card c : p.getCardsIn(z)) {
+            if (name.equals(c.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * BL-11 second card (group {@code extended}). Abandon Attachments carries
+     * the exact script triple that routes Transmute Artifact's X to the seat:
+     * {@code UnlessCost$ ... | UnlessPayer$ You | UnlessSwitched$ True} on the
+     * seat's OWN spell ({@code A:SP$ Draw | NumCards$ 2 | UnlessCost$
+     * Discard<1/Card> | UnlessPayer$ You | UnlessSwitched$ True}). The unless
+     * cost is a discard rather than X mana, so the seat must both decide to
+     * pay (PAY_UNLESS) and name the discarded card (DISCARD PAYMENT), and the
+     * "if you do" draw must then actually happen.
+     */
+    @Test(groups = "extended", timeOut = 240_000)
+    public void abandonAttachmentsDiscardUnlessReachesTheSeat() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            for (int i = 0; i < 2; i++) MailboxTestKit.put("Island", k.seat, ZoneType.Battlefield);
+            MailboxTestKit.put("Abandon Attachments", k.seat, ZoneType.Hand);
+            MailboxTestKit.put("Swamp", k.seat, ZoneType.Hand);                 // the discard
+            MailboxTestKit.put("Craterhoof Behemoth", k.seat, ZoneType.Hand);   // must survive
+            for (int i = 0; i < 4; i++) MailboxTestKit.put("Plains", k.seat, ZoneType.Library);
+            for (int i = 0; i < 2; i++) MailboxTestKit.put("Island", k.opp, ZoneType.Library);
+            final boolean[] played = {false};
+            k.startBrain(body -> {
+                if (body.contains("DISCARD PAYMENT")) {
+                    String id = MailboxTestKit.idOf(body, "Swamp");
+                    return id != null ? "{\"chosen\": [" + id + "]}" : null;
+                }
+                if (body.contains("\"decisionType\":\"PAY_UNLESS\"")) {
+                    return "{\"chosenId\": 1}";      // PAY: discard, then draw two
+                }
+                if ((body.contains("\"decisionType\":\"CAST_SPELL\"")
+                        || body.contains("\"decisionType\":\"REACT\"")) && !played[0]) {
+                    String id = MailboxTestKit.idOf(body, "Abandon Attachments");
+                    if (id != null) {
+                        played[0] = true;
+                        return "{\"chosenId\": " + id + "}";
+                    }
+                }
+                return null;
+            });
+            k.run(() -> played[0] && has(k.seat, ZoneType.Graveyard, "Swamp"), 300);
+
+            boolean payUnlessAsked = k.seen.stream().anyMatch(s -> s.contains("\"decisionType\":\"PAY_UNLESS\""));
+            boolean discardWindow = k.seen.stream().anyMatch(s -> s.contains("DISCARD PAYMENT"));
+            int lib = k.seat.getCardsIn(ZoneType.Library).size();
+            int hand = k.seat.getCardsIn(ZoneType.Hand).size();
+            System.out.println("UNLESS-DISCARD test: cast=" + played[0] + " payUnlessAsked=" + payUnlessAsked
+                    + " discardWindow=" + discardWindow + " swampInGy=" + has(k.seat, ZoneType.Graveyard, "Swamp")
+                    + " lib=" + lib + " hand=" + hand + " reqs=" + k.seen.size());
+            Assert.assertTrue(played[0], "Abandon Attachments was never cast through the mailbox");
+            Assert.assertTrue(payUnlessAsked, "the discard-unless decision never reached the seat");
+            Assert.assertTrue(discardWindow, "WHICH card is discarded must be the seat's pick");
+            Assert.assertTrue(has(k.seat, ZoneType.Graveyard, "Swamp"), "the seat's named discard must be the card discarded");
+            Assert.assertTrue(has(k.seat, ZoneType.Hand, "Craterhoof Behemoth"), "the high-value card must survive");
+            Assert.assertEquals(lib, 2, "paying the unless cost must draw two (library 4 -> 2)");
+            Assert.assertEquals(hand, 3, "hand = Craterhoof + the two drawn Plains");
+        }
+    }
 }

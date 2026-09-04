@@ -97,4 +97,62 @@ public class GrantedAbilityRollbackTest {
         Assert.assertTrue(gauntletsOn, "the grantor must be untouched");
         Assert.assertEquals(copies, 1, "the grantor must not be duplicated by the rollback");
     }
+
+    /**
+     * BL-11 second card (group {@code extended}). Umbral Mantle grants through
+     * the same static shape as Gauntlets of Light — {@code S:Mode$ Continuous
+     * | Affected$ Card.EquippedBy | AddAbility$ UmbralPump} with a mana cost
+     * on the granted ability ({@code AB$ Pump | Cost$ 3 Q}) — but from an
+     * EQUIPMENT rather than an Aura, and its {Q} untap cost is the exact
+     * untap-for-mana loop shape the live vanish came from. A failed {3}
+     * payment must leave the equipped host on the battlefield and the grantor
+     * unduplicated.
+     */
+    @Test(groups = "extended", timeOut = 240_000)
+    public void failedEquipmentGrantedActivationMustNotVanishTheHost() throws Exception {
+        ArenaBootstrap.initialize(new File("..", "forge-gui"));
+        List<RegisteredPlayer> players = Lists.newArrayList();
+        Deck d = new Deck();
+        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("opp", null)));
+        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("me", null)));
+        GameRules rules = new GameRules(GameType.Commander);
+        Game game = new Game(players, rules, new Match(rules, players, "t"));
+        Player me = game.getPlayers().get(1);
+        game.setAge(GameStage.Play);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, me);
+        game.getPhaseHandler().onStackResolved();
+
+        Card bears = put("Grizzly Bears", me, ZoneType.Battlefield);
+        Card mantle = put("Umbral Mantle", me, ZoneType.Battlefield);
+        mantle.attachToEntity(bears, null, true);
+        bears.setTapped(true);           // {Q} wants a tapped host; the {3} has no source
+        // NO mana sources: the {3} payment must fail
+
+        game.getAction().checkStaticAbilities();   // apply the AddAbility layer
+        SpellAbility pump = null;
+        for (SpellAbility sa2 : bears.getAllPossibleAbilities(me, false)) {
+            if (sa2.toString().contains("+2/+2")) {
+                pump = sa2;
+                break;
+            }
+        }
+        Assert.assertNotNull(pump, "Umbral Mantle did not grant the {3},{Q} pump ability");
+        pump.setActivatingPlayer(me);
+
+        boolean played = ComputerUtil.handlePlayingSpellAbility(me, pump, null);
+        Assert.assertFalse(played, "payment should fail with no mana sources");
+
+        boolean onBattlefield = bears.isInZone(ZoneType.Battlefield);
+        boolean mantleOn = mantle.isInZone(ZoneType.Battlefield);
+        int copies = 0;
+        for (Card c : me.getCardsIn(ZoneType.Battlefield)) {
+            if (c.getName().equals("Umbral Mantle")) copies++;
+        }
+        System.out.println("ROLLBACK-EQUIP test: bearsOnBf=" + onBattlefield
+                + " mantleOnBf=" + mantleOn + " mantleCopies=" + copies);
+        Assert.assertTrue(onBattlefield,
+                "THE VANISH: the equipped host of a granted ability must survive a failed payment");
+        Assert.assertTrue(mantleOn, "the grantor must be untouched");
+        Assert.assertEquals(copies, 1, "the grantor must not be duplicated by the rollback");
+    }
 }

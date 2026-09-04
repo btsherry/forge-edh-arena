@@ -49,12 +49,32 @@ public class StackTargetsVisibleTest {
         return c;
     }
 
+    /** How a test aims the opponent's spell before it goes on the stack. */
+    private interface Aimer {
+        void aim(SpellAbility sa, Card bears, Player seat);
+    }
+
     /** Opp casts {@code spellName} at the seat's bear and/or the seat's face;
      *  the seat (holding a live Counterspell so the reactive gate opens) must
      *  see every chosen target. {@code aimBears}: root part targets the bear;
      *  {@code aimFaceOnSub}: (root if !aimBears else the SubAbility part)
      *  targets the seat player — exercises the chained multi-target shape. */
     private String runSpell(String spellName, boolean aimBears, boolean aimFaceOnSub) throws Exception {
+        return runSpell(spellName, (sa, bears, seat) -> {
+            if (aimBears) {
+                sa.getTargets().add(bears);
+                if (aimFaceOnSub) {
+                    sa.getSubAbility().getTargets().add(seat); // chained second target
+                }
+            } else {
+                sa.getTargets().add(seat);
+            }
+        });
+    }
+
+    /** Boots one game, lets {@code aimer} choose the opp spell's targets, puts
+     *  it on the stack and returns the seat's first window body naming it. */
+    private String runSpell(String spellName, Aimer aimer) throws Exception {
         ArenaBootstrap.initialize(new java.io.File("..", "forge-gui"));
         Path base = Files.createTempDirectory("stacktgt");
         List<RegisteredPlayer> players = Lists.newArrayList();
@@ -79,14 +99,7 @@ public class StackTargetsVisibleTest {
         Card spell = put(spellName, opp, ZoneType.Hand);
         SpellAbility sa = spell.getFirstSpellAbility();
         sa.setActivatingPlayer(opp);
-        if (aimBears) {
-            sa.getTargets().add(bears);
-            if (aimFaceOnSub) {
-                sa.getSubAbility().getTargets().add(seat); // chained second target
-            }
-        } else {
-            sa.getTargets().add(seat);
-        }
+        aimer.aim(sa, bears, seat);
         game.getAction().moveToStack(spell, sa);
         game.getStack().add(sa);
 
@@ -146,5 +159,30 @@ public class StackTargetsVisibleTest {
         Assert.assertTrue(present && card && player,
                 "every chosen target — card and player, root and chained part — "
                 + "must be announced (public info)");
+    }
+
+    /** BL-11 second card (group {@code extended}). Forked Bolt — {@code A:SP$
+     *  DealDamage | ValidTgts$ Any | TargetMin$ 1 | TargetMax$ 2 |
+     *  DividedAsYouChoose$ 2} — is the OTHER multi-target script shape: both
+     *  targets sit on ONE part with a divided allocation, where Arc Trail
+     *  spreads its two over a root + SubAbility chain. The same serializer
+     *  must announce both targets AND their shares ({@code [1]}). */
+    @Test(groups = "extended", timeOut = 240_000)
+    public void dividedTargetsOnOnePartAnnounced() throws Exception {
+        String body = runSpell("Forked Bolt", (sa, bears, seat) -> {
+            sa.getTargets().add(bears);
+            sa.getTargets().add(seat);
+            sa.addDividedAllocation(bears, 1);
+            sa.addDividedAllocation(seat, 1);
+        });
+        boolean present = body.contains("\"stackTargets\"");
+        boolean card = body.contains("Grizzly Bears");
+        boolean player = body.contains("seat ");
+        boolean shares = body.contains("[1]");
+        System.out.println("STACKTGT-divided: present=" + present
+                + " card=" + card + " player=" + player + " shares=" + shares);
+        Assert.assertTrue(present && card && player,
+                "both targets of a divided single-part spell must be announced (public info)");
+        Assert.assertTrue(shares, "the divided damage share per target must be announced");
     }
 }

@@ -168,4 +168,78 @@ public class SiblingTriggerBatchTest {
                 "the declined sibling's resolve-confirm must be auto-answered "
                 + "locally (saw " + confirms + " CONFIRM requests)");
     }
+
+    /**
+     * BL-11 second card (group {@code extended}). Dire Undercurrents' blue
+     * trigger has Aura Shards' exact shape — {@code T:Mode$ ChangesZone |
+     * Origin$ Any | Destination$ Battlefield | ValidCard$ Creature.Blue+YouCtrl
+     * | TriggerZones$ Battlefield | OptionalDecider$ You} executing a targeted
+     * effect ({@code DB$ Draw | ValidTgts$ Player}) — with a PLAYER target
+     * instead of a permanent. Two Drakes from one Talrand's Invocation = two
+     * simultaneous optional triggers; the seat aims the first at itself and
+     * declines the second: exactly one card drawn, one aim honoured, one
+     * decline honoured, no stray CONFIRM for the declined sibling.
+     */
+    @Test(groups = "extended", timeOut = 240_000)
+    public void direUndercurrentsSiblingsAimAndDeclineIndependently() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            MailboxTestKit.put("Dire Undercurrents", k.seat, ZoneType.Battlefield);
+            for (int i = 0; i < 4; i++) MailboxTestKit.put("Island", k.seat, ZoneType.Battlefield);
+            MailboxTestKit.put("Talrand's Invocation", k.seat, ZoneType.Hand); // two blue Drakes
+            for (int i = 0; i < 3; i++) MailboxTestKit.put("Plains", k.seat, ZoneType.Library);
+            for (int i = 0; i < 2; i++) MailboxTestKit.put("Island", k.opp, ZoneType.Library);
+            final String me = k.seat.getName();
+            final boolean[] aimedOnce = {false};
+            final boolean[] confirmedOnce = {false};
+            k.startBrain(body -> {
+                if (body.contains("\"decisionType\":\"CAST_SPELL\"")) {
+                    String id = MailboxTestKit.idOf(body, "Talrand's Invocation");
+                    return id != null ? "{\"chosenId\": " + id + "}" : null;
+                }
+                if (body.contains("\"decisionType\":\"CHOOSE_ENTITY\"")
+                        && body.contains("Dire Undercurrents")) {
+                    if (!aimedOnce[0]) {
+                        String id = MailboxTestKit.idOf(body, me);   // aim the draw at myself
+                        if (id != null) {
+                            aimedOnce[0] = true;
+                            return "{\"chosenId\": " + id + "}";
+                        }
+                        return "{\"chosenId\": 0}";
+                    }
+                    return "{\"chosenId\": 0}";      // second sibling: DECLINE
+                }
+                if (body.contains("\"decisionType\":\"CONFIRM\"")) {
+                    if (!confirmedOnce[0]) {
+                        confirmedOnce[0] = true;
+                        return "{\"chosenId\": 1}";
+                    }
+                    return "{\"chosenId\": 0}";
+                }
+                return null;
+            });
+            k.run(() -> k.seat.getCardsIn(ZoneType.Library).size() <= 2, 300);
+
+            long aims = k.seen.stream().filter(s2 -> s2.contains("\"decisionType\":\"CHOOSE_ENTITY\"")
+                    && s2.contains("Dire Undercurrents")).count();
+            boolean declineOffered = k.seen.stream().anyMatch(s2 ->
+                    s2.contains("\"decisionType\":\"CHOOSE_ENTITY\"") && s2.contains("Dire Undercurrents")
+                    && s2.contains("DECLINE this optional trigger"));
+            long confirms = k.seen.stream().filter(s2 ->
+                    s2.contains("\"decisionType\":\"CONFIRM\"")).count();
+            int lib = k.seat.getCardsIn(ZoneType.Library).size();
+            int drakes = 0;
+            for (Card c : k.seat.getCardsIn(ZoneType.Battlefield)) {
+                if (c.isCreature() && c.isToken()) drakes++;
+            }
+            System.out.println("SIBLING-UNDERCURRENTS test: aims=" + aims + " declineOffered=" + declineOffered
+                    + " confirms=" + confirms + " drakes=" + drakes + " lib=" + lib + " reqs=" + k.seen.size());
+            Assert.assertEquals(drakes, 2, "Talrand's Invocation must have made two Drakes");
+            Assert.assertTrue(aims >= 2, "two simultaneous Dire Undercurrents triggers should each ask for a target");
+            Assert.assertTrue(declineOffered, "trigger-aim windows must offer the explicit DECLINE option");
+            Assert.assertEquals(lib, 2, "the aimed sibling draws exactly one card; the declined one draws none");
+            Assert.assertTrue(confirms <= 1,
+                    "the declined sibling's resolve-confirm must be auto-answered "
+                    + "locally (saw " + confirms + " CONFIRM requests)");
+        }
+    }
 }

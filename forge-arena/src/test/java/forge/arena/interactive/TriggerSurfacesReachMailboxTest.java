@@ -167,4 +167,57 @@ public class TriggerSurfacesReachMailboxTest {
                 "paying the Rings copy should add a SECOND +1/+1 counter "
                 + "(activation + copy); got " + (endCounters - startCounters));
     }
+
+    /**
+     * BL-11 second card (group {@code extended}). Mirari is the same seam by
+     * script shape: a trigger with {@code OptionalDecider$ You} whose Execute
+     * is {@code AB$ CopySpellAbility | Cost$ 3 | Defined$ TriggeredSpellAbility
+     * | MayChooseTarget$ True} — Rings of Brighthearth's line with {@code Cost$
+     * 2} and {@code Mode$ SpellCast} instead of {@code Mode$ AbilityCast}. The
+     * optional pay-to-copy CONFIRM (confirmMode TRIGGER) must reach the seat,
+     * and on yes the copy must resolve: the copied Divination draws two more.
+     */
+    @Test(groups = "extended", timeOut = 240_000)
+    public void mirariCopyConfirmReachesSeatAndCopies() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            MailboxTestKit.put("Mirari", k.seat, forge.game.zone.ZoneType.Battlefield);
+            // {2}{U} for Divination + {3} for the Mirari copy = 6
+            for (int i = 0; i < 6; i++) MailboxTestKit.put("Island", k.seat, forge.game.zone.ZoneType.Battlefield);
+            MailboxTestKit.put("Divination", k.seat, forge.game.zone.ZoneType.Hand);
+            for (int i = 0; i < 6; i++) MailboxTestKit.put("Plains", k.seat, forge.game.zone.ZoneType.Library);
+            for (int i = 0; i < 2; i++) MailboxTestKit.put("Island", k.opp, forge.game.zone.ZoneType.Library);
+            final boolean[] played = {false};
+            k.startBrain(body -> {
+                if (body.contains("\"decisionType\":\"CONFIRM\"")) {
+                    return "{\"chosenId\": 1}";              // yes, pay {3}, copy
+                }
+                if ((body.contains("\"decisionType\":\"CAST_SPELL\"")
+                        || body.contains("\"decisionType\":\"REACT\"")) && !played[0]) {
+                    String id = MailboxTestKit.idOf(body, "Divination");
+                    if (id != null) {
+                        played[0] = true;
+                        return "{\"chosenId\": " + id + "}";
+                    }
+                }
+                return null;
+            });
+            // original + copy = four draws: library 6 -> 2
+            k.run(() -> k.seat.getCardsIn(forge.game.zone.ZoneType.Library).size() <= 2, 300);
+
+            boolean triggerConfirmSeen = k.seen.stream().anyMatch(s ->
+                    s.contains("\"decisionType\":\"CONFIRM\"")
+                    && (s.contains("Mirari") || s.contains("\"TRIGGER\"")));
+            int lib = k.seat.getCardsIn(forge.game.zone.ZoneType.Library).size();
+            int hand = k.seat.getCardsIn(forge.game.zone.ZoneType.Hand).size();
+            System.out.println("MIRARI test: reqs=" + k.seen.size() + " cast=" + played[0]
+                    + " triggerConfirmSeen=" + triggerConfirmSeen + " lib=" + lib + " hand=" + hand);
+            Assert.assertTrue(played[0], "Divination was never cast through the mailbox");
+            Assert.assertTrue(triggerConfirmSeen,
+                    "the Mirari optional-trigger CONFIRM never reached the seat "
+                    + "(defect: stock CopySpellAbilityAi decided it, never the brain)");
+            Assert.assertEquals(lib, 2,
+                    "paying the Mirari copy should draw a SECOND two cards (original + copy)");
+            Assert.assertEquals(hand, 4, "hand = the four drawn Plains");
+        }
+    }
 }
