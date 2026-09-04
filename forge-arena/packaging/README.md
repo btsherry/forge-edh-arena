@@ -149,7 +149,7 @@ card names resolve correctly during ingest.
 
 ```sh
 forge-arena/scripts/arena-play.sh --human my-deck.dck   # Advisor is ON by default; --no-advisor to opt out
-#   ... [--linger N] [--no-autostop]   # auto-teardown after game over (default 600 s human, 60 s all-AI)
+#   ... [--linger N] [--no-autostop]   # auto-teardown after game over (default 120 s human, 60 s all-AI)
 ```
 
 A fourth brain — loaded exactly like the opponents (your deck's dossier,
@@ -335,7 +335,7 @@ alongside pending decisions.
 
 | Script | What it does |
 |---|---|
-| `scripts/arena-play.sh` | One-shot launch: preflight → teardown → seat brains → Advisor (human games) → GUI; `--all-ai` or `--human [deck.dck]`; the Advisor is on by default in `--human` games, `--no-advisor` opts out (`--advisor` is accepted and changes nothing); the table tears itself down after game over (`--linger N` seconds, default 600 human / 60 all-AI; `--no-autostop`) |
+| `scripts/arena-play.sh` | One-shot launch: preflight → teardown → seat brains → Advisor (human games) → GUI; `--all-ai` or `--human [deck.dck]`; the Advisor is on by default in `--human` games, `--no-advisor` opts out (`--advisor` is accepted and changes nothing); the table tears itself down after game over (`--linger N` seconds, default 120 human / 60 all-AI; `--no-autostop`) |
 | `scripts/arena-stop.sh` | Full teardown: kill GUI + runners (by PID file), rate the game, archive the session's logs (seat logs, `game.jsonl`, `game-*.jsonl`, engine/runner output), clear mailbox |
 | `scripts/arena-autostop.sh` | The auto-teardown watcher `arena-play.sh` starts: waits for the engine's `gameOver` (or the GUI window to close), lingers, then runs `arena-stop.sh`; a hand stop always wins |
 | `scripts/arena-add-deck.py` | Bare `.dck` → playable seat (dossier + combos + lint + primer) |

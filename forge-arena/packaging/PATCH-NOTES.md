@@ -8,7 +8,7 @@
   One question at a time; answered even while the advisor is paused.
 - **Tables tear themselves down when the match is over.** Once the engine
   reports game over (or the game window is closed), `arena-play.sh` lingers
-  (`--linger N`; default 600 s in human games so you can read the final
+  (`--linger N`; default 120 s in human games so you can read the final
   board, 60 s all-AI) and then runs the same stop as `arena-stop.sh`: kill,
   rate, archive, clear. `--no-autostop` keeps the old behaviour; a hand stop
   always wins.

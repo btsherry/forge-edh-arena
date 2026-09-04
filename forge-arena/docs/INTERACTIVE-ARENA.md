@@ -282,7 +282,7 @@ attacker or blocker; a forced single sub-choice; a non-card entity option) are
 # status line):
 forge-arena/scripts/arena-play.sh --all-ai                          # 4 AI seats, spectator GUI
 forge-arena/scripts/arena-play.sh --human [deck.dck] [--no-advisor] # you at seat 0
-#          --linger N | --no-autostop   (auto-teardown after game over: 600s human / 60s all-AI)
+#          --linger N | --no-autostop   (auto-teardown after game over: 120s human / 60s all-AI)
 #   knobs: --model haiku|sonnet|opus|fable  --effort low|medium|high|xhigh|max
 #          --timeout N   (defaults: opus / medium / 90s)
 forge-arena/scripts/arena-stop.sh    # teardown + ELO sweep + log archive
@@ -1457,8 +1457,9 @@ Hard-won from two live sessions; read before optimizing anything.
     is live: a plain sleep loop (no scheduler) that polls the observer
     snapshot for the engine's own `gameOver: true` (a forced write on the
     outcome event) or for the GUI JVM's PID to vanish (window closed), then
-    lingers `--linger N` seconds (default 600 in human games so the final
-    board can be read, 60 all-AI; 10 when the GUI is already gone) and
+    lingers `--linger N` seconds (default 120 in human games so the final
+    board can be read — 600 at first, shortened after game 22 — 60 all-AI;
+    10 when the GUI is already gone) and
     `exec`s `arena-stop.sh` — the same kill/rate/archive/clear as a hand
     stop. A hand stop always wins: `arena-stop` kills a waiting watcher by
     its PID file (`ours()` marker), and a watcher that wakes to a cleared

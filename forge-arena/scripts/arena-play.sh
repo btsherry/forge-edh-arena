@@ -11,7 +11,8 @@
 # Defaults: model=opus effort=medium timeout=90; human deck=selvala-heart-of-the-wilds.dck
 # Auto-teardown (2026-09-04, Ben): once the engine reports gameOver (or the GUI
 #   JVM is gone) a sleep-loop watcher lingers --linger seconds (default 60 all-AI,
-#   600 human — time to read the final board) and runs arena-stop.sh. --no-autostop
+#   120 human — time to read the final board; Ben shortened it from 600 after
+#   game 22) and runs arena-stop.sh. --no-autostop
 #   leaves the table up until you stop it by hand.
 # Human games run the seat-0 AI Advisor BY DEFAULT (2026-08-17, Ben) — teaching
 #   commentary in the GUI's Advisor tab + autopass (ARENA_AUTOPASS=off|strict|casts,
@@ -73,7 +74,7 @@ if [ "$ADVISOR" = "1" ]; then
 fi
 [ -n "$MODE" ] || { echo "specify --all-ai or --human [deck]" >&2; exit 2; }
 # Linger default: a spectator table has nobody reading the board; a human does.
-[ -n "$LINGER" ] || { [ "$MODE" = "human" ] && LINGER=600 || LINGER=60; }
+[ -n "$LINGER" ] || { [ "$MODE" = "human" ] && LINGER=120 || LINGER=60; }
 
 # Item R (Ben, 2026-09-04): run_table.sh seats the AI decks from the roster
 # rule (all-AI: roster order; human: the first three roster decks that are not
