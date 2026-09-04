@@ -3056,6 +3056,75 @@ public final class MailboxController extends PlayerControllerAi
         }
     }
 
+    // ---- item 16: measure the surfaces still decided by stock ----------------
+    // Six real decisions the brain does not own yet. Nothing here changes
+    // behavior: each override logs one line and delegates to stock, so a few
+    // games of gui.out say which of them actually fire and how often —
+    // surfaces are opened by evidence, not by completeness.
+
+    private void stockSurface(String which) {
+        try {
+            System.err.println("[arena] STOCK-SURFACE seat " + seatIndex + " " + which
+                    + " turn " + getGame().getPhaseHandler().getTurn());
+        } catch (RuntimeException ignore) {
+            // measurement must never affect play
+        }
+    }
+
+    @Override
+    public String chooseSomeType(String kindOfType, SpellAbility sa,
+            java.util.Collection<String> validTypes, boolean isOptional) {
+        stockSurface("chooseSomeType(" + kindOfType + ")");
+        return super.chooseSomeType(kindOfType, sa, validTypes, isOptional);
+    }
+
+    @Override
+    public byte chooseColor(String message, SpellAbility sa, forge.card.ColorSet colors) {
+        stockSurface("chooseColor");
+        return super.chooseColor(message, sa, colors);
+    }
+
+    @Override
+    public byte chooseColorAllowColorless(String message, Card card, forge.card.ColorSet colors) {
+        stockSurface("chooseColorAllowColorless");
+        return super.chooseColorAllowColorless(message, card, colors);
+    }
+
+    @Override
+    public List<SpellAbility> orderSimultaneousSa(List<SpellAbility> activePlayerSAs) {
+        if (activePlayerSAs != null && activePlayerSAs.size() > 1) {
+            stockSurface("orderSimultaneousSa(" + activePlayerSAs.size() + ")");
+        }
+        return super.orderSimultaneousSa(activePlayerSAs);
+    }
+
+    @Override
+    public Map<Card, Integer> assignCombatDamage(Card attacker, CardCollectionView blockers,
+            CardCollectionView remaining, int damageDealt, GameEntity defender, boolean overrideOrder) {
+        if (blockers != null && blockers.size() > 1) {
+            stockSurface("assignCombatDamage(" + blockers.size() + " blockers)");
+        }
+        return super.assignCombatDamage(attacker, blockers, remaining, damageDealt, defender, overrideOrder);
+    }
+
+    @Override
+    public Map<Card, forge.card.mana.ManaCostShard> chooseCardsForConvokeOrImprovise(SpellAbility sa,
+            forge.card.mana.ManaCost manaCost, CardCollectionView untappedCards, boolean artifacts,
+            boolean creatures, Integer maxReduction) {
+        stockSurface("chooseCardsForConvokeOrImprovise");
+        return super.chooseCardsForConvokeOrImprovise(sa, manaCost, untappedCards, artifacts,
+                creatures, maxReduction);
+    }
+
+    @Override
+    public SpellAbility chooseSingleSpellForEffect(List<SpellAbility> spells, SpellAbility sa,
+            String title, Map<String, Object> params) {
+        if (spells != null && spells.size() > 1) {
+            stockSurface("chooseSingleSpellForEffect(" + spells.size() + ")");
+        }
+        return super.chooseSingleSpellForEffect(spells, sa, title, params);
+    }
+
     // ---- state projection (hidden-info-safe) -------------------------------
 
     private Map<String, Object> buildState(int turn) {
