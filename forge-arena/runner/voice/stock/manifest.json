@@ -90,14 +90,28 @@
   "game-over-gg": {
    "text": "Gee Gees, it was very nice playing with you.",
    "source": "ben-v3-2026-09-07"
+  },
+  "winner-none": {
+   "text": "Winner: none.",
+   "source": "elevenlabs-v3"
+  },
+  "whats-the-difference": {
+   "text": "What's the difference?",
+   "source": "elevenlabs-v3"
+  },
+  "meatbag-out": {
+   "text": "Observation: the meatbag is no longer playing.",
+   "source": "elevenlabs-v3"
   }
  },
  "quotes": [
-  "shall-we-play",
   "greetings-falken",
-  "strange-game",
+  "hello",
   "nice-game-of-chess",
-  "hello"
+  "shall-we-play",
+  "strange-game",
+  "whats-the-difference",
+  "winner-none"
  ],
  "sfx": [
   "typing-01.wav",
@@ -112,5 +126,10 @@
  "fx": "ffmpeg -af <fx-chain.txt>: third-octave match-EQ to the film reference + 50 Hz tremolo + short slap echo + compressor; raw/ holds the dry renders",
  "voice_id": "SBbMtfucc8NAkpyzIRvP",
  "voice_name": "Jousha-W.O.P.R.",
- "sfx_note": "terminal typing-to-Joshua beeps cut from the WOPR compilation (19-20 char/s clock, 900-1200 Hz); the earlier tones are in sfx/legacy/"
+ "sfx_note": "terminal typing-to-Joshua beeps cut from the WOPR compilation (19-20 char/s clock, 900-1200 Hz); the earlier tones are in sfx/legacy/",
+ "human_out": [
+  "winner-none",
+  "whats-the-difference",
+  "meatbag-out"
+ ]
 }

@@ -212,6 +212,20 @@ class VoiceRunnerTests(unittest.TestCase):
         self.clock.t += 10; self._observer(8, 0); self.r.step()
         self.assertEqual(self.player.played, ["your-move.wav"], "it resumes with the next real event")
 
+    # ---- the human's own elimination
+    def test_human_elimination_plays_a_rotation_line_at_once(self):
+        self._observer(1, 1); self.r.step()                          # startup
+        self.clock.t += 1                                             # inside the gap: human_out ignores it
+        self._observer(14, 2, elim=(0,)); self.r.step()
+        self.assertIn(self.player.played[-1], {"winner-none.wav", "whats-the-difference.wav", "meatbag-out.wav"})
+        self.clock.t += 10; self._observer(15, 3, elim=(0,)); self.r.step()
+        self.assertEqual(len(self.player.played), 2, "said once per death, not per snapshot")
+
+    def test_human_elimination_that_ends_the_game_uses_the_loss_pair_only(self):
+        self._observer(1, 1); self.r.step()
+        self.clock.t += 1; self._observer(20, 2, game_over=True, elim=(0,)); self.r.step(); self.r.step(); self.r.step()
+        self.assertEqual(self.player.played[1:], ["strange-game.wav", "game-over-gg.wav"])
+
     # ---- colour recaps on opponents' turns
     def test_color_recaps_are_voiced_per_mode(self):
         self.clock.t += 100

@@ -13,7 +13,8 @@ Sources
                                 of them — this is what speaks on opponents' turns)
   mailbox/observer-state.json   game start → "startup" stock line; the human's
                                 turn beginning → "your-move" (low priority);
-                                eliminations → "player-eliminated"; game over →
+                                eliminations → "player-eliminated"; the human's own
+                                elimination → one of manifest.human_out; game over →
                                 win: "you-win" + "game-over-gg", loss:
                                 "strange-game" + "game-over-gg"
   runner/logs/control/voice.json  {"enabled": false} mutes (written by
@@ -77,7 +78,7 @@ DEFAULT_VOICE_ID = ""                        # resolved from stock/manifest.json
 POLL_S = 0.5
 FIRST_SENTENCE_MAX = 220
 ASK_MAX = 300
-PRIORITY = {"game_over": 0, "startup": 1, "ask": 2, "advice": 3, "quip": 4, "event": 5, "color": 6, "your_move": 7}
+PRIORITY = {"game_over": 0, "human_out": 0, "startup": 1, "ask": 2, "advice": 3, "quip": 4, "event": 5, "color": 6, "your_move": 7}
 
 
 # ---- helpers ------------------------------------------------------------------
@@ -410,7 +411,7 @@ class VoiceRunner:
         live.sort(key=lambda q: (q["prio"], q["at"]))
         item = live[0]
         # the rate limit applies to everything but game start / game over
-        if item["kind"] not in ("startup", "game_over") and now - self.last_spoken_at < self.min_gap:
+        if item["kind"] not in ("startup", "game_over", "human_out") and now - self.last_spoken_at < self.min_gap:
             return None
         self.queue.remove(item)
         return item
@@ -483,9 +484,16 @@ class VoiceRunner:
         turn, active = d.get("turn"), d.get("activeSeat")
         seats = d.get("seats") or []
         for s in seats:
-            if s.get("eliminated") and s.get("seat") not in self.eliminated and s.get("seat") != self.human_seat:
+            if s.get("eliminated") and s.get("seat") not in self.eliminated:
                 self.eliminated.add(s.get("seat"))
-                if not d.get("gameOver"):
+                if d.get("gameOver"):
+                    continue  # the game-over pair covers the last elimination
+                if s.get("seat") == self.human_seat:
+                    # the human's own death (Ben, 2026-09-07): one line from the
+                    # rotation, straight away, ahead of the rate limit
+                    rotation = self.renderer.manifest.get("human_out") or ["winner-none"]
+                    self.enqueue("human_out", stock=self.rng.choice(rotation), ttl=60.0)
+                else:
                     self.enqueue("event", stock="player-eliminated", ttl=20.0)
         if self.your_move_on and turn is not None and (turn, active) != (self.seen_turn, self.seen_active):
             if active == self.human_seat and self.seen_turn is not None:
