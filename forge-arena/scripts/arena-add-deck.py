@@ -417,6 +417,33 @@ def fetch_combos(parsed, slug, cache_dir, use_cache):
 
 # ---- step 4: implementability lint ------------------------------------------
 
+_SCRIPT_NAMES = None
+
+
+def _script_names():
+    """Every `Name:` line in the card-script tree. The filename heuristic
+    alone misses meld cards (Forge files them `front_meldresult.txt`, e.g.
+    hanweir_battlements_hanweir_the_writhing_township.txt, while Scryfall's
+    name is just "Hanweir Battlements") — found 2026-09-06 when --strict
+    refused a legal bracket-3 list over one meld land."""
+    global _SCRIPT_NAMES
+    if _SCRIPT_NAMES is None:
+        names = set()
+        for root, _dirs, files in os.walk(CARDSFOLDER):
+            for fn in files:
+                if not fn.endswith(".txt"):
+                    continue
+                try:
+                    with open(os.path.join(root, fn), encoding="utf-8", errors="replace") as fh:
+                        for line in fh:
+                            if line.startswith("Name:"):
+                                names.add(line[5:].strip())
+                except OSError:
+                    continue
+        _SCRIPT_NAMES = names
+    return _SCRIPT_NAMES
+
+
 def lint(all_names):
     if not os.path.isdir(CARDSFOLDER):
         warn(f"Forge cardsfolder not found at {CARDSFOLDER}; skipping lint")
@@ -427,8 +454,12 @@ def lint(all_names):
             continue
         slug = slugify_card(name)
         path = os.path.join(CARDSFOLDER, slug[:1], slug + ".txt")
-        if not os.path.exists(path):
-            unsupported.append(name)
+        if os.path.exists(path):
+            continue
+        # fall back to the scripts' own Name: lines (meld fronts, odd slugs)
+        if name in _script_names() or name.split(" // ")[0].strip() in _script_names():
+            continue
+        unsupported.append(name)
     return {"unsupported": unsupported, "checked": len(set(all_names))}
 
 

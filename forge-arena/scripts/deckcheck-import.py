@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import http.cookiejar
 import json
+import re
 import os
 import sys
 import time
@@ -74,6 +75,22 @@ def load_creds(path):
     if "u" not in d or "p" not in d:
         sys.exit(f"ERROR: {path} must contain 'u:' and 'p:' lines")
     return d["u"], d["p"]
+
+
+def norm_entries(entries):
+    """DeckCheck's import returns Moxfield lists as {name, quantity, …}
+    objects but Archidekt lists as plain "N Card Name" strings (2026-09-06).
+    Normalize both to dicts so persist/write_dck/deck_list see one shape."""
+    out = []
+    for e in entries or []:
+        if isinstance(e, dict):
+            out.append(e)
+            continue
+        s = str(e).strip()
+        m = re.match(r"^(\d+)[xX]?\s+(.+)$", s)
+        out.append({"name": m.group(2).strip(), "quantity": int(m.group(1))} if m
+                   else {"name": s, "quantity": 1})
+    return out
 
 
 def persist(cards):
@@ -150,7 +167,9 @@ def main():
     if not isinstance(imp, dict) or "cards" not in imp:
         sys.exit(f"ERROR: import failed: {imp}")
     name = a.name or imp.get("name") or "arena-import"
-    commanders = imp.get("commanders", [])
+    imp["cards"] = norm_entries(imp.get("cards"))
+    imp["sideboard"] = norm_entries(imp.get("sideboard"))
+    commanders = norm_entries(imp.get("commanders"))
     cmd_names = [c["name"] for c in commanders]
     print(f"[import] '{imp.get('name')}' — {len(imp.get('cards', []))} cards, "
           f"commander={cmd_names}")
