@@ -174,8 +174,12 @@ automatically, each
 narrated in the tab as `⏭ (auto-passed — …)`. Hard guarantees: your own main
 phases are never auto-passed, nor combat declare steps, nor a stop with an
 opponent's spell on the stack, nor any stop while you have mana floating, nor
-the turn after an equipment lands with its equip affordable. Any doubt fails
-open to showing the prompt. `ARENA_AUTOPASS=strict` wakes you for every
+the turn after an equipment lands with its equip affordable. Everywhere else
+it is aggressive: no mana and nothing free to cast passes, and so does an
+opponent's spell or trigger on the stack when your cheapest answer costs more
+than you can produce (a kept prompt says which card kept it). Any doubt,
+including a mana source whose yield the engine cannot bound, fails open to
+showing the prompt. `ARENA_AUTOPASS=strict` wakes you for every
 legal action; `ARENA_AUTOPASS=off` disables it. Mono-coloured commanders also
 get any-colour mana picks (Gemstone Caverns, City of Brass…) auto-answered in
 the commander's colour, with one receipt in the tab; multicolour commanders

@@ -2,6 +2,13 @@
 
 ## Unreleased — after v3.4
 
+- **Autopass stops asking when you cannot act.** On the AI seats' turns and between
+  phases, a priority stop now passes by itself when you have no mana and nothing
+  free to cast, or when the only thing on the stack is an opponent's spell or
+  trigger and even your cheapest play costs more than you can produce — the
+  "acknowledge the damage ping" prompts are gone. Your main phases, combat
+  declares, floating mana and a fresh equipment still always stop, and any
+  prompt that is kept says which card kept it ("prompt kept — castable: …").
 - **Typing in the Chat field no longer triggers the game's hotkeys.** Forge
   binds T (targeting arrows), S, C, Y, N and P at window level, and every
   letter typed into the Advisor tab's field also fired the matching one —

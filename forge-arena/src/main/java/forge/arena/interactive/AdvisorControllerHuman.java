@@ -187,35 +187,63 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
             return;
         }
         try {
-            if (getPlayer().getManaPool().totalMana() > 0) {
-                return; // floating mana = intent; the stop stays open
-            }
-            PhaseType phase = getGame().getPhaseHandler().getPhase();
-            if (phase == PhaseType.COMBAT_DECLARE_ATTACKERS
-                    || phase == PhaseType.COMBAT_DECLARE_BLOCKERS) {
-                return;
-            }
-            if (phase != null && phase.isMain()
-                    && getGame().getPhaseHandler().isPlayerTurn(getPlayer())) {
-                return; // own mains are sacred — never arm, never narrate
-            }
+            final PhaseType phase = getGame().getPhaseHandler().getPhase();
+            final boolean myTurn = getGame().getPhaseHandler().isPlayerTurn(getPlayer());
+            boolean oppOnStack = false;
             for (SpellAbilityStackInstance si : getGame().getStack()) {
                 SpellAbility sa = si.getSpellAbility();
                 if (sa == null || !getPlayer().equals(sa.getActivatingPlayer())) {
-                    return; // an opponent's spell is up — always offer the window
+                    oppOnStack = true;
                 }
             }
             List<String> utilityOnly = new ArrayList<>();
-            if (hasRealPlay(utilityOnly) || utilityOnly.isEmpty()) {
-                // real play available, or truly nothing (upstream APINA passes that)
-                return;
+            List<AutopassPolicy.Play> plays = new ArrayList<>();
+            boolean freshEquipment = collectPlays(plays, utilityOnly);
+            AutopassPolicy.Stop stop = new AutopassPolicy.Stop(myTurn, phase,
+                    getPlayer().getManaPool().totalMana(), manaCeiling(), freshEquipment,
+                    plays, utilityOnly, oppOnStack);
+            AutopassPolicy.Decision d = AutopassPolicy.decide(stop);
+            int turn = getGame().getPhaseHandler().getTurn();
+            if (d.pass) {
+                oneStopPass = true;
+                feed.publishNote(turn, String.valueOf(phase), "(auto-passed — " + d.reason + ")");
+            } else if (!plays.isEmpty() && !(myTurn && phase != null && phase.isMain())) {
+                // receipt for a kept prompt outside the sacred stops, once per
+                // phase: says which card held it open (tuning evidence)
+                String key = turn + ":" + phase + ":kept";
+                if (!key.equals(lastSilentNoteKey)) {
+                    lastSilentNoteKey = key;
+                    feed.publishNote(turn, String.valueOf(phase), "(prompt kept — " + d.reason + ")");
+                }
             }
-            oneStopPass = true;
-            feed.publishNote(getGame().getPhaseHandler().getTurn(), String.valueOf(phase),
-                    "(auto-passed — only utility activations available: "
-                            + String.join(", ", utilityOnly) + ")");
         } catch (RuntimeException failOpen) {
             oneStopPass = false; // any doubt → show the prompt
+        }
+    }
+
+    /**
+     * Pool plus every untapped source's yield on the live board, from the
+     * seats' own mana table ({@code MailboxController.manaSources}); {@code -1}
+     * when any source's yield is not a plain number (Selvala-class,
+     * power-scaled, condition-forked) — the policy then stays conservative.
+     */
+    private int manaCeiling() {
+        try {
+            int total = getPlayer().getManaPool().totalMana();
+            for (java.util.Map<String, Object> row : MailboxController.manaSources(getPlayer())) {
+                if (row.containsKey("sick")) {
+                    continue;
+                }
+                Object y = row.get("yield");
+                if (!(y instanceof Integer)) {
+                    return -1;
+                }
+                Object n = row.get("count");
+                total += (Integer) y * (n instanceof Integer ? (Integer) n : 1);
+            }
+            return total;
+        } catch (RuntimeException unknown) {
+            return -1;
         }
     }
 
@@ -235,12 +263,13 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
      *   <li>utility: everything else, collected for the narration line.</li>
      * </ul>
      */
-    private boolean hasRealPlay(List<String> utilityOut) {
+    private boolean collectPlays(List<AutopassPolicy.Play> playsOut, List<String> utilityOut) {
         java.util.Set<forge.game.card.CardView> actionable =
                 forge.ai.AvailableActions.collectActionable(getPlayer(), 500);
         if (actionable == null || actionable.isEmpty()) {
-            return false; // upstream sees nothing; its own APINA handles the pass
+            return false; // upstream sees nothing
         }
+        boolean freshEquipment = false;
         int matched = 0;
         for (ZoneType zone : new ZoneType[] { ZoneType.Hand, ZoneType.Battlefield, ZoneType.Flashback }) {
             for (Card card : getPlayer().getCardsIn(zone)) {
@@ -249,7 +278,7 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
                 }
                 matched++;
                 if (card.isEquipment() && card.enteredThisTurn()) {
-                    return true; // Ben's rule: fresh equipment holds the turn open
+                    freshEquipment = true; // Ben's rule: fresh equipment holds the turn open
                 }
                 boolean classified = false;
                 for (SpellAbility sa : card.getAllPossibleAbilities(getPlayer(), true)) {
@@ -258,7 +287,9 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
                         continue;
                     }
                     if (sa.isSpell() || sa instanceof LandAbility || sa.isPwAbility()) {
-                        return true;
+                        classified = true;
+                        playsOut.add(new AutopassPolicy.Play(card.getName(), manaCostOf(sa)));
+                        continue;
                     }
                     if (sa.isActivatedAbility()) {
                         classified = true;
@@ -268,14 +299,27 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
                     }
                 }
                 if (!classified) {
-                    return true; // upstream says actionable, we can't say why — fail open
+                    // upstream says actionable, we can't say why — fail open as a free play
+                    playsOut.add(new AutopassPolicy.Play(card.getName() + " (unclassified)", 0));
                 }
             }
         }
         if (matched < actionable.size()) {
-            return true; // actionable cards outside our walk — fail open
+            playsOut.add(new AutopassPolicy.Play("(actionable outside hand/battlefield/flashback)", 0)); // fail open
         }
-        return false;
+        return freshEquipment;
+    }
+
+    /** Total mana of the ability's cost (0 for pitch / alternative / free casts). */
+    private static int manaCostOf(SpellAbility sa) {
+        try {
+            if (sa.getPayCosts() == null || sa.getPayCosts().getTotalMana() == null) {
+                return 0;
+            }
+            return sa.getPayCosts().getTotalMana().getCMC();
+        } catch (RuntimeException unknown) {
+            return 0; // unknown cost → treat as free → the prompt stays open
+        }
     }
 
     /** Feed priority stops only at moments worth advising on. */

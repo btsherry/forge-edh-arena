@@ -1465,3 +1465,16 @@ Hard-won from two live sessions; read before optimizing anything.
     mailbox exits without stopping anything. `--no-autostop` leaves the
     table up. Tests: `runner/tests/test_autostop.py` drives the script through
     its env hooks against a temp tree with a stub stop command.
+
+75. **Autopass policy table (2026-09-07, BL-31).** `AutopassPolicy.decide(Stop)`
+    replaces the inline rules in `AdvisorControllerHuman.armCastsAutopassIfIdle`:
+    the controller adapts the board (turn, phase, pool, mana ceiling from
+    `MailboxController.manaSources` — `-1` when any yield is not a plain number,
+    real plays with `Cost.getTotalMana().getCMC()`, utility names, opponent item
+    on the stack, fresh equipment) and applies the decision. Order: floating
+    mana / declare steps / own mains / fresh equipment keep; a free play keeps;
+    no real play passes (opponent item or not); cheapest cost > ceiling passes
+    with the numbers; else keep naming the cheapest castable play, with a
+    once-per-phase "(prompt kept — …)" receipt in the Advisor feed. Forge's
+    own APINA still handles the truly-empty case first. Wedge threshold left at
+    3 by Ben's decision after Urza's game-24 stall (W-2).
