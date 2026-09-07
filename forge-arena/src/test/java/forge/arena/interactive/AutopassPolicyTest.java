@@ -128,14 +128,43 @@ public class AutopassPolicyTest {
     }
 
     @Test
+    public void declareStepsPassOnlyWhenNothingIsPossible() {
+        // nothing in hand that is affordable, no abilities, ceiling known → pass
+        Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.COMBAT_DECLARE_ATTACKERS, 0, 1,
+                Arrays.asList(new Play("Craterhoof Behemoth", 8)), NO_UTILITY, false)).reason, "declare step, nothing possible");
+        Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.COMBAT_DECLARE_BLOCKERS, 0, 0, NONE, NO_UTILITY, false)).reason,
+                "declare step, nothing possible");
+        // an affordable instant, any utility, or an unknown ceiling keeps the sacred stop
+        Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.COMBAT_DECLARE_ATTACKERS, 0, 3,
+                Arrays.asList(new Play("Heroic Intervention", 2)), NO_UTILITY, false)).reason, "combat declare step");
+        Assert.assertEquals(AutopassPolicy.decide(withUtility(false, PhaseType.COMBAT_DECLARE_BLOCKERS, false,
+                new Utility("Arbor Elf", false, true, false))).reason, "combat declare step");
+        Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.COMBAT_DECLARE_ATTACKERS, 0, -1, NONE, NO_UTILITY, false)).reason,
+                "combat declare step");
+    }
+
+    @Test
+    public void resolvingYourOwnSpellIsOptIn() {
+        final Stop off = new Stop(true, PhaseType.MAIN1, 0, 4, false, Arrays.asList(new Play("Giant Growth", 1)), NO_UTILITY,
+                Collections.<Utility>emptyList(), false, true, false);
+        Assert.assertEquals(AutopassPolicy.decide(off).reason, "own main phase", "default: the main stays sacred");
+        final Stop on = new Stop(true, PhaseType.MAIN1, 0, 4, false, Arrays.asList(new Play("Giant Growth", 1)), NO_UTILITY,
+                Collections.<Utility>emptyList(), false, true, true);
+        Assert.assertTrue(AutopassPolicy.decide(on).pass, "opt-in: one pass lets the spell resolve");
+        final Stop onButOpp = new Stop(true, PhaseType.MAIN1, 0, 4, false, NONE, NO_UTILITY,
+                Collections.<Utility>emptyList(), true, false, true);
+        Assert.assertEquals(AutopassPolicy.decide(onButOpp).reason, "own main phase", "an opponent's response on the stack keeps it");
+    }
+
+    @Test
     public void theSacredStopsNeverPass() {
         Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.MAIN1, 0, 0, NONE, NO_UTILITY, false)).reason,
                 "own main phase");
         Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.MAIN2, 0, 0, NONE, NO_UTILITY, false)).reason,
                 "own main phase");
-        Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.COMBAT_DECLARE_ATTACKERS, 0, 0, NONE, NO_UTILITY, false)).reason,
+        Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.COMBAT_DECLARE_ATTACKERS, 0, -1, NONE, NO_UTILITY, false)).reason,
                 "combat declare step");
-        Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.COMBAT_DECLARE_BLOCKERS, 0, 0, NONE, NO_UTILITY, false)).reason,
+        Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.COMBAT_DECLARE_BLOCKERS, 0, -1, NONE, NO_UTILITY, false)).reason,
                 "combat declare step");
         Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.END_OF_TURN, 2, 5, NONE, NO_UTILITY, false)).reason,
                 "mana floating");

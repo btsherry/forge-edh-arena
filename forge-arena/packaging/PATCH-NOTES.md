@@ -10,7 +10,10 @@
   declares, floating mana and a fresh equipment still always stop, so does a
   permanent whose ability is the answer (a targeted creature you can sacrifice,
   a sac outlet under a wipe, a tapper at their begin-combat), and any prompt
-  that is kept says which card kept it ("prompt kept — castable: …").
+  that is kept says which card kept it ("prompt kept — castable: …"). Combat
+  declare stops pass only when nothing at all is possible. Opt-in:
+  `ARENA_AUTOPASS_RESOLVE_OWN=on` lets your own spell resolve in your main
+  phase without a click.
 - **Typing in the Chat field no longer triggers the game's hotkeys.** Forge
   binds T (targeting arrows), S, C, Y, N and P at window level, and every
   letter typed into the Advisor tab's field also fired the matching one —

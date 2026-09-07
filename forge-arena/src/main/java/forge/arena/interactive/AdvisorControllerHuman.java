@@ -146,6 +146,13 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
 
     private volatile boolean inPriorityStop;
 
+    /** ARENA_AUTOPASS_RESOLVE_OWN=on (opt-in, 2026-09-07): in your own main phase
+     *  with only your own items on the stack, one pass lets the spell resolve
+     *  instead of a click. Off by default — it is the one hole in "mains are
+     *  sacred", and holding priority to stack a second spell is what it costs. */
+    private static final boolean RESOLVE_OWN =
+            "on".equalsIgnoreCase(String.valueOf(System.getenv("ARENA_AUTOPASS_RESOLVE_OWN")));
+
     /**
      * Color-commentary source: on the first stop of a new turn, publish the
      * public game-log delta of the completed turn(s). Batched — one digest
@@ -190,8 +197,10 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
             final PhaseType phase = getGame().getPhaseHandler().getPhase();
             final boolean myTurn = getGame().getPhaseHandler().isPlayerTurn(getPlayer());
             boolean oppOnStack = false;
+            int stackSize = 0;
             java.util.Set<Card> targetedByOpp = new java.util.HashSet<>();
             for (SpellAbilityStackInstance si : getGame().getStack()) {
+                stackSize++;
                 SpellAbility sa = si.getSpellAbility();
                 if (sa == null || !getPlayer().equals(sa.getActivatingPlayer())) {
                     oppOnStack = true;
@@ -210,7 +219,8 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
             boolean freshEquipment = collectPlays(plays, utilityOnly, utilities, targetedByOpp);
             AutopassPolicy.Stop stop = new AutopassPolicy.Stop(myTurn, phase,
                     getPlayer().getManaPool().totalMana(), manaCeiling(), freshEquipment,
-                    plays, utilityOnly, utilities, oppOnStack);
+                    plays, utilityOnly, utilities, oppOnStack,
+                    stackSize > 0 && !oppOnStack, RESOLVE_OWN);
             AutopassPolicy.Decision d = AutopassPolicy.decide(stop);
             int turn = getGame().getPhaseHandler().getTurn();
             if (d.pass) {
