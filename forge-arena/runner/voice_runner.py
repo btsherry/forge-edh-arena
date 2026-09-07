@@ -329,8 +329,15 @@ class VoiceRunner:
         self.your_move_on = os.environ.get("ARENA_VOICE_YOUR_MOVE", "on").lower() != "off"
         self.queue: list[dict] = []
         self.last_spoken_at = -1e9
-        self._adv_pos = 0
-        self._adv_inode = None
+        # Start at the END of the advisor's stream: a (re)started runner speaks
+        # new lines only — replaying history re-said the last quip after the
+        # 2026-09-07 mid-game restart. A brand-new game's file is empty anyway.
+        self._adv_pos, self._adv_inode = 0, None
+        try:
+            st = (logs_dir / "advisor-0.jsonl").stat()
+            self._adv_pos, self._adv_inode = st.st_size, st.st_ino
+        except OSError:
+            pass
         self.answered: set[int] = set()     # advisor request seqs the human already answered
         self.game_id = None
         self.seen_turn = None

@@ -195,6 +195,16 @@ class VoiceRunnerTests(unittest.TestCase):
         p_off = r2.renderer.render("Same words.")
         self.assertNotEqual(p_heavy, p_off, "different glitch levels never share a cache entry")
 
+    def test_restart_reads_only_new_advisor_lines(self):
+        self._advisor(kind="quip", id="ouch", turn=3)               # history from before the (re)start
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        self.clock.t += 100
+        r.step()
+        self.assertEqual(self.player.played, [], "history is never replayed")
+        self._advisor(kind="quip", id="nice-combo", turn=4)          # new line after the start
+        r.step()
+        self.assertEqual(self.player.played, ["nice-combo.wav"])
+
     def test_restart_mid_game_does_not_greet_again(self):
         self._observer(7, 2)            # a game already at turn 7 when the runner (re)starts
         self.r.step()
