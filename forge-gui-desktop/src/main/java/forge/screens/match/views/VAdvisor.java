@@ -85,6 +85,21 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         final java.awt.event.ActionListener sendAsk = e -> sendAsk();
         askField.addActionListener(sendAsk);
         askButton.addActionListener(sendAsk);
+        // Typed letters must not fire Forge's window-level match hotkeys
+        // (T arrows, S stack, C combat, Y/N yield, P auto-pass …) — see
+        // HotkeyGuard. Escape leaves the field without sending; after a send
+        // the focus goes back to the game so a deliberate hotkey works again.
+        askField.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(final java.awt.event.KeyEvent e) {
+                if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ESCAPE) {
+                    releaseFocus();
+                    e.consume();
+                } else if (forge.arena.interactive.HotkeyGuard.swallow(e)) {
+                    e.consume();
+                }
+            }
+        });
         askRow.add(askField, "growx");
         askRow.add(askButton);
         body.add(askRow, "growx, gaptop 2");
@@ -131,6 +146,13 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         pendingAsk = f;
         pendingSince = System.currentTimeMillis();
         syncAsk();
+        releaseFocus();
+    }
+
+    /** Hand keyboard focus back to the game: Forge's card panels are not
+     *  focusable, so without this the field would keep every later keystroke. */
+    private void releaseFocus() {
+        java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().clearFocusOwner();
     }
 
     private void syncAsk() {
