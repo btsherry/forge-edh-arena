@@ -13,6 +13,7 @@ import forge.arena.bootstrap.ArenaBootstrap;
 import forge.arena.interactive.AutopassPolicy.Decision;
 import forge.arena.interactive.AutopassPolicy.Play;
 import forge.arena.interactive.AutopassPolicy.Stop;
+import forge.arena.interactive.AutopassPolicy.Utility;
 import forge.game.phase.PhaseType;
 
 /**
@@ -85,6 +86,45 @@ public class AutopassPolicyTest {
                 Arrays.asList("Arbor Elf", "Magus of the Candelabra"), false));
         Assert.assertTrue(d.pass, d.toString());
         Assert.assertEquals(d.reason, "only utility activations available: Arbor Elf, Magus of the Candelabra");
+    }
+
+    private static Stop withUtility(final boolean myTurn, final PhaseType phase, final boolean oppOnStack, final Utility... u) {
+        return new Stop(myTurn, phase, 0, 2, false, NONE, Arrays.asList(u[0].name), Arrays.asList(u), oppOnStack);
+    }
+
+    @Test
+    public void aTargetedPermanentWithAnActivatedAbilityKeepsThePrompt() {
+        // Swords to Plowshares on Sakura-Tribe Elder: the sacrifice is the response
+        final Decision d = AutopassPolicy.decide(withUtility(false, PhaseType.MAIN1, true,
+                new Utility("Sakura-Tribe Elder", true, false, true)));
+        Assert.assertFalse(d.pass, d.toString());
+        Assert.assertTrue(d.reason.startsWith("response available: Sakura-Tribe Elder"), d.reason);
+    }
+
+    @Test
+    public void aSacrificeOutletKeepsWhileAnOpponentItemIsUp() {
+        // a wipe on the stack targets nothing; the outlet still matters
+        final Decision d = AutopassPolicy.decide(withUtility(false, PhaseType.MAIN2, true,
+                new Utility("Viscera Seer", true, false, false)));
+        Assert.assertFalse(d.pass, d.toString());
+        Assert.assertEquals(d.reason, "response available: Viscera Seer (sacrifice outlet)");
+    }
+
+    @Test
+    public void aTapperKeepsAtTheOpponentsBeginCombatOnly() {
+        final Utility maze = new Utility("Maze of Ith", false, true, false);
+        Assert.assertFalse(AutopassPolicy.decide(withUtility(false, PhaseType.COMBAT_BEGIN, false, maze)).pass,
+                "tapper window at the opponent's begin combat");
+        Assert.assertTrue(AutopassPolicy.decide(withUtility(false, PhaseType.END_OF_TURN, false, maze)).pass,
+                "the same ability at end of turn is plain utility");
+    }
+
+    @Test
+    public void plainUtilityStillPassesUnderAnOpponentPing() {
+        // Arbor Elf's untap is not a response to a Purphoros trigger
+        final Decision d = AutopassPolicy.decide(withUtility(false, PhaseType.MAIN1, true,
+                new Utility("Arbor Elf", false, true, false)));
+        Assert.assertTrue(d.pass, d.toString());
     }
 
     @Test

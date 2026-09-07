@@ -190,18 +190,27 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
             final PhaseType phase = getGame().getPhaseHandler().getPhase();
             final boolean myTurn = getGame().getPhaseHandler().isPlayerTurn(getPlayer());
             boolean oppOnStack = false;
+            java.util.Set<Card> targetedByOpp = new java.util.HashSet<>();
             for (SpellAbilityStackInstance si : getGame().getStack()) {
                 SpellAbility sa = si.getSpellAbility();
                 if (sa == null || !getPlayer().equals(sa.getActivatingPlayer())) {
                     oppOnStack = true;
+                    for (SpellAbility part = sa; part != null; part = part.getSubAbility()) {
+                        try {
+                            targetedByOpp.addAll(part.getTargets().getTargetCards());
+                        } catch (RuntimeException ignore) {
+                            // untargeted part
+                        }
+                    }
                 }
             }
             List<String> utilityOnly = new ArrayList<>();
+            List<AutopassPolicy.Utility> utilities = new ArrayList<>();
             List<AutopassPolicy.Play> plays = new ArrayList<>();
-            boolean freshEquipment = collectPlays(plays, utilityOnly);
+            boolean freshEquipment = collectPlays(plays, utilityOnly, utilities, targetedByOpp);
             AutopassPolicy.Stop stop = new AutopassPolicy.Stop(myTurn, phase,
                     getPlayer().getManaPool().totalMana(), manaCeiling(), freshEquipment,
-                    plays, utilityOnly, oppOnStack);
+                    plays, utilityOnly, utilities, oppOnStack);
             AutopassPolicy.Decision d = AutopassPolicy.decide(stop);
             int turn = getGame().getPhaseHandler().getTurn();
             if (d.pass) {
@@ -263,7 +272,8 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
      *   <li>utility: everything else, collected for the narration line.</li>
      * </ul>
      */
-    private boolean collectPlays(List<AutopassPolicy.Play> playsOut, List<String> utilityOut) {
+    private boolean collectPlays(List<AutopassPolicy.Play> playsOut, List<String> utilityOut,
+            List<AutopassPolicy.Utility> utilitiesOut, java.util.Set<Card> targetedByOpp) {
         java.util.Set<forge.game.card.CardView> actionable =
                 forge.ai.AvailableActions.collectActionable(getPlayer(), 500);
         if (actionable == null || actionable.isEmpty()) {
@@ -296,6 +306,15 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
                         if (!utilityOut.contains(card.getName())) {
                             utilityOut.add(card.getName());
                         }
+                        boolean sac = false;
+                        try {
+                            sac = sa.getPayCosts() != null
+                                    && sa.getPayCosts().hasSpecificCostType(forge.game.cost.CostSacrifice.class);
+                        } catch (RuntimeException ignore) {
+                            // cost unreadable → not a sac outlet
+                        }
+                        utilitiesOut.add(new AutopassPolicy.Utility(card.getName(), sac,
+                                sa.usesTargeting(), targetedByOpp.contains(card)));
                     }
                 }
                 if (!classified) {

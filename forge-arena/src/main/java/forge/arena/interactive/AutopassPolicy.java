@@ -21,6 +21,10 @@ import forge.game.phase.PhaseType;
  *       equipping is the natural play);</li>
  *   <li>a real play that costs nothing (0-mana spell, pitch/alternative
  *       cost) → keep, naming it;</li>
+ *   <li>a utility ability that can be the response → keep: its permanent is
+ *       targeted by the opponent's stack item, it has a sacrifice cost while
+ *       an opponent's item is up, or it targets at an opponent's begin-combat
+ *       (tappers, Maze of Ith);</li>
  *   <li>no real play at all → pass ("only utility: …" or "nothing available")
  *       — this now applies with an opponent's spell or trigger on the stack
  *       too, which is the damage-ping case;</li>
@@ -52,11 +56,19 @@ public final class AutopassPolicy {
         public final List<Play> realPlays;
         /** Names of utility activations (tap abilities and the like). */
         public final List<String> utilityOnly;
+        /** The same utilities with the facts that can make one a response. */
+        public final List<Utility> utilities;
         public final boolean opponentItemOnStack;
 
         public Stop(final boolean myTurn, final PhaseType phase, final int poolMana, final int manaCeiling,
                 final boolean freshEquipment, final List<Play> realPlays, final List<String> utilityOnly,
                 final boolean opponentItemOnStack) {
+            this(myTurn, phase, poolMana, manaCeiling, freshEquipment, realPlays, utilityOnly, null, opponentItemOnStack);
+        }
+
+        public Stop(final boolean myTurn, final PhaseType phase, final int poolMana, final int manaCeiling,
+                final boolean freshEquipment, final List<Play> realPlays, final List<String> utilityOnly,
+                final List<Utility> utilities, final boolean opponentItemOnStack) {
             this.myTurn = myTurn;
             this.phase = phase;
             this.poolMana = poolMana;
@@ -64,7 +76,26 @@ public final class AutopassPolicy {
             this.freshEquipment = freshEquipment;
             this.realPlays = realPlays == null ? Collections.<Play>emptyList() : realPlays;
             this.utilityOnly = utilityOnly == null ? Collections.<String>emptyList() : utilityOnly;
+            this.utilities = utilities == null ? Collections.<Utility>emptyList() : utilities;
             this.opponentItemOnStack = opponentItemOnStack;
+        }
+    }
+
+    /** A non-mana activated ability and the two facts that can make it a response. */
+    public static final class Utility {
+        public final String name;
+        /** Its cost sacrifices something (a sac outlet answers removal and wipes). */
+        public final boolean sacCost;
+        /** It targets (a tapper / Maze of Ith fires at an opponent's begin-combat). */
+        public final boolean targets;
+        /** Its permanent is targeted by an opponent's item on the stack right now. */
+        public final boolean targetedByOpponent;
+
+        public Utility(final String name, final boolean sacCost, final boolean targets, final boolean targetedByOpponent) {
+            this.name = name;
+            this.sacCost = sacCost;
+            this.targets = targets;
+            this.targetedByOpponent = targetedByOpponent;
         }
     }
 
@@ -122,6 +153,19 @@ public final class AutopassPolicy {
             }
             if (cheapest == null || p.manaCost < cheapest.manaCost) {
                 cheapest = p;
+            }
+        }
+        // Ben (2026-09-07): tapping or sacrificing a permanent can BE the response.
+        // Three narrow keeps ahead of the utility-only pass.
+        for (final Utility u : s.utilities) {
+            if (s.opponentItemOnStack && u.targetedByOpponent) {
+                return Decision.keep("response available: " + u.name + " is targeted");
+            }
+            if (s.opponentItemOnStack && u.sacCost) {
+                return Decision.keep("response available: " + u.name + " (sacrifice outlet)");
+            }
+            if (!s.myTurn && s.phase == PhaseType.COMBAT_BEGIN && u.targets) {
+                return Decision.keep("tapper window: " + u.name);
             }
         }
         if (cheapest == null) {
