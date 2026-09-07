@@ -1495,6 +1495,13 @@ Hard-won from two live sessions; read before optimizing anything.
     mana / declare steps / own mains / fresh equipment keep; a free play keeps;
     no real play passes (opponent item or not); cheapest cost > ceiling passes
     with the numbers; else keep naming the cheapest castable play, with a
-    once-per-phase "(prompt kept — …)" receipt in the Advisor feed. Forge's
-    own APINA still handles the truly-empty case first. Wedge threshold left at
+    once-per-phase "(prompt kept — …)" receipt in the Advisor feed. Response-
+    aware keeps ahead of the utility-only pass (Ben's tap/sac question): a
+    utility on a permanent targeted by the opponent's stack item, a sacrifice-
+    cost utility while an opponent's item is up, a targeting utility at the
+    opponent's COMBAT_BEGIN. Declare steps pass when `nothingPossible` (no
+    free/affordable play with a known ceiling, no activated ability, no fresh
+    equipment). `ARENA_AUTOPASS_RESOLVE_OWN=on` (env read by the GUI JVM) lets
+    own-items-only stacks resolve in the main phase — opt-in. Forge's own APINA
+    still handles the truly-empty case first. Wedge threshold left at
     3 by Ben's decision after Urza's game-24 stall (W-2).

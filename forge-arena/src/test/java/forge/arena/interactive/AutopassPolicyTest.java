@@ -13,6 +13,7 @@ import forge.arena.bootstrap.ArenaBootstrap;
 import forge.arena.interactive.AutopassPolicy.Decision;
 import forge.arena.interactive.AutopassPolicy.Play;
 import forge.arena.interactive.AutopassPolicy.Stop;
+import forge.arena.interactive.AutopassPolicy.Utility;
 import forge.game.phase.PhaseType;
 
 /**
@@ -87,15 +88,83 @@ public class AutopassPolicyTest {
         Assert.assertEquals(d.reason, "only utility activations available: Arbor Elf, Magus of the Candelabra");
     }
 
+    private static Stop withUtility(final boolean myTurn, final PhaseType phase, final boolean oppOnStack, final Utility... u) {
+        return new Stop(myTurn, phase, 0, 2, false, NONE, Arrays.asList(u[0].name), Arrays.asList(u), oppOnStack);
+    }
+
+    @Test
+    public void aTargetedPermanentWithAnActivatedAbilityKeepsThePrompt() {
+        // Swords to Plowshares on Sakura-Tribe Elder: the sacrifice is the response
+        final Decision d = AutopassPolicy.decide(withUtility(false, PhaseType.MAIN1, true,
+                new Utility("Sakura-Tribe Elder", true, false, true)));
+        Assert.assertFalse(d.pass, d.toString());
+        Assert.assertTrue(d.reason.startsWith("response available: Sakura-Tribe Elder"), d.reason);
+    }
+
+    @Test
+    public void aSacrificeOutletKeepsWhileAnOpponentItemIsUp() {
+        // a wipe on the stack targets nothing; the outlet still matters
+        final Decision d = AutopassPolicy.decide(withUtility(false, PhaseType.MAIN2, true,
+                new Utility("Viscera Seer", true, false, false)));
+        Assert.assertFalse(d.pass, d.toString());
+        Assert.assertEquals(d.reason, "response available: Viscera Seer (sacrifice outlet)");
+    }
+
+    @Test
+    public void aTapperKeepsAtTheOpponentsBeginCombatOnly() {
+        final Utility maze = new Utility("Maze of Ith", false, true, false);
+        Assert.assertFalse(AutopassPolicy.decide(withUtility(false, PhaseType.COMBAT_BEGIN, false, maze)).pass,
+                "tapper window at the opponent's begin combat");
+        Assert.assertTrue(AutopassPolicy.decide(withUtility(false, PhaseType.END_OF_TURN, false, maze)).pass,
+                "the same ability at end of turn is plain utility");
+    }
+
+    @Test
+    public void plainUtilityStillPassesUnderAnOpponentPing() {
+        // Arbor Elf's untap is not a response to a Purphoros trigger
+        final Decision d = AutopassPolicy.decide(withUtility(false, PhaseType.MAIN1, true,
+                new Utility("Arbor Elf", false, true, false)));
+        Assert.assertTrue(d.pass, d.toString());
+    }
+
+    @Test
+    public void declareStepsPassOnlyWhenNothingIsPossible() {
+        // nothing in hand that is affordable, no abilities, ceiling known → pass
+        Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.COMBAT_DECLARE_ATTACKERS, 0, 1,
+                Arrays.asList(new Play("Craterhoof Behemoth", 8)), NO_UTILITY, false)).reason, "declare step, nothing possible");
+        Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.COMBAT_DECLARE_BLOCKERS, 0, 0, NONE, NO_UTILITY, false)).reason,
+                "declare step, nothing possible");
+        // an affordable instant, any utility, or an unknown ceiling keeps the sacred stop
+        Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.COMBAT_DECLARE_ATTACKERS, 0, 3,
+                Arrays.asList(new Play("Heroic Intervention", 2)), NO_UTILITY, false)).reason, "combat declare step");
+        Assert.assertEquals(AutopassPolicy.decide(withUtility(false, PhaseType.COMBAT_DECLARE_BLOCKERS, false,
+                new Utility("Arbor Elf", false, true, false))).reason, "combat declare step");
+        Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.COMBAT_DECLARE_ATTACKERS, 0, -1, NONE, NO_UTILITY, false)).reason,
+                "combat declare step");
+    }
+
+    @Test
+    public void resolvingYourOwnSpellIsOptIn() {
+        final Stop off = new Stop(true, PhaseType.MAIN1, 0, 4, false, Arrays.asList(new Play("Giant Growth", 1)), NO_UTILITY,
+                Collections.<Utility>emptyList(), false, true, false);
+        Assert.assertEquals(AutopassPolicy.decide(off).reason, "own main phase", "default: the main stays sacred");
+        final Stop on = new Stop(true, PhaseType.MAIN1, 0, 4, false, Arrays.asList(new Play("Giant Growth", 1)), NO_UTILITY,
+                Collections.<Utility>emptyList(), false, true, true);
+        Assert.assertTrue(AutopassPolicy.decide(on).pass, "opt-in: one pass lets the spell resolve");
+        final Stop onButOpp = new Stop(true, PhaseType.MAIN1, 0, 4, false, NONE, NO_UTILITY,
+                Collections.<Utility>emptyList(), true, false, true);
+        Assert.assertEquals(AutopassPolicy.decide(onButOpp).reason, "own main phase", "an opponent's response on the stack keeps it");
+    }
+
     @Test
     public void theSacredStopsNeverPass() {
         Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.MAIN1, 0, 0, NONE, NO_UTILITY, false)).reason,
                 "own main phase");
         Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.MAIN2, 0, 0, NONE, NO_UTILITY, false)).reason,
                 "own main phase");
-        Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.COMBAT_DECLARE_ATTACKERS, 0, 0, NONE, NO_UTILITY, false)).reason,
+        Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.COMBAT_DECLARE_ATTACKERS, 0, -1, NONE, NO_UTILITY, false)).reason,
                 "combat declare step");
-        Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.COMBAT_DECLARE_BLOCKERS, 0, 0, NONE, NO_UTILITY, false)).reason,
+        Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.COMBAT_DECLARE_BLOCKERS, 0, -1, NONE, NO_UTILITY, false)).reason,
                 "combat declare step");
         Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.END_OF_TURN, 2, 5, NONE, NO_UTILITY, false)).reason,
                 "mana floating");

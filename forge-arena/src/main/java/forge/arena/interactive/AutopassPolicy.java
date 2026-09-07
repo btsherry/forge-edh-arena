@@ -15,12 +15,20 @@ import forge.game.phase.PhaseType;
  * <p>Order of rules (first match wins):
  * <ol>
  *   <li>mana floating in the pool → keep (unspent mana signals intent);</li>
- *   <li>declare attackers / declare blockers → keep (combat is sacred);</li>
- *   <li>own main phase → keep (mains are sacred by any layer, ever);</li>
+ *   <li>declare attackers / declare blockers → keep (combat is sacred) unless
+ *       nothing at all is possible: no free or affordable play with a known
+ *       ceiling and no activated ability — then pass;</li>
+ *   <li>own main phase → keep (mains are sacred by any layer, ever); the one
+ *       opt-in exception is {@code ARENA_AUTOPASS_RESOLVE_OWN=on}: with only
+ *       your own items on the stack, one pass lets your spell resolve;</li>
  *   <li>an equipment that entered this turn → keep (the drop turn is when
  *       equipping is the natural play);</li>
  *   <li>a real play that costs nothing (0-mana spell, pitch/alternative
  *       cost) → keep, naming it;</li>
+ *   <li>a utility ability that can be the response → keep: its permanent is
+ *       targeted by the opponent's stack item, it has a sacrifice cost while
+ *       an opponent's item is up, or it targets at an opponent's begin-combat
+ *       (tappers, Maze of Ith);</li>
  *   <li>no real play at all → pass ("only utility: …" or "nothing available")
  *       — this now applies with an opponent's spell or trigger on the stack
  *       too, which is the damage-ping case;</li>
@@ -52,11 +60,34 @@ public final class AutopassPolicy {
         public final List<Play> realPlays;
         /** Names of utility activations (tap abilities and the like). */
         public final List<String> utilityOnly;
+        /** The same utilities with the facts that can make one a response. */
+        public final List<Utility> utilities;
         public final boolean opponentItemOnStack;
+        /** The stack is non-empty and every item on it is the human's own. */
+        public final boolean onlyOwnItemsOnStack;
+        /** ARENA_AUTOPASS_RESOLVE_OWN=on: one pass lets your own spell resolve in your main phase. */
+        public final boolean resolveOwnEnabled;
 
         public Stop(final boolean myTurn, final PhaseType phase, final int poolMana, final int manaCeiling,
                 final boolean freshEquipment, final List<Play> realPlays, final List<String> utilityOnly,
                 final boolean opponentItemOnStack) {
+            this(myTurn, phase, poolMana, manaCeiling, freshEquipment, realPlays, utilityOnly, null, opponentItemOnStack,
+                    false, false);
+        }
+
+        public Stop(final boolean myTurn, final PhaseType phase, final int poolMana, final int manaCeiling,
+                final boolean freshEquipment, final List<Play> realPlays, final List<String> utilityOnly,
+                final List<Utility> utilities, final boolean opponentItemOnStack) {
+            this(myTurn, phase, poolMana, manaCeiling, freshEquipment, realPlays, utilityOnly, utilities, opponentItemOnStack,
+                    false, false);
+        }
+
+        public Stop(final boolean myTurn, final PhaseType phase, final int poolMana, final int manaCeiling,
+                final boolean freshEquipment, final List<Play> realPlays, final List<String> utilityOnly,
+                final List<Utility> utilities, final boolean opponentItemOnStack,
+                final boolean onlyOwnItemsOnStack, final boolean resolveOwnEnabled) {
+            this.onlyOwnItemsOnStack = onlyOwnItemsOnStack;
+            this.resolveOwnEnabled = resolveOwnEnabled;
             this.myTurn = myTurn;
             this.phase = phase;
             this.poolMana = poolMana;
@@ -64,7 +95,26 @@ public final class AutopassPolicy {
             this.freshEquipment = freshEquipment;
             this.realPlays = realPlays == null ? Collections.<Play>emptyList() : realPlays;
             this.utilityOnly = utilityOnly == null ? Collections.<String>emptyList() : utilityOnly;
+            this.utilities = utilities == null ? Collections.<Utility>emptyList() : utilities;
             this.opponentItemOnStack = opponentItemOnStack;
+        }
+    }
+
+    /** A non-mana activated ability and the two facts that can make it a response. */
+    public static final class Utility {
+        public final String name;
+        /** Its cost sacrifices something (a sac outlet answers removal and wipes). */
+        public final boolean sacCost;
+        /** It targets (a tapper / Maze of Ith fires at an opponent's begin-combat). */
+        public final boolean targets;
+        /** Its permanent is targeted by an opponent's item on the stack right now. */
+        public final boolean targetedByOpponent;
+
+        public Utility(final String name, final boolean sacCost, final boolean targets, final boolean targetedByOpponent) {
+            this.name = name;
+            this.sacCost = sacCost;
+            this.targets = targets;
+            this.targetedByOpponent = targetedByOpponent;
         }
     }
 
@@ -102,14 +152,37 @@ public final class AutopassPolicy {
         }
     }
 
+    /** No free play, no play within a KNOWN ceiling, no activated ability at all. */
+    static boolean nothingPossible(final Stop s) {
+        if (s.freshEquipment || !s.utilities.isEmpty() || !s.utilityOnly.isEmpty() || s.manaCeiling < 0) {
+            return false;
+        }
+        for (final Play p : s.realPlays) {
+            if (p.manaCost <= s.manaCeiling) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static Decision decide(final Stop s) {
         if (s.poolMana > 0) {
             return Decision.keep("mana floating");
         }
         if (s.phase == PhaseType.COMBAT_DECLARE_ATTACKERS || s.phase == PhaseType.COMBAT_DECLARE_BLOCKERS) {
+            // Ben (2026-09-07, "pass with no action where sensical"): a declare
+            // step where NOTHING is possible — no free or affordable play, no
+            // activated ability of any kind, ceiling known — may pass. Any
+            // doubt keeps it, as before.
+            if (nothingPossible(s)) {
+                return Decision.pass("declare step, nothing possible");
+            }
             return Decision.keep("combat declare step");
         }
         if (s.myTurn && s.phase != null && s.phase.isMain()) {
+            if (s.resolveOwnEnabled && s.onlyOwnItemsOnStack) {
+                return Decision.pass("letting your own spell resolve (ARENA_AUTOPASS_RESOLVE_OWN)");
+            }
             return Decision.keep("own main phase");
         }
         if (s.freshEquipment) {
@@ -122,6 +195,19 @@ public final class AutopassPolicy {
             }
             if (cheapest == null || p.manaCost < cheapest.manaCost) {
                 cheapest = p;
+            }
+        }
+        // Ben (2026-09-07): tapping or sacrificing a permanent can BE the response.
+        // Three narrow keeps ahead of the utility-only pass.
+        for (final Utility u : s.utilities) {
+            if (s.opponentItemOnStack && u.targetedByOpponent) {
+                return Decision.keep("response available: " + u.name + " is targeted");
+            }
+            if (s.opponentItemOnStack && u.sacCost) {
+                return Decision.keep("response available: " + u.name + " (sacrifice outlet)");
+            }
+            if (!s.myTurn && s.phase == PhaseType.COMBAT_BEGIN && u.targets) {
+                return Decision.keep("tapper window: " + u.name);
             }
         }
         if (cheapest == null) {
