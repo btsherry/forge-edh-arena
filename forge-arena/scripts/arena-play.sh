@@ -8,6 +8,7 @@
 #   arena-play.sh --all-ai [--timeout N] [--model M] [--effort E]
 #   arena-play.sh --human [deck.dck] [--timeout N] [--model M] [--effort E] [--no-advisor]
 #   ... [--linger N] [--no-autostop]
+#   ... [--no-voice]   (the advisor's spoken voice: stock phrases always, live lines with ELEVENLABS_API_KEY)
 # Defaults: model=opus effort=medium timeout=90; human deck=selvala-heart-of-the-wilds.dck
 # Auto-teardown (2026-09-04, Ben): once the engine reports gameOver (or the GUI
 #   JVM is gone) a sleep-loop watcher lingers --linger seconds (default 60 all-AI,
@@ -30,7 +31,7 @@ LOGS="$ROOT/runner/logs"
 
 MODE=""; HUMAN_DECK="selvala-heart-of-the-wilds.dck"
 MODEL="opus"; EFFORT="medium"; TIMEOUT="90"; ADVISOR=""
-LINGER=""; AUTOSTOP=1
+LINGER=""; AUTOSTOP=1; VOICE="${ARENA_VOICE:-on}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --all-ai) MODE="all-ai"; shift ;;
@@ -44,6 +45,7 @@ while [ $# -gt 0 ]; do
               case "$2" in ''|*[!0-9]*) echo "arena: --linger takes a whole number of seconds (got '$2')" >&2; exit 2 ;; esac
               LINGER="$2"; shift 2 ;;
     --no-autostop) AUTOSTOP=0; shift ;;
+    --no-voice) VOICE=off; shift ;;
     --advisor) ADVISOR=1; shift ;;      # explicit on (the default for --human)
     --no-advisor) ADVISOR=0; shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -113,6 +115,16 @@ if [ "$ADVISOR" = "1" ]; then
   echo $! > "$LOGS/pids/advisor-loop.pid"
 fi
 
+# 2.6) the advisor's voice (Ben, 2026-09-07): Joshua/W.O.P.R. stock phrases
+# always (shipped, offline), first-sentence advice live only when
+# ELEVENLABS_API_KEY is set. One-way like the advisor; supervised the same way.
+# Off with --no-voice or ARENA_VOICE=off; no advisor → no voice.
+if [ "$ADVISOR" = "1" ] && [ "$VOICE" != "off" ]; then
+  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
+    "$ROOT/runner/run_voice.sh" >"$LOGS/voice_runner.out" 2>&1 &
+  echo $! > "$LOGS/pids/voice-loop.pid"
+fi
+
 # 3) GUI (spectator for all-ai, human seat 0 otherwise)
 if [ "$MODE" = "all-ai" ]; then GUI_ARG="--all-ai"; else GUI_ARG="$HUMAN_DECK"; fi
 ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" \
@@ -139,6 +151,7 @@ done
 if [ -f "$ROOT/mailbox/observer-state.json" ]; then
   seats=$(python3 "$ROOT/runner/arena-ctl.py" status 2>/dev/null | grep -c "model=")
   echo "arena live [$MODE]: $seats AI seats @ $MODEL/$EFFORT, timeout=${TIMEOUT}s"$([ "$MODE" = human ] && echo ", human=$HUMAN_DECK")
+  [ "$ADVISOR" = "1" ] && [ "$VOICE" != "off" ] && echo "  voice: stock phrases on$([ -n "${ELEVENLABS_API_KEY:-}" ] && echo ", live advice on" || echo ", live advice off (no ELEVENLABS_API_KEY)") (--no-voice to silence)"
   # 6) auto-teardown once the match has clearly concluded (Ben, 2026-09-04):
   # a plain sleep-loop watcher (no scheduler) waits for the engine's gameOver
   # flag or the GUI JVM to vanish, lingers, then runs arena-stop.sh exactly as

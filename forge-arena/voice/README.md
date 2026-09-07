@@ -46,3 +46,20 @@ families came out, and only ears can say which is Joshua:
 Audition: `afplay voice/samples/joshua-30s.wav`, the per-segment files are in
 `samples/take3.level/segments/NNN.wav`. Then either accept, or rebuild with
 `cut.py samples/wopr-take3.wav --keep <numbers> --target 30`.
+
+## The voice in the game (2026-09-07)
+
+The advisor now speaks: `runner/voice_runner.py` (stdlib only; supervised by
+`runner/run_voice.sh`; started by `arena-play.sh` in advised human games,
+`--no-voice` to silence). Stock lines live in `runner/voice/stock/` — 20
+rendered from Ben's ElevenLabs voice `Jousha-W.O.P.R.` with `eleven_v3`
+(stability 1.0, speed 0.92) plus his two v3 files from Downloads (`startup`,
+`game-over-gg`); `raw/` holds the dry renders, the shipped WAVs carry the
+film-match FX chain in `fx-chain.txt` (third-octave match-EQ against
+`samples/joshua-30s.wav`, 50 Hz tremolo, slap echo, compressor — centroid
+1176 Hz vs the reference's 1120). `sfx/` = seven terminal bleeps cut from
+take 3. Re-render stock after editing the chain:
+`for f in raw/*.wav; do ffmpeg -i $f -af "$(cat fx-chain.txt)" ../$(basename $f); done`.
+Live lines: Flash v2.5, first sentence of each advice, cached under
+`runner/logs/cache/voice/`. Tests: `runner/tests/test_voice_runner.py`,
+`test_advisor_quips.py`.

@@ -181,6 +181,30 @@ get any-colour mana picks (Gemstone Caverns, City of Brass…) auto-answered in
 the commander's colour, with one receipt in the tab; multicolour commanders
 keep the dialog.
 
+## The Advisor's voice
+
+The advisor can speak, in the register of Joshua from *WarGames*. It ships
+on in `--human` games with a set of pre-rendered stock lines and terminal
+bleeps (greeting at launch, "Your move.", eliminations, a win line or "A
+strange game…" at the end, and short quips the advisor picks when a moment
+earns one: "Nice combo.", "Ouch.", "I did not see that coming."). With
+`ELEVENLABS_API_KEY` set it also reads the **first sentence** of each piece
+of advice live (ElevenLabs Flash, about a second to first audio), caching
+every line so a repeated one never costs again. Discipline is the point: one
+utterance at a time, at most one every `ARENA_VOICE_MIN_GAP` seconds
+(default 8), and advice for a window you already answered is dropped, never
+read late.
+
+Knobs: `--no-voice` or `ARENA_VOICE=off`; `ARENA_VOICE_SFX=off` (no bleeps);
+`ARENA_VOICE_FX=off` (no film-style processing on live lines);
+`ARENA_VOICE_MAX_CHARS` per game (default 20000, then stock only);
+`ARENA_VOICE_ID` to use your own ElevenLabs voice. Mute mid-game with
+`python3 forge-arena/runner/voice_runner.py --mute` (`--unmute` to resume);
+`--play startup` or `--say "text"` test the speakers. Live rendering needs
+`ffmpeg` for decoding and the effects chain; without it the stock lines still
+play and live lines are skipped. The voice's own log is
+`runner/logs/voice-0.log` and its structured twin `voice-0.jsonl`.
+
 ## The AI panel
 
 The match screen's upper-left dock opens on the **AI** tab (Stack, Combat,
@@ -252,10 +276,11 @@ Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 | `seat-N.log` / `seat-N.jsonl` | Seat N's decision stream, readable and structured (`deviation` and `turn_intent` fields per record), with `DEVIATION` lines whenever the plan met reality ("wanted X — blocked by Y"); `grep DEVIATION` is the fastest play-quality review |
 | `seat-N.usage.json` | Rolling token and cost snapshot |
 | `advisor-0.log` / `advisor-0.jsonl` | The Advisor tab's stream and its structured twin: advice, commentary, autopass notes, your Chat exchanges, and your actual choices paired to their decision seq |
+| `voice-0.log` / `voice-0.jsonl` | The advisor's voice: what it spoke, dropped (stale, expired) or skipped, with live characters used |
 | `gui.out`, `run_table.out`, `ratings.out`, `advisor_runner.out`, `autostop.out` | Engine, runners, ratings sweep, advisor supervisor, auto-teardown watcher |
 | `transport-events.jsonl` | Punt and wedge events; the ratings sweep voids games contaminated inside their window |
 | `elo/seat-N.json` | Per-seat rating digest the AI panel reads |
-| `control/seat-N.json`, `control/advisor.json`, `control/ask/` | The GUI↔runner control plane: seat re-dials, the Advisor pause state, Chat questions (one file each, deleted on pickup); cleared at teardown |
+| `control/seat-N.json`, `control/advisor.json`, `control/voice.json`, `control/ask/` | The GUI↔runner control plane: seat re-dials, the Advisor pause state, the voice mute, Chat questions (one file each, deleted on pickup); cleared at teardown |
 | `archive/<timestamp>-stop/` | Every finished game's full log set, moved here at stop |
 
 Nothing is clobbered. Stop moves the session's whole log set into a
@@ -290,7 +315,7 @@ pretty-prints it with the pending decisions.
 
 | Script | What it does |
 |---|---|
-| `scripts/arena-play.sh` | One-shot launch: preflight → teardown → brains → Advisor (human) → GUI → auto-teardown watcher. `--all-ai` or `--human [deck.dck]`; `--no-advisor` (`--advisor` accepted, no-op); `--linger N`, `--no-autostop` |
+| `scripts/arena-play.sh` | One-shot launch: preflight → teardown → brains → Advisor (human) → GUI → auto-teardown watcher. `--all-ai` or `--human [deck.dck]`; `--no-advisor` (`--advisor` accepted, no-op); `--no-voice`; `--linger N`, `--no-autostop` |
 | `scripts/arena-stop.sh` | Stop now: kill GUI and runners by PID file, rate the game, archive the session's logs, clear the mailbox |
 | `scripts/arena-autostop.sh` | The watcher `arena-play.sh` starts: waits for the engine's `gameOver` or the window to close, lingers, runs `arena-stop.sh` |
 | `scripts/arena-add-deck.py` | Bare `.dck` → playable seat (dossier, combos, lint, load probe, primer) |
@@ -302,6 +327,7 @@ pretty-prints it with the pending decisions.
 | `runner/arena-ctl.py` | Set any seat's model or effort mid-game |
 | `runner/status.py`, `runner/usage_report.py` | Seat health dashboard; per-seat token-burn report, works mid-game |
 | `runner/run_advisor.sh`, `runner/advisor_runner.py` | The Advisor's supervisor and the Advisor brain |
+| `runner/run_voice.sh`, `runner/voice_runner.py` | The Advisor's voice: supervisor and daemon (stock phrases in `runner/voice/stock/`, live lines with a key) |
 
 Seat portraits are built-in Forge avatars matched to each deck's mana-pip
 mix (mono-red gets a red head, a three-colour deck its heaviest colour),

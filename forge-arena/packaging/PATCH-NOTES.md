@@ -2,6 +2,12 @@
 
 ## Unreleased — after v3.4
 
+- **The advisor speaks.** A Joshua/W.O.P.R.-register voice for the Advisor: shipped
+  stock lines and terminal bleeps at launch, your turns, eliminations and game
+  over, quips the advisor picks when a moment earns one, and — with
+  `ELEVENLABS_API_KEY` — the first sentence of each piece of advice read live,
+  cached, rate-limited to one utterance every 8 s and never read late.
+  `--no-voice` silences it.
 - **Typing in the Chat field no longer triggers the game's hotkeys.** Forge
   binds T (targeting arrows), S, C, Y, N and P at window level, and every
   letter typed into the Advisor tab's field also fired the matching one —

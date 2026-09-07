@@ -1465,3 +1465,23 @@ Hard-won from two live sessions; read before optimizing anything.
     mailbox exits without stopping anything. `--no-autostop` leaves the
     table up. Tests: `runner/tests/test_autostop.py` drives the script through
     its env hooks against a temp tree with a stub stop command.
+
+75. **The advisor's voice (2026-09-07, Ben; branch experimental/voicework).**
+    `runner/voice_runner.py` (stdlib only, supervised by `run_voice.sh`, started by
+    `arena-play.sh` in advised human games unless `--no-voice`) reads
+    `advisor-0.jsonl` and `mailbox/observer-state.json` and plays WAVs on the
+    default output: STOCK (`runner/voice/stock/`, 22 pre-rendered lines from
+    Ben's ElevenLabs voice `Jousha-W.O.P.R.` with the film-match FX chain in
+    `fx-chain.txt` baked in, plus seven terminal bleeps cut from the WOPR
+    compilation), CACHE (`logs/cache/voice/<sha1>.wav`, key = text+voice+model+fx),
+    LIVE (ElevenLabs Flash v2.5 via HTTPS, MP3 → ffmpeg → WAV + FX; only with
+    `ELEVENLABS_API_KEY`). Advice → first sentence only; ask answers; the
+    advisor's `[quip:<id>]` tags (closed vocabulary in `advisor_runner.QUIPS`,
+    stripped from the panel text, recorded as `quip`) → stock phrase; observer
+    events → startup / your-move / player-eliminated / you-win or strange-game +
+    game-over-gg. Discipline: one utterance at a time, `ARENA_VOICE_MIN_GAP`
+    (8 s) between them except start/end, newest per kind wins, advice whose seq
+    the human already answered (advisor now records `chosen`) is dropped, TTLs
+    expire the rest. Mute: `control/voice.json`. Tests:
+    `runner/tests/test_voice_runner.py` (12), `test_advisor_quips.py` (4).
+    Not yet: a GUI mute button, Linux playback verification, tuning by ear.

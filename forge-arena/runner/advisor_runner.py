@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import sys
 import time
 from pathlib import Path
@@ -43,6 +44,31 @@ DEFAULT_TABLE = ("urza-lord-high-artificer giada-font-of-hope "
                  "purphoros-god-of-the-forge selvala-heart-of-the-wilds")
 CONTEXT_MAX_LINES = 40  # BL-13: bound on lines carried between advice calls
 ASK_MAX_CHARS = 500     # a question is one line; the GUI caps at the same value
+# Voice quips (Ben, 2026-09-07): the advisor may end an advice or commentary
+# line with ONE tag from this closed set — [quip:<id>] — and the voice runner
+# plays the matching pre-rendered Joshua/W.O.P.R. phrase. The tag is stripped
+# from the panel text and recorded as its own `quip` record. Film quotes are
+# rare by instruction (the prompt says so); the runner rate-limits everything.
+QUIPS = ("good-swing", "good-counter", "rough-counter", "didnt-see-that", "nice-combo", "stick-it-to-them",
+         "ouch", "must-have-hurt", "well-played", "interesting", "calculating",
+         "shall-we-play", "greetings-falken", "strange-game", "nice-game-of-chess", "hello")
+QUIP_QUOTES = ("shall-we-play", "greetings-falken", "strange-game", "nice-game-of-chess", "hello")
+QUIP_RE = re.compile(r"\s*\[quip:([a-z0-9-]+)\]\s*")
+QUIP_GUIDE = ("\nVOICE QUIP (optional): if the moment earns it, end with exactly one tag from this list and nothing after it: "
+              + ", ".join(f"[quip:{q}]" for q in QUIPS)
+              + ". Use one at most every other turn; the four WarGames quotes (shall-we-play, greetings-falken, "
+              "strange-game, nice-game-of-chess) at most once per game each, when they genuinely fit.")
+
+
+def split_quip(text: str) -> tuple[str, str | None]:
+    """Strip the [quip:<id>] tag from a reply; return (clean text, id or None).
+    Unknown ids are dropped silently — the vocabulary is closed."""
+    m = QUIP_RE.search(text or "")
+    if not m:
+        return (text or "").strip(), None
+    qid = m.group(1)
+    clean = QUIP_RE.sub(" ", text).strip()
+    return clean, (qid if qid in QUIPS else None)
 
 
 def table_opponents(own_deck: str, roster: list[str]) -> list[str]:
@@ -308,27 +334,31 @@ class AdvisorRunner:
                   f"(turn {turn}, {phase}): {req.get('prompt')}\n"
                   f"{self._fmt_options(req)}"
                   f"STATE: {json.dumps(req.get('state'), separators=(',', ':'))}\n\n"
-                  "Advise the human now (1-3 sentences, plain text).")
+                  "Advise the human now (1-3 sentences, plain text)." + QUIP_GUIDE)
         answer, meta = self.brain.decide(prompt, self.timeout)
-        text = (meta.get("raw") or "").strip()
+        text, quip = split_quip((meta.get("raw") or "").strip())
         if text:
             self._stream_write(f"\n[t{turn} · {phase}] {text}\n")
         self._record("advice", {"seq": req.get("seq"), "turn": turn, "phase": phase,
                                 "decisionType": req.get("decisionType"),
                                 "text": text, "latency_s": meta.get("latency_s")})
+        if quip:
+            self._record("quip", {"id": quip, "turn": turn, "with": "advice", "seq": req.get("seq")})
 
     def _commentate(self, digest: dict) -> None:
         turn = digest.get("turn")
         lines = digest.get("digest") or []
         prompt = (f"TURN {turn} COMPLETE. Public log of the turn:\n"
                   + "\n".join(f"  {ln}" for ln in lines[-60:])
-                  + "\n\nONE line of color commentary (plain text).")
+                  + "\n\nONE line of color commentary (plain text)." + QUIP_GUIDE)
         answer, meta = self.brain.decide(prompt, min(self.timeout, 45.0))
-        text = (meta.get("raw") or "").strip()
+        text, quip = split_quip((meta.get("raw") or "").strip())
         if text:
             self._stream_write(f"\n[t{turn} · color] {text}\n")
         self._record("color", {"seq": digest.get("seq"), "turn": turn,
                                "text": text, "latency_s": meta.get("latency_s")})
+        if quip:
+            self._record("quip", {"id": quip, "turn": turn, "with": "color", "seq": digest.get("seq")})
 
     # ---- game identity (plan items 5 + 8) ----------------------------------------
 
@@ -388,6 +418,7 @@ class AdvisorRunner:
                 self._push_context(
                     f"- the human chose {json.dumps(body.get('chosen'))} "
                     f"for {body.get('decisionType')} (seq {body.get('seq')})")
+                self._record("chosen", {"seq": body.get("seq"), "decisionType": body.get("decisionType")})
             elif kind == "note":
                 if not quiet:
                     self._stream_write(f"[t{body.get('turn')}] ⏭ {body.get('note')}\n")
