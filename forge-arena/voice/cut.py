@@ -164,6 +164,7 @@ def main() -> None:
     ap.add_argument("--pad", type=float, default=0.12)
     ap.add_argument("--gap", type=float, default=0.15, help="silence inserted between montage segments")
     ap.add_argument("--skip-until", type=float, default=0.0, help="ignore everything before this second (ads, intro)")
+    ap.add_argument("--until", type=float, default=None, help="ignore everything after this second")
     ap.add_argument("--f0", default="70-140", help="F0 band (Hz) that counts as the target voice")
     ap.add_argument("--keep", help="comma-separated segment numbers to use instead of auto-pick")
     ap.add_argument("--min-inband", type=float, default=0.5, help="auto-pick: minimum in-band voiced fraction")
@@ -172,6 +173,8 @@ def main() -> None:
     a = ap.parse_args()
 
     x, sr = load(a.wav)
+    if a.until is not None:
+        x = x[: int(a.until * sr)]
     lo, hi = (float(v) for v in a.f0.split("-"))
     if a.mode == "f0":
         mask, _ = voiced_mask(x, sr, lo, hi)
