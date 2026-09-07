@@ -2836,16 +2836,25 @@ public final class MailboxController extends PlayerControllerAi
     private boolean prepareTriggerViaSeat(SpellAbility sa) {
         final SpellAbility root = sa; // the WrappedAbility — optionality lives here
         Card host = sa.getHostCard();
+        boolean modal = false;
         if (sa.getApi() == ApiType.Charm) {
-            // modal trigger: mode choice already reaches the seat via
-            // chooseModeForAbility (CHOOSE_MODE); stock flow otherwise
+            // modal trigger: the mode choice reaches the seat via
+            // chooseModeForAbility (CHOOSE_MODE) inside makeChoices, which
+            // chains the chosen mode(s) under the Charm shell. BL-30 (game 23,
+            // 2026-09-06): this used to `return true` right here for every
+            // non-Random modal trigger, so a chosen mode WITH a target (Kogla
+            // and Yidaro's fight) reached the stack untargeted and Forge
+            // dropped it — "[Couldn't add to stack, failed to target]". The
+            // chosen chain now goes through the same aiming as any other own
+            // trigger; a mode without targets stacks as before.
             if (!forge.game.ability.effects.CharmEffect.makeChoices(sa)) {
                 return false;
             }
-            if (!sa.hasParam("Random")) {
-                return true;
+            modal = true;
+            sa = sa.getSubAbility(); // the chained chosen mode(s)
+            if (sa == null) {
+                return true; // nothing chosen (min 0): the shell stacks empty, as stock does
             }
-            sa = sa.getSubAbility();
         }
         if (sa.hasParam("TargetingPlayer")) {
             Player targetingPlayer = AbilityUtils.getDefinedPlayers(
@@ -2861,6 +2870,9 @@ public final class MailboxController extends PlayerControllerAi
             }
         }
         if (!anyTargeting) {
+            if (modal) {
+                return true; // the seat's chosen mode(s) need no aim; never re-run CharmAi (it re-picks modes)
+            }
             return getAi().doTrigger(sa, true); // stock setup for non-targeting triggers
         }
         // Item 1: only an OPTIONAL trigger may be declined at aim time. The

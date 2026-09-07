@@ -1,5 +1,18 @@
 # forge-light-llm — Patch Notes
 
+## Unreleased — after v3.4
+
+- **Typing in the Chat field no longer triggers the game's hotkeys.** Forge
+  binds T (targeting arrows), S, C, Y, N and P at window level, and every
+  letter typed into the Advisor tab's field also fired the matching one —
+  arrows went dark, an auto-yield could be set mid-combat. The field now
+  keeps its keystrokes; Escape leaves it; a send hands focus back to the game.
+- **A seat's own modal trigger keeps its target.** When a seat chose a
+  targeted mode of its own "choose one" trigger (Kogla and Yidaro's fight),
+  the mode reached the stack untargeted and the engine dropped it. The
+  chosen mode is now aimed by the seat like every other trigger; a silent
+  brain falls to stock aiming instead of losing the trigger.
+
 ## v3.4 — 2026-09-04
 
 Feature release on top of the v3.3.3 reliability work, validated in a live
