@@ -100,16 +100,17 @@
   "hello"
  ],
  "sfx": [
-  "bloop-a.wav",
-  "bloop-b.wav",
-  "bloop-c.wav",
-  "bloop-d.wav",
-  "bloop-run.wav",
-  "chirp-hi.wav",
-  "tone-long.wav"
+  "typing-01.wav",
+  "typing-02.wav",
+  "typing-03.wav",
+  "typing-04.wav",
+  "typing-05.wav",
+  "typing-06.wav",
+  "typing-07.wav"
  ],
  "fx_chain_file": "fx-chain.txt",
  "fx": "ffmpeg -af <fx-chain.txt>: third-octave match-EQ to the film reference + 50 Hz tremolo + short slap echo + compressor; raw/ holds the dry renders",
  "voice_id": "SBbMtfucc8NAkpyzIRvP",
- "voice_name": "Jousha-W.O.P.R."
+ "voice_name": "Jousha-W.O.P.R.",
+ "sfx_note": "terminal typing-to-Joshua beeps cut from the WOPR compilation (19-20 char/s clock, 900-1200 Hz); the earlier tones are in sfx/legacy/"
 }

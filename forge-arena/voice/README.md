@@ -57,8 +57,9 @@ rendered from Ben's ElevenLabs voice `Jousha-W.O.P.R.` with `eleven_v3`
 `game-over-gg`); `raw/` holds the dry renders, the shipped WAVs carry the
 film-match FX chain in `fx-chain.txt` (third-octave match-EQ against
 `samples/joshua-30s.wav`, 50 Hz tremolo, slap echo, compressor — centroid
-1176 Hz vs the reference's 1120). `sfx/` = seven terminal bleeps cut from
-take 3. Re-render stock after editing the chain:
+1176 Hz vs the reference's 1120). `sfx/` = seven terminal typing-to-Joshua beeps cut from take 3 (the 19–20 char/s clock at
+900–1200 Hz, found by `typing_cut.py`-style steady-tone + pulse-rate detection; levelled 6 dB under
+the voice lines, peaks ≤ −6 dBFS; the first tonal bloops are in `sfx/legacy/`). Re-render stock after editing the chain:
 `for f in raw/*.wav; do ffmpeg -i $f -af "$(cat fx-chain.txt)" ../$(basename $f); done`.
 Live lines: Flash v2.5, first sentence of each advice, cached under
 `runner/logs/cache/voice/`. Tests: `runner/tests/test_voice_runner.py`,
