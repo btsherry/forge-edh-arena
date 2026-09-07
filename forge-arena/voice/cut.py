@@ -155,19 +155,20 @@ def runs(mask: np.ndarray, hop_s: float, min_seg: float, min_gap: float, pad: fl
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("wav", type=Path)
-    ap.add_argument("--mode", choices=["level", "f0"], default="f0",
+    ap.add_argument("--mode", choices=["level", "f0"], default="level",
                     help="f0: segments are runs of periodic frames with F0 in --f0 (default); level: RMS gate")
     ap.add_argument("--target", type=float, default=30.0, help="montage length in seconds")
-    ap.add_argument("--gate-db", type=float, default=12.0)
+    ap.add_argument("--gate-db", type=float, default=15.0)
     ap.add_argument("--min-seg", type=float, default=0.35)
     ap.add_argument("--min-gap", type=float, default=0.25)
     ap.add_argument("--pad", type=float, default=0.12)
     ap.add_argument("--gap", type=float, default=0.15, help="silence inserted between montage segments")
     ap.add_argument("--skip-until", type=float, default=0.0, help="ignore everything before this second (ads, intro)")
     ap.add_argument("--until", type=float, default=None, help="ignore everything after this second")
-    ap.add_argument("--f0", default="70-140", help="F0 band (Hz) that counts as the target voice")
+    ap.add_argument("--f0", default="70-135", help="F0 band (Hz) that counts as the target voice")
     ap.add_argument("--keep", help="comma-separated segment numbers to use instead of auto-pick")
-    ap.add_argument("--min-inband", type=float, default=0.5, help="auto-pick: minimum in-band voiced fraction")
+    ap.add_argument("--max-iqr", type=float, default=20.0, help="auto-pick: max F0 interquartile spread (Hz) — flat delivery")
+    ap.add_argument("--min-pick", type=float, default=0.6, help="auto-pick: skip segments shorter than this")
     ap.add_argument("--max-seg", type=float, default=12.0, help="auto-pick: skip segments longer than this (music beds)")
     ap.add_argument("--out", type=Path, help="output directory (default: <wav>.cut/)")
     a = ap.parse_args()
@@ -209,8 +210,14 @@ def main() -> None:
     if a.keep:
         chosen = [int(k) for k in a.keep.split(",") if k.strip()]
     else:
-        cands = [r for r in rows if r["josh"] >= a.min_inband and r["dur"] <= a.max_seg]
-        cands.sort(key=lambda r: (-r["josh"] * min(r["dur"], 4.0), -r["dur"]))
+        # Joshua rule (take 3, 2026-09-07): a low, FLAT register — median F0 in
+        # --f0 and an interquartile spread at most --max-iqr — separates his
+        # lines from the other actors and the music bed far better than the
+        # periodicity fraction did on this processed voice. Longest first.
+        cands = [r for r in rows if r["f0_med"] != "" and lo <= r["f0_med"] <= hi
+                 and r["f0_iqr"] != "" and r["f0_iqr"] <= a.max_iqr
+                 and a.min_pick <= r["dur"] <= a.max_seg]
+        cands.sort(key=lambda r: -r["dur"])
         chosen, acc = [], 0.0
         for r in cands:
             if acc + r["dur"] + a.gap > a.target:
