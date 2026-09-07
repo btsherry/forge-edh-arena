@@ -1,0 +1,5 @@
+.venv/
+samples/
+*.wav
+*.m4a
+*.webm
