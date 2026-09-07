@@ -100,9 +100,63 @@ def f0_stats(x: np.ndarray, sr: int, lo: float = 60.0, hi: float = 400.0) -> tup
     return float(med), float(q3 - q1)
 
 
+def voiced_mask(x: np.ndarray, sr: int, lo: float, hi: float, hop_s: float = 0.02, win_s: float = 0.04,
+                min_periodicity: float = 0.6) -> tuple[np.ndarray, np.ndarray]:
+    """Per-hop: is this frame periodic with F0 in [lo, hi]? Returns the mask
+    and the F0 per frame (nan where unvoiced). Joshua sits around 80–130 Hz
+    with a flat contour; the film's music bed and the other actors mostly do
+    not, so runs of in-band voiced frames pick his lines out of a mixed
+    soundtrack far better than a level gate."""
+    win, hop = int(sr * win_s), int(sr * hop_s)
+    n = max(0, (len(x) - win) // hop)
+    mask = np.zeros(n, dtype=bool)
+    f0 = np.full(n, np.nan, dtype=np.float32)
+    lag_lo, lag_hi = int(sr / hi), int(sr / lo)
+    for i in range(n):
+        fr = x[i * hop:i * hop + win]
+        if np.sqrt((fr ** 2).mean()) < 0.003:
+            continue
+        fr = fr - fr.mean()
+        ac = np.correlate(fr, fr, mode="full")[win - 1:]
+        ac = ac / (ac[0] + 1e-9)
+        seg = ac[lag_lo:lag_hi]
+        if len(seg) == 0:
+            continue
+        k = int(np.argmax(seg))
+        if seg[k] >= min_periodicity:
+            mask[i] = True
+            f0[i] = sr / (lag_lo + k)
+    # median-smooth the mask over 5 hops (100 ms) to bridge consonants
+    sm = np.convolve(mask.astype(np.float32), np.ones(5) / 5, mode="same") >= 0.5
+    return sm, f0
+
+
+def runs(mask: np.ndarray, hop_s: float, min_seg: float, min_gap: float, pad: float) -> list[tuple[float, float]]:
+    segs: list[list[float]] = []
+    i = 0
+    while i < len(mask):
+        if mask[i]:
+            j = i
+            while j < len(mask) and mask[j]:
+                j += 1
+            segs.append([i * hop_s, j * hop_s])
+            i = j
+        else:
+            i += 1
+    merged: list[list[float]] = []
+    for s in segs:
+        if merged and s[0] - merged[-1][1] < min_gap:
+            merged[-1][1] = s[1]
+        else:
+            merged.append(s)
+    return [(max(0.0, s - pad), e + pad) for s, e in merged if e - s >= min_seg]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("wav", type=Path)
+    ap.add_argument("--mode", choices=["level", "f0"], default="f0",
+                    help="f0: segments are runs of periodic frames with F0 in --f0 (default); level: RMS gate")
     ap.add_argument("--target", type=float, default=30.0, help="montage length in seconds")
     ap.add_argument("--gate-db", type=float, default=12.0)
     ap.add_argument("--min-seg", type=float, default=0.35)
@@ -110,14 +164,22 @@ def main() -> None:
     ap.add_argument("--pad", type=float, default=0.12)
     ap.add_argument("--gap", type=float, default=0.15, help="silence inserted between montage segments")
     ap.add_argument("--skip-until", type=float, default=0.0, help="ignore everything before this second (ads, intro)")
-    ap.add_argument("--f0", default="70-220", help="median-F0 band (Hz) a segment must sit in for auto-pick")
+    ap.add_argument("--f0", default="70-140", help="F0 band (Hz) that counts as the target voice")
     ap.add_argument("--keep", help="comma-separated segment numbers to use instead of auto-pick")
+    ap.add_argument("--min-inband", type=float, default=0.5, help="auto-pick: minimum in-band voiced fraction")
+    ap.add_argument("--max-seg", type=float, default=12.0, help="auto-pick: skip segments longer than this (music beds)")
     ap.add_argument("--out", type=Path, help="output directory (default: <wav>.cut/)")
     a = ap.parse_args()
 
     x, sr = load(a.wav)
-    rms, hop = frame_rms(x, sr)
-    segs = segments(rms, hop, sr, a.gate_db, a.min_seg, a.min_gap, a.pad, a.skip_until)
+    lo, hi = (float(v) for v in a.f0.split("-"))
+    if a.mode == "f0":
+        mask, _ = voiced_mask(x, sr, lo, hi)
+        mask[: int(a.skip_until / 0.02)] = False
+        segs = segments_from_mask = runs(mask, 0.02, a.min_seg, a.min_gap, a.pad)
+    else:
+        rms, hop = frame_rms(x, sr)
+        segs = segments(rms, hop, sr, a.gate_db, a.min_seg, a.min_gap, a.pad, a.skip_until)
     out = a.out or a.wav.with_suffix(".cut")
     (out / "segments").mkdir(parents=True, exist_ok=True)
     rows = []
@@ -125,9 +187,11 @@ def main() -> None:
         seg = x[int(s * sr):int(e * sr)]
         med, spread = f0_stats(seg, sr)
         level = 20 * np.log10(np.sqrt((seg ** 2).mean()) + 1e-9)
+        m, _ = voiced_mask(seg, sr, lo, hi)
+        josh = float(m.mean()) if len(m) else 0.0
         rows.append({"n": n, "start": round(s, 2), "end": round(e, 2), "dur": round(e - s, 2),
                      "rms_db": round(float(level), 1), "f0_med": round(med, 1) if med == med else "",
-                     "f0_iqr": round(spread, 1) if spread == spread else ""})
+                     "f0_iqr": round(spread, 1) if spread == spread else "", "josh": round(josh, 2)})
         sf.write(str(out / "segments" / f"{n:03d}.wav"), seg, sr)
     with (out / "segments.csv").open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()) if rows else ["n"])
@@ -137,14 +201,13 @@ def main() -> None:
     print(f"[cut] {len(rows)} speech segments, {total:.1f}s of speech in {len(x) / sr:.1f}s of audio -> {out}")
     for r in rows:
         print(f"  #{r['n']:>3}  {r['start']:>7.2f}-{r['end']:>7.2f}  {r['dur']:>5.2f}s  {r['rms_db']:>6.1f} dB"
-              f"  f0 {r['f0_med'] or '  -  '} ±{r['f0_iqr'] or ' - '}")
+              f"  f0 {r['f0_med'] or '  -  '} ±{r['f0_iqr'] or ' - '}  in-band {r['josh']:.2f}")
 
     if a.keep:
         chosen = [int(k) for k in a.keep.split(",") if k.strip()]
     else:
-        lo, hi = (float(v) for v in a.f0.split("-"))
-        cands = [r for r in rows if r["f0_med"] != "" and lo <= r["f0_med"] <= hi]
-        cands.sort(key=lambda r: (-r["dur"], r["f0_iqr"] if r["f0_iqr"] != "" else 1e9))
+        cands = [r for r in rows if r["josh"] >= a.min_inband and r["dur"] <= a.max_seg]
+        cands.sort(key=lambda r: (-r["josh"] * min(r["dur"], 4.0), -r["dur"]))
         chosen, acc = [], 0.0
         for r in cands:
             if acc + r["dur"] + a.gap > a.target:

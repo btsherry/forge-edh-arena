@@ -7,7 +7,7 @@ so anything routed to that OUTPUT comes back on its INPUT. This script:
   2. switches the default output to the loop (browser audio follows it),
   3. sets a fixed output volume (the analog level into the ADC),
   4. optionally opens a URL (YouTube autoplays a /watch URL),
-  5. records the loop's input with ffmpeg to a mono 44.1 kHz WAV,
+  5. records the loop's input with PortAudio to a mono WAV at the device rate (48 kHz),
   6. restores the previous output device — also on Ctrl-C or error.
 
 Usage:
@@ -15,7 +15,7 @@ Usage:
   capture.py --url https://www.youtube.com/watch?v=ID --seconds 572 --out samples/wopr-raw.wav
   capture.py --tone --seconds 5 --out samples/level-test.wav  # play a 440 Hz tone + speech into the loop
 
-Requires: ffmpeg (avfoundation), SwitchAudioSource (brew install switchaudio-osx).
+Requires: sounddevice + soundfile in voice/.venv, ffmpeg (level stats, tone), SwitchAudioSource.
 Reference audio recorded this way is a LISTENING reference for the voice
 design work; it is gitignored (voice/.gitignore) and never uploaded anywhere.
 """
@@ -68,13 +68,38 @@ def make_tone(path: Path, seconds: float) -> None:
 
 
 def record(out: Path, seconds: float, device: str) -> None:
+    """PortAudio (sounddevice) streaming capture at the device's native rate.
+    ffmpeg's avfoundation input dropped ~15% of the audio on this Mac at every
+    setting tried (8.4–8.6 s recorded per 10 s, 2026-09-07); sounddevice
+    delivered 10.00 s with a clean 440 Hz tone, zero holes."""
+    import queue
+
+    import numpy as np
+    import sounddevice as sd
+    import soundfile as sf
+
     out.parent.mkdir(parents=True, exist_ok=True)
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-           "-f", "avfoundation", "-i", f":{device}",
-           "-t", f"{seconds:.1f}", "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", str(out)]
-    p = subprocess.run(cmd, capture_output=True, text=True)
-    if p.returncode != 0:
-        raise SystemExit(f"ERROR: ffmpeg recording failed: {p.stderr.strip()[:400]}")
+    idx = next((i for i, d in enumerate(sd.query_devices())
+                if device in d["name"] and d["max_input_channels"] > 0), None)
+    if idx is None:
+        raise SystemExit(f"ERROR: no input device named '{device}' (see `python -m sounddevice`)")
+    sr = int(sd.query_devices(idx)["default_samplerate"])
+    q: "queue.Queue[np.ndarray]" = queue.Queue()
+    total = int(seconds * sr)
+    got = 0
+
+    def cb(indata, frames, time_info, status):  # noqa: ARG001
+        if status:
+            print(f"[capture] stream status: {status}", file=sys.stderr)
+        q.put(indata[:, :1].copy())
+
+    with sf.SoundFile(str(out), mode="w", samplerate=sr, channels=1, subtype="PCM_16") as wav, \
+            sd.InputStream(samplerate=sr, device=idx, channels=1, dtype="float32", callback=cb):
+        while got < total:
+            block = q.get()
+            take = min(len(block), total - got)
+            wav.write(block[:take])
+            got += take
 
 
 def stats(path: Path) -> str:
