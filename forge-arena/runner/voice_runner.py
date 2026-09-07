@@ -40,6 +40,7 @@ Env knobs
   ARENA_VOICE_MAX_CHARS     live characters per game before stock-only (20000)
   ARENA_VOICE_SFX           on|off bleeps (on)
   ARENA_VOICE_FX            on|off the film FX chain on live lines (on)
+  ARENA_VOICE_GLITCH        off|light|heavy stutters and hitches on every line (light)
   ARENA_VOICE_YOUR_MOVE     on|off "Your move." at the human's turns (on)
 
 CLI
@@ -108,6 +109,93 @@ def wav_seconds(path: Path) -> float:
         return 0.0
 
 
+# ---- glitch pass: stutters and hitches (Ben, 2026-09-07) -----------------------
+
+GLITCH_LEVELS = {
+    # events per second of audio: (stutter, hitch/dropout, skip, chatter)
+    "off":   (0.0, 0.0, 0.0, 0.0),
+    "light": (0.30, 0.20, 0.10, 0.12),
+    "heavy": (0.70, 0.45, 0.25, 0.30),
+}
+
+
+def glitch_wav(data: bytes, level: str, seed: int) -> bytes:
+    """W.O.P.R. digital hitches on a 16-bit mono WAV, pure stdlib.
+    - stutter: a 35–75 ms slice repeats 2–3 times (a word catching)
+    - hitch:   15–40 ms goes silent (a dropout)
+    - skip:    20–50 ms is cut (the tape jumps)
+    - chatter: an 8–12 ms slice repeats 4–6 times (machine buzz)
+    Deterministic for (level, seed) so a cached line always sounds the same;
+    never touches the first/last 120 ms; total length stays within ±20%."""
+    rates = GLITCH_LEVELS.get(level, GLITCH_LEVELS["light"])
+    if not any(rates):
+        return data
+    import array
+    import io
+
+    with wave.open(io.BytesIO(data), "rb") as w:
+        if w.getsampwidth() != 2 or w.getnchannels() != 1:
+            return data
+        sr = w.getframerate()
+        pcm = array.array("h")
+        pcm.frombytes(w.readframes(w.getnframes()))
+    n = len(pcm)
+    seconds = n / sr
+    if seconds < 0.5:
+        return data
+    rng = random.Random(seed)
+    ms = lambda x: int(sr * x / 1000)  # noqa: E731
+    guard = ms(120)
+
+    def fade(seg, k):
+        k = min(k, len(seg) // 2)
+        for i in range(k):
+            g = i / k
+            seg[i] = int(seg[i] * g)
+            seg[-1 - i] = int(seg[-1 - i] * g)
+        return seg
+
+    events = []
+    for kind, rate in zip(("stutter", "hitch", "skip", "chatter"), rates):
+        count = int(rate * seconds) + (1 if rng.random() < (rate * seconds) % 1 else 0)
+        for _ in range(count):
+            events.append((rng.randint(guard, max(guard + 1, n - guard)), kind))
+    events.sort()
+    out = array.array("h")
+    pos = 0
+    for at, kind in events:
+        if at <= pos:
+            continue
+        out.extend(pcm[pos:at])
+        if kind == "stutter":
+            L = ms(rng.randint(35, 75)); reps = rng.randint(2, 3)
+            seg = fade(pcm[at:at + L], ms(3))
+            for _ in range(reps):
+                out.extend(seg)
+            pos = at
+        elif kind == "hitch":
+            L = ms(rng.randint(15, 40))
+            out.extend(array.array("h", [0] * L))
+            pos = at + L
+        elif kind == "skip":
+            pos = at + ms(rng.randint(20, 50))
+        else:  # chatter
+            L = ms(rng.randint(8, 12)); reps = rng.randint(4, 6)
+            seg = fade(pcm[at:at + L], ms(1))
+            for _ in range(reps):
+                out.extend(seg)
+            pos = at + L
+    out.extend(pcm[pos:])
+    # bound the length change
+    if not (0.8 * n <= len(out) <= 1.2 * n):
+        return data
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+        w.writeframes(out.tobytes())
+    return buf.getvalue()
+
+
 # ---- players -----------------------------------------------------------------
 
 class Player:
@@ -148,6 +236,9 @@ class Renderer:
         fx_file = STOCK / self.manifest.get("fx_chain_file", "fx-chain.txt")
         self.fx_chain = fx_file.read_text().strip() if (self.fx_on and fx_file.exists()) else ""
         self.max_chars = int(os.environ.get("ARENA_VOICE_MAX_CHARS", "20000"))
+        self.glitch = os.environ.get("ARENA_VOICE_GLITCH", "light").lower()
+        if self.glitch not in GLITCH_LEVELS:
+            self.glitch = "light"
         self.chars_used = 0
         self.fake_tts = fake_tts  # tests: callable(text) -> wav bytes
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -172,7 +263,7 @@ class Renderer:
         text = text.strip()
         if not text:
             return None
-        key = cache_key(text, self.voice_id, self.model, self.fx_chain)
+        key = cache_key(text, self.voice_id, self.model, self.fx_chain + "|glitch=" + self.glitch)
         out = self.cache_dir / f"{key}.wav"
         if out.exists():
             return out
@@ -200,6 +291,8 @@ class Renderer:
                 subprocess.run(cmd, check=True, timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
                 tmp_out.write_bytes(mp3)  # tests / no ffmpeg: keep what we got
+            if self.glitch != "off":
+                tmp_out.write_bytes(glitch_wav(tmp_out.read_bytes(), self.glitch, int(key[:8], 16)))
             tmp_out.replace(out)
         finally:
             tmp_in.unlink(missing_ok=True)
@@ -361,7 +454,9 @@ class VoiceRunner:
         gid = d.get("gameId") or d.get("timestamp") and "live"
         if not self.started_said:
             self.started_said = True
-            self.enqueue("startup", stock="startup", ttl=30.0)
+            if (d.get("turn") or 0) <= 1 and not d.get("gameOver"):
+                self.enqueue("startup", stock="startup", ttl=30.0)
+            # a restart mid-game (supervisor, code reload) says nothing until the next event
         turn, active = d.get("turn"), d.get("activeSeat")
         seats = d.get("seats") or []
         for s in seats:
@@ -395,7 +490,7 @@ class VoiceRunner:
     def run(self) -> None:
         self.say(f"[voice] up — stock {len(self.renderer.manifest.get('phrases', {}))} phrases, "
                  f"live={'on' if self.renderer.live else 'off (no ELEVENLABS_API_KEY)'}, min_gap={self.min_gap}s, "
-                 f"fx={'on' if self.renderer.fx_chain else 'off'}, sfx={'on' if self.sfx_on else 'off'}")
+                 f"fx={'on' if self.renderer.fx_chain else 'off'}, glitch={self.renderer.glitch}, sfx={'on' if self.sfx_on else 'off'}")
         hb = self.mailbox / "seat-0-voice" / "heartbeat"
         hb.parent.mkdir(parents=True, exist_ok=True)
 

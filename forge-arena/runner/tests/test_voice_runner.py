@@ -173,6 +173,35 @@ class VoiceRunnerTests(unittest.TestCase):
         self._observer(1, 1); self.r.step()
         self.assertEqual(self.player.played, [])
 
+    # ---- glitch pass
+    def test_glitch_is_deterministic_bounded_and_off_is_identity(self):
+        raw = silent_wav(3.0)
+        self.assertEqual(vr.glitch_wav(raw, "off", 1), raw)
+        g1, g2, g3 = vr.glitch_wav(raw, "light", 42), vr.glitch_wav(raw, "light", 42), vr.glitch_wav(raw, "light", 43)
+        self.assertEqual(g1, g2, "same seed, same hitches — a cached line never changes")
+        self.assertNotEqual(g1, g3)
+        with wave.open(io.BytesIO(g1)) as w:
+            secs = w.getnframes() / w.getframerate()
+        self.assertTrue(2.4 <= secs <= 3.6, f"length stays within ±20% (got {secs:.2f}s)")
+        self.assertEqual(vr.glitch_wav(silent_wav(0.3), "heavy", 1), silent_wav(0.3), "sub-half-second lines are left alone")
+
+    def test_glitch_level_is_part_of_the_cache_key(self):
+        os.environ["ARENA_VOICE_GLITCH"] = "heavy"
+        r = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(1.0), player=self.player, clock=self.clock)
+        self.assertEqual(r.renderer.glitch, "heavy")
+        p_heavy = r.renderer.render("Same words.")
+        os.environ["ARENA_VOICE_GLITCH"] = "off"
+        r2 = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(1.0), player=self.player, clock=self.clock)
+        p_off = r2.renderer.render("Same words.")
+        self.assertNotEqual(p_heavy, p_off, "different glitch levels never share a cache entry")
+
+    def test_restart_mid_game_does_not_greet_again(self):
+        self._observer(7, 2)            # a game already at turn 7 when the runner (re)starts
+        self.r.step()
+        self.assertEqual(self.player.played, [])
+        self.clock.t += 10; self._observer(8, 0); self.r.step()
+        self.assertEqual(self.player.played, ["your-move.wav"], "it resumes with the next real event")
+
     def _records(self, kind):
         p = self.logs / "voice-0.jsonl"
         if not p.exists():
