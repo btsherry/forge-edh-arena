@@ -212,6 +212,29 @@ class VoiceRunnerTests(unittest.TestCase):
         self.clock.t += 10; self._observer(8, 0); self.r.step()
         self.assertEqual(self.player.played, ["your-move.wav"], "it resumes with the next real event")
 
+    # ---- colour recaps on opponents' turns
+    def test_color_recaps_are_voiced_per_mode(self):
+        self.clock.t += 100
+        os.environ["ARENA_VOICE_COLOR"] = "all"
+        r = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock)
+        self._advisor(kind="color", turn=3, text="Urza pitched a land to Mox Diamond. Three artifacts on turn two.")
+        r.step()
+        self.assertEqual(len(self.player.played), 1, "mode all voices every recap")
+        os.environ["ARENA_VOICE_COLOR"] = "off"
+        r2 = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock)
+        self._advisor(kind="color", turn=4, text="Giada played a Plains.")
+        self.clock.t += 20; r2.step()
+        self.assertEqual(len(self.player.played), 1, "mode off never does")
+        os.environ["ARENA_VOICE_COLOR"] = "some"; os.environ["ARENA_VOICE_COLOR_P"] = "0.5"
+        r3 = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock)
+        r3.rng.seed(1)
+        spoken = 0
+        for n in range(20):
+            self._advisor(kind="color", turn=10 + n, text=f"Recap number {n}.")
+            self.clock.t += 20; r3.step()
+        spoken = len(self.player.played) - 1
+        self.assertTrue(4 <= spoken <= 16, f"'some' voices roughly half (got {spoken}/20)")
+
     def _records(self, kind):
         p = self.logs / "voice-0.jsonl"
         if not p.exists():

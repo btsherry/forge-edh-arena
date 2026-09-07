@@ -9,7 +9,8 @@ output. It never writes to the mailbox, so the game can never wait on it.
 Sources
   runner/logs/advisor-0.jsonl   advice (first sentence, LIVE), ask answers
                                 (LIVE), quip records the advisor emits
-                                (STOCK phrase by id), notes ignored
+                                (STOCK phrase by id), colour recaps (LIVE, some
+                                of them — this is what speaks on opponents' turns)
   mailbox/observer-state.json   game start → "startup" stock line; the human's
                                 turn beginning → "your-move" (low priority);
                                 eliminations → "player-eliminated"; game over →
@@ -42,6 +43,7 @@ Env knobs
   ARENA_VOICE_FX            on|off the film FX chain on live lines (on)
   ARENA_VOICE_GLITCH        off|light|heavy stutters and hitches on every line (light)
   ARENA_VOICE_YOUR_MOVE     on|off "Your move." at the human's turns (on)
+  ARENA_VOICE_COLOR         off|some|all — voice the per-turn recap (opponents' turns too); some = probability ARENA_VOICE_COLOR_P (0.5)
 
 CLI
   voice_runner.py                       run the daemon
@@ -75,7 +77,7 @@ DEFAULT_VOICE_ID = ""                        # resolved from stock/manifest.json
 POLL_S = 0.5
 FIRST_SENTENCE_MAX = 220
 ASK_MAX = 300
-PRIORITY = {"game_over": 0, "startup": 1, "ask": 2, "advice": 3, "quip": 4, "event": 5, "your_move": 6}
+PRIORITY = {"game_over": 0, "startup": 1, "ask": 2, "advice": 3, "quip": 4, "event": 5, "color": 6, "your_move": 7}
 
 
 # ---- helpers ------------------------------------------------------------------
@@ -327,6 +329,15 @@ class VoiceRunner:
         self.min_gap = float(os.environ.get("ARENA_VOICE_MIN_GAP", "8"))
         self.sfx_on = os.environ.get("ARENA_VOICE_SFX", "on").lower() != "off"
         self.your_move_on = os.environ.get("ARENA_VOICE_YOUR_MOVE", "on").lower() != "off"
+        # Colour commentary (Ben, 2026-09-07: "it could say a thing during
+        # opponents' turns some of the time"): the advisor's per-turn recap
+        # arrives after every turn, the opponents' included. off | some | all;
+        # "some" voices each recap with probability ARENA_VOICE_COLOR_P (0.5).
+        self.color_mode = os.environ.get("ARENA_VOICE_COLOR", "some").lower()
+        if self.color_mode not in ("off", "some", "all"):
+            self.color_mode = "some"
+        self.color_p = float(os.environ.get("ARENA_VOICE_COLOR_P", "0.5"))
+        self.rng = random.Random()
         self.queue: list[dict] = []
         self.last_spoken_at = -1e9
         # Start at the END of the advisor's stream: a (re)started runner speaks
@@ -378,7 +389,7 @@ class VoiceRunner:
         item = {"kind": kind, "text": text, "stock": stock, "seq": seq, "prio": PRIORITY.get(kind, 9),
                 "at": self.clock(), "expires": self.clock() + ttl}
         # one pending item per kind for the chatty kinds: newest wins
-        if kind in ("advice", "your_move", "quip", "event"):
+        if kind in ("advice", "your_move", "quip", "event", "color"):
             self.queue = [q for q in self.queue if q["kind"] != kind]
         self.queue.append(item)
 
@@ -447,6 +458,11 @@ class VoiceRunner:
                 self.enqueue("advice", text=first_sentence(r["text"]), seq=r.get("seq"), ttl=25.0)
             elif k == "ask" and r.get("answer"):
                 self.enqueue("ask", text=first_sentence(r["answer"], ASK_MAX), ttl=60.0)
+            elif k == "color" and r.get("text") and self.color_mode != "off":
+                if self.color_mode == "all" or self.rng.random() < self.color_p:
+                    self.enqueue("color", text=first_sentence(r["text"]), ttl=40.0)
+                else:
+                    self.record("skipped", kind="color", why="dice (ARENA_VOICE_COLOR=some)", text=r["text"][:80])
             elif k == "quip" and r.get("id"):
                 self.enqueue("quip", stock=str(r["id"]), ttl=20.0)
             elif k == "chosen" and r.get("seq") is not None:
@@ -497,7 +513,7 @@ class VoiceRunner:
     def run(self) -> None:
         self.say(f"[voice] up — stock {len(self.renderer.manifest.get('phrases', {}))} phrases, "
                  f"live={'on' if self.renderer.live else 'off (no ELEVENLABS_API_KEY)'}, min_gap={self.min_gap}s, "
-                 f"fx={'on' if self.renderer.fx_chain else 'off'}, glitch={self.renderer.glitch}, sfx={'on' if self.sfx_on else 'off'}")
+                 f"fx={'on' if self.renderer.fx_chain else 'off'}, glitch={self.renderer.glitch}, sfx={'on' if self.sfx_on else 'off'}, color={self.color_mode}")
         hb = self.mailbox / "seat-0-voice" / "heartbeat"
         hb.parent.mkdir(parents=True, exist_ok=True)
 
