@@ -107,43 +107,53 @@ QUIP_GUIDE = QUIP_GUIDE_SPARSE   # the default when the voice has published noth
 
 class TurnClock:
     """Turn labels as players say them (Ben, 2026-09-08): ``r4-t13`` = the
-    fourth round, thirteenth turn of the game. A round ends when a seat that
-    has already taken a turn this round becomes active again — so any
-    starting seat and any elimination count correctly. The active seat comes
-    from the public observer snapshot; without one, four turns make a round."""
+    fourth round, thirteenth turn of the game. A round is one full set of
+    turns around the table: it ends when a seat that has already taken a turn
+    this round becomes active again — so any starting seat and any
+    elimination count correctly. The active seat of each turn is read from the
+    public observer snapshot as the game runs (``observe()`` from the advisor's
+    poll loop, so the pair is known before the turn's first line is written —
+    game 33 showed a one-turn lag when it was only read on demand). Without a
+    snapshot, four turns make a round."""
 
     def __init__(self, observer_state: Path):
         self.path = observer_state
-        self.round = 1
-        self.turn = None
-        self.seen: set = set()
-        self.known = False   # an active seat has been read at least once
+        self.active_of: dict = {}     # turn -> active seat, as observed
+        self.round_of: dict = {}      # turn -> round, computed in turn order
+        self._seen: set = set()       # seats active in the round being built
+        self._round = 1
+        self._last_turn = 0
 
-    def _active(self, turn):
+    def observe(self) -> None:
+        """Record the snapshot's (turn, activeSeat) if new; cheap, call often."""
         try:
             d = json.loads(Path(self.path).read_text())
         except (OSError, ValueError, TypeError):
-            return None
-        return d.get("activeSeat") if d.get("turn") == turn else None
+            return
+        turn, active = d.get("turn"), d.get("activeSeat")
+        if not isinstance(turn, int) or isinstance(turn, bool) or active is None or turn in self.active_of:
+            return
+        self.active_of[turn] = active
+        if turn <= self._last_turn:
+            return   # out of order (a late snapshot): keep the round already assigned
+        if not self.round_of:
+            self._round = max(1, (turn - 1) // 4 + 1)   # joined mid-game: best guess, exact from here
+        elif active in self._seen:
+            self._seen = set()
+            self._round += 1
+        self._seen.add(active)
+        self.round_of[turn] = self._round
+        self._last_turn = turn
 
     def label(self, turn) -> str:
         if not isinstance(turn, int) or isinstance(turn, bool):
             return f"t{turn}"
-        if turn != self.turn:
-            active = self._active(turn)
-            if active is None:
-                if not self.known:
-                    self.round = (turn - 1) // 4 + 1
-            else:
-                if not self.known and self.turn is None and turn > 1:
-                    self.round = (turn - 1) // 4 + 1   # joined mid-game: best guess, tracked exactly from here
-                self.known = True
-                if active in self.seen:
-                    self.seen = set()
-                    self.round += 1
-                self.seen.add(active)
-            self.turn = turn
-        return f"r{self.round}-t{turn}"
+        if turn not in self.round_of:
+            self.observe()
+        r = self.round_of.get(turn)
+        if r is None:
+            r = self._round if (self.round_of and turn >= self._last_turn) else (turn - 1) // 4 + 1
+        return f"r{r}-t{turn}"
 
 
 def quip_guide(state_file, log=None, prev=None) -> tuple[str, bool]:
@@ -798,6 +808,7 @@ class AdvisorRunner:
             if self._executive_tick():
                 continue          # a seat-0 decision was answered; look again at once
             self._maybe_rotate()
+            self._clock.observe()   # the turn's active seat, before its first line is written
             self._handle_asks()   # questions first, pause or not (see docstring)
             # In-game on/off toggle (plan 13b): the Advisor tab's button writes
             # logs/control/advisor.json; disabled = no scanning, no model calls

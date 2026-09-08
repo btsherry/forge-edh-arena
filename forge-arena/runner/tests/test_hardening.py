@@ -233,20 +233,27 @@ class RoundTurnLabels(unittest.TestCase):
         clk = ar.TurnClock(st)
         self.assertEqual(clk.label(1), "r1-t1", "no snapshot: four turns a round")
         self.assertEqual(clk.label(5), "r2-t5"); self.assertEqual(clk.label(13), "r4-t13")
+        # game 33's order: seat 1 started; the human is seat 0
         clk = ar.TurnClock(st)
-        order = {1: 2, 2: 3, 3: 0, 4: 1, 5: 2, 6: 3, 7: 0, 8: 1}   # seat 2 started the game
+        order = {1: 1, 2: 2, 3: 3, 4: 0, 5: 1, 6: 2, 7: 3, 8: 0, 9: 1}
+        labels = {}
         for t, active in order.items():
             st.write_text(json.dumps({"turn": t, "activeSeat": active}))
-            lab = clk.label(t)
-        self.assertEqual(lab, "r2-t8")
-        self.assertEqual(clk.label(4), "r2-t4"[:0] + clk.label(4), "a repeated call for the current turn is stable")
-        # seat 3 eliminated: turns 9 (s2), 10 (s0), 11 (s1), 12 (s2) -> round 3 begins at t9, round 4 at t12
-        for t, active in {9: 2, 10: 0, 11: 1, 12: 2}.items():
-            st.write_text(json.dumps({"turn": t, "activeSeat": active}))
-            lab = clk.label(t)
-        self.assertEqual(lab, "r4-t12")
+            clk.observe()                      # the poll loop sees the snapshot first
+            labels[t] = clk.label(t)
+        self.assertEqual(labels[4], "r1-t4"); self.assertEqual(labels[5], "r2-t5", "seat 1 again: round 2 starts at t5")
+        self.assertEqual(labels[8], "r2-t8"); self.assertEqual(labels[9], "r3-t9")
+        # the snapshot lags a line: label() reads it on demand
+        st.write_text(json.dumps({"turn": 10, "activeSeat": 2}))
+        self.assertEqual(clk.label(10), "r3-t10")
+        # seat 3 eliminated: round 3 is 9 (s1), 10 (s2), 11 (s0); seat 1 again at 12 opens round 4 — three turns a round now
+        for t, active in {11: 0, 12: 1, 13: 2}.items():
+            st.write_text(json.dumps({"turn": t, "activeSeat": active})); clk.observe()
+        self.assertEqual(clk.label(11), "r3-t11", "earlier turns keep their round")
+        self.assertEqual(clk.label(12), "r4-t12"); self.assertEqual(clk.label(13), "r4-t13")
         self.assertEqual(clk.label("?"), "t?")
-        self.assertEqual(clk.label(12), "r4-t12")
+        # a line for a turn the snapshot has not shown yet: same round as the latest known
+        self.assertEqual(clk.label(14), "r4-t14")
 
     def test_stream_lines_carry_the_label(self):
         import advisor_runner as ar
