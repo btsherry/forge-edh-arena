@@ -1544,3 +1544,26 @@ Hard-won from two live sessions; read before optimizing anything.
     line. The brief tells the advisor when to run it (graveyards, exile, an
     imprint, Chat questions; never for hands, which it does not show) and to
     run it at most once per reply. `ARENA_ADVISOR_TOOLS=off` removes it.
+
+79. **Game 25 autopass repair (2026-09-07 evening, experimental/voicework;
+    Ben: "we did something bad to the previous autopass functionality … we
+    need autopass working correctly and speeding up the game instead of
+    making 100s or thousands of offers to the AI seats").** Log facts first:
+    REACT windows per turn were 3.1 in game 22 (v3.4), 13.4 in game 24 (no
+    table yet; Urza's Needlehead/Rings triggers) and 19.7 in game 25 (Ben's
+    Selvala/Staff loop: 84 windows in t23, each with real options, 445/452
+    answered "pass" at ~4 s). Fixes: (a) HUMAN table — a mana-costing
+    activated ability is filed among the plays (`Staff of Domination
+    (ability)`, cost 5) so the ceiling rule keeps it when affordable; game 25
+    had passed 54 such stops as "only utility". (b) SEATS — `_spell_reactor`:
+    counter/copy-spell options are dead when `stackKinds` has no `spell`
+    (Purphoros' Flare of Duplication: 45 of 103 windows held only abilities);
+    `_repeat_tap_pass`: pool 0 + untapped 0 + non-empty unthreatening stack +
+    all options tap-only utilities + the MODEL already passed that option set
+    this turn + own life not down → pass as source `repeat` (Giada's One Ring:
+    62 of 155 model calls, 0 wrong on replay; the desperation draw at 19 vs 20
+    incoming is preserved by the life guard); `_life_bucket`: memo signature
+    keeps own life exact, opponents' exact ≤10 and bucketed by 5 above (+14
+    passes on games 24–25, 0 wrong). The first offer of every shape still
+    reaches the model; only repeats are cut. Tests:
+    `test_repeat_and_spell_reactor.py`, `AutopassPolicyTest` (14).

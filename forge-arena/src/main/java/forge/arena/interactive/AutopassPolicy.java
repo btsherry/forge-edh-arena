@@ -24,7 +24,10 @@ import forge.game.phase.PhaseType;
  *   <li>an equipment that entered this turn → keep (the drop turn is when
  *       equipping is the natural play);</li>
  *   <li>a real play that costs nothing (0-mana spell, pitch/alternative
- *       cost) → keep, naming it;</li>
+ *       cost) → keep, naming it; an activated ability that costs mana is a
+ *       real play too (Staff of Domination, game 25) and is judged by the
+ *       ceiling rules below like a spell — only {T}-only abilities are
+ *       "utility";</li>
  *   <li>a utility ability that can be the response → keep: its permanent is
  *       targeted by the opponent's stack item, it has a sacrifice cost while
  *       an opponent's item is up, or it targets at an opponent's begin-combat

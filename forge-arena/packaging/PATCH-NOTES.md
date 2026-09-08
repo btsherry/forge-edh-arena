@@ -2,6 +2,15 @@
 
 ## Unreleased — after v3.4
 
+- **Autopass rides the line better (game 25).** The human's table no longer
+  passes a stop where an activated ability that costs mana is affordable — a
+  Staff of Domination with mana up is a real play, not "utility". The AI seats
+  stop paying for repeat offers: a counterspell or spell-copier is dead while
+  only abilities sit on the stack; a no-mana window whose only options are
+  tap-only utilities is passed without a model call once the model has passed
+  the same options this turn and the seat's life has not dropped; and the
+  same-turn memo ignores an opponent's life moving within a 5-point band above
+  10. The first offer of any shape still goes to the model.
 - **Every public zone is on the table.** The observer snapshot and the seats'
   board state now carry graveyards, face-up exile, command zones, what each
   permanent imprinted or exiled (an Isochron Scepter's instant is public

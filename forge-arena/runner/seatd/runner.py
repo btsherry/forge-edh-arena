@@ -55,6 +55,10 @@ class SeatRunner:
         # Consumed locally under the four-part guard; discarded on any divergence.
         self.plan: dict | None = None
         self.react_seen: set[tuple] = set()
+        # Repeat rule (2026-09-07, game 25 t23): the last MODEL pass of a
+        # resourceless, tap-only REACT window this turn — (turn, option set,
+        # own life). Cleared with the turn.
+        self._tap_pass: tuple | None = None
         # BL-02 follow-up: a trigger-order answer for the SAME set of trigger
         # groups is replayed for the rest of the TURN (Purphoros + Impact
         # Tremors would otherwise ask on every creature). Cleared with the other
@@ -365,7 +369,13 @@ class SeatRunner:
             stack = tuple(sorted(names))
         opts = tuple(sorted(str(o.get("label", "")).split("  ")[0]
                             for o in req.get("options", []) if o.get("id") != 0))
-        lives = (st.get("life"),) + tuple(o.get("life")
+        # Game 25 (2026-09-07): Ben's Staff/Selvala loop changed HIS life on
+        # every activation, so no two of the seats' windows matched and the
+        # memo never fired (0 of 84 windows in one turn). Own life stays
+        # exact; an opponent's life is exact at 10 or below (kill range) and
+        # bucketed by 5 above it — replayed on games 24-25: +14 passes, 0 of
+        # them a window the model had acted on.
+        lives = (st.get("life"),) + tuple(self._life_bucket(o.get("life"))
                                           for o in st.get("opponents", []) or [])
         pool = st.get("manaPool")
         # Wave-2 (2026-08-28 audit finding 1): the signature was blind to
@@ -379,6 +389,12 @@ class SeatRunner:
         tgts = json.dumps(st.get("stackTargets"), sort_keys=True, default=str)
         return (req.get("turn"), req.get("phase"), stack, opts, lives, pool,
                 combat, tgts)
+
+    @staticmethod
+    def _life_bucket(life):
+        if not isinstance(life, int) or isinstance(life, bool) or life <= 10:
+            return life
+        return f"{life // 5 * 5}+"
 
     def _all_own_objects(self, req: dict) -> bool:
         """True iff the stack is non-empty and EVERY item belongs to this
@@ -657,6 +673,14 @@ class SeatRunner:
             return "only counterspells offered and the stack is empty"
         if stack_empty and all(self._plain_mana_ability(o) or self._counterspell(o) for o in non_pass):
             return "only mana abilities and counterspells offered with an empty stack"
+        # Game 25: a non-empty stack of ABILITIES (Staff of Domination, Selvala)
+        # is no target for a counterspell or a spell-copier either. Needs the
+        # engine's stackKinds; absent or malformed -> fall through to the model.
+        kinds = st.get("stackKinds")
+        if (not stack_empty and isinstance(kinds, list) and len(kinds) == len(st.get("stack") or [])
+                and kinds and "spell" not in kinds
+                and all(self._spell_reactor(o) or self._plain_mana_ability(o) for o in non_pass)):
+            return "only counter/copy-spell options and no spell on the stack (abilities only)"
         cheapest = None
         for o in non_pass:
             label = str(o.get("label", "")).lower()
@@ -688,6 +712,82 @@ class SeatRunner:
     def _counterspell(o: dict) -> bool:
         low = str(o.get("label", "")).lower()
         return "counter target" in low
+
+    @staticmethod
+    def _spell_reactor(o: dict) -> bool:
+        """An option that only does something to a SPELL on the stack: counter
+        target spell, copy target instant/sorcery (Flare of Duplication class).
+        Game 25: Purphoros was asked 103 times about Flare while Ben's Staff
+        and Selvala ABILITIES cycled on the stack; 45 of those windows held
+        nothing but abilities."""
+        low = str(o.get("label", "")).lower()
+        text = low.split(" — ", 1)[1] if " — " in low else low
+        return ("counter target" in text
+                or ("copy target" in text and ("instant" in text or "sorcery" in text or "spell" in text)))
+
+    @staticmethod
+    def _tap_only_utility(o: dict) -> bool:
+        """A {T}/{Q}-only activated ability with no mana, no sacrifice/discard/
+        exile/life in its cost and no target/counter/prevent in its text (The
+        One Ring's draw, Sensei's Top's look). Nothing here can answer a
+        stack item; it is a card-flow choice the model has already made
+        once this turn when the repeat rule applies."""
+        low = str(o.get("label", ""))
+        low = low.lower()
+        if " — " not in low:
+            return False
+        cost_part, text = low.split(" — ", 1)
+        syms = re.findall(r"\{([^}]*)\}", cost_part)
+        if not syms or any(s.strip().upper() not in ("T", "Q") for s in syms):
+            return False
+        if any(w in cost_part for w in ("sacrifice", "discard", "exile", "pay", "remove")):
+            return False
+        # "target" also covers "counter target"; a plain "counter" would reject
+        # The One Ring's own "burden counter" text (the very card this is for)
+        return not any(w in text for w in ("target", "prevent"))
+
+    def _repeat_tap_pass(self, req: dict) -> str | None:
+        """Repeat rule (Ben, 2026-09-07: cut the repeat offers, not the first
+        one). A REACT window where the seat has NO mana (pool 0, untapped 0),
+        the stack is non-empty, nothing on it threatens this seat, and every
+        option is a tap-only utility, is passed without a model call when the
+        MODEL already passed the same option set this turn and the seat's own
+        life has not dropped since. The first such window always goes to the
+        model; a life drop re-opens it (Giada's desperation One Ring draw at
+        19 life vs 20 incoming, game 25 seq 202-class, stays live). Replayed on
+        game 25: 62 fewer model calls for Giada, 0 of them a window the model
+        had acted on."""
+        if req.get("decisionType") != "REACT" or not self._tap_pass:
+            return None
+        st = req.get("state") or {}
+        if not st.get("stack") or not self._resourceless_react(req) or self._threatens_own(req):
+            return None
+        non_pass = [o for o in req.get("options", []) if o.get("id") != 0]
+        if not non_pass or not all(self._tap_only_utility(o) for o in non_pass):
+            return None
+        turn, optset, life = self._tap_pass
+        if turn != req.get("turn") or optset != self._option_set(req):
+            return None
+        own = st.get("life")
+        if not isinstance(own, int) or own < life:
+            return None
+        return "repeat: same tap-only options already passed this turn, no mana, life not down"
+
+    @staticmethod
+    def _option_set(req: dict) -> tuple:
+        return tuple(sorted(str(o.get("label", "")).split("  ")[0]
+                            for o in req.get("options", []) if o.get("id") != 0))
+
+    def _note_tap_pass(self, req: dict, answer: dict) -> None:
+        """Remember a MODEL pass of a repeat-eligible window (never a punt)."""
+        if req.get("decisionType") != "REACT" or answer != {"chosenId": 0}:
+            return
+        st = req.get("state") or {}
+        non_pass = [o for o in req.get("options", []) if o.get("id") != 0]
+        if (non_pass and st.get("stack") and self._resourceless_react(req)
+                and all(self._tap_only_utility(o) for o in non_pass)
+                and isinstance(st.get("life"), int)):
+            self._tap_pass = (req.get("turn"), self._option_set(req), st.get("life"))
 
     @staticmethod
     def _resourceless_react(req: dict) -> bool:
@@ -786,6 +886,10 @@ class SeatRunner:
             return {"chosenId": 0}, "affordability"
         if self._react_signature(req) in self.react_seen:
             return {"chosenId": 0}, "memo"
+        why = self._repeat_tap_pass(req)
+        if why is not None:
+            self._fast_why = why
+            return {"chosenId": 0}, "repeat"
         # #2 reactive hold: brain armed a same-turn hold; auto-pass only when the
         # stack is non-empty AND every object was already shown-and-passed this
         # turn. A new object or an empty-stack (tactical) window escalates.
@@ -858,6 +962,7 @@ class SeatRunner:
             self._last_turn = req.get("turn")
             self.react_seen.clear()
             self.order_memo.clear()
+            self._tap_pass = None
             self.hold = None  # hold posture is single-turn
             self.turn_intent = None
             self.cycle = None   # loops never survive a turn boundary
@@ -912,7 +1017,7 @@ class SeatRunner:
         if fast:
             answer, source = fast
             why = ("all options on the no-op allowlist" if source == "autopass"
-                   else getattr(self, "_fast_why", "") if source == "affordability"
+                   else getattr(self, "_fast_why", "") if source in ("affordability", "repeat")
                    else "identical window already passed this turn")
             ok = self.mb.respond(req, answer)
             self._say(f"[seat {self.seat}] seq={seq} {dtype} -> {json.dumps(answer)} "
@@ -1084,6 +1189,9 @@ class SeatRunner:
         # otherwise, and hid the punts from the ratings void counter.
         if source == "model" and dtype == "REACT" and answer == {"chosenId": 0}:
             self.react_seen.add(self._react_signature(req))
+            self._note_tap_pass(req, answer)
+        elif source == "model" and dtype == "REACT":
+            self._tap_pass = None  # the seat acted: the next repeat is a fresh question
         if source == "model" and dtype == "CHOOSE_MODE":
             self._order_remember(req, answer)
 

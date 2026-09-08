@@ -321,6 +321,17 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
                     }
                     if (sa.isActivatedAbility()) {
                         classified = true;
+                        // Game 25 (2026-09-07): the table auto-passed Ben out of 54
+                        // Staff of Domination windows as "only utility". An activated
+                        // ability that COSTS MANA is a real play, not utility: it
+                        // joins the plays with its cost, so the ceiling rule keeps
+                        // it when affordable and passes it with the numbers when
+                        // not. {T}-only abilities stay utility (the narrow keeps
+                        // below cover tappers, sac outlets and targeted permanents).
+                        int abilityMana = manaCostOf(sa);
+                        if (abilityMana > 0) {
+                            playsOut.add(new AutopassPolicy.Play(card.getName() + " (ability)", abilityMana));
+                        }
                         if (!utilityOut.contains(card.getName())) {
                             utilityOut.add(card.getName());
                         }

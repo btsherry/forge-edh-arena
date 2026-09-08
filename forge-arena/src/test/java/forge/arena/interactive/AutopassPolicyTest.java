@@ -157,6 +157,23 @@ public class AutopassPolicyTest {
     }
 
     @Test
+    public void aManaCostingActivatedAbilityIsARealPlay() {
+        // Game 25: Staff of Domination ({5}: draw) with mana up at an opponent's
+        // end step was auto-passed as "only utility" 54 times. The controller now
+        // files a mana-costing ability among the plays; the ceiling rule decides.
+        final Decision kept = AutopassPolicy.decide(new Stop(false, PhaseType.END_OF_TURN, 0, 6, false,
+                Arrays.asList(new Play("Staff of Domination (ability)", 5)), Arrays.asList("Staff of Domination"),
+                Arrays.asList(new Utility("Staff of Domination", false, true, false)), false));
+        Assert.assertFalse(kept.pass, kept.toString());
+        Assert.assertEquals(kept.reason, "castable: Staff of Domination (ability)");
+        final Decision broke = AutopassPolicy.decide(new Stop(false, PhaseType.END_OF_TURN, 0, 1, false,
+                Arrays.asList(new Play("Staff of Domination (ability)", 5)), Arrays.asList("Staff of Domination"),
+                Arrays.asList(new Utility("Staff of Domination", false, true, false)), false));
+        Assert.assertTrue(broke.pass, broke.toString());
+        Assert.assertEquals(broke.reason, "cheapest play Staff of Domination (ability) costs 5, you have 1");
+    }
+
+    @Test
     public void theSacredStopsNeverPass() {
         Assert.assertEquals(AutopassPolicy.decide(stop(true, PhaseType.MAIN1, 0, 0, NONE, NO_UTILITY, false)).reason,
                 "own main phase");
