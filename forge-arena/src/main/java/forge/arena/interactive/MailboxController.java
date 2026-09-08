@@ -4041,6 +4041,17 @@ public final class MailboxController extends PlayerControllerAi
             if (c.isCreature() && c.hasSickness()) {
                 row.put("sick", true);
             }
+            // Games 27-28 (2026-09-08): Mox Opal without metalcraft was listed as
+            // a live source; Urza planned Etherium Sculptor around it twice and
+            // the payer refused (DEVIATION). A mana ability whose own activation
+            // restriction fails right now is DORMANT: shown, never summed.
+            try {
+                if (best.getRestrictions() != null && !best.getRestrictions().canPlay(c, best)) {
+                    row.put("dormant", true);
+                }
+            } catch (RuntimeException ignore) {
+                // restriction unreadable: leave the row as it was
+            }
             if (!bestBare && best.getPayCosts() != null) {
                 row.put("cost", best.getPayCosts().toSimpleString());
             }
@@ -4077,7 +4088,7 @@ public final class MailboxController extends PlayerControllerAi
         int total = me.getManaPool().totalMana();
         for (Map<String, Object> row : sources) {
             if (row.containsKey("restricted") || row.containsKey("sick")
-                    || row.containsKey("cost")) {
+                    || row.containsKey("cost") || row.containsKey("dormant")) {
                 continue;
             }
             Object y = row.get("yield");

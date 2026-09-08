@@ -1726,3 +1726,25 @@ Hard-won from two live sessions; read before optimizing anything.
     budget). `ARENA_ROTATE_HARD` (600k; 0 off) now rotates at the NEXT
     decision, mid-turn, once the last call re-read that much; the record
     carries the turn's plays so far.
+
+89. **Game 28 — all-AI on the branch (2026-09-08 08:31–09:05; Urza won t21)
+    and the dormant-source fix.** 21 turns, 551 decisions: model 367 (66%),
+    runner 184 (cycle 159, memo 16, affordability 9). Urza alone made 263
+    model calls — a 145-decision turn 17 of Isochron/Dramatic Reversal digs,
+    each a NEW card to judge (no memo, no cycle can apply; inherent) — and
+    read 108.5M tokens, peaking at 846k per call before the boundary rotation
+    (→ `ARENA_ROTATE_HARD`, note 88). Zero timeouts, punts, refusals,
+    TARGETLOSS; persistent 352 calls / 0 fallbacks. Deviations 3: Urza t1
+    Mox Opal (data defect, fixed below), Urza t17 "~15 digs missed Aetherflux"
+    (variance), Purphoros t19 "Mana Drain countered the recast" (interaction).
+    Autopass hygiene: the model passed 90 of its 109 REACT windows; 68 of
+    those held ≥4 options with a non-empty stack and mana up — Urza holding
+    Counterspell/Mana Drain plus Welding Jar, Drafna, Mirage Mirror while its
+    own trigger resolved. A "counterspell-or-mana-only" dead rule would have
+    caught 0 of them (a utility option is always present); no new rule is
+    justified — those are real holds. **BL-35 fix:** `manaSources` flags a
+    source whose own activation restriction fails right now (Mox Opal without
+    metalcraft) as `dormant`; `manaAvailableNow` and the human `manaCeiling`
+    skip it. `ManaTableTest.conditionLockedManaSourceIsDormantNotAvailable`.
+    arena-stop now archives `engine-events.jsonl` and the persistent-process
+    stderr files too.

@@ -267,8 +267,8 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
         try {
             int total = getPlayer().getManaPool().totalMana();
             for (java.util.Map<String, Object> row : MailboxController.manaSources(getPlayer())) {
-                if (row.containsKey("sick")) {
-                    continue;
+                if (row.containsKey("sick") || row.containsKey("dormant")) {
+                    continue; // summoning-sick or condition-locked (Mox Opal without metalcraft)
                 }
                 Object y = row.get("yield");
                 if (!(y instanceof Integer)) {

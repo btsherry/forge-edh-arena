@@ -135,4 +135,35 @@ public class ManaTableTest {
             Assert.assertEquals(selvala.get("yield"), 5, "X = greatest power among creatures you control: " + selvala);
         }
     }
+
+    /** Games 27-28: a mana ability whose activation restriction fails now
+     *  (Mox Opal, metalcraft) is listed but flagged dormant and never summed
+     *  into manaAvailableNow; with metalcraft it is a normal source. */
+    @Test(timeOut = 120_000)
+    public void conditionLockedManaSourceIsDormantNotAvailable() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            MailboxTestKit.put("Mox Opal", k.seat, ZoneType.Battlefield);
+            MailboxTestKit.put("Forest", k.seat, ZoneType.Battlefield);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> sources = (List<Map<String, Object>>) MailboxController.buildState(k.seat, k.seat.getId(), 3).get("manaSources");
+            Map<String, Object> opal = null;
+            for (Map<String, Object> row : sources) {
+                if ("Mox Opal".equals(row.get("name"))) {
+                    opal = row;
+                }
+            }
+            Assert.assertNotNull(opal, "Mox Opal row: " + sources);
+            Assert.assertEquals(opal.get("dormant"), Boolean.TRUE, "one artifact: no metalcraft, dormant: " + opal);
+            Assert.assertEquals(MailboxController.manaAvailableNow(k.seat, sources), 1, "only the Forest counts");
+            MailboxTestKit.put("Sol Ring", k.seat, ZoneType.Battlefield);
+            MailboxTestKit.put("Lotus Petal", k.seat, ZoneType.Battlefield);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> after = (List<Map<String, Object>>) MailboxController.buildState(k.seat, k.seat.getId(), 3).get("manaSources");
+            for (Map<String, Object> row : after) {
+                if ("Mox Opal".equals(row.get("name"))) {
+                    Assert.assertNull(row.get("dormant"), "three artifacts: metalcraft on, live source: " + row);
+                }
+            }
+        }
+    }
 }

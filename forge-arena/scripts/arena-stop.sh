@@ -75,6 +75,7 @@ if [ "$have_logs" = 1 ]; then
      "$LOGS"/gui.out "$LOGS"/run_table.out "$LOGS"/autostop.out \
      "$LOGS"/game.jsonl "$LOGS"/game-*.jsonl \
      "$LOGS"/ratings.out "$LOGS"/transport-events.jsonl \
+     "$LOGS"/engine-events.jsonl "$LOGS"/claude-persistent-seat-*.err \
      "$ROOT"/runner/results/*.rated \
      "$ROOT"/runner/results/*.skipped "$ROOT"/runner/results/*.voided "$A/" 2>/dev/null
   archived=$(ls "$A" 2>/dev/null | wc -l | tr -d ' ')
