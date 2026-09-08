@@ -329,6 +329,15 @@ class SeatBrain:
 
     # ---- transport -----------------------------------------------------------
 
+    @property
+    def transport_name(self) -> str:
+        """What answers this seat's questions: a backend endpoint, one
+        persistent Claude process, or a spawn per call (for logs and the
+        launch banner)."""
+        if self.backend is not None:
+            return f"backend:{self.model}"
+        return "persistent" if self.persistent_enabled else "spawn"
+
     def set_model(self, model: str) -> None:
         """Apply a (possibly transport-changing) model re-dial. Per-transport
         session state: the Claude session_id and any backend transcript are
@@ -519,9 +528,24 @@ class SeatBrain:
 
     # ---- lifecycle -------------------------------------------------------------
 
-    def ensure_session(self, timeout_s: float = 300.0) -> bool:
+    def _init_prompt(self, record_text: str | None = None) -> str:
+        """The first message of a session: the dossier, verbatim, optionally
+        followed by the machine-built game record (seatd/record.py), then
+        READY. Shared by ensure_session (a restart mid-game) and rotate."""
+        if not record_text:
+            return self._init_message
+        ready = "\nReply exactly: READY"
+        base = self._init_message
+        if base.endswith(ready):
+            base = base[: -len(ready)]
+        return base + "\n\n" + record_text.rstrip() + "\n" + ready
+
+    def ensure_session(self, timeout_s: float = 300.0, record_text: str | None = None) -> bool:
         """Load the dossier into a fresh session (once per game, per transport:
-        Claude iff no session_id, backend iff its transcript is empty)."""
+        Claude iff no session_id, backend iff its transcript is empty).
+        `record_text` (Ben, 2026-09-08): a runner restarted mid-game hands the
+        new session the game record so far, exactly as a rotation does, instead
+        of starting the game over with no memory."""
         if self.backend is not None:
             if self.backend.ready:
                 return True
@@ -538,15 +562,16 @@ class SeatBrain:
         if self.session_id:
             return True
         t0 = time.time()
-        env = self._call(self._init_message, timeout_s, resume=False)
+        env = self._call(self._init_prompt(record_text), timeout_s, resume=False)
         if env is None or not env.get("session_id"):
             return False
         self.session_id = env["session_id"]
         self.calls += 1
         self._accumulate(env)  # the dossier load is the biggest single burn
         self.log(f"[seat {self.seat}] session up ({self.model}) in "
-                 f"{time.time() - t0:.1f}s — {self.deck} dossier loaded, "
-                 f"session {self.session_id[:8]}")
+                 f"{time.time() - t0:.1f}s — {self.deck} dossier loaded"
+                 + (f" + game record ({len(record_text)} chars)" if record_text else "")
+                 + f", session {self.session_id[:8]}")
         return True
 
     def rotate(self, record_text: str, timeout_s: float = 120.0) -> bool:
@@ -557,13 +582,8 @@ class SeatBrain:
         failure the old session stays in use."""
         if self.backend is not None or not self.session_id:
             return False
-        ready = "\nReply exactly: READY"
-        base = self._init_message
-        if base.endswith(ready):
-            base = base[: -len(ready)]
-        prompt = base + "\n\n" + record_text.rstrip() + "\n" + ready
         t0 = time.time()
-        env = self._call(prompt, timeout_s, resume=False)
+        env = self._call(self._init_prompt(record_text), timeout_s, resume=False)
         if env is None or not env.get("session_id"):
             self.log(f"[seat {self.seat}] session rotation FAILED — keeping the old session")
             return False

@@ -76,6 +76,7 @@ if [ "$have_logs" = 1 ]; then
      "$LOGS"/game.jsonl "$LOGS"/game-*.jsonl \
      "$LOGS"/ratings.out "$LOGS"/transport-events.jsonl \
      "$LOGS"/engine-events.jsonl "$LOGS"/claude-persistent-seat-*.err \
+     "$LOGS"/launch-config.txt \
      "$ROOT"/runner/results/*.rated \
      "$ROOT"/runner/results/*.skipped "$ROOT"/runner/results/*.voided "$A/" 2>/dev/null
   archived=$(ls "$A" 2>/dev/null | wc -l | tr -d ' ')
@@ -92,6 +93,11 @@ if [ -n "${A:-}" ] && [ -f "$A/game.jsonl" ]; then
   games=$(ls "$A"/game-*.jsonl 2>/dev/null | grep -v legacy | wc -l | tr -d ' ')
 fi
 echo "arena stopped: runners=$runners gui=$gui | archived $archived log files | $decisions decisions across $games game(s) (archived)"
+# Hygiene block (Ben, 2026-09-08): the numbers a reviewer would otherwise
+# compute by hand, printed here and saved beside the logs. Never blocks teardown.
+if [ -n "${A:-}" ] && [ -d "$A" ] && [ "$decisions" -gt 0 ]; then
+  python3 "$DIR/arena-hygiene.py" "$A" 2>/dev/null | tee "$A/hygiene.txt" || true
+fi
 
 # Watchers armed by a driving agent session (digest monitors, log tails) are
 # deliberately NOT killed — they re-attach across games by design. Surface

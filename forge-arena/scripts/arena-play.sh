@@ -9,9 +9,12 @@
 #   arena-play.sh --human [deck.dck] [--timeout N] [--model M] [--effort E] [--no-advisor]
 #   ... [--linger N] [--no-autostop]
 #   ... [--no-voice]   (the advisor's spoken voice: stock phrases always, live lines with ELEVENLABS_API_KEY)
-#   ... [--stops quick|full]  (human games: opponent-turn priority stops in Forge's preferences —
-#                              quick = declare-attackers + end step only; full = + begin-combat + declare-blockers)
-# Defaults: model=opus effort=medium timeout=90; human deck=selvala-heart-of-the-wilds.dck
+#   ... [--stops quick|full|keep|restore]  (human games: opponent-turn priority stops in Forge's preferences —
+#                              quick (DEFAULT) = declare-attackers + end step only; full = + begin-combat +
+#                              declare-blockers; keep = leave your preferences alone; restore = put back the
+#                              preferences saved before the first --stops rewrite. `arena-play.sh --stops restore`
+#                              on its own restores and exits.)
+# Defaults: model=opus effort=medium timeout=90; human deck=selvala-heart-of-the-wilds.dck; stops=quick
 # Auto-teardown (2026-09-04, Ben): once the engine reports gameOver (or the GUI
 #   JVM is gone) a sleep-loop watcher lingers --linger seconds (default 60 all-AI,
 #   120 human — time to read the final board; Ben shortened it from 600 after
@@ -33,7 +36,7 @@ LOGS="$ROOT/runner/logs"
 
 MODE=""; HUMAN_DECK="selvala-heart-of-the-wilds.dck"
 MODEL="opus"; EFFORT="medium"; TIMEOUT="90"; ADVISOR=""
-LINGER=""; AUTOSTOP=1; VOICE="${ARENA_VOICE:-on}"
+LINGER=""; AUTOSTOP=1; VOICE="${ARENA_VOICE:-on}"; STOPS="${ARENA_STOPS:-quick}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --all-ai) MODE="all-ai"; shift ;;
@@ -47,8 +50,8 @@ while [ $# -gt 0 ]; do
               case "$2" in ''|*[!0-9]*) echo "arena: --linger takes a whole number of seconds (got '$2')" >&2; exit 2 ;; esac
               LINGER="$2"; shift 2 ;;
     --no-autostop) AUTOSTOP=0; shift ;;
-    --stops) [ $# -ge 2 ] || { echo "arena: --stops needs quick|full" >&2; exit 2; }
-              case "$2" in quick|full) STOPS="$2" ;; *) echo "arena: --stops takes quick|full (got '$2')" >&2; exit 2 ;; esac; shift 2 ;;
+    --stops) [ $# -ge 2 ] || { echo "arena: --stops needs quick|full|keep|restore" >&2; exit 2; }
+              case "$2" in quick|full|keep|restore) STOPS="$2" ;; *) echo "arena: --stops takes quick|full|keep|restore (got '$2')" >&2; exit 2 ;; esac; shift 2 ;;
     --no-voice) VOICE=off; shift ;;
     --advisor) ADVISOR=1; shift ;;      # explicit on (the default for --human)
     --no-advisor) ADVISOR=0; shift ;;
@@ -78,6 +81,16 @@ if [ "$ADVISOR" = "1" ]; then
     ADVISOR=0
   fi
 fi
+PREFS="$HOME/Library/Application Support/Forge/preferences/forge.preferences"
+if [ -z "$MODE" ] && [ "$STOPS" = "restore" ]; then
+  # standalone: put the saved preferences back and stop
+  if [ -f "$PREFS.bak-arena" ]; then
+    cp "$PREFS.bak-arena" "$PREFS" && echo "arena: opponent-turn stops restored from $PREFS.bak-arena"
+  else
+    echo "arena: nothing to restore — no $PREFS.bak-arena (no --stops rewrite has happened yet)" >&2; exit 1
+  fi
+  exit 0
+fi
 [ -n "$MODE" ] || { echo "specify --all-ai or --human [deck]" >&2; exit 2; }
 # Linger default: a spectator table has nobody reading the board; a human does.
 [ -n "$LINGER" ] || { [ "$MODE" = "human" ] && LINGER=120 || LINGER=60; }
@@ -100,11 +113,18 @@ fi
 # before the GUI reads them. The autopass table passes any stop where nothing
 # is possible, so a stop only costs a prompt when you CAN act — "quick" keeps
 # the two stops where interaction usually lives (after attackers are declared,
-# and the end step) and drops begin-combat and declare-blockers.
-if [ -n "${STOPS:-}" ]; then
-  PREFS="$HOME/Library/Application Support/Forge/preferences/forge.preferences"
+# and the end step) and drops begin-combat and declare-blockers. Human games
+# only (a spectator has no stops). The backup is written ONCE — the first
+# rewrite saves your own preferences; later launches never overwrite it.
+if [ "$MODE" = "human" ] && [ "$STOPS" = "restore" ]; then
+  if [ -f "$PREFS.bak-arena" ]; then
+    cp "$PREFS.bak-arena" "$PREFS" && echo "  stops: restored your saved preferences ($PREFS.bak-arena)"
+  else
+    echo "  stops: nothing to restore (no $PREFS.bak-arena) — preferences left as they are"
+  fi
+elif [ "$MODE" = "human" ] && [ "$STOPS" != "keep" ]; then
   if [ -f "$PREFS" ]; then
-    cp "$PREFS" "$PREFS.bak-arena"
+    [ -f "$PREFS.bak-arena" ] || cp "$PREFS" "$PREFS.bak-arena"
     case "$STOPS" in
       quick) BC=false; DA=true; DB=false; EOT=true ;;
       full)  BC=true;  DA=true; DB=true;  EOT=true ;;
@@ -126,7 +146,7 @@ for k, v in want.items():
         lines.append(f"{k}={v}")
 open(p, "w", encoding="utf-8").write("\n".join(lines) + "\n")
 PY
-    echo "  stops: $STOPS (opponent turns: begin-combat=$BC declare-attackers=$DA declare-blockers=$DB end-step=$EOT; backup $PREFS.bak-arena)"
+    echo "  stops: $STOPS (opponent turns: begin-combat=$BC declare-attackers=$DA declare-blockers=$DB end-step=$EOT; your originals: $PREFS.bak-arena — --stops restore puts them back)"
   else
     echo "arena: --stops: preferences file not found at $PREFS — skipped" >&2
   fi
@@ -136,9 +156,19 @@ fi
 "$DIR/arena-stop.sh" >/dev/null 2>&1
 mkdir -p "$LOGS/pids"   # item 13e: every process this launch starts leaves a PID file
 
+# 1.5) the launch banner (Ben, 2026-09-08): every knob in effect, once, to the
+# terminal and runner/logs/launch-config.txt (archived at teardown), and at
+# the head of run_table.out and gui.out so each log explains its own run.
+STOPS_SHOWN="$STOPS"; [ "$MODE" = "human" ] || STOPS_SHOWN="n/a"
+python3 "$DIR/arena-config.py" --mode "$MODE" --deck "$HUMAN_SLUG" --model "$MODEL" --effort "$EFFORT" \
+  --timeout "$TIMEOUT" --advisor "$ADVISOR" --voice "$VOICE" --stops "$STOPS_SHOWN" --linger "$LINGER" \
+  --autostop "$AUTOSTOP" --out "$LOGS/launch-config.txt"
+cp "$LOGS/launch-config.txt" "$LOGS/run_table.out" 2>/dev/null
+cp "$LOGS/launch-config.txt" "$LOGS/gui.out" 2>/dev/null
+
 # 2) seat runners (all four for all-ai; seats 1-3 for human)
 env $ALL SEAT_MODEL="$MODEL" SEAT_EFFORT="$EFFORT" ARENA_MAILBOX_TIMEOUT="$TIMEOUT" \
-  nohup "$ROOT/runner/run_table.sh" >"$LOGS/run_table.out" 2>&1 &
+  nohup "$ROOT/runner/run_table.sh" >>"$LOGS/run_table.out" 2>&1 &
 echo $! > "$LOGS/pids/run_table.pid"
 sleep 3
 
@@ -170,7 +200,7 @@ if [ "$MODE" = "all-ai" ]; then GUI_ARG="--all-ai"; else GUI_ARG="$HUMAN_DECK"; 
 ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" \
   ARENA_AUTOPASS="${ARENA_AUTOPASS:-casts}" \
   nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
-  "$DIR/run-pilot-match.sh" "$GUI_ARG" >"$LOGS/gui.out" 2>&1 &
+  "$DIR/run-pilot-match.sh" "$GUI_ARG" >>"$LOGS/gui.out" 2>&1 &
 echo $! > "$LOGS/pids/gui.pid"   # run-pilot-match execs java, so this IS the JVM
 
 # 4) wait until the match is actually live — or until the engine refuses the

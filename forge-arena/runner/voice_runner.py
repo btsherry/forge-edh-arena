@@ -358,9 +358,23 @@ class Renderer:
     our own WAV header, no ffmpeg needed), the film-match effects via ffmpeg when
     present or the pure-Python lite chain when not; the result is cached."""
 
-    def __init__(self, cache_dir: Path, log=print, fake_tts=None):
+    # After this many consecutive live failures the renderer stops calling
+    # ElevenLabs for a while (60 s, doubling to 10 min) and says so ONCE;
+    # a quota that ran out mid-game no longer writes a failure per line.
+    FAIL_PAUSE_AFTER = 3
+    PAUSE_FIRST_S = 60.0
+    PAUSE_MAX_S = 600.0
+
+    def __init__(self, cache_dir: Path, log=print, fake_tts=None, record=None, clock=time.monotonic):
         self.cache_dir = cache_dir
         self.log = log
+        self.record = record          # callable(event, **body) -> the voice jsonl; optional
+        self.clock = clock
+        self.renders = 0              # live renders that produced audio
+        self.fails_total = 0
+        self.fail_streak = 0
+        self.paused_until = 0.0
+        self.pause_s = self.PAUSE_FIRST_S
         self.manifest = json.loads((STOCK / "manifest.json").read_text()) if (STOCK / "manifest.json").exists() else {"phrases": {}, "sfx": []}
         self.api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
         self.voice_id = os.environ.get("ARENA_VOICE_ID") or self.manifest.get("voice_id") or DEFAULT_VOICE_ID
@@ -420,6 +434,8 @@ class Renderer:
             return out
         if not self.live:
             return None
+        if self.clock() < self.paused_until:
+            return None   # backing off after repeated failures; stock phrases still play
         try:
             if self.fake_tts is not None:
                 raw = self.fake_tts(text)
@@ -427,8 +443,13 @@ class Renderer:
             else:
                 raw, cost = self._elevenlabs(text)
         except Exception as e:  # noqa: BLE001 — a failed render is a skipped line, never a crash
-            self.log(f"[voice] live render failed: {str(e)[:160]}")
+            self._render_failed(str(e)[:160])
             return None
+        if self.fail_streak:
+            self.log(f"[voice] live render recovered after {self.fail_streak} failure(s)")
+            self.fail_streak = 0
+            self.pause_s = self.PAUSE_FIRST_S
+        self.renders += 1
         self.chars_used += cost
         # what did we get? WAV (a fake, or PCM already wrapped), or MP3 (fallback)
         is_wav = raw[:4] == b"RIFF"
@@ -475,6 +496,29 @@ class Renderer:
             tmp_out.unlink(missing_ok=True)
             return None
         return out
+
+    def _render_failed(self, detail: str) -> None:
+        """Count a live failure; log the first of a streak in full, then one
+        line per pause instead of one per attempt."""
+        self.fails_total += 1
+        self.fail_streak += 1
+        if self.record is not None:
+            try:
+                self.record("render-failed", streak=self.fail_streak, detail=detail[:120])
+            except Exception:  # noqa: BLE001
+                pass
+        if self.fail_streak == 1:
+            self.log(f"[voice] live render failed: {detail}")
+        if self.fail_streak >= self.FAIL_PAUSE_AFTER:
+            self.paused_until = self.clock() + self.pause_s
+            self.log(f"[voice] live render failed {self.fail_streak}x in a row (last: {detail}) — "
+                     f"live lines paused {int(self.pause_s)}s; stock phrases continue")
+            if self.record is not None:
+                try:
+                    self.record("live-paused", failures=self.fail_streak, seconds=int(self.pause_s), detail=detail[:120])
+                except Exception:  # noqa: BLE001
+                    pass
+            self.pause_s = min(self.pause_s * 2, self.PAUSE_MAX_S)
 
     def _elevenlabs(self, text: str) -> tuple[bytes, int]:
         """One TTS call. PCM comes back as raw 16-bit samples and is wrapped in a
@@ -553,7 +597,8 @@ class VoiceRunner:
         self._log_path = logs_dir / "voice-0.log"
         self._jsonl = logs_dir / "voice-0.jsonl"
         self._control = logs_dir / "control" / "voice.json"
-        self.renderer = Renderer(logs_dir / "cache" / "voice", log=self.say, fake_tts=fake_tts)
+        self.renderer = Renderer(logs_dir / "cache" / "voice", log=self.say, fake_tts=fake_tts,
+                                 record=self.record, clock=clock)
         self.player = player or Player(dry_run=dry_run, log=self.say)
         self.min_gap = float(os.environ.get("ARENA_VOICE_MIN_GAP", "8"))
         self.sfx_on = os.environ.get("ARENA_VOICE_SFX", "on").lower() != "off"

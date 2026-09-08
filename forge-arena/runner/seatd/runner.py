@@ -1070,11 +1070,29 @@ class SeatRunner:
     def run(self, poll_s: float = 0.15) -> None:
         swept = self.mb.sweep_outbox()
         self._say(f"[seat {self.seat}] runner up — deck={self.deck} "
-                  f"model={self.brain.model} timeout={self.timeout_s}s"
+                  f"model={self.brain.model} effort={getattr(self.brain, 'effort', '?')} "
+                  f"timeout={self.timeout_s}s transport={getattr(self.brain, 'transport_name', '?')} "
+                  f"react-low-effort={os.environ.get('ARENA_REACT_LOW_EFFORT', 'on')} "
+                  f"rotate={self.rotate_at // 1000}k/{self.rotate_hard // 1000}k "
+                  f"speculative={'on' if self.speculative else 'off'} react-hold={'on' if self.react_hold else 'off'}"
                   + (f" (swept {swept} stale)" if swept else ""))
         self.mb.start_heartbeat_thread()  # item 12: "somebody is home", every 5s,
                                           # beating through the pre-warm below too
-        self.brain.ensure_session()  # pre-warm: dossier loads before turn 0
+        # Ben, 2026-09-08: a runner that died mid-game (crash, kill, the
+        # restart loop) used to come back with a fresh session and NO game
+        # memory. The record the rotation already builds is on disk; hand it
+        # to the first session the same way.
+        restart = self._restart_record()
+        if restart is None:
+            self.brain.ensure_session()  # pre-warm: dossier loads before turn 0
+        else:
+            gid, text, n = restart
+            self._game_id = gid
+            self.mb.game_id = gid   # a different gameId on the first request still resets, as it should
+            self._say(f"[seat {self.seat}] RESTART mid-game detected (game {gid[:8]}, {n} own decisions "
+                      f"on disk) — the fresh session gets the game record ({len(text)} chars)")
+            self._transport_event("restart", gid)
+            self.brain.ensure_session(record_text=text)
         while True:
             self._apply_control()
             req = self.mb.pending_request()
@@ -1082,6 +1100,44 @@ class SeatRunner:
                 time.sleep(poll_s)
                 continue
             self.handle(req)
+
+    def _restart_record(self):
+        """(gameId, record text, own decision count) when this seat already has
+        decisions on disk for a game that is not over — i.e. the process is a
+        restart, not a launch (arena-play archives the logs before a launch, so
+        an existing game.jsonl means a live session). None otherwise; never
+        raises."""
+        try:
+            log = self._game_log
+            if not log.exists():
+                return None
+            last = None
+            n = 0
+            with open(log, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    try:
+                        r = json.loads(line)
+                    except ValueError:
+                        continue
+                    if r.get("seat") == self.seat and isinstance(r.get("gameId"), str) and r.get("gameId"):
+                        if r.get("gameId") != last:
+                            last, n = r.get("gameId"), 0
+                        n += 1
+            if not last:
+                return None
+            state = self.mb.inbox.parent.parent / "observer-state.json"
+            try:
+                snap = json.loads(state.read_text())
+                if snap.get("gameOver") or (snap.get("gameId") and snap.get("gameId") != last):
+                    return None
+            except (OSError, ValueError):
+                pass   # no snapshot: trust the log
+            from . import record as _record
+            text = _record.render(log, self._jsonl_path, self.seat, game_id=last)
+            return (last, text, n) if text and text.strip() else None
+        except Exception as e:  # noqa: BLE001 — a restart helper must never stop the launch
+            self._say(f"[seat {self.seat}] restart check failed ({e}) — starting without a record")
+            return None
 
     def _maybe_rotate(self, hard: bool = False) -> bool:
         """Layer two (Ben, 2026-09-07): when the last call re-read more than

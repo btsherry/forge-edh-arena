@@ -139,7 +139,7 @@ public class GuiPilotMatchRosterTest {
 
     @Test(groups = "extended", timeOut = 120_000)
     public void allShippedDecksVerify() throws Exception {
-        // every deck in decks/ must verify, whatever the count is today (13 since 09-06)
+        // every deck in decks/ must verify, whatever the count is today (10: the three 09-06 test imports were removed 09-08 — only decks Ben built ship)
         Path status = Files.createTempDirectory("roster-all").resolve("launch-status.json");
         List<Deck> decks = GuiPilotMatch.verifyRoster(decksDir.toFile(), shipped, status);
         Assert.assertEquals(decks.size(), shipped.size(), "every shipped deck verifies: " + shipped);
