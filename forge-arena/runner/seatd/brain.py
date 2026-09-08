@@ -290,6 +290,7 @@ class SeatBrain:
         self._persistent_key: tuple | None = None   # (model, effort) the process was started with
         self.persistent_calls = 0
         self.persistent_fallbacks = 0
+        self.effort_pinned = 0   # calls answered at the process's effort, not the asked one
         root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[3]
         self.root = root  # session storage is cwd-scoped: keep every call here
         here = Path(__file__).parent
@@ -441,22 +442,27 @@ class SeatBrain:
         (model, effort); a different effort than the running process was
         started with means THIS call takes the spawn path (per-process flag).
         Any failure counts a fallback and returns None."""
-        key = (self.model, eff)
         p = self._persistent
-        if p is not None and p.alive() and self._persistent_key != key:
-            # effort/model differs for this one call: spawn path. The live
-            # process holds the transcript IN MEMORY, so a turn appended on
-            # disk by the spawn would be invisible to it — stop it; the next
-            # persistent call restarts from disk with --resume (Gemini pass 2, P1).
-            self.stop_persistent()
-            return None
+        # Keyed on MODEL only (Ben, 2026-09-08): --effort is a per-process flag,
+        # and restarting the process for every low/medium flip cost more than
+        # the low-effort call saved (game 29: 26 flips for Urza, ~2.5 s each).
+        # A live process answers at the effort it was started with; the flip
+        # is logged and counted. A MODEL change still needs a new process.
+        if p is not None and p.alive() and self._persistent_key[0] != self.model:
+            self.stop_persistent()   # in-memory transcript: never let disk drift past it
+            p = None
+        if p is not None and p.alive() and self._persistent_key[1] != eff:
+            self.effort_pinned += 1
+            if self.effort_pinned in (1, 10, 100):
+                self.log(f"[seat {self.seat}] persistent process answers at effort "
+                         f"{self._persistent_key[1]} (asked {eff}); pinned {self.effort_pinned}x so far")
         if p is None or not p.alive():
             err_path = str(self.root / "forge-arena" / "runner" / "logs" / f"claude-persistent-seat-{self.seat}.err")
             p = PersistentClaude(cmd_base, self.session_id, str(self.root), self.log, stderr_path=err_path)
             if not p.start():
                 self.persistent_fallbacks += 1
                 return None
-            self._persistent, self._persistent_key = p, key
+            self._persistent, self._persistent_key = p, (self.model, eff)
             self.log(f"[seat {self.seat}] persistent claude process up for session "
                      f"{self.session_id[:8]} ({self.model}/{eff})")
         self._child = p.proc

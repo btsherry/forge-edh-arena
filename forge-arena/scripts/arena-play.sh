@@ -9,6 +9,8 @@
 #   arena-play.sh --human [deck.dck] [--timeout N] [--model M] [--effort E] [--no-advisor]
 #   ... [--linger N] [--no-autostop]
 #   ... [--no-voice]   (the advisor's spoken voice: stock phrases always, live lines with ELEVENLABS_API_KEY)
+#   ... [--stops quick|full]  (human games: opponent-turn priority stops in Forge's preferences —
+#                              quick = declare-attackers + end step only; full = + begin-combat + declare-blockers)
 # Defaults: model=opus effort=medium timeout=90; human deck=selvala-heart-of-the-wilds.dck
 # Auto-teardown (2026-09-04, Ben): once the engine reports gameOver (or the GUI
 #   JVM is gone) a sleep-loop watcher lingers --linger seconds (default 60 all-AI,
@@ -45,6 +47,8 @@ while [ $# -gt 0 ]; do
               case "$2" in ''|*[!0-9]*) echo "arena: --linger takes a whole number of seconds (got '$2')" >&2; exit 2 ;; esac
               LINGER="$2"; shift 2 ;;
     --no-autostop) AUTOSTOP=0; shift ;;
+    --stops) [ $# -ge 2 ] || { echo "arena: --stops needs quick|full" >&2; exit 2; }
+              case "$2" in quick|full) STOPS="$2" ;; *) echo "arena: --stops takes quick|full (got '$2')" >&2; exit 2 ;; esac; shift 2 ;;
     --no-voice) VOICE=off; shift ;;
     --advisor) ADVISOR=1; shift ;;      # explicit on (the default for --human)
     --no-advisor) ADVISOR=0; shift ;;
@@ -90,6 +94,42 @@ ALL="ARENA_HUMAN_DECK=$HUMAN_SLUG"
 if ! env $ALL "$ROOT/runner/run_table.sh" --preflight; then
   echo "arena: refusing to start — an AI deck is missing required files (see above)." >&2
   exit 1
+fi
+
+# 0.5) opponent-turn stops (Ben, 2026-09-08): rewrite Forge's PHASE_AI_* prefs
+# before the GUI reads them. The autopass table passes any stop where nothing
+# is possible, so a stop only costs a prompt when you CAN act — "quick" keeps
+# the two stops where interaction usually lives (after attackers are declared,
+# and the end step) and drops begin-combat and declare-blockers.
+if [ -n "${STOPS:-}" ]; then
+  PREFS="$HOME/Library/Application Support/Forge/preferences/forge.preferences"
+  if [ -f "$PREFS" ]; then
+    cp "$PREFS" "$PREFS.bak-arena"
+    case "$STOPS" in
+      quick) BC=false; DA=true; DB=false; EOT=true ;;
+      full)  BC=true;  DA=true; DB=true;  EOT=true ;;
+    esac
+    python3 - "$PREFS" "$BC" "$DA" "$DB" "$EOT" <<'PY'
+import sys, re
+p, bc, da, db, eot = sys.argv[1:]
+want = {"PHASE_AI_BEGINCOMBAT": bc, "PHASE_AI_DECLAREATTACKERS": da, "PHASE_AI_DECLAREBLOCKERS": db,
+        "PHASE_AI_EOT": eot, "PHASE_AI_UPKEEP": "false", "PHASE_AI_DRAW": "false", "PHASE_AI_MAIN1": "false",
+        "PHASE_AI_MAIN2": "false", "PHASE_AI_COMBATDAMAGE": "false", "PHASE_AI_ENDCOMBAT": "false"}
+lines = open(p, encoding="utf-8").read().splitlines()
+seen = set()
+for i, l in enumerate(lines):
+    k = l.split("=", 1)[0]
+    if k in want:
+        lines[i] = f"{k}={want[k]}"; seen.add(k)
+for k, v in want.items():
+    if k not in seen:
+        lines.append(f"{k}={v}")
+open(p, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+PY
+    echo "  stops: $STOPS (opponent turns: begin-combat=$BC declare-attackers=$DA declare-blockers=$DB end-step=$EOT; backup $PREFS.bak-arena)"
+  else
+    echo "arena: --stops: preferences file not found at $PREFS — skipped" >&2
+  fi
 fi
 
 # 1) clean slate (reuses arena-stop for teardown+archive+clear)

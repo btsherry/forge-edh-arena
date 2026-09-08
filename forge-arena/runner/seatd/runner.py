@@ -327,7 +327,7 @@ class SeatRunner:
         if self.turn_intent and source == "model":
             rec["turn_intent"] = self.turn_intent
         cum = dict(self.brain.totals)  # burn since instantiation
-        for k in ("last_prompt_tokens", "rotations", "persistent_calls", "persistent_fallbacks"):
+        for k in ("last_prompt_tokens", "rotations", "persistent_calls", "persistent_fallbacks", "effort_pinned"):
             v = getattr(self.brain, k, None)
             if isinstance(v, int):
                 cum[k] = v

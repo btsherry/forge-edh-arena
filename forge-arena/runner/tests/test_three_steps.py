@@ -138,17 +138,20 @@ class BrainTransportTests(unittest.TestCase):
         try:
             env = b._call("hello", 10.0, resume=True)
             self.assertIsNotNone(env); self.assertEqual(b.persistent_calls, 1); self.assertEqual(spawned, [])
-            # a different effort for one call -> spawn path (per-process flag) AND the
-            # live process is stopped: it holds the transcript in memory and would
-            # not see the turn the spawn appends on disk (Gemini pass 2)
+            # a different EFFORT keeps the live process (keyed on model only, Ben
+            # 2026-09-08): the call is answered at the process's effort and counted
             b._call("low one", 10.0, resume=True, effort="low")
-            self.assertEqual(len(spawned), 1, "effort mismatch goes through the spawn path")
-            self.assertIn("--resume", spawned[0])
-            self.assertIsNone(b._persistent, "the stale in-memory process is stopped before the spawn turn")
+            self.assertEqual(spawned, [], "no spawn for an effort flip")
+            self.assertEqual(b.effort_pinned, 1); self.assertEqual(b.persistent_calls, 2)
+            self.assertIsNotNone(b._persistent, "the process stays up across effort flips")
+            # a different MODEL stops it (transcript is in memory) and starts a fresh one
+            b.model = "sonnet"
+            b._call("other model", 10.0, resume=True)
+            self.assertEqual(len(calls), 5, "a new process for the new model")   # new, call, call(pinned), new, call
             # process failure -> fallback counted, spawn used
             P.call = lambda self, prompt, timeout_s: None
             b._call("again", 10.0, resume=True)
-            self.assertEqual(b.persistent_fallbacks, 1); self.assertEqual(len(spawned), 2)
+            self.assertEqual(b.persistent_fallbacks, 1); self.assertEqual(len(spawned), 1, "the failure is the only spawn")
         finally:
             brain_mod.PersistentClaude, brain_mod._run = orig_cls, orig_run
 
