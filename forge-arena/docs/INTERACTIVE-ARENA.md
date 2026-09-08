@@ -1862,3 +1862,48 @@ Hard-won from two live sessions; read before optimizing anything.
     Addendum: the packager's script list lacked the three new scripts and
     shipped the 4 MB raw takes (BL-42) — fixed with a drift test that derives
     the needed set from the shipped scripts themselves.
+
+95. **Stock voice library grown to 63 lines — RoboCop and HK-47 registers
+    (2026-09-08, a worktree subagent on `experimental/voicework`).** The 25
+    WarGames lines were the whole vocabulary of the stock-only mode (every
+    package user without an ElevenLabs key), and at "one line in two" the same
+    eleven reactions came round fast. Added 38 lines, same voice, same v3
+    settings (stability 1.0, speed 0.92), same FX chain and seeded glitch:
+    18 from *RoboCop* (1987) — sourced from published quote lists, IMDb and
+    TV Tropes refused the fetch — and 20 from the HK-47 register of Ben's
+    soundboard quote list (`lancerrpg-soundboard/hk-quotes.txt`, read only).
+    Every line carries a `category` in the manifest now (`reaction` /
+    `event` / `quote`); `advisor_runner` splits `QUIPS` into
+    `QUIP_REACTIONS` + `QUIP_EVENTS` + `QUIP_QUOTES` and both guide texts are
+    generated from those tuples, so the id lists can no longer drift from the
+    prose; the DENSE guide names the moments for the event lines and asks for
+    variety. `human_out` gains four lines (thank-you-cooperation, youre-fired,
+    sentence-is-death, organic-life-fragile). Edits for the table: names
+    dropped ("Dick, you're fired" → "You're fired.", "Can you fly, Bobby?" →
+    "Can you fly?"), "Book him!" → "Book them.", HK's "master/comrade" address
+    removed except where "meatbag" carries the joke, "Nice shooting, son" →
+    "Nice shooting.", the paramedic line without its expletive. Discarded from
+    RoboCop: "Bitches, leave" (sexist), "bad motherf—" (profanity), "Give the
+    man a hand" (the joke is a severed hand), "Buddy, I think you're slime" /
+    "He's a cyborg, you idiot" (insults aimed at a person), "Mind if I zip
+    this up" (innuendo), "Murphy, it's you" / "I can feel them but I can't
+    remember them" (need the film's context, wrong mood), "Cops don't like
+    me", prime-directives / military / car-dealer lines (no fit), "Sayonara",
+    "free society" and "repeat offender" (weak or over twelve words).
+    Discarded from HK-47: the children-in-war line, "burn holes through
+    meatbags", "crush his neck", "slaughtering the inhabitants" (gore),
+    "democracy is a cancer", "no women, no children", "betrayed the law"
+    (politics / off-register), the Lancer-specific sand-kiver lines, the love
+    definition (far too long), "if I were out to kill you" and "programmed to
+    terminate threats" (menace aimed at the human), plus a handful of weaker
+    near-duplicates to land inside the 50–70 target. `build_stock.py` gained a
+    `--render` step (ElevenLabs v3 for manifest phrases with no raw take; key
+    from the environment only) and `--ids` so a batch is rendered and baked
+    without re-baking the 25 existing files — they are byte-identical.
+    `pcm_44100` was refused (403, tier) so the new raw takes are 24 kHz; the
+    bake resamples to 44.1 kHz mono like the rest. Cost: 1,426 characters of
+    text submitted, **783 characters billed** (v3's `character-cost` header).
+    Verification without ears: every new WAV 44.1 kHz mono, 0.68–5.92 s,
+    `Renderer.stock(id)` resolves each; `StockLibrary` tests pin the count,
+    the registers, the WAV format and the QUIPS ⊆ manifest invariant. A
+    listen-check and any re-take is Ben's, after a game.

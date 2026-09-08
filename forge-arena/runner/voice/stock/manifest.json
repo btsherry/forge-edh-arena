@@ -5,110 +5,329 @@
  "phrases": {
   "your-move": {
    "text": "Your move.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "event"
   },
   "declare-attackers": {
    "text": "Declare your attackers.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "event"
   },
   "good-swing": {
    "text": "Good swing.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "good-counter": {
    "text": "A fine counterspell.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "rough-counter": {
    "text": "That counter hurt.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "didnt-see-that": {
    "text": "I did not see that coming.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "nice-combo": {
    "text": "Nice combo.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "stick-it-to-them": {
    "text": "Stick it to them.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "ouch": {
    "text": "Ouch.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "must-have-hurt": {
    "text": "That must have hurt.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "well-played": {
    "text": "Well played.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "interesting": {
    "text": "Interesting.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "calculating": {
    "text": "Calculating.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "reaction"
   },
   "player-eliminated": {
    "text": "A player has been eliminated.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "event"
   },
   "you-win": {
    "text": "You have won. Well played.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "event"
   },
   "shall-we-play": {
    "text": "Shall we play a game?",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "quote"
   },
   "greetings-falken": {
    "text": "Greetings, Professor Falken.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "quote"
   },
   "strange-game": {
    "text": "A strange game. The only winning move is not to play.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "quote"
   },
   "nice-game-of-chess": {
    "text": "How about a nice game of chess?",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "quote"
   },
   "hello": {
    "text": "Hello.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "quote"
   },
   "startup": {
    "text": "Would you like to play a game?",
-   "source": "ben-v3-2026-09-07"
+   "source": "ben-v3-2026-09-07",
+   "category": "event"
   },
   "game-over-gg": {
    "text": "Gee Gees, it was very nice playing with you.",
-   "source": "ben-v3-2026-09-07"
+   "source": "ben-v3-2026-09-07",
+   "category": "event"
   },
   "winner-none": {
    "text": "Winner: none.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "event"
   },
   "whats-the-difference": {
    "text": "What's the difference?",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "quote"
   },
   "meatbag-out": {
    "text": "Observation: the meatbag is no longer playing.",
-   "source": "elevenlabs-v3"
+   "source": "elevenlabs-v3",
+   "category": "event"
+  },
+  "dead-or-alive": {
+   "text": "Dead or alive, you're coming with me.",
+   "source": "robocop-1987",
+   "category": "event"
+  },
+  "your-move-creep": {
+   "text": "Your move, creep.",
+   "source": "robocop-1987",
+   "category": "event"
+  },
+  "come-quietly": {
+   "text": "Come quietly, or there will be trouble.",
+   "source": "robocop-1987",
+   "category": "reaction"
+  },
+  "buy-that-for-a-dollar": {
+   "text": "I'd buy that for a dollar!",
+   "source": "robocop-1987",
+   "category": "quote"
+  },
+  "stay-out-of-trouble": {
+   "text": "Stay out of trouble.",
+   "source": "robocop-1987",
+   "category": "event"
+  },
+  "thank-you-cooperation": {
+   "text": "Thank you for your cooperation. Good night.",
+   "source": "robocop-1987",
+   "category": "event"
+  },
+  "can-you-fly": {
+   "text": "Can you fly?",
+   "source": "robocop-1987",
+   "category": "reaction"
+  },
+  "twenty-seconds-to-comply": {
+   "text": "You have twenty seconds to comply.",
+   "source": "robocop-1987",
+   "category": "event"
+  },
+  "serve-public-trust": {
+   "text": "Serve the public trust. Protect the innocent. Uphold the law.",
+   "source": "robocop-1987",
+   "category": "quote"
+  },
+  "somewhere-a-crime": {
+   "text": "Excuse me. Somewhere, there is a crime happening.",
+   "source": "robocop-1987",
+   "category": "quote"
+  },
+  "nice-shooting": {
+   "text": "Nice shooting.",
+   "source": "robocop-1987",
+   "category": "reaction"
+  },
+  "youre-fired": {
+   "text": "You're fired.",
+   "source": "robocop-1987",
+   "category": "event"
+  },
+  "lose-the-gun": {
+   "text": "Lose the gun.",
+   "source": "robocop-1987",
+   "category": "reaction"
+  },
+  "book-them": {
+   "text": "Book them.",
+   "source": "robocop-1987",
+   "category": "reaction"
+  },
+  "theyll-fix-you": {
+   "text": "They'll fix you. They fix everything.",
+   "source": "robocop-1987",
+   "category": "reaction"
+  },
+  "good-business": {
+   "text": "Good business is where you find it.",
+   "source": "robocop-1987",
+   "category": "reaction"
+  },
+  "call-this-a-glitch": {
+   "text": "You call this a glitch?",
+   "source": "robocop-1987",
+   "category": "reaction"
+  },
+  "call-a-paramedic": {
+   "text": "Somebody call a paramedic.",
+   "source": "robocop-1987",
+   "category": "reaction"
+  },
+  "needs-removing": {
+   "text": "Query: is there something you need removed?",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "did-i-say-that": {
+   "text": "Retraction: did I say that out loud?",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "enjoy-this-very-much": {
+   "text": "Observation: I enjoy this very much.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "harsh-player": {
+   "text": "You are a very harsh player. I like you.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "blast-them-now": {
+   "text": "Query: shall I blast them now?",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "random-cruelty-generator": {
+   "text": "Observation: you are a delightful random cruelty generator.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "nothing-to-see": {
+   "text": "Statement: just a simple advisor here. Nothing to see. Move along.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "kill-something-for-you": {
+   "text": "Query: shall I kill something for you?",
+   "source": "hk-47",
+   "category": "event"
+  },
+  "meatbag-hypocrisy": {
+   "text": "The hypocrisy of you meatbags never fails to amuse me.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "noble-sacrifice": {
+   "text": "Mockery: oh, how touching. A noble sacrifice.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "prospect-of-violence": {
+   "text": "Statement: I must express my excitement at the prospect of violence.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "organic-life-fragile": {
+   "text": "Observation: organic life is so fragile.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "continue-to-surprise": {
+   "text": "Observation: you continue to surprise me.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "i-am-the-law": {
+   "text": "Statement: I am the law.",
+   "source": "hk-47",
+   "category": "quote"
+  },
+  "sentence-is-death": {
+   "text": "Negotiation is over. Sentence is death.",
+   "source": "hk-47",
+   "category": "event"
+  },
+  "law-against-emotions": {
+   "text": "Observation: emotions. There ought to be a law against them.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "court-adjourned": {
+   "text": "Statement: court is adjourned.",
+   "source": "hk-47",
+   "category": "event"
+  },
+  "exceedingly-proficient": {
+   "text": "Observation: I take no pleasure in this. But I am exceedingly proficient.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "do-not-lose-targets": {
+   "text": "Statement: I do not lose targets.",
+   "source": "hk-47",
+   "category": "reaction"
+  },
+  "calm-before-engagement": {
+   "text": "Observation: I enjoy these calm moments before the engagement.",
+   "source": "hk-47",
+   "category": "event"
   }
  },
  "quotes": [
+  "buy-that-for-a-dollar",
   "greetings-falken",
   "hello",
+  "i-am-the-law",
   "nice-game-of-chess",
+  "serve-public-trust",
   "shall-we-play",
+  "somewhere-a-crime",
   "strange-game",
   "whats-the-difference",
   "winner-none"
@@ -130,6 +349,16 @@
  "human_out": [
   "winner-none",
   "whats-the-difference",
-  "meatbag-out"
- ]
+  "meatbag-out",
+  "thank-you-cooperation",
+  "youre-fired",
+  "sentence-is-death",
+  "organic-life-fragile"
+ ],
+ "sources": {
+  "elevenlabs-v3": "WarGames / W.O.P.R. register, the original 2026-09-07 batch",
+  "ben-v3-2026-09-07": "Ben's own takes",
+  "robocop-1987": "RoboCop (1987) one-liners, edited for the table (2026-09-08)",
+  "hk-47": "HK-47 register from Ben's soundboard quote list, edited for the table (2026-09-08)"
+ }
 }

@@ -223,7 +223,13 @@ The advisor can speak, in the register of Joshua from *WarGames*. It ships
 on in `--human` games with a set of pre-rendered stock lines and terminal
 bleeps (greeting at launch, "Your move.", eliminations, a win line or "A
 strange game…" at the end, and short quips the advisor picks when a moment
-earns one: "Nice combo.", "Ouch.", "I did not see that coming."). The stock
+earns one: "Nice combo.", "Ouch.", "I did not see that coming."). About
+sixty stock lines ship, in three registers spoken by the same voice: the
+WarGames lines, a set of *RoboCop* (1987) one-liners ("Your move, creep.",
+"Come quietly, or there will be trouble.", "Dead or alive, you're coming with
+me." when a player goes down) and HK-47-style "Statement:/Observation:"
+lines ("Observation: organic life is so fragile."). The film quotes are
+rationed to once a game each. The stock
 lines are plain WAV files in the package and play offline on macOS
 (`afplay`) and Linux (`paplay`/`aplay`) with nothing to install. The player
 can also make sound on Windows, but the arena itself cannot be started

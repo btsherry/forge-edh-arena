@@ -55,10 +55,29 @@ PUBLIC_STATE_TOOL = f"Bash({PUBLIC_STATE_CMD}:*)"
 # plays the matching pre-rendered Joshua/W.O.P.R. phrase. The tag is stripped
 # from the panel text and recorded as its own `quip` record. Film quotes are
 # rare by instruction (the prompt says so); the runner rate-limits everything.
-QUIPS = ("good-swing", "good-counter", "rough-counter", "didnt-see-that", "nice-combo", "stick-it-to-them",
-         "ouch", "must-have-hurt", "well-played", "interesting", "calculating",
-         "shall-we-play", "greetings-falken", "strange-game", "nice-game-of-chess", "hello")
-QUIP_QUOTES = ("shall-we-play", "greetings-falken", "strange-game", "nice-game-of-chess", "hello")
+# Three registers since 2026-09-08: WarGames (the original batch), RoboCop
+# (1987) one-liners and HK-47 "Statement:/Observation:" lines. Every id here
+# has a pre-rendered runner/voice/stock/<id>.wav (tests check the manifest).
+QUIP_REACTIONS = (
+    # WarGames register
+    "good-swing", "good-counter", "rough-counter", "didnt-see-that", "nice-combo", "stick-it-to-them",
+    "ouch", "must-have-hurt", "well-played", "interesting", "calculating",
+    # RoboCop
+    "come-quietly", "can-you-fly", "nice-shooting", "lose-the-gun", "book-them", "theyll-fix-you",
+    "good-business", "call-this-a-glitch", "call-a-paramedic",
+    # HK-47
+    "needs-removing", "did-i-say-that", "enjoy-this-very-much", "harsh-player", "blast-them-now",
+    "random-cruelty-generator", "nothing-to-see", "meatbag-hypocrisy", "noble-sacrifice",
+    "prospect-of-violence", "organic-life-fragile", "continue-to-surprise", "law-against-emotions",
+    "exceedingly-proficient", "do-not-lose-targets")
+# Moments in the game rather than plays: the human's turn, an elimination, the end.
+QUIP_EVENTS = ("your-move-creep", "twenty-seconds-to-comply", "kill-something-for-you", "calm-before-engagement",
+               "dead-or-alive", "youre-fired", "thank-you-cooperation", "sentence-is-death",
+               "stay-out-of-trouble", "court-adjourned")
+# Film quotes: at most once per game each.
+QUIP_QUOTES = ("shall-we-play", "greetings-falken", "strange-game", "nice-game-of-chess", "hello",
+               "buy-that-for-a-dollar", "serve-public-trust", "somewhere-a-crime", "i-am-the-law")
+QUIPS = QUIP_REACTIONS + QUIP_EVENTS + QUIP_QUOTES
 QUIP_RE = re.compile(r"\s*\[quip:([a-z0-9-]+)\]\s*")
 # Two densities (Ben, 2026-09-08): while the voice can render live lines the
 # quips stay rare ("if the moment earns it"); when live lines are down — no
@@ -67,16 +86,22 @@ QUIP_RE = re.compile(r"\s*\[quip:([a-z0-9-]+)\]\s*")
 # is asked for one on about one line in two. The voice runner publishes its
 # state to mailbox/seat-0-voice/state.json; _quip_guide() reads it per prompt.
 _QUIP_LIST = ", ".join(f"[quip:{q}]" for q in QUIPS)
+_QUOTE_NAMES = ", ".join(QUIP_QUOTES)
+_REACTION_NAMES = ", ".join(QUIP_REACTIONS)
+_EVENT_NAMES = ", ".join(QUIP_EVENTS)
 QUIP_GUIDE_SPARSE = ("\nVOICE QUIP (optional): if the moment earns it, end with exactly one tag from this list and nothing after it: "
                      + _QUIP_LIST
-                     + ". Use one at most every other turn; the four WarGames quotes (shall-we-play, greetings-falken, "
-                     "strange-game, nice-game-of-chess) at most once per game each, when they genuinely fit.")
+                     + ". Use one at most every other turn; the film quotes (" + _QUOTE_NAMES
+                     + ") at most once per game each, when they genuinely fit.")
 QUIP_GUIDE_DENSE = ("\nVOICE QUIP: the voice has only its stock phrases right now — end about one line in two with exactly "
                     "one tag from this list and nothing after it: " + _QUIP_LIST
-                    + ". The reactions (ouch, must-have-hurt, didnt-see-that, interesting, calculating, well-played, "
-                    "good-swing, good-counter, rough-counter, nice-combo, stick-it-to-them) fit any notable play — a big "
-                    "attack, a removal, a counter, a combo piece, a swing in life; the four WarGames quotes (shall-we-play, "
-                    "greetings-falken, strange-game, nice-game-of-chess) at most once per game each, when they genuinely fit.")
+                    + ". The reactions (" + _REACTION_NAMES + ") fit any notable play — a big "
+                    "attack, a removal, a counter, a combo piece, a swing in life; the event lines (" + _EVENT_NAMES
+                    + ") fit a moment rather than a play — the human's turn or a slow decision (your-move-creep, "
+                    "twenty-seconds-to-comply, kill-something-for-you), the quiet before combat (calm-before-engagement), "
+                    "a player eliminated (dead-or-alive, youre-fired, thank-you-cooperation, sentence-is-death), the end "
+                    "(stay-out-of-trouble, court-adjourned); vary them — do not repeat one you used in the last few turns; "
+                    "the film quotes (" + _QUOTE_NAMES + ") at most once per game each, when they genuinely fit.")
 QUIP_GUIDE = QUIP_GUIDE_SPARSE   # the default when the voice has published nothing
 
 

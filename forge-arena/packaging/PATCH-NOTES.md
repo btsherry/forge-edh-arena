@@ -2,6 +2,14 @@
 
 ## Unreleased — after v3.4
 
+- **The Advisor's voice has more to say (2026-09-08).** The stock phrase
+  library grows from 25 to 63 lines: 18 *RoboCop* (1987) one-liners and 20
+  HK-47-style "Statement:/Observation:" lines join the WarGames set, all
+  rendered in the same voice and processing. Reactions to plays, lines for
+  the human's turn, eliminations and the end of the game, and four more film
+  quotes (rationed to once a game each). The human's-elimination rotation
+  gains four lines. Matters most without an ElevenLabs key, where the stock
+  quips are all the voice has.
 - **Hardening before the release candidate (2026-09-08).** A seat runner that
   dies mid-game comes back with its memory: the restarted process hands its
   fresh session the game record built from the logs, the same record a

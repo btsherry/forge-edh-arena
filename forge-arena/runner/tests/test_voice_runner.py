@@ -217,7 +217,9 @@ class VoiceRunnerTests(unittest.TestCase):
         self._observer(1, 1); self.r.step()                          # startup
         self.clock.t += 1                                             # inside the gap: human_out ignores it
         self._observer(14, 2, elim=(0,)); self.r.step()
-        self.assertIn(self.player.played[-1], {"winner-none.wav", "whats-the-difference.wav", "meatbag-out.wav"})
+        rotation = self.r.renderer.manifest["human_out"]           # 7 lines since the RoboCop/HK-47 batch (2026-09-08)
+        self.assertGreaterEqual(len(rotation), 7)
+        self.assertIn(self.player.played[-1], {f"{i}.wav" for i in rotation})
         self.clock.t += 10; self._observer(15, 3, elim=(0,)); self.r.step()
         self.assertEqual(len(self.player.played), 2, "said once per death, not per snapshot")
 
@@ -254,6 +256,58 @@ class VoiceRunnerTests(unittest.TestCase):
         if not p.exists():
             return []
         return [json.loads(l) for l in p.read_text().splitlines() if json.loads(l).get("event") == kind]
+
+
+class StockLibrary(unittest.TestCase):
+    """The stock phrase library (2026-09-08: WarGames + RoboCop + HK-47, 63
+    lines). Every manifest phrase ships as a baked WAV in the runner's format;
+    every id the advisor may tag, every quote and every human_out line is a
+    manifest phrase; the film quotes are the same closed set on both sides."""
+    STOCK = Path(__file__).resolve().parents[1] / "voice" / "stock"
+
+    def setUp(self):
+        self.m = json.loads((self.STOCK / "manifest.json").read_text())
+
+    def test_library_size_and_registers(self):
+        by_src = {}
+        for ph in self.m["phrases"].values():
+            by_src[ph["source"]] = by_src.get(ph["source"], 0) + 1
+        self.assertEqual(len(self.m["phrases"]), 63)
+        self.assertEqual(by_src["robocop-1987"], 18)
+        self.assertEqual(by_src["hk-47"], 20)
+        self.assertEqual(set(ph["category"] for ph in self.m["phrases"].values()), {"reaction", "event", "quote"})
+
+    def test_every_phrase_is_a_baked_wav_in_the_runner_format(self):
+        for pid, ph in self.m["phrases"].items():
+            p = self.STOCK / f"{pid}.wav"
+            self.assertTrue(p.exists(), f"{pid} has no stock WAV")
+            with wave.open(str(p), "rb") as w:
+                secs = w.getnframes() / w.getframerate()
+                self.assertEqual((w.getframerate(), w.getnchannels(), w.getsampwidth()), (44100, 1, 2), pid)
+            self.assertTrue(0.4 <= secs <= 6.0, f"{pid}: {secs:.2f}s")
+            self.assertTrue(1 <= len(ph["text"].split()) <= 12, f"{pid}: {ph['text']!r} is not a short line")
+
+    def test_quotes_human_out_and_advisor_tags_are_manifest_phrases(self):
+        import advisor_runner as ar
+        phrases = set(self.m["phrases"])
+        self.assertTrue(set(self.m["quotes"]) <= phrases)
+        self.assertTrue(set(self.m["human_out"]) <= phrases)
+        self.assertTrue(set(ar.QUIPS) <= phrases, set(ar.QUIPS) - phrases)
+        self.assertEqual(len(set(ar.QUIPS)), len(ar.QUIPS), "no duplicate quip ids")
+        self.assertTrue(set(ar.QUIP_QUOTES) <= set(self.m["quotes"]))
+        for q in ar.QUIP_QUOTES:
+            self.assertEqual(self.m["phrases"][q]["category"], "quote", q)
+        self.assertEqual({q for q in ar.QUIPS if self.m["phrases"][q]["category"] == "quote"}, set(ar.QUIP_QUOTES))
+        for pid in ar.QUIP_REACTIONS:
+            self.assertEqual(self.m["phrases"][pid]["category"], "reaction", pid)
+        for pid in ar.QUIP_EVENTS:
+            self.assertEqual(self.m["phrases"][pid]["category"], "event", pid)
+        for guide in (ar.QUIP_GUIDE_SPARSE, ar.QUIP_GUIDE_DENSE):
+            for q in ar.QUIPS:
+                self.assertIn(f"[quip:{q}]", guide)
+            self.assertIn("at most once per game each", guide)
+        self.assertIn("one line in two", ar.QUIP_GUIDE_DENSE)
+        self.assertIn("at most every other turn", ar.QUIP_GUIDE_SPARSE)
 
 
 if __name__ == "__main__":
