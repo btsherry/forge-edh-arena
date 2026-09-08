@@ -20,6 +20,7 @@ deadline.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -99,6 +100,134 @@ def _run(cmd, *, input, timeout, cwd, on_child=None):
     return subprocess.CompletedProcess(cmd, child.returncode, out, err)
 
 
+class PersistentClaude:
+    """One long-lived `claude -p --input-format stream-json --output-format
+    stream-json` process holding ONE session (Ben's step 1, 2026-09-07). Each
+    decision is one user message in; we read events until the `result` line
+    and return it shaped like the `--output-format json` envelope (result,
+    session_id, usage, is_error, total_cost_usd). Same session, same reads,
+    no per-call process spawn. Probe 2026-09-07: turn 2 in one process 1.0 s
+    vs 2.5 s cold; cache is ephemeral_1h.
+
+    Reading: a daemon thread drains stdout line by line into a queue (a
+    buffered text pipe must never be mixed with select()); call() consumes
+    the queue with a deadline. A timeout kills the process (never a hung
+    read); any failure marks it dead and the brain falls back to the per-call
+    --resume spawn on the SAME session id, so the transcript is never lost.
+    Model/effort are per-process flags, so a call at a different effort goes
+    through the spawn path instead."""
+
+    def __init__(self, cmd_base: list[str], session_id: str | None, cwd: str, log,
+                 stderr_path: str | None = None):
+        self.cmd = list(cmd_base) + (["--resume", session_id] if session_id else [])
+        self.cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
+        self.cwd = cwd
+        self.log = log
+        self.stderr_path = stderr_path   # Gemini pass 2 (P1): an undrained stderr pipe would block the CLI
+        self.proc = None
+        self.turns = 0
+        self._q = None
+        self._reader = None
+        self._err = None
+
+    def alive(self) -> bool:
+        return self.proc is not None and self.proc.poll() is None
+
+    def _spawn(self):
+        err = subprocess.DEVNULL
+        if self.stderr_path:
+            try:
+                Path(self.stderr_path).parent.mkdir(parents=True, exist_ok=True)
+                self._err = open(self.stderr_path, "ab")   # append: kept for post-game inspection
+                err = self._err
+            except OSError:
+                err = subprocess.DEVNULL
+        return subprocess.Popen(self.cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=err, text=True, cwd=self.cwd)
+
+    def start(self) -> bool:
+        import queue
+        import threading
+        try:
+            self.proc = self._spawn()
+        except OSError as e:
+            self.log(f"persistent claude launch failed: {e}")
+            self.proc = None
+            return False
+        self._q = queue.Queue()
+        proc, q = self.proc, self._q
+
+        def drain():
+            try:
+                for line in iter(proc.stdout.readline, ""):
+                    q.put(line)
+            except (OSError, ValueError):
+                pass
+            q.put(None)   # EOF marker
+
+        self._reader = threading.Thread(target=drain, name="claude-stream-reader", daemon=True)
+        self._reader.start()
+        return True
+
+    def kill(self) -> None:
+        p = self.proc
+        self.proc = None
+        if p is None:
+            return
+        try:
+            p.kill()
+            p.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        for stream in (getattr(p, "stdin", None), getattr(p, "stdout", None), self._err):
+            close = getattr(stream, "close", None)
+            try:
+                if close is not None:
+                    close()
+            except Exception:  # noqa: BLE001 — teardown must never raise
+                pass
+        self._err = None
+
+    def call(self, prompt: str, timeout_s: float) -> dict | None:
+        """One turn. None on any failure (the process is then dead)."""
+        import queue
+        if not self.alive() and not self.start():
+            return None
+        msg = json.dumps({"type": "user", "message": {"role": "user", "content": prompt}})
+        try:
+            self.proc.stdin.write(msg + "\n")
+            self.proc.stdin.flush()
+        except (OSError, ValueError) as e:
+            self.log(f"persistent claude write failed: {e}")
+            self.kill()
+            return None
+        deadline = time.time() + timeout_s
+        while True:
+            left = deadline - time.time()
+            if left <= 0:
+                self.log(f"persistent claude call timed out ({timeout_s:.0f}s) — process killed")
+                self.kill()
+                return None
+            try:
+                line = self._q.get(timeout=min(left, 1.0))
+            except queue.Empty:
+                # a process that exited closes its stdout: the reader posts the
+                # EOF marker (None) below — never abort on poll() alone, the
+                # final result line may still be in flight (Gemini pass 2, P2)
+                continue
+            if line is None:
+                self.log("persistent claude closed its output")
+                self.kill()
+                return None
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(ev, dict) and ev.get("type") == "result":
+                self.turns += 1
+                return ev
+
+
 class SeatBrain:
     """One resident model session for one seat."""
 
@@ -153,6 +282,13 @@ class SeatBrain:
         # model re-read). The runner rotates the session when it passes a cap.
         self.last_prompt_tokens = 0
         self.rotations = 0
+        # Step 1 (opt-in): ARENA_BRAIN_TRANSPORT=persistent keeps one CLI
+        # process per session; "spawn" (default) is the per-call --resume.
+        self.persistent_enabled = os.environ.get("ARENA_BRAIN_TRANSPORT", "spawn").lower() == "persistent"
+        self._persistent: PersistentClaude | None = None
+        self._persistent_key: tuple | None = None   # (model, effort) the process was started with
+        self.persistent_calls = 0
+        self.persistent_fallbacks = 0
         root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[3]
         self.root = root  # session storage is cwd-scoped: keep every call here
         here = Path(__file__).parent
@@ -250,6 +386,11 @@ class SeatBrain:
             cmd += ["--disallowedTools", "*"]   # golden argv (test_golden_claude): order is fixed
         cmd += ["--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                 "--setting-sources", ""]
+        if resume and self.session_id and self.persistent_enabled:
+            env_p = self._persistent_call(cmd, prompt, timeout_s, eff)
+            if env_p is not None:
+                return None if env_p.get("__error__") else env_p
+            # fell through: the process is dead or unsuitable -> per-call spawn below
         if resume and self.session_id:
             cmd += ["--resume", self.session_id]
         try:
@@ -283,9 +424,58 @@ class SeatBrain:
     def _track_child(self, proc) -> None:
         self._child = proc
 
+    def _persistent_call(self, cmd_base: list[str], prompt: str, timeout_s: float,
+                         eff: str) -> dict | None:
+        """Step 1 transport. Starts (or restarts) the long-lived process for
+        (model, effort); a different effort than the running process was
+        started with means THIS call takes the spawn path (per-process flag).
+        Any failure counts a fallback and returns None."""
+        key = (self.model, eff)
+        p = self._persistent
+        if p is not None and p.alive() and self._persistent_key != key:
+            # effort/model differs for this one call: spawn path. The live
+            # process holds the transcript IN MEMORY, so a turn appended on
+            # disk by the spawn would be invisible to it — stop it; the next
+            # persistent call restarts from disk with --resume (Gemini pass 2, P1).
+            self.stop_persistent()
+            return None
+        if p is None or not p.alive():
+            err_path = str(self.root / "forge-arena" / "runner" / "logs" / f"claude-persistent-seat-{self.seat}.err")
+            p = PersistentClaude(cmd_base, self.session_id, str(self.root), self.log, stderr_path=err_path)
+            if not p.start():
+                self.persistent_fallbacks += 1
+                return None
+            self._persistent, self._persistent_key = p, key
+            self.log(f"[seat {self.seat}] persistent claude process up for session "
+                     f"{self.session_id[:8]} ({self.model}/{eff})")
+        self._child = p.proc
+        env = p.call(prompt, timeout_s)
+        self._child = None
+        if env is None:
+            self.persistent_fallbacks += 1
+            self._persistent = None
+            return None
+        if env.get("is_error"):
+            self.log(f"[seat {self.seat}] model error envelope (persistent): "
+                     f"{str(env.get('result'))[:200]}")
+            return {"__error__": True}   # handled by _call: a model error, not a transport fallback
+        if env.get("session_id") and env["session_id"] != self.session_id:
+            self.log(f"[seat {self.seat}] persistent process reported session "
+                     f"{env['session_id'][:8]} (had {self.session_id[:8]}) — adopting it")
+            self.session_id = env["session_id"]
+        self.persistent_calls += 1
+        return env
+
+    def stop_persistent(self) -> None:
+        p = getattr(self, "_persistent", None)   # brains built without __init__ (tests)
+        if p is not None:
+            p.kill()
+        self._persistent = None
+
     def kill_child(self) -> None:
         """Kill the in-flight CLI call, if any (BL-28: called from the seat's
         SIGTERM/SIGINT handler so teardown never orphans a model call)."""
+        self.stop_persistent()
         c = self._child
         if c is not None:
             try:
@@ -361,6 +551,7 @@ class SeatBrain:
             self.log(f"[seat {self.seat}] session rotation FAILED — keeping the old session")
             return False
         old = self.session_id
+        self.stop_persistent()          # the process holds the OLD session
         self.session_id = env["session_id"]
         self.calls += 1
         self.rotations += 1
@@ -386,6 +577,10 @@ class SeatBrain:
         return True
 
     def reset(self) -> None:
+        self.stop_persistent()
+        self._reset_inner()
+
+    def _reset_inner(self) -> None:
         """New game (seq regression): drop the session; next decide() reloads.
         Totals restart too — each game's readout counts its own burn."""
         self.session_id = None

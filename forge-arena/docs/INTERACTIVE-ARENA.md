@@ -1632,3 +1632,51 @@ Hard-won from two live sessions; read before optimizing anything.
     keep-alive would cost tokens and fix nothing; layer two bounds the cost of
     a miss (250k vs 900k). `docs/HOW-IT-RUNS.md` is the plain-language
     architecture note written for Ben tonight.
+
+84. **The three low-risk steps (2026-09-07 late, experimental/voicework).**
+    (1) `PersistentClaude` (brain.py): ONE `claude -p --input-format
+    stream-json --output-format stream-json --verbose` process per session;
+    each decision is one user line in, events read until `result` (same
+    envelope fields as `--output-format json`). Probe: turn 2 in one process
+    1.0 s vs 2.5 s cold; the cache is `ephemeral_1h`. **Opt-in**:
+    `ARENA_BRAIN_TRANSPORT=persistent` (default `spawn` = per-call
+    `--resume`, unchanged) until one live game validates it. Hardening: a
+    timeout kills the process (select-driven read, never a hung pipe); any
+    failure counts `persistent_fallbacks` and the SAME session continues via
+    the spawn path; a call at a different effort/model than the process was
+    started with takes the spawn path (per-process flags); rotate/reset/
+    kill_child stop the process. (2) `_unthreatened_ability_react`: REACT
+    with a non-empty stack of OTHER players' abilities/triggers only
+    (stackKinds/stackOwners aligned, no spell, none ours) and no item aimed at
+    the seat → effort low for that window (`ARENA_REACT_LOW_EFFORT=off`
+    disables). Logged per window; `effort` is in every record. (3) Engine
+    mirror: the runner publishes this turn's yields to
+    `mailbox/seat-N/yield.json` (atomic) after every yield note and at the
+    turn boundary; `YieldMirror` (Java) checks a REACTIVE window before the
+    request is written — same turn, top item name/owner/kind, identical
+    option names, no spell on the stack, no opponent item targeting the seat,
+    life not down, pool/untapped not up — and passes without a window,
+    logging to stderr + `runner/logs/engine-events.jsonl` (`yield-mirror`),
+    counted by `arena-status.py` ("engine events"). Any doubt opens the
+    window. Visibility: `seat-N.usage.json`/record `cum` carry
+    `last_prompt_tokens`, `rotations`, `persistent_calls/fallbacks`; the
+    USAGE readout prints ctx/rotations/persistent; `arena-status.py` gained a
+    SEAT EFFICIENCY section (runner-answered vs model, punts, ctx, rotations,
+    executive state, engine events).
+
+85. **Gemini review round (2026-09-07 late).** `docs/reviews/2026-09-07-gemini-review.md`
+    — 23 findings, 19 accepted and fixed, 2 rejected after verification
+    (Flashback pseudo-zone is handled by `Player.getCardsIn`; `sick` is put
+    only when true), 2 noted. The important ones: Stifle-class counters are
+    NOT dead reactors; mana abilities stay live while our source is targeted;
+    the repeat rule needs an all-abilities stack; the executive toggle file
+    alone never hands the seat to nobody (`ExecutiveSwitch.wanted()` needs an
+    attached, live advisor; `exchange()` returns null at once when the
+    executive should release); fresh equipment keeps only on our own turn.
+    Pass 2 (the three steps): 8 findings, 7 fixed, 1 rejected — stderr of the
+    persistent process drained to a file (an undrained pipe blocks the CLI);
+    the live process is stopped before any spawn-path turn (its transcript is
+    in memory; a disk-appended turn would be invisible to it); the low-effort
+    downgrade steps aside when a stack item's oracle text names win/lose the
+    game or an extra turn; the mirror counts our own targeted stack item as a
+    threat; the record's hard cap keeps the newest text.

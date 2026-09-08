@@ -63,6 +63,67 @@ def print_seatd_narrative(tail_n=6):
         print(f"  [t{r.get('turn')} {r.get('phase','')} seat {r.get('seat')} "
               f"{r.get('type')}] {json.dumps(r.get('answer'))}")
 
+def print_seat_efficiency():
+    """2026-09-07: per-seat efficiency for the CURRENT game — how many
+    decisions the runner answered itself (memo/repeat/yield/affordability/
+    autopass) vs the model, the model's context size and rotations (from the
+    seat's usage snapshot), and the executive / engine-mirror state."""
+    import collections
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    logs = os.path.join(root, "runner", "logs")
+    game = os.path.join(logs, "game.jsonl")
+    if not os.path.exists(game):
+        return
+    rows = []
+    try:
+        for line in open(game):
+            try:
+                rows.append(json.loads(line))
+            except ValueError:
+                pass
+    except OSError:
+        return
+    if not rows:
+        return
+    gid = rows[-1].get("gameId")
+    rows = [r for r in rows if r.get("gameId") == gid]
+    print()
+    print("== SEAT EFFICIENCY (this game) ==")
+    for seat in sorted({r.get("seat") for r in rows}):
+        mine = [r for r in rows if r.get("seat") == seat]
+        src = collections.Counter(r.get("source") for r in mine)
+        model = src.get("model", 0)
+        fast = sum(v for k, v in src.items() if k not in ("model", "punt"))
+        line = (f"  seat {seat} [{_label(seat)}]  decisions {len(mine)}  model {model}  "
+                f"runner-answered {fast} ({', '.join(f'{k} {v}' for k, v in sorted(src.items()) if k not in ('model', 'punt'))})  "
+                f"punts {src.get('punt', 0)}")
+        try:
+            u = json.load(open(os.path.join(logs, f"seat-{seat}.usage.json")))
+            line += (f"\n        ctx {u.get('last_prompt_tokens', 0) // 1000}k  rotations {u.get('rotations', 0)}  "
+                     f"cache_read {u.get('cache_read_input_tokens', 0) // 1000}k  calls {u.get('calls', 0)}"
+                     + (f"  persistent {u.get('persistent_calls')}/{u.get('persistent_fallbacks')}fb"
+                        if 'persistent_calls' in u else ""))
+        except (OSError, ValueError):
+            pass
+        print(line)
+    exe = os.path.join(logs, "control", "executive.json")
+    try:
+        on = json.load(open(exe)).get("on", False)
+        print(f"  advisor executive: {'ON — the advisor plays seat 0' if on else 'off'}")
+    except (OSError, ValueError):
+        print("  advisor executive: off")
+    mirror = os.path.join(logs, "engine-events.jsonl")
+    if os.path.exists(mirror):
+        try:
+            ev = [json.loads(l) for l in open(mirror) if l.strip()]
+            ev = [e for e in ev if e.get("gameId") == gid]
+            kinds = collections.Counter(e.get("kind") for e in ev)
+            if kinds:
+                print("  engine events: " + ", ".join(f"{k} {v}" for k, v in sorted(kinds.items())))
+        except (OSError, ValueError):
+            pass
+
+
 def print_observer_snapshot(path):
     """Print a dashboard from the continuously-updated public observer snapshot.
 
@@ -119,6 +180,7 @@ if not reqs:
         print()
         print_observer_snapshot(obs)
         print_seatd_narrative()
+        print_seat_efficiency()
         sys.exit(0)
     print("No pending decision in the mailbox.")
     print("=> It's the human's turn (act in the GUI), or the game is between windows.")

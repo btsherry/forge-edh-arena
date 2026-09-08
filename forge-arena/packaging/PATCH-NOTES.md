@@ -2,6 +2,13 @@
 
 ## Unreleased — after v3.4
 
+- **Fewer seconds per seat decision.** Reactions to other players' abilities
+  that aim nothing at the seat are answered at low effort. A seat's yields
+  are mirrored by the engine, which skips opening windows the runner would
+  pass anyway. An opt-in persistent Claude process per seat
+  (`ARENA_BRAIN_TRANSPORT=persistent`) removes the per-decision process
+  start. `arena-status.py` shows how many decisions the runner answered
+  itself, each seat's context size and rotations.
 - **Seats keep their chats thin.** A seat's Claude session re-reads its whole
   transcript on every decision (up to 900k tokens late in a long game). Past
   a cap (`ARENA_ROTATE_TOKENS`, default 250k) the runner starts a fresh

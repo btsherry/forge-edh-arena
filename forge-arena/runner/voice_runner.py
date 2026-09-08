@@ -136,6 +136,10 @@ def glitch_wav(data: bytes, level: str, seed: int) -> bytes:
     import array
     import io
 
+    try:
+        wave.open(io.BytesIO(data), "rb").close()
+    except (wave.Error, EOFError, OSError):
+        return data   # not a WAV (ffmpeg absent -> raw mp3): leave it untouched
     with wave.open(io.BytesIO(data), "rb") as w:
         if w.getsampwidth() != 2 or w.getnchannels() != 1:
             return data
@@ -448,7 +452,13 @@ class VoiceRunner:
         with path.open("rb") as f:
             f.seek(self._adv_pos)
             chunk = f.read()
-            self._adv_pos = f.tell()
+            # only complete lines advance the cursor: a line caught mid-write
+            # is re-read whole next scan instead of being lost (Gemini P1)
+            cut = chunk.rfind(b"\n")
+            if cut < 0:
+                return
+            chunk = chunk[:cut + 1]
+            self._adv_pos += len(chunk)
         for raw in chunk.decode("utf-8", "replace").splitlines():
             try:
                 r = json.loads(raw)

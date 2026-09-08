@@ -66,14 +66,17 @@ QUIP_GUIDE = ("\nVOICE QUIP (optional): if the moment earns it, end with exactly
               "strange-game, nice-game-of-chess) at most once per game each, when they genuinely fit.")
 
 
-def split_quip(text: str) -> tuple[str, str | None]:
+def split_quip(text: str, log=None) -> tuple[str, str | None]:
     """Strip the [quip:<id>] tag from a reply; return (clean text, id or None).
-    Unknown ids are dropped silently — the vocabulary is closed."""
+    Unknown ids are dropped — the vocabulary is closed — and logged when a
+    logger is given (Gemini review 2026-09-07: silent drops hid prompt drift)."""
     m = QUIP_RE.search(text or "")
     if not m:
         return (text or "").strip(), None
     qid = m.group(1)
     clean = QUIP_RE.sub(" ", text).strip()
+    if qid not in QUIPS and log is not None:
+        log(f"[advisor] unknown quip tag dropped: [quip:{qid}]")
     return clean, (qid if qid in QUIPS else None)
 
 
@@ -338,11 +341,17 @@ class AdvisorRunner:
             self._say("[advisor] EXECUTIVE ON — playing seat 0 through the mailbox")
             self._stream_write("\n[advisor] EXECUTIVE ON — I am playing your seat now. Click again to take it back.\n")
         elif not want and self._exec is not None:
+            try:
+                self._exec.mb.stop_heartbeat_thread()   # seat-0 must not read as alive now
+            except Exception:  # noqa: BLE001
+                pass
             self._exec = None
             self.brain.note(self.EXEC_RELEASE, timeout_s=min(60.0, self.timeout))
             self._say("[advisor] EXECUTIVE OFF — advising again")
             self._stream_write("\n[advisor] EXECUTIVE OFF — your seat is yours again from the next priority.\n")
         if self._exec is not None:
+            if getattr(self._exec, "_game_id", None):
+                self.game_id = self._exec._game_id   # one game id for both views (Gemini P2)
             req = self._exec.mb.pending_request()
             if req is not None:
                 self._exec.handle(req)
@@ -353,6 +362,8 @@ class AdvisorRunner:
         """Layer two for the advisor: a fresh session with the same four
         dossiers plus the public game record when the last call re-read more
         than ARENA_ADVISOR_ROTATE_TOKENS (0 disables)."""
+        if self._exec is not None:
+            return False   # executive: the seat-0 runner rotates with its OWN record (Gemini P1)
         size = getattr(self.brain, "last_prompt_tokens", 0)
         if not self.rotate_at or size < self.rotate_at or not self.brain.session_id:
             return False
@@ -426,7 +437,7 @@ class AdvisorRunner:
                   f"STATE: {json.dumps(req.get('state'), separators=(',', ':'))}\n\n"
                   "Advise the human now (1-3 sentences, plain text)." + QUIP_GUIDE)
         answer, meta = self.brain.decide(prompt, self.timeout)
-        text, quip = split_quip((meta.get("raw") or "").strip())
+        text, quip = split_quip((meta.get("raw") or "").strip(), log=self._say)
         if text:
             self._stream_write(f"\n[t{turn} · {phase}] {text}\n")
         self._record("advice", {"seq": req.get("seq"), "turn": turn, "phase": phase,
@@ -442,7 +453,7 @@ class AdvisorRunner:
                   + "\n".join(f"  {ln}" for ln in lines[-60:])
                   + "\n\nONE line of color commentary (plain text)." + QUIP_GUIDE)
         answer, meta = self.brain.decide(prompt, min(self.timeout, 45.0))
-        text, quip = split_quip((meta.get("raw") or "").strip())
+        text, quip = split_quip((meta.get("raw") or "").strip(), log=self._say)
         if text:
             self._stream_write(f"\n[t{turn} · color] {text}\n")
         self._record("color", {"seq": digest.get("seq"), "turn": turn,

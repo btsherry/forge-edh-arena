@@ -204,14 +204,23 @@ class SeatMailbox:
         loop blocks in a model/init call (the pre-warm alone can take a
         minute). Liveness then means exactly 'this process is alive'."""
         import threading
+        stop = threading.Event()
+        self._heartbeat_stop = stop
 
         def loop():
-            while True:
+            while not stop.is_set():
                 self.heartbeat()
-                time.sleep(self.HEARTBEAT_S)
+                stop.wait(self.HEARTBEAT_S)
 
         t = threading.Thread(target=loop, name=f"seat-{self.seat}-heartbeat", daemon=True)
         t.start()
+
+    def stop_heartbeat_thread(self) -> None:
+        """End the beat (executive take-over toggled off: the seat-0 mailbox is
+        idle again and must not read as alive)."""
+        stop = getattr(self, "_heartbeat_stop", None)
+        if stop is not None:
+            stop.set()
 
     # ---- public observer ----------------------------------------------------
 

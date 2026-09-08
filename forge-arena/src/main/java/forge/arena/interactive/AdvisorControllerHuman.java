@@ -80,8 +80,11 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
         // Advisor Executive (Ben, 2026-09-07): the toggle file says the advisor
         // plays this seat -> install the seat-0 mailbox override now and hand
         // this very decision to it. Decision boundary, game thread.
-        if (ExecutiveSwitch.wanted() && ExecutiveSwitch.install(getPlayer(), getLobbyPlayer())) {
-            return getPlayer().getController().chooseSpellAbilityToPlay();
+        if (ExecutiveSwitch.wanted()) {
+            ExecutiveSwitch.install(getPlayer(), getLobbyPlayer()); // no-op when already installed
+            if (ExecutiveSwitch.isExecutive(getPlayer().getController())) {
+                return getPlayer().getController().chooseSpellAbilityToPlay();
+            }
         }
         maybePublishTurnDigest();
         armCastsAutopassIfIdle();
@@ -305,7 +308,8 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
         }
         boolean freshEquipment = false;
         int matched = 0;
-        for (ZoneType zone : new ZoneType[] { ZoneType.Hand, ZoneType.Battlefield, ZoneType.Flashback }) {
+        for (ZoneType zone : new ZoneType[] { ZoneType.Hand, ZoneType.Battlefield, ZoneType.Flashback,
+                ZoneType.Command }) {
             for (Card card : getPlayer().getCardsIn(zone)) {
                 if (!actionable.contains(card.getView())) {
                     continue;
@@ -335,7 +339,16 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
                         // not. {T}-only abilities stay utility (the narrow keeps
                         // below cover tappers, sac outlets and targeted permanents).
                         int abilityMana = manaCostOf(sa);
-                        if (abilityMana > 0) {
+                        boolean tapCost = false;
+                        try {
+                            tapCost = sa.getPayCosts() != null && sa.getPayCosts().hasTapCost();
+                        } catch (RuntimeException ignore) {
+                            // unreadable cost: treat as tap-only utility below
+                        }
+                        if (abilityMana > 0 || (abilityMana == 0 && !tapCost && sa.getPayCosts() != null
+                                && sa.getPayCosts().isOnlyManaCost())) {
+                            // Gemini review 2026-09-07 (P2): "{0}: regenerate"-class
+                            // abilities are free plays, not utility
                             playsOut.add(new AutopassPolicy.Play(card.getName() + " (ability)", abilityMana));
                         }
                         if (!utilityOut.contains(card.getName())) {

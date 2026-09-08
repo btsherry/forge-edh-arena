@@ -56,16 +56,19 @@ def _label(rec: dict) -> str | None:
     opts = rec.get("options") or []
     if not isinstance(ans, dict):
         return None
+    def name_of(o) -> str:
+        lab = o.get("label") if isinstance(o, dict) else o
+        return str(lab or "").split("  ")[0]
     cid = ans.get("chosenId")
     if isinstance(cid, int) and opts and 0 <= cid < len(opts):
-        lab = str(opts[cid])
-        return lab.split("  ")[0] if lab else None
+        lab = name_of(opts[cid])
+        return lab or None
     if "chosen" in ans and isinstance(ans["chosen"], list) and opts:
         names = []
         for i in ans["chosen"]:
             if isinstance(i, int) and 0 <= i < len(opts):
-                names.append(str(opts[i]).split("  ")[0])
-        return ", ".join(names) if names else None
+                names.append(name_of(opts[i]))
+        return ", ".join(n for n in names if n) or None
     if "keep" in ans:
         return "keep" if ans["keep"] else "mulligan"
     if isinstance(ans.get("attackers"), list):
@@ -116,6 +119,8 @@ def render(game_log: Path, seat_log: Path | None, seat: int, game_id: str | None
             why = str(mine.get("why") or r.get("why") or "").strip()
             if len(why) > WHY_CHARS:
                 why = why[:WHY_CHARS - 1] + "…"
+            if lab is None and isinstance(ans, dict) and isinstance(ans.get("chosenId"), int):
+                lab = f"option {ans['chosenId']}"   # labels live in the seat file; game.jsonl alone has ids
             plays = blk["plays"]
             plays.append(f"{r.get('type')}: {lab or '?'}" + (f' — "{why}"' if why else ""))
     order = sorted(turns)
@@ -153,6 +158,16 @@ def render(game_log: Path, seat_log: Path | None, seat: int, game_id: str | None
         body[i] = short(order[i])
         i += 1
         text = "\n".join(head + body)
+    # still over budget: DROP the oldest turns entirely (never cut the newest)
+    dropped = 0
+    while len(text) > max_chars and len(body) > FULL_TURNS:
+        body.pop(0)
+        dropped += 1
+        text = "\n".join(head + [f"(… {dropped} earlier turn{'s' if dropped != 1 else ''} omitted for length)"] + body)
     if len(text) > max_chars:
-        text = text[:max_chars - 1] + "…"
+        # even the newest FULL_TURNS blocks overflow: keep the head and the TAIL
+        # (the newest text), cut from the front of the body (Gemini pass 2, P2)
+        head_text = "\n".join(head) + "\n(… earlier text omitted for length)\n"
+        keep = max(0, max_chars - len(head_text))
+        text = head_text + text[-keep:]
     return text

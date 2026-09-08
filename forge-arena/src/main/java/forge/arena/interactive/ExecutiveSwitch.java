@@ -21,7 +21,7 @@ import forge.game.player.PlayerController;
  * controller override on the {@link Player} ({@code controlledBy}, the
  * Mindslaver path): {@link Player#addController(long, Player, PlayerController, boolean)}
  * routes every later decision to the override until
- * {@link Player#removeController(long)}.
+ * {@link Player#removeController(long, boolean)}.
  *
  * <p>The switch is a file, {@code logs/control/executive.json} {"on": true},
  * written by the Advisor tab's button (forge-gui-desktop cannot reference
@@ -60,15 +60,32 @@ public final class ExecutiveSwitch {
         return logsDir().resolve("control").resolve("executive.json");
     }
 
-    /** True when the control file exists and says {"on": true}. Never throws. */
+    /** True when the control file says {"on": true} AND an advisor runner is
+     *  attached to this JVM ({@code -Darena.advisor=1}) AND its heartbeat is
+     *  fresh. Gemini review 2026-09-07 (P0): a stale file with no runner
+     *  behind it must never hand the human's seat to nobody. A runner that
+     *  dies mid-executive makes this false, so the override releases at the
+     *  next priority and the human plays again. Never throws. */
     public static boolean wanted() {
         try {
+            if (!"1".equals(System.getProperty("arena.advisor"))
+                    && !"1".equals(System.getProperty("arena.executive.test"))) {
+                return false;
+            }
             final Path f = controlFile();
             if (!Files.exists(f)) {
                 return false;
             }
             final String s = new String(Files.readAllBytes(f), StandardCharsets.UTF_8).replace(" ", "");
-            return s.contains("\"on\":true");
+            if (!s.contains("\"on\":true")) {
+                return false;
+            }
+            if ("1".equals(System.getProperty("arena.executive.test"))) {
+                return true; // unit tests: no runner process exists
+            }
+            final Boolean alive = MailboxProtocol.brainAlive(
+                    MailboxProtocol.baseDir().toAbsolutePath().resolve("seat-0-advisor"));
+            return Boolean.TRUE.equals(alive);
         } catch (IOException | RuntimeException e) {
             return false;
         }

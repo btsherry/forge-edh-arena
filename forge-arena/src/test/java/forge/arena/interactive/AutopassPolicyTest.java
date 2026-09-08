@@ -185,8 +185,10 @@ public class AutopassPolicyTest {
                 "combat declare step");
         Assert.assertEquals(AutopassPolicy.decide(stop(false, PhaseType.END_OF_TURN, 2, 5, NONE, NO_UTILITY, false)).reason,
                 "mana floating");
-        Assert.assertFalse(AutopassPolicy.decide(new Stop(false, PhaseType.END_OF_TURN, 0, 0, true, NONE, NO_UTILITY, false)).pass,
-                "fresh equipment holds the turn open");
+        Assert.assertFalse(AutopassPolicy.decide(new Stop(true, PhaseType.COMBAT_END, 0, 0, true, NONE, NO_UTILITY, false)).pass,
+                "fresh equipment holds OUR turn open");
+        Assert.assertTrue(AutopassPolicy.decide(new Stop(false, PhaseType.END_OF_TURN, 0, 0, true, NONE, NO_UTILITY, false)).pass,
+                "equip is sorcery-speed: fresh equipment on an opponent's turn keeps nothing (Gemini review)");
         // an opponent's main phase is NOT sacred: with nothing to do it passes
         Assert.assertTrue(AutopassPolicy.decide(stop(false, PhaseType.MAIN1, 0, 0, NONE, NO_UTILITY, false)).pass);
     }

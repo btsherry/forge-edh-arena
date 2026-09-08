@@ -100,6 +100,12 @@ public final class MailboxProtocol {
         this.gameId = id;
     }
 
+    /** This seat's mailbox directory ({@code mailbox/seat-N}); the runner
+     *  publishes {@code yield.json} there for {@link YieldMirror}. */
+    public Path seatDir() {
+        return seatDir;
+    }
+
     private MailboxProtocol(Path seatDir, long timeoutMillis) {
         this.seatDir = seatDir;
         this.inbox = seatDir.resolve("inbox");

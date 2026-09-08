@@ -119,6 +119,72 @@ public final class MailboxController extends PlayerControllerAi
         STOCK_FALLBACKS.put(p, new int[1]);
     }
 
+    /**
+     * {@link YieldMirror}: true iff the runner's published yields for this seat
+     * cover THIS window under every guard the runner itself applies (same turn,
+     * top item name/owner/kind, identical option names, no spell anywhere on the
+     * stack, no opponent item aimed at this seat or its permanents, life not
+     * down, pool and untapped sources not up). Records the mirrored pass.
+     */
+    private boolean mirrorYield(MailboxProtocol.Request req, int turn) {
+        java.util.List<YieldMirror.Entry> entries = YieldMirror.read(bus.seatDir().resolve("yield.json"));
+        if (entries.isEmpty()) {
+            return false;
+        }
+        Game game = getGame();
+        Player me = getPlayer();
+        forge.game.spellability.SpellAbilityStackInstance top = null;
+        boolean anySpell = false;
+        boolean threatened = false;
+        for (forge.game.spellability.SpellAbilityStackInstance si : game.getStack()) {
+            SpellAbility sa = si.getSpellAbility();
+            if (sa == null) {
+                return false; // unreadable item: open the window
+            }
+            if (top == null) {
+                top = si; // the stack iterates top-first (newest item first)
+            }
+            if (sa.isSpell()) {
+                anySpell = true;
+            }
+            if (sa.getActivatingPlayer() != me) {
+                for (SpellAbility part = sa; part != null; part = part.getSubAbility()) {
+                    if (part.getTargets() == null) {
+                        continue;
+                    }
+                    for (forge.game.GameObject tgt : part.getTargets()) {
+                        if (tgt == me || (tgt instanceof Card && ((Card) tgt).getController() == me)
+                                || (tgt instanceof SpellAbility
+                                    && ((SpellAbility) tgt).getActivatingPlayer() == me)) {
+                            threatened = true; // our player, permanent, or our own stack item is aimed at
+                        }
+                    }
+                }
+            }
+        }
+        if (top == null) {
+            return false;
+        }
+        SpellAbility tsa = top.getSpellAbility();
+        Card host = tsa.getHostCard();
+        String topName = host != null ? host.getName() : String.valueOf(top);
+        Player owner = tsa.getActivatingPlayer();
+        String kind = tsa.isTrigger() ? "trigger" : tsa.isSpell() ? "spell" : "ability";
+        java.util.Set<String> names = new java.util.HashSet<>();
+        for (MailboxProtocol.Option o : req.options) {
+            if (o.id != 0) {
+                names.add(YieldMirror.optionName(o.label));
+            }
+        }
+        int untapped = SeatViews.of(me, seatIndex, turn).untappedManaSources();
+        boolean hit = YieldMirror.matches(entries, turn, topName, owner != null ? owner.getId() : -1, kind, names,
+                me.getLife(), me.getManaPool().totalMana(), untapped, anySpell, threatened);
+        if (hit) {
+            YieldMirror.note(seatIndex, turn, topName, gameIdFor(game));
+        }
+        return hit;
+    }
+
     /** -1 for a seat playing its own cards; else the seat whose brain answers. */
     private final int controllingSeat;
     /** The master player under Mindslaver-class control, else null (BL-05). */
@@ -138,6 +204,12 @@ public final class MailboxController extends PlayerControllerAi
     /** All exchanges go through here: a null answer (timeout / absent brain /
      *  IO) is a stock fallback and is counted (item 12). */
     private JsonNode exchange(MailboxProtocol.Request req) {
+        // Advisor Executive released mid-decision (or the runner died): never
+        // wait on a mailbox nobody answers — a null here means "stock decides
+        // this one", and the next priority hands the seat back (Gemini P1).
+        if (ExecutiveSwitch.isExecutive(this) && !ExecutiveSwitch.wanted()) {
+            return null;
+        }
         if (controllingSeat >= 0 && controllerPlayer != null && req.state instanceof Map) {
             // BL-05 / CR 721.3: the master decides with full sight of the
             // controlled player's hidden information (the request's own state
@@ -685,6 +757,19 @@ public final class MailboxController extends PlayerControllerAi
             id++;
         }
 
+        // Step 3 (Ben, 2026-09-07): engine-side mirror of the runner's auto-yield.
+        // A REACTIVE window whose top item the runner has already yielded this
+        // turn, with every runner guard still holding, is passed here without
+        // opening the mailbox window. Any doubt (or any exception) opens it.
+        if (reactive) {
+            try {
+                if (mirrorYield(req, turn)) {
+                    return null; // pass — the runner would have yielded this
+                }
+            } catch (RuntimeException mirrorNeverBreaksAWindow) {
+                // fall through to the normal exchange
+            }
+        }
         JsonNode resp = exchange(req);
         // item 4: the refusal has been reported and suppressed once; a fresh
         // refusal (below, in playChosenSpellAbility) re-arms it for the next window

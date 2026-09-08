@@ -239,6 +239,10 @@ public final class ObserverSnapshot {
                 for (Player tgt : tc.getTargetPlayers()) {
                     targets.add("seat " + tgt.getId());
                 }
+                for (SpellAbility tgt : tc.getTargetSpells()) {   // a counterspell's target (Gemini P2)
+                    Card th = tgt.getHostCard();
+                    targets.add((th != null ? th.getName() : String.valueOf(tgt)) + " (on the stack)");
+                }
             }
             if (!targets.isEmpty()) {
                 d.put("targets", targets);

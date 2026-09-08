@@ -16,11 +16,40 @@ import forge.game.player.PlayerController;
  */
 public class ExecutiveSwitchTest {
 
+    @Test
+    public void theFileAloneIsNotEnoughWithoutAnAttachedLiveAdvisor() throws Exception {
+        final String prev = System.getProperty("arena.runner.logs.dir");
+        final Path logs = Files.createTempDirectory("exec-logs2");
+        System.setProperty("arena.runner.logs.dir", logs.toString());
+        System.clearProperty("arena.executive.test");
+        final String adv = System.getProperty("arena.advisor");
+        System.clearProperty("arena.advisor");
+        try {
+            Files.createDirectories(ExecutiveSwitch.controlFile().getParent());
+            Files.write(ExecutiveSwitch.controlFile(), "{\"on\": true}".getBytes(StandardCharsets.UTF_8));
+            Assert.assertFalse(ExecutiveSwitch.wanted(), "no advisor attached: a stale file hands the seat to nobody");
+            System.setProperty("arena.advisor", "1");
+            Assert.assertFalse(ExecutiveSwitch.wanted(), "attached but no fresh heartbeat: still off");
+        } finally {
+            if (adv == null) {
+                System.clearProperty("arena.advisor");
+            } else {
+                System.setProperty("arena.advisor", adv);
+            }
+            if (prev == null) {
+                System.clearProperty("arena.runner.logs.dir");
+            } else {
+                System.setProperty("arena.runner.logs.dir", prev);
+            }
+        }
+    }
+
     @Test(timeOut = 120_000)
     public void toggleFileInstallsAndReleasesTheOverride() throws Exception {
         final String prev = System.getProperty("arena.runner.logs.dir");
         final Path logs = Files.createTempDirectory("exec-logs");
         System.setProperty("arena.runner.logs.dir", logs.toString());
+        System.setProperty("arena.executive.test", "1"); // wanted() otherwise needs a live advisor heartbeat
         try (MailboxTestKit k = new MailboxTestKit(false)) {
             Assert.assertFalse(ExecutiveSwitch.wanted(), "no file = off");
             final PlayerController before = k.opp.getController();
@@ -41,6 +70,7 @@ public class ExecutiveSwitchTest {
             Assert.assertSame(k.opp.getController(), before, "the human's controller answers again");
             Assert.assertFalse(ExecutiveSwitch.release(k.opp), "release twice is a no-op");
         } finally {
+            System.clearProperty("arena.executive.test");
             if (prev == null) {
                 System.clearProperty("arena.runner.logs.dir");
             } else {

@@ -78,7 +78,8 @@ class RecordTests(unittest.TestCase):
         text = record.render(d / "game.jsonl", None, 2, max_chars=3000)
         self.assertLessEqual(len(text), 3000)
         self.assertIn("Turn 39\n", text, "the newest turns stay in full")
-        self.assertIn("Turn 1 — life", text, "old turns fold to one line")
+        self.assertTrue("Turn 1 — life" in text or "earlier turns omitted" in text,
+                        "old turns fold to one line, or are dropped with an omission line when still over budget")
 
     def test_empty_logs_render_nothing(self):
         d = Path(tempfile.mkdtemp(prefix="rec-"))

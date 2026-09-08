@@ -317,6 +317,10 @@ class SeatRunner:
         if self.turn_intent and source == "model":
             rec["turn_intent"] = self.turn_intent
         cum = dict(self.brain.totals)  # burn since instantiation
+        for k in ("last_prompt_tokens", "rotations", "persistent_calls", "persistent_fallbacks"):
+            v = getattr(self.brain, k, None)
+            if isinstance(v, int):
+                cum[k] = v
         if self.brain.backend is not None:
             cum["backend"] = self.brain.backend.kind      # additive (plan §8)
             if self.brain.backend.cap_unenforceable:
@@ -361,6 +365,10 @@ class SeatRunner:
                   f"in={t['input_tokens']} out={t['output_tokens']} "
                   f"cache_read={t['cache_read_input_tokens']} "
                   f"cache_write={t['cache_creation_input_tokens']} "
+                  f"ctx={getattr(self.brain, 'last_prompt_tokens', 0) // 1000}k "
+                  f"rotations={getattr(self.brain, 'rotations', 0)} "
+                  f"persistent={getattr(self.brain, 'persistent_calls', 0)}/"
+                  f"{getattr(self.brain, 'persistent_fallbacks', 0)}fb "
                   f"(≈${t['cost_usd']:.2f} {suffix})")
 
     # ---- fastpaths --------------------------------------------------------
@@ -688,7 +696,11 @@ class SeatRunner:
         # abilities with a sacrifice/discard cost are NOT plain (Lion's Eye
         # Diamond class) and go to the model.
         stack_empty = not (st.get("stack") or [])
-        if all(self._plain_mana_ability(o) for o in non_pass):
+        # Gemini review 2026-09-07 (P1): a mana ability IS the response when our
+        # source is targeted (Rishadan Port on a land, Beast Within on a Lotus:
+        # float the mana first). Any opponent item aimed at us keeps the window.
+        threatened = self._threatens_own(req)
+        if not threatened and all(self._plain_mana_ability(o) for o in non_pass):
             return "only mana abilities offered, nothing to spend the mana on"
         if stack_empty and all(self._counterspell(o) for o in non_pass):
             return "only counterspells offered and the stack is empty"
@@ -698,7 +710,7 @@ class SeatRunner:
         # is no target for a counterspell or a spell-copier either. Needs the
         # engine's stackKinds; absent or malformed -> fall through to the model.
         kinds = st.get("stackKinds")
-        if (not stack_empty and isinstance(kinds, list) and len(kinds) == len(st.get("stack") or [])
+        if (not stack_empty and not threatened and isinstance(kinds, list) and len(kinds) == len(st.get("stack") or [])
                 and kinds and "spell" not in kinds
                 and all(self._spell_reactor(o) or self._plain_mana_ability(o) for o in non_pass)):
             return "only counter/copy-spell options and no spell on the stack (abilities only)"
@@ -743,6 +755,10 @@ class SeatRunner:
         nothing but abilities."""
         low = str(o.get("label", "")).lower()
         text = low.split(" — ", 1)[1] if " — " in low else low
+        # Gemini review 2026-09-07 (P0): Stifle / Disallow / Tale's End counter
+        # ABILITIES — an all-abilities stack is exactly their target. Not dead.
+        if "ability" in text or "activated" in text or "triggered" in text:
+            return False
         return ("counter target" in text
                 or ("copy target" in text and ("instant" in text or "sorcery" in text or "spell" in text)))
 
@@ -783,6 +799,11 @@ class SeatRunner:
         st = req.get("state") or {}
         if not st.get("stack") or not self._resourceless_react(req) or self._threatens_own(req):
             return None
+        # Gemini review 2026-09-07 (P1): a SPELL on the stack is a new question
+        # (dig with the Ring in response to Peer into the Abyss) — abilities only.
+        kinds = st.get("stackKinds")
+        if not isinstance(kinds, list) or len(kinds) != len(st.get("stack") or []) or any(k == "spell" or k == "?" for k in kinds):
+            return None
         non_pass = [o for o in req.get("options", []) if o.get("id") != 0]
         if not non_pass or not all(self._tap_only_utility(o) for o in non_pass):
             return None
@@ -798,6 +819,36 @@ class SeatRunner:
     def _option_set(req: dict) -> tuple:
         return tuple(sorted(str(o.get("label", "")).split("  ")[0]
                             for o in req.get("options", []) if o.get("id") != 0))
+
+    def _unthreatened_ability_react(self, req: dict) -> bool:
+        """REACT with a non-empty stack of OTHER players' abilities/triggers
+        only (stackKinds/stackOwners present and aligned, no spell, none ours)
+        and nothing aimed at this seat (state.stackTargets). Off with
+        ARENA_REACT_LOW_EFFORT=off."""
+        if os.environ.get("ARENA_REACT_LOW_EFFORT", "on").lower() == "off":
+            return False
+        st = req.get("state") or {}
+        names = st.get("stack") or []
+        kinds = st.get("stackKinds")
+        owners = st.get("stackOwners")
+        if (not names or not isinstance(kinds, list) or not isinstance(owners, list)
+                or len(kinds) != len(names) or len(owners) != len(names)):
+            return False
+        if any(k not in ("ability", "trigger") for k in kinds):
+            return False
+        if any(o == self.seat for o in owners):
+            return False
+        # Gemini pass 2 (P1): a non-targeting ability can still end the game
+        # (Thassa's Oracle, Felidar Sovereign, extra-turn loops). If any stack
+        # item's oracle text says so, this is a full-effort question.
+        for otext in st.get("stackOracle") or []:
+            low = str(otext).lower()
+            if any(w in low for w in self.GAME_DECIDING):
+                return False
+        return not self._threatens_own(req)
+
+    GAME_DECIDING = ("win the game", "wins the game", "lose the game", "loses the game",
+                     "extra turn", "each opponent loses", "you win", "you lose")
 
     def _yield_key(self, req: dict) -> tuple | None:
         """(turn, top name, top owner, top kind, option set) when the stack is
@@ -855,6 +906,25 @@ class SeatRunner:
                 self._yielded = {}
             self._yielded[key] = (st.get("life"), st.get("manaPool") or 0,
                                   st.get("untappedManaSourceCount") or 0)
+            self._publish_yields()
+
+    def _publish_yields(self) -> None:
+        """Step 3 (engine-side mirror): write this turn's yields to
+        mailbox/seat-N/yield.json so MailboxController can skip opening a
+        window the runner would yield anyway (same key, same guards, one
+        layer lower). Atomic; a failure only costs the mirror."""
+        try:
+            base = Path(getattr(self.mb, "dir", None) or (Path(self.mb.inbox).parent))
+            base.mkdir(parents=True, exist_ok=True)
+            items = []
+            for (turn, name, owner, kind, optset), (life, pool, untapped) in (self._yielded or {}).items():
+                items.append({"turn": turn, "name": name, "owner": owner, "kind": kind,
+                              "options": list(optset), "life": life, "pool": pool, "untapped": untapped})
+            tmp = base / "yield.json.tmp"
+            tmp.write_text(json.dumps({"seat": self.seat, "items": items}))
+            os.replace(tmp, base / "yield.json")
+        except (OSError, TypeError, AttributeError):
+            pass
 
     def _note_tap_pass(self, req: dict, answer: dict) -> None:
         """Remember a MODEL pass of a repeat-eligible window (never a punt)."""
@@ -1018,7 +1088,9 @@ class SeatRunner:
         except Exception as e:  # noqa: BLE001 — a record failure must not stop the game
             self._say(f"[seat {self.seat}] game record failed ({e}) — rotation skipped")
             return False
-        ok = self.brain.rotate(text, timeout_s=min(120.0, self.timeout_s))
+        # bounded well inside one engine window (0.8 x timeout): a slow init
+        # keeps the old session rather than costing the turn's first decision
+        ok = self.brain.rotate(text, timeout_s=min(45.0, 0.5 * self.timeout_s))
         if ok:
             self._transport_event("rotate", self._game_id)
         return ok
@@ -1060,6 +1132,9 @@ class SeatRunner:
             self.order_memo.clear()
             self.cycle = None
             self._hist = []
+            self._tap_pass = None
+            self._yielded = {}
+            self._publish_yields()
         if req.get("gameId"):
             self._game_id = req.get("gameId")
         if self._last_turn != req.get("turn"):
@@ -1069,6 +1144,7 @@ class SeatRunner:
             self.order_memo.clear()
             self._tap_pass = None
             self._yielded = {}
+            self._publish_yields()
             self.hold = None  # hold posture is single-turn
             self.turn_intent = None
             self.cycle = None   # loops never survive a turn boundary
@@ -1202,6 +1278,14 @@ class SeatRunner:
                 elif dtype == "REACT" and self._all_own_triggers(req):
                     fast_eff = "low"
                     self._say(f"[seat {self.seat}] own-trigger REACT -> "
+                              f"effort low for this window")
+                elif dtype == "REACT" and self._unthreatened_ability_react(req):
+                    # Step 2 (Ben, 2026-09-07): other players' ABILITIES on the
+                    # stack, no spell, nothing aimed at us — a short question.
+                    # Full authority, light thinking. ARENA_REACT_LOW_EFFORT=off
+                    # disables.
+                    fast_eff = "low"
+                    self._say(f"[seat {self.seat}] unthreatened ability REACT -> "
                               f"effort low for this window")
                 elif (dtype == "CONFIRM"
                         and (req.get("state") or {}).get("confirmMode") == "TRIGGER"

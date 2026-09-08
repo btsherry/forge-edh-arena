@@ -21,8 +21,9 @@ import forge.game.phase.PhaseType;
  *   <li>own main phase → keep (mains are sacred by any layer, ever); the one
  *       opt-in exception is {@code ARENA_AUTOPASS_RESOLVE_OWN=on}: with only
  *       your own items on the stack, one pass lets your spell resolve;</li>
- *   <li>an equipment that entered this turn → keep (the drop turn is when
- *       equipping is the natural play);</li>
+ *   <li>an equipment that entered this turn, on OUR turn → keep (the drop
+ *       turn is when equipping is the natural play; equip is sorcery-speed,
+ *       so on an opponent's turn it is nothing);</li>
  *   <li>a real play that costs nothing (0-mana spell, pitch/alternative
  *       cost) → keep, naming it; an activated ability that costs mana is a
  *       real play too (Staff of Domination, game 25) and is judged by the
@@ -188,7 +189,8 @@ public final class AutopassPolicy {
             }
             return Decision.keep("own main phase");
         }
-        if (s.freshEquipment) {
+        if (s.myTurn && s.freshEquipment) {
+            // equip is sorcery-speed: the drop-turn rule only means anything on our own turn (Gemini P1)
             return Decision.keep("equipment entered this turn");
         }
         Play cheapest = null;
