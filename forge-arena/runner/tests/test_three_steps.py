@@ -225,3 +225,64 @@ class YieldPublishAndVisibilityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FallbackBudgetTests(unittest.TestCase):
+    """Game 26: after a persistent-process timeout the spawn fallback must get
+    only the REMAINING window, i.e. nothing — punt at once, never wait twice."""
+    def _brain(self):
+        os.environ["ARENA_BRAIN_TRANSPORT"] = "persistent"
+        try:
+            b = SeatBrain(2, "giada-font-of-hope", model="opus", effort="medium", log=lambda *_: None)
+        finally:
+            os.environ.pop("ARENA_BRAIN_TRANSPORT", None)
+        b.session_id = "s-live"
+        return b
+
+    def test_timeout_leaves_no_time_so_no_spawn(self):
+        b = self._brain()
+        import time as _t
+
+        class SlowP:
+            def __init__(self, *a, **k): self.ok = True
+            def alive(self): return self.ok
+            def start(self): return True
+            def call(self, prompt, timeout_s):
+                _t.sleep(min(timeout_s, 0.3)); self.ok = False; return None   # "timed out", process killed
+            def kill(self): self.ok = False
+            proc = None
+        spawned = []
+        orig = brain_mod.PersistentClaude
+        brain_mod.PersistentClaude = SlowP
+        brain_mod._run = lambda cmd, **kw: spawned.append(cmd) or (_ for _ in ()).throw(OSError("no spawn expected"))
+        try:
+            self.assertIsNone(b._call("q", 0.3, resume=True))
+            self.assertEqual(spawned, [], "the window is spent: punt, do not wait a second time")
+            self.assertEqual(b.persistent_fallbacks, 1)
+        finally:
+            brain_mod.PersistentClaude = orig
+            import importlib; importlib.reload(brain_mod)
+
+    def test_quick_failure_still_spawns_with_the_remaining_time(self):
+        b = self._brain()
+
+        class DeadP:
+            def __init__(self, *a, **k): pass
+            def alive(self): return False
+            def start(self): return False     # launch failed at once
+            def kill(self): pass
+            proc = None
+        seen = {}
+
+        def fake_run(cmd, **kw):
+            seen["timeout"] = kw.get("timeout"); raise OSError("stop here")
+        orig = brain_mod.PersistentClaude
+        brain_mod.PersistentClaude = DeadP
+        brain_mod._run = fake_run
+        try:
+            b._call("q", 30.0, resume=True)
+            self.assertIsNotNone(seen.get("timeout"))
+            self.assertGreater(seen["timeout"], 29.0, "a quick failure leaves the whole window for the spawn")
+        finally:
+            brain_mod.PersistentClaude = orig
+            import importlib; importlib.reload(brain_mod)

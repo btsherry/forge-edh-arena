@@ -155,3 +155,55 @@ class AdvisorExecutiveGuards(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReceiptSummaryTests(unittest.TestCase):
+    """Ben, 2026-09-08: auto-pass receipts collapse to one line per turn in the panel."""
+    def _adv(self):
+        tmp = Path(tempfile.mkdtemp(prefix="rcpt-"))
+
+        class FakeBrain:
+            deck = "selvala-heart-of-the-wilds"; model = "opus"; effort = "low"; session_id = "s1"
+            last_prompt_tokens = 0; totals = {"calls": 0}; backend = None; wedges = 0; calls = 0
+            def ensure_session(self, *a, **k): return True
+            def reset(self): pass
+        orig = (ar.SeatBrain, ar.opponent_deck_sections)
+        ar.SeatBrain, ar.opponent_deck_sections = (lambda *a, **k: FakeBrain()), (lambda *a, **k: [])
+        try:
+            adv = ar.AdvisorRunner("selvala-heart-of-the-wilds", tmp, "opus", "low", 30.0, log_dir=tmp / "logs")
+        finally:
+            ar.SeatBrain, ar.opponent_deck_sections = orig
+        out = []
+        adv._stream_write = out.append
+        return adv, out
+
+    def test_one_line_per_turn_with_counts(self):
+        adv, out = self._adv()
+        for _ in range(3):
+            adv._show_note({"turn": 8, "note": "(auto-passed — nothing available)"})
+        adv._show_note({"turn": 8, "note": "(auto-passed — only utility activations available: Arbor Elf)"})
+        self.assertEqual(out, [], "nothing shown until the turn moves on")
+        adv._show_note({"turn": 9, "note": "(auto-passed — nothing available)"})
+        self.assertEqual(len(out), 1)
+        self.assertIn("[t8] ⏭ auto-passed 4 stops (nothing available ×3, only utility activations available: Arbor Elf)", out[0])
+
+    def test_kept_prompts_show_at_once_and_flush_first(self):
+        adv, out = self._adv()
+        adv._show_note({"turn": 8, "note": "(auto-passed — nothing available)"})
+        adv._show_note({"turn": 8, "note": "(prompt kept — castable: Khalni Ambush)"})
+        self.assertEqual(len(out), 1); self.assertIn("prompt kept", out[0])
+        adv._show_note({"turn": 9, "note": "(auto-passed — nothing available)"})
+        self.assertIn("[t8] ⏭ auto-passed 1 stop (nothing available)", out[1])
+
+    def test_modes_all_and_off(self):
+        adv, out = self._adv()
+        import os as _os
+        _os.environ["ARENA_AUTOPASS_RECEIPTS"] = "all"
+        try:
+            adv._show_note({"turn": 1, "note": "(auto-passed — nothing available)"})
+            self.assertEqual(len(out), 1)
+            _os.environ["ARENA_AUTOPASS_RECEIPTS"] = "off"
+            adv._show_note({"turn": 1, "note": "(auto-passed — nothing available)"})
+            self.assertEqual(len(out), 1)
+        finally:
+            _os.environ.pop("ARENA_AUTOPASS_RECEIPTS", None)

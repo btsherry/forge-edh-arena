@@ -114,7 +114,6 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             forge.arena.interactive.AiControlFile.setAdvisorEnabled(next);
             syncToggle();
         });
-        body.add(toggle, "gaptop 2");
         // Advisor Executive (Ben, 2026-09-07): the advisor PLAYS your seat until
         // clicked again. Writes logs/control/executive.json; the engine installs
         // or removes the override at your next priority (ExecutiveSwitch).
@@ -125,7 +124,12 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             forge.arena.interactive.AiControlFile.setExecutive(next);
             syncExecutive();
         });
-        body.add(executive, "gaptop 2");
+        // Ben (2026-09-08): both toggles on ONE row, short labels
+        final JPanel toggleRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][grow]", "[]"));
+        toggleRow.setOpaque(false);
+        toggleRow.add(toggle, "growx");
+        toggleRow.add(executive, "growx");
+        body.add(toggleRow, "growx, gaptop 2");
         refresh = new Timer(1000, e -> poll());
         refresh.setRepeats(true);
     }
@@ -133,7 +137,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     private final javax.swing.JButton toggle =
             new javax.swing.JButton("Advisor: OFF");
     private final javax.swing.JButton executive =
-            new javax.swing.JButton("Advisor Executive: OFF — click to toggle");
+            new javax.swing.JButton("Advisor Exec: OFF - clk to tgl");
 
     private final javax.swing.JTextField askField = new javax.swing.JTextField();
     private final javax.swing.JButton askButton = new javax.swing.JButton("Chat");
@@ -193,26 +197,26 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         // to pause, and advisorEnabled() (the pause flag) defaults to true —
         // so without this gate the button read "ON" in advisor-less games.
         if (!forge.arena.interactive.AiControlFile.advisorAttached()) {
-            toggle.setText("Advisor: OFF — not attached this game");
+            toggle.setText("Advisor: OFF - not attached");
             toggle.setEnabled(false);
             return;
         }
         toggle.setEnabled(true);
         final boolean on = forge.arena.interactive.AiControlFile.advisorEnabled();
-        toggle.setText(on ? "Advisor: ON — click to pause"
-                          : "Advisor: PAUSED — click to resume");
+        toggle.setText(on ? "Advisor: ON - clk to pause"
+                          : "Advisor: PAUSED - clk to resume");
     }
 
     private void syncExecutive() {
         if (!forge.arena.interactive.AiControlFile.advisorAttached()) {
-            executive.setText("Advisor Executive: OFF — not attached this game");
+            executive.setText("Advisor Exec: OFF - not attached");
             executive.setEnabled(false);
             return;
         }
         executive.setEnabled(true);
         final boolean on = forge.arena.interactive.AiControlFile.executiveOn();
-        executive.setText(on ? "Advisor Executive: ON — the advisor plays your seat; click to take it back"
-                             : "Advisor Executive: OFF — click to toggle");
+        executive.setText(on ? "Advisor Exec: ON - clk to tgl"
+                             : "Advisor Exec: OFF - clk to tgl");
     }
 
     private void poll() {

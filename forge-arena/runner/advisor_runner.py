@@ -375,6 +375,42 @@ class AdvisorRunner:
             return False
         return self.brain.rotate(text, timeout_s=min(120.0, self.timeout))
 
+    # ---- auto-pass receipts in the panel (Ben, 2026-09-08: "address the spam") --
+    # ARENA_AUTOPASS_RECEIPTS = summary (default: ONE line per turn, written when
+    # the next turn's first receipt arrives, with counts by reason) | all (every
+    # receipt, the old behaviour) | off (nothing in the panel). "prompt kept"
+    # lines always show at once — they are the rare, useful ones.
+
+    def _show_note(self, body: dict) -> None:
+        mode = os.environ.get("ARENA_AUTOPASS_RECEIPTS", "summary").lower()
+        note = str(body.get("note") or "")
+        turn = body.get("turn")
+        if mode == "off":
+            return
+        if mode == "all" or "prompt kept" in note or "auto-passed" not in note:
+            self._flush_receipts(turn)
+            self._stream_write(f"[t{turn}] ⏭ {note}\n")
+            return
+        if getattr(self, "_receipt_turn", None) != turn:
+            self._flush_receipts(turn)
+            self._receipt_turn = turn
+            self._receipts = {}
+        reason = re.sub(r"^\(auto-passed — ", "", note).rstrip(")")
+        self._receipts[reason] = self._receipts.get(reason, 0) + 1
+
+    def _flush_receipts(self, new_turn=None) -> None:
+        """Write the pending turn's one-line summary (if any) before anything
+        for a later turn is shown, so the panel stays in order."""
+        rec = getattr(self, "_receipts", None)
+        turn = getattr(self, "_receipt_turn", None)
+        if not rec or turn is None or turn == new_turn:
+            return
+        total = sum(rec.values())
+        parts = ", ".join(f"{k} ×{v}" if v > 1 else k for k, v in rec.items())
+        self._stream_write(f"[t{turn}] ⏭ auto-passed {total} stop{'s' if total != 1 else ''} ({parts})\n")
+        self._receipts = {}
+        self._receipt_turn = None
+
     def _toggle_enabled(self) -> bool:
         try:
             body = json.loads((self._control.parent / "advisor.json").read_text())
@@ -510,6 +546,8 @@ class AdvisorRunner:
             self.last_seq = max(self.last_seq, n)
             consumed += 1
             if kind in ("req", "digest") and body.get("turn") is not None:
+                if body.get("turn") != self._last_turn:
+                    self._flush_receipts(body.get("turn"))
                 self._last_turn = body.get("turn")
             if kind == "req":
                 reqs.append(body)
@@ -522,8 +560,8 @@ class AdvisorRunner:
                 self._record("chosen", {"seq": body.get("seq"), "decisionType": body.get("decisionType")})
             elif kind == "note":
                 if not quiet:
-                    self._stream_write(f"[t{body.get('turn')}] ⏭ {body.get('note')}\n")
-                self._record("note", body)
+                    self._show_note(body)
+                self._record("note", body)   # every receipt is kept for analysis
             try:
                 path.unlink()
             except OSError:

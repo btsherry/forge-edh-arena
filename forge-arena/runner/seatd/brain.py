@@ -387,10 +387,20 @@ class SeatBrain:
         cmd += ["--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                 "--setting-sources", ""]
         if resume and self.session_id and self.persistent_enabled:
+            t_p = time.time()
             env_p = self._persistent_call(cmd, prompt, timeout_s, eff)
             if env_p is not None:
                 return None if env_p.get("__error__") else env_p
-            # fell through: the process is dead or unsuitable -> per-call spawn below
+            # fell through: the process is dead or unsuitable -> per-call spawn
+            # below, with ONLY the time that remains of this window. Game 26
+            # (2026-09-08): a persistent timeout followed by a full-length spawn
+            # wait cost 144 s per window and lost it twice; after a timeout
+            # nothing remains, so the seat punts at once instead.
+            timeout_s = timeout_s - (time.time() - t_p)
+            if timeout_s < self.MIN_CALL_S:
+                self.log(f"[seat {self.seat}] persistent call used the window "
+                         f"({timeout_s:.0f}s left) — no spawn retry")
+                return None
         if resume and self.session_id:
             cmd += ["--resume", self.session_id]
         try:

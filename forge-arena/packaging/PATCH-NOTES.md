@@ -2,6 +2,10 @@
 
 ## Unreleased — after v3.4
 
+- **A quieter Advisor panel.** Auto-pass receipts collapse to one line per
+  turn with counts by reason (`ARENA_AUTOPASS_RECEIPTS=all|summary|off`; kept
+  prompts still show at once). The two advisor toggles sit on one row with
+  short labels: "Advisor: ON - clk to pause", "Advisor Exec: OFF - clk to tgl".
 - **Fewer seconds per seat decision.** Reactions to other players' abilities
   that aim nothing at the seat are answered at low effort. A seat's yields
   are mirrored by the engine, which skips opening windows the runner would

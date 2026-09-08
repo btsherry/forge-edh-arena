@@ -1680,3 +1680,37 @@ Hard-won from two live sessions; read before optimizing anything.
     downgrade steps aside when a stack item's oracle text names win/lose the
     game or an extra turn; the mirror counts our own targeted stack item as a
     threat; the record's hard cap keeps the newest text.
+
+86. **Panel quiet + toggle row (2026-09-08, game 26 running).** Ben: "address
+    the autopass spam printing out to the AI window". Java already deduped
+    receipts per turn:phase:reason, which still left 3–6 lines per turn. The
+    advisor runner now renders them as ONE line per turn, written when the
+    next turn's first receipt (or any advice/digest for a later turn) arrives:
+    `[t8] ⏭ auto-passed 4 stops (nothing available ×3, only utility …)`.
+    "prompt kept" lines show at once (they flush the pending summary first so
+    the panel stays in order). `ARENA_AUTOPASS_RECEIPTS=all` restores per-stop
+    lines, `off` hides them; every receipt is still recorded in
+    advisor-0.jsonl. VAdvisor: both toggles on one MigLayout row, labels
+    "Advisor: ON - clk to pause" / "Advisor: PAUSED - clk to resume" and
+    "Advisor Exec: OFF - clk to tgl" / "Advisor Exec: ON - clk to tgl".
+    Applied to source during game 26; the GUI rebuild and the advisor restart
+    wait for the game to end (never rebuild jars under a live game).
+
+87. **Game 26 — first live game on the branch (2026-09-08 06:04–07:12, Ben on
+    Selvala vs Urza/Giada/Purphoros, persistent transport + low-effort + rotation
+    on).** 18 turns, 906 seat decisions: model 273 (30%), runner-answered 628
+    (cycle 494, memo 129, yield 4, affordability 1), punts 5. REACT/turn 16.2
+    (game 25: 19.7) — the volume is board-driven as predicted; the runner now
+    answers two thirds of it. Engine yield mirror: 136 windows never opened.
+    Rotations: seats 1 and 2 once each (266k → 50k in 3.8 s; record 5.1k chars);
+    cache reads 15.5M / 12.5M / 8.7M per seat over the game (game 25: 95M for
+    one seat in 23 turns). Persistent transport: 231 calls, 4 fallbacks. The
+    stall: an API-side slow period 06:32–06:41 timed out Giada (5×), Urza (2×)
+    and one advisor call (120 s); unrotated sessions stalled too, so neither
+    rotation nor transport caused it. Defect found: a persistent timeout was
+    followed by a full-length spawn wait (144 s windows) → fixed, the fallback
+    gets only the remaining time. Also seen: Winter Orb's `Affected$ Player |
+    AddKeyword$ UntapAdjust` makes Forge create every player's "Keyword
+    Effects" command-zone card — stock engine behaviour, not ours. Visibility
+    gap closed: the record's `effort` now shows the effort actually used for
+    that call (fast_eff), not the seat's default.
