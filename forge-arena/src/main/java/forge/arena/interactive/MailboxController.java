@@ -306,6 +306,13 @@ public final class MailboxController extends PlayerControllerAi
 
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
+        // Advisor Executive: this controller is the override on the human's
+        // seat and the toggle went off -> remove ourselves and hand this
+        // decision back to the human controller (next-decision semantics).
+        if (ExecutiveSwitch.isExecutive(this) && !ExecutiveSwitch.wanted()
+                && ExecutiveSwitch.release(getPlayer())) {
+            return getPlayer().getController().chooseSpellAbilityToPlay();
+        }
         Game game = getGame();
         Player me = getPlayer();
         pendingTapPreference.clear(); // one-shot: valid only for the pick below

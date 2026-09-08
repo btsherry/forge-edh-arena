@@ -1591,3 +1591,44 @@ Hard-won from two live sessions; read before optimizing anything.
     decision), while latency stayed ~4 s flat. The lever is context size
     (session rotation with a summary, smaller request payloads), not process
     spawn.
+
+81. **Session rotation with a machine-built record (2026-09-07 late,
+    experimental/voicework; Ben: "session rotation … lacks deck text, combo
+    text … ripe for hallucination" → the record is rendered, never written).**
+    `SeatBrain.last_prompt_tokens` = input + cache read + cache creation of the
+    last call (what the model re-read). `SeatRunner._maybe_rotate()` runs at
+    the turn boundary only: past `ARENA_ROTATE_TOKENS` (250k; 0 = off) it
+    renders `seatd/record.py` from `game.jsonl` + `seat-N.jsonl` (turn blocks:
+    life totals, stack items seen, own plays with the chosen LABEL and own
+    "why" quoted; other seats' "why" never; oldest turns fold to one line
+    under a 12k-char budget; gameId-filtered) and calls `SeatBrain.rotate()`:
+    the SAME `_init_message` (dossier, combos, primer, rules) + the record +
+    READY as a FRESH session; the old session is abandoned; a failure keeps
+    the old one. Games 23–25 render to 6–11k chars, deterministic, 0 leaks.
+    The advisor rotates likewise at `ARENA_ADVISOR_ROTATE_TOKENS` (400k) with
+    the public record (seat 0). `transport-events` gets a `rotate` event.
+    Data: game 25 Giada 95M cached tokens read; a 250k cap ≈ 45M by replay,
+    and fewer once layer one removes calls.
+
+82. **Advisor Executive (2026-09-07 late).** `ExecutiveSwitch` (forge-arena):
+    `logs/control/executive.json` {"on": true} written by VAdvisor's second
+    button (`AiControlFile.setExecutive`). Read at DECISION BOUNDARIES on the
+    game thread: `AdvisorControllerHuman.chooseSpellAbilityToPlay` installs a
+    seat-0 `MailboxController` via `Player.addController(ts, p, c, true)` and
+    delegates that decision; the override's own `chooseSpellAbilityToPlay`
+    releases via `removeController` when the file says off and hands the
+    decision back. Runner side: `SeatRunner(…, brain=…)` injection; the
+    advisor runner's `_executive_tick` builds `SeatRunner(0, deck, base,
+    brain=self.brain)` (ONE session — the advisor's, with all four dossiers),
+    sends `EXEC_HANDOFF` (seat answer rules) / `EXEC_RELEASE`, and answers
+    `mailbox/seat-0`. `ExecutiveSwitchTest` (kit: install → MailboxController
+    override → release restores). NOT yet live-tested: GUI rendering while
+    overridden.
+
+83. **Cache re-writes are not idle-driven (2026-09-07 finding; no keep-alive
+    built).** Game 25: 13 full cache re-writes over 543 calls (2.4%); 11 within
+    12 s of the previous call, effort unchanged (no flips); only 2 after >5 min
+    idle, one of them the runner restart. Best-effort eviction, not TTL. A
+    keep-alive would cost tokens and fix nothing; layer two bounds the cost of
+    a miss (250k vs 900k). `docs/HOW-IT-RUNS.md` is the plain-language
+    architecture note written for Ben tonight.

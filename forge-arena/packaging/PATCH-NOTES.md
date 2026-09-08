@@ -2,6 +2,16 @@
 
 ## Unreleased — after v3.4
 
+- **Seats keep their chats thin.** A seat's Claude session re-reads its whole
+  transcript on every decision (up to 900k tokens late in a long game). Past
+  a cap (`ARENA_ROTATE_TOKENS`, default 250k) the runner starts a fresh
+  session at the next turn boundary with the same dossier plus a game record
+  rendered from its own logs — life totals, what was seen, what it played and
+  why, in its own words. No model writes the record. The advisor does the same
+  at 400k.
+- **Advisor Executive.** A second button in the Advisor panel hands your seat
+  to the advisor at your next priority; click again to take it back. The
+  advisor plays through the same session that already knows all four decks.
 - **Autopass rides the line better (game 25).** The human's table no longer
   passes a stop where an activated ability that costs mana is affordable — a
   Staff of Domination with mana up is a real play, not "utility". The AI seats

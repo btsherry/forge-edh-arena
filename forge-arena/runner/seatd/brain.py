@@ -148,6 +148,11 @@ class SeatBrain:
         self.totals = {"calls": 0, "input_tokens": 0, "output_tokens": 0,
                        "cache_read_input_tokens": 0,
                        "cache_creation_input_tokens": 0, "cost_usd": 0.0}
+        # Session rotation (Ben, 2026-09-07): the prompt size of the LAST call
+        # (input + cache read + cache creation = the whole transcript the
+        # model re-read). The runner rotates the session when it passes a cap.
+        self.last_prompt_tokens = 0
+        self.rotations = 0
         root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[3]
         self.root = root  # session storage is cwd-scoped: keep every call here
         here = Path(__file__).parent
@@ -291,6 +296,11 @@ class SeatBrain:
     def _accumulate(self, env: dict) -> None:
         u = env.get("usage") or {}
         self.totals["calls"] += 1
+        try:
+            self.last_prompt_tokens = sum(int(u.get(k) or 0) for k in (
+                "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+        except (TypeError, ValueError):
+            pass
         for k in ("input_tokens", "output_tokens", "cache_read_input_tokens",
                   "cache_creation_input_tokens"):
             v = u.get(k)
@@ -330,6 +340,49 @@ class SeatBrain:
         self.log(f"[seat {self.seat}] session up ({self.model}) in "
                  f"{time.time() - t0:.1f}s — {self.deck} dossier loaded, "
                  f"session {self.session_id[:8]}")
+        return True
+
+    def rotate(self, record_text: str, timeout_s: float = 120.0) -> bool:
+        """Start a FRESH session for the same game: the same dossier, verbatim,
+        plus the machine-built game record (seatd/record.py), then READY. The
+        old session is simply abandoned. Claude CLI transport only — a backend
+        keeps its own transcript. Returns True when the new session is up; on
+        failure the old session stays in use."""
+        if self.backend is not None or not self.session_id:
+            return False
+        ready = "\nReply exactly: READY"
+        base = self._init_message
+        if base.endswith(ready):
+            base = base[: -len(ready)]
+        prompt = base + "\n\n" + record_text.rstrip() + "\n" + ready
+        t0 = time.time()
+        env = self._call(prompt, timeout_s, resume=False)
+        if env is None or not env.get("session_id"):
+            self.log(f"[seat {self.seat}] session rotation FAILED — keeping the old session")
+            return False
+        old = self.session_id
+        self.session_id = env["session_id"]
+        self.calls += 1
+        self.rotations += 1
+        before = self.last_prompt_tokens
+        self._accumulate(env)
+        self.log(f"[seat {self.seat}] session rotated #{self.rotations} in {time.time() - t0:.1f}s: "
+                 f"{before // 1000}k -> {self.last_prompt_tokens // 1000}k tokens "
+                 f"({old[:8]} -> {self.session_id[:8]}); record {len(record_text)} chars")
+        return True
+
+    def note(self, text: str, timeout_s: float = 60.0) -> bool:
+        """One plain message into the live session (no decision): used for the
+        executive hand-off. Returns True when the model answered."""
+        if not self.ensure_session(timeout_s=timeout_s):
+            return False
+        if self.backend is not None:
+            return False
+        env = self._call(text, timeout_s, resume=True)
+        if env is None:
+            return False
+        self.calls += 1
+        self._accumulate(env)
         return True
 
     def reset(self) -> None:

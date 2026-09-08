@@ -115,12 +115,25 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             syncToggle();
         });
         body.add(toggle, "gaptop 2");
+        // Advisor Executive (Ben, 2026-09-07): the advisor PLAYS your seat until
+        // clicked again. Writes logs/control/executive.json; the engine installs
+        // or removes the override at your next priority (ExecutiveSwitch).
+        executive.setFocusable(false);
+        executive.setMargin(new java.awt.Insets(1, 8, 1, 8));
+        executive.addActionListener(e -> {
+            final boolean next = !forge.arena.interactive.AiControlFile.executiveOn();
+            forge.arena.interactive.AiControlFile.setExecutive(next);
+            syncExecutive();
+        });
+        body.add(executive, "gaptop 2");
         refresh = new Timer(1000, e -> poll());
         refresh.setRepeats(true);
     }
 
     private final javax.swing.JButton toggle =
             new javax.swing.JButton("Advisor: OFF");
+    private final javax.swing.JButton executive =
+            new javax.swing.JButton("Advisor Executive: OFF — click to toggle");
 
     private final javax.swing.JTextField askField = new javax.swing.JTextField();
     private final javax.swing.JButton askButton = new javax.swing.JButton("Chat");
@@ -190,8 +203,21 @@ public class VAdvisor implements IVDoc<CAdvisor> {
                           : "Advisor: PAUSED — click to resume");
     }
 
+    private void syncExecutive() {
+        if (!forge.arena.interactive.AiControlFile.advisorAttached()) {
+            executive.setText("Advisor Executive: OFF — not attached this game");
+            executive.setEnabled(false);
+            return;
+        }
+        executive.setEnabled(true);
+        final boolean on = forge.arena.interactive.AiControlFile.executiveOn();
+        executive.setText(on ? "Advisor Executive: ON — the advisor plays your seat; click to take it back"
+                             : "Advisor Executive: OFF — click to toggle");
+    }
+
     private void poll() {
         syncToggle();
+        syncExecutive();
         syncAsk();
         final String fresh = tail.readNew();
         if (!fresh.isEmpty()) {

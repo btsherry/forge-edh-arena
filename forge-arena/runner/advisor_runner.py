@@ -32,7 +32,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from seatd import backends  # noqa: E402
-from seatd.brain import SeatBrain  # noqa: E402
+from seatd.brain import SeatBrain
+from seatd.runner import SeatRunner  # noqa: E402
 
 POLL_S = 0.25  # advice feels snappier; cost is a stat() at 4Hz
 # Table roster convention shared with run_table.sh / GuiPilotMatch: four deck
@@ -145,6 +146,20 @@ class AdvisorRunner:
                                allowed_tools=tools)
         self.last_seq = 0
         self.game_id: str | None = None   # item 5/8: the game being advised
+        # Executive take-over (Ben, 2026-09-07): logs/control/executive.json
+        # {"on": true} — written by the Advisor tab's second button. The GUI
+        # installs a mailbox controller over the human seat at its next
+        # priority; THIS process answers that mailbox with the advisor's own
+        # brain through a seat-0 SeatRunner (no second agent, same session).
+        self._exec_file = log_dir / "control" / "executive.json"
+        self._exec: SeatRunner | None = None
+        self._base = Path(base)
+        self._log_dir = log_dir
+        self._game_log = log_dir / "game.jsonl"
+        try:
+            self.rotate_at = int(os.environ.get("ARENA_ADVISOR_ROTATE_TOKENS", "400000"))
+        except ValueError:
+            self.rotate_at = 400000
         self.pending_context: list[str] = []  # chosen/digest lines awaiting a call
         self._context_dropped = 0             # BL-13: lines cut by the bound
         self._init_control(model, effort)
@@ -285,6 +300,69 @@ class AdvisorRunner:
                 self._say(f"[advisor] effort -> {effort}")
         except OSError:
             pass
+
+    # ---- executive take-over ---------------------------------------------------
+
+    EXEC_HANDOFF = (
+        "EXECUTIVE MODE (the human clicked 'Advisor Executive'): from now until you are told "
+        "otherwise you PLAY seat 0 — the deck in your dossier — directly. Requests arrive in the "
+        "seat format and each states its exact 'Answer:' shape. Reply with ONLY the JSON answer "
+        "object on one line: no prose, no code fences. The request JSON is ground truth; you see "
+        "your own hand plus public information. A malformed answer is replaced by a safe default "
+        "(CAST_SPELL/REACT pass; MULLIGAN keep; no attackers/blocks; CHOOSE_* the first legal "
+        "ids; CHOOSE_NUMBER the maximum for an X cost else the minimum; PAY_UNLESS decline; "
+        "CONFIRM yes only when the effect is yours and free). Play to win. Reply exactly: READY")
+    EXEC_RELEASE = ("EXECUTIVE MODE ENDED: the human plays seat 0 again. You are advising "
+                    "from here on. Reply exactly: OK")
+
+    def _executive_wanted(self) -> bool:
+        try:
+            body = json.loads(self._exec_file.read_text())
+            return bool(body.get("on", False))
+        except (OSError, ValueError):
+            return False
+
+    def _executive_tick(self) -> bool:
+        """Start/stop executive mode from the control file; answer one pending
+        seat-0 request when on. Returns True when a request was handled."""
+        want = self._executive_wanted()
+        if want and self._exec is None:
+            self._exec = SeatRunner(0, self.brain.deck, self._base, model=self.brain.model,
+                                    effort=self.brain.effort, timeout_s=self.timeout,
+                                    log_dir=self._log_dir, brain=self.brain)
+            try:
+                self._exec.mb.start_heartbeat_thread()
+            except Exception:  # noqa: BLE001 — liveness only
+                pass
+            self.brain.note(self.EXEC_HANDOFF, timeout_s=min(60.0, self.timeout))
+            self._say("[advisor] EXECUTIVE ON — playing seat 0 through the mailbox")
+            self._stream_write("\n[advisor] EXECUTIVE ON — I am playing your seat now. Click again to take it back.\n")
+        elif not want and self._exec is not None:
+            self._exec = None
+            self.brain.note(self.EXEC_RELEASE, timeout_s=min(60.0, self.timeout))
+            self._say("[advisor] EXECUTIVE OFF — advising again")
+            self._stream_write("\n[advisor] EXECUTIVE OFF — your seat is yours again from the next priority.\n")
+        if self._exec is not None:
+            req = self._exec.mb.pending_request()
+            if req is not None:
+                self._exec.handle(req)
+                return True
+        return False
+
+    def _maybe_rotate(self) -> bool:
+        """Layer two for the advisor: a fresh session with the same four
+        dossiers plus the public game record when the last call re-read more
+        than ARENA_ADVISOR_ROTATE_TOKENS (0 disables)."""
+        size = getattr(self.brain, "last_prompt_tokens", 0)
+        if not self.rotate_at or size < self.rotate_at or not self.brain.session_id:
+            return False
+        try:
+            from seatd import record as _record
+            text = _record.render(self._game_log, None, 0, game_id=self.game_id)
+        except Exception as e:  # noqa: BLE001
+            self._say(f"[advisor] game record failed ({e}) — rotation skipped")
+            return False
+        return self.brain.rotate(text, timeout_s=min(120.0, self.timeout))
 
     def _toggle_enabled(self) -> bool:
         try:
@@ -564,6 +642,9 @@ class AdvisorRunner:
         threading.Thread(target=beat, name="advisor-heartbeat", daemon=True).start()
         while True:
             self._apply_control()
+            if self._executive_tick():
+                continue          # a seat-0 decision was answered; look again at once
+            self._maybe_rotate()
             self._handle_asks()   # questions first, pause or not (see docstring)
             # In-game on/off toggle (plan 13b): the Advisor tab's button writes
             # logs/control/advisor.json; disabled = no scanning, no model calls

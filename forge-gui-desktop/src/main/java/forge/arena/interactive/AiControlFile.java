@@ -193,6 +193,41 @@ public final class AiControlFile {
         }
     }
 
+    // ---- Advisor Executive (Ben, 2026-09-07): the advisor plays your seat ----
+
+    /** logs/control/executive.json {"on": true|false}; read by the engine side
+     *  (forge.arena.interactive.ExecutiveSwitch) at decision boundaries and by
+     *  the advisor runner. Missing = off. */
+    public static File executiveFile() {
+        return new File(logsDir(), "control/executive.json");
+    }
+
+    public static boolean executiveOn() {
+        final File f = executiveFile();
+        if (!f.exists()) {
+            return false;
+        }
+        try {
+            final String s = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8).replace(" ", "");
+            return s.contains("\"on\":true");
+        } catch (final IOException e) {
+            return false;
+        }
+    }
+
+    public static void setExecutive(final boolean on) {
+        final File f = executiveFile();
+        try {
+            f.getParentFile().mkdirs();
+            final File tmp = new File(f.getParentFile(), f.getName() + ".tmp");
+            Files.write(tmp.toPath(), ("{\"on\": " + on + "}").getBytes(StandardCharsets.UTF_8));
+            Files.move(tmp.toPath(), f.toPath(), StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (final IOException ignored) {
+            // runner absent / dir unwritable — button click shows no effect
+        }
+    }
+
     // ---- ask the advisor (Ben, 2026-09-04): one field, one button ----------
 
     /** {@code logs/control/ask/} — one file per question typed into the

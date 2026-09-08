@@ -77,6 +77,12 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
 
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
+        // Advisor Executive (Ben, 2026-09-07): the toggle file says the advisor
+        // plays this seat -> install the seat-0 mailbox override now and hand
+        // this very decision to it. Decision boundary, game thread.
+        if (ExecutiveSwitch.wanted() && ExecutiveSwitch.install(getPlayer(), getLobbyPlayer())) {
+            return getPlayer().getController().chooseSpellAbilityToPlay();
+        }
         maybePublishTurnDigest();
         armCastsAutopassIfIdle();
         long n = -1;

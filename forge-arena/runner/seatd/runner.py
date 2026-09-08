@@ -33,13 +33,30 @@ DEFAULT_AUTOPASS = ("Giver of Runes", "Mother of Runes", "Academy Ruins")
 
 
 class SeatRunner:
+    # Defaults for a runner built without __init__ (offline tests use __new__):
+    # rotation off, no game id, no repeat/yield memory yet.
+    rotate_at = 0  # class default
+    _game_id = None
+    _tap_pass = None
+    _yielded = None   # dict once the first yield is noted (never a shared class dict)
     def __init__(self, seat: int, deck: str, base, model: str = "sonnet",
                  effort: str = "low", timeout_s: float = 90.0, log_dir=None,
                  autopass: tuple[str, ...] = DEFAULT_AUTOPASS,
-                 speculative: bool = False, react_hold: bool = False):
+                 speculative: bool = False, react_hold: bool = False,
+                 brain=None):
         self.mb = SeatMailbox(seat, base, timeout_s=timeout_s)
-        self.brain = SeatBrain(seat, deck, model=model, effort=effort,
-                               log=self._say)
+        # Executive take-over (Ben, 2026-09-07): the ADVISOR's own brain — the
+        # session that already holds all four dossiers — can be injected and
+        # plays seat 0 through this runner's protocol loop. No second agent.
+        self.brain = brain if brain is not None else SeatBrain(
+            seat, deck, model=model, effort=effort, log=self._say)
+        # Session rotation cap (tokens the model re-read on the last call).
+        # 0 disables. Applied at a turn boundary, never inside a window.
+        try:
+            self.rotate_at = int(os.environ.get("ARENA_ROTATE_TOKENS", "250000"))
+        except ValueError:
+            self.rotate_at = 250000
+        self._game_id: str | None = None
         self.seat, self.deck = seat, deck
         self.timeout_s = timeout_s
         self.autopass = tuple(autopass)
@@ -834,6 +851,8 @@ class SeatRunner:
         key = self._yield_key(req)
         st = req.get("state") or {}
         if key is not None and isinstance(st.get("life"), int):
+            if self._yielded is None:
+                self._yielded = {}
             self._yielded[key] = (st.get("life"), st.get("manaPool") or 0,
                                   st.get("untappedManaSourceCount") or 0)
 
@@ -984,6 +1003,26 @@ class SeatRunner:
                 continue
             self.handle(req)
 
+    def _maybe_rotate(self) -> bool:
+        """Layer two (Ben, 2026-09-07): when the last call re-read more than
+        ARENA_ROTATE_TOKENS, start a fresh session with the same dossier plus
+        the machine-built game record (seatd/record.py). Runs at a turn
+        boundary only. A failed rotation keeps the old session."""
+        size = getattr(self.brain, "last_prompt_tokens", 0)
+        if (not self.rotate_at or not isinstance(size, int) or size < self.rotate_at
+                or not getattr(self.brain, "session_id", None)):
+            return False
+        try:
+            from . import record as _record
+            text = _record.render(self._game_log, self._jsonl_path, self.seat, game_id=self._game_id)
+        except Exception as e:  # noqa: BLE001 — a record failure must not stop the game
+            self._say(f"[seat {self.seat}] game record failed ({e}) — rotation skipped")
+            return False
+        ok = self.brain.rotate(text, timeout_s=min(120.0, self.timeout_s))
+        if ok:
+            self._transport_event("rotate", self._game_id)
+        return ok
+
     def handle(self, req: dict) -> None:
         """Item 13a: nothing raised inside a decision may kill the runner — a
         crash restarts it 2 s later with a fresh session and a full dossier
@@ -1021,8 +1060,11 @@ class SeatRunner:
             self.order_memo.clear()
             self.cycle = None
             self._hist = []
+        if req.get("gameId"):
+            self._game_id = req.get("gameId")
         if self._last_turn != req.get("turn"):
             self._last_turn = req.get("turn")
+            self._maybe_rotate()   # turn boundary: the one safe moment
             self.react_seen.clear()
             self.order_memo.clear()
             self._tap_pass = None
