@@ -3826,6 +3826,16 @@ public final class MailboxController extends PlayerControllerAi
         if (!attached.isEmpty()) {
             m.put("auras", attached);
         }
+        // Public per CR 406.3: what the permanent imprinted / exiled (Isochron
+        // Scepter's instant is knowable by every seat, Ben 2026-09-07).
+        List<String> imprinted = ObserverSnapshot.names(c.getImprintedCards(), true);
+        if (!imprinted.isEmpty()) {
+            m.put("imprinted", imprinted);
+        }
+        List<String> held = ObserverSnapshot.names(c.getExiledCards(), true);
+        if (!held.isEmpty()) {
+            m.put("exiledWith", held);
+        }
         if (includeAbilities) {
             List<Map<String, Object>> abilities = new ArrayList<>();
             for (SpellAbility sa : c.getSpellAbilities()) {

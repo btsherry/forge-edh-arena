@@ -2,6 +2,15 @@
 
 ## Unreleased — after v3.4
 
+- **Every public zone is on the table.** The observer snapshot and the seats'
+  board state now carry graveyards, face-up exile, command zones, what each
+  permanent imprinted or exiled (an Isochron Scepter's instant is public
+  knowledge, CR 406.3) and who owns and targets each stack item. Face-down
+  exiled cards stay nameless.
+- **The advisor can look at the whole table.** `scripts/arena-public-state.py`
+  prints the complete public state; the Advisor may run it (its only tool) when
+  advice or a Chat question hinges on a graveyard, exile or an imprint. Seats
+  remain tool-less. `ARENA_ADVISOR_TOOLS=off` disables it.
 - **Seats stop paying for dead reaction windows.** A seat passes without a
   model call when every option it is offered costs more mana than it can
   produce right now, when only plain mana abilities are offered, or when the

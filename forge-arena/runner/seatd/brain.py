@@ -10,6 +10,7 @@ Pattern (verified live 2026-08-07):
   prompt on stdin; the session carries the dossier (cache-hit on resume —
   `usage.cache_read_input_tokens` observed > 0 across resumes).
 - tools are disabled (--disallowedTools '*'); the model is text-in/text-out.
+  Exception: an `allowed_tools` allowlist (the advisor's public-state dump).
   The runner does ALL file I/O — the model can never touch a mailbox path.
 
 Every call returns (parsed_json_or_None, meta). Callers validate via rules.py
@@ -104,8 +105,14 @@ class SeatBrain:
     def __init__(self, seat: int, deck: str, model: str = "sonnet",
                  effort: str = "low", repo_root: str | Path | None = None,
                  log=print, brief: str = "seat-brief.md",
-                 extra_parts: list[str] | None = None):
+                 extra_parts: list[str] | None = None,
+                 allowed_tools: list[str] | None = None):
         self.seat = int(seat)
+        # Tools are disabled for every brain ("--disallowedTools *"); the
+        # ADVISOR alone may be handed an allowlist (2026-09-07, Ben): the
+        # public-state dump script. Seats never get one — their state is the
+        # request, and a tool would be a second, unaudited channel.
+        self.allowed_tools = list(allowed_tools) if allowed_tools else None
         self.deck = deck
         self.model = model
         self.effort = effort  # pinned — never inherit the user's saved default
@@ -229,10 +236,15 @@ class SeatBrain:
         # explicitly, so nothing from those files is needed. (CLAUDE.md
         # auto-discovery is NOT affected by this flag; see the README note.)
         cmd = ["claude", "-p", "-", "--output-format", "json",
-               "--model", self.model, "--effort", eff,
-               "--disallowedTools", "*",
-               "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-               "--setting-sources", ""]
+               "--model", self.model, "--effort", eff]
+        if self.allowed_tools:
+            # print mode denies every tool not on the allowlist without asking
+            for pattern in self.allowed_tools:
+                cmd += ["--allowedTools", pattern]
+        else:
+            cmd += ["--disallowedTools", "*"]   # golden argv (test_golden_claude): order is fixed
+        cmd += ["--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+                "--setting-sources", ""]
         if resume and self.session_id:
             cmd += ["--resume", self.session_id]
         try:

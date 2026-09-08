@@ -1526,3 +1526,21 @@ Hard-won from two live sessions; read before optimizing anything.
     ~4 s per call itself (see [[parked-ai-snappiness]]). Also: the human
     autopass receipts are deduped per turn:phase:reason (game 25 wrote 400+
     per-stop notes into the Advisor tab).
+
+78. **The advisor's public-state tool + public zones (2026-09-07, Ben:
+    "shouldn't the imprint on Isochron Scepter be public knowledge?" / "give
+    the advisor access to the python script that dumps out all public
+    knowledge").** `ObserverSnapshot` now publishes every public zone per seat
+    — `graveyard`, `exile` (face-up; a face-down exiled card is
+    "(face-down card)"), `commandZone` — and per permanent `imprinted` and
+    `exiledWith` (CR 406.3), plus `stackDetail` (kind, owner seat, targets).
+    The seats' request `cardState` carries `imprinted`/`exiledWith` too.
+    `scripts/arena-public-state.py` renders the snapshot (`--seat N`,
+    `--json`; exit 2 with no live game) and is the advisor brain's ONE
+    allowed tool: `SeatBrain(allowed_tools=[...])` swaps `--disallowedTools *`
+    for `--allowedTools "Bash(python3 forge-arena/scripts/arena-public-state.py:*)"`
+    (claude -p's cwd is the repo root; print mode denies anything else without
+    asking). Seats stay tool-less — the golden argv test pins their command
+    line. The brief tells the advisor when to run it (graveyards, exile, an
+    imprint, Chat questions; never for hands, which it does not show) and to
+    run it at most once per reply. `ARENA_ADVISOR_TOOLS=off` removes it.

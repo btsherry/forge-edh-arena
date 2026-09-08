@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import sys
@@ -44,6 +45,10 @@ DEFAULT_TABLE = ("urza-lord-high-artificer giada-font-of-hope "
                  "purphoros-god-of-the-forge selvala-heart-of-the-wilds")
 CONTEXT_MAX_LINES = 40  # BL-13: bound on lines carried between advice calls
 ASK_MAX_CHARS = 500     # a question is one line; the GUI caps at the same value
+# The advisor may run exactly this (see advisor-brief.md "Public state tool");
+# claude -p's cwd is the package root, so the path is root-relative.
+PUBLIC_STATE_CMD = "python3 forge-arena/scripts/arena-public-state.py"
+PUBLIC_STATE_TOOL = f"Bash({PUBLIC_STATE_CMD}:*)"
 # Voice quips (Ben, 2026-09-07): the advisor may end an advice or commentary
 # line with ONE tag from this closed set — [quip:<id>] — and the voice runner
 # plays the matching pre-rendered Joshua/W.O.P.R. phrase. The tag is stripped
@@ -128,9 +133,16 @@ class AdvisorRunner:
         self._asks = log_dir / "control" / "ask"   # questions from the Advisor tab
         self._last_turn = None                      # for the [tN · you] label
         arena_root = Path(__file__).resolve().parent.parent
+        # The advisor's ONE tool (Ben, 2026-09-07): the public-state dump.
+        # claude -p runs from the package root, so the pattern is root-relative;
+        # ARENA_ADVISOR_TOOLS=off takes it away.
+        tools = None
+        if os.environ.get("ARENA_ADVISOR_TOOLS", "on").lower() != "off":
+            tools = [PUBLIC_STATE_TOOL]
         self.brain = SeatBrain(0, deck, model=model, effort=effort,
                                log=self._say, brief="advisor-brief.md",
-                               extra_parts=opponent_deck_sections(deck, arena_root))
+                               extra_parts=opponent_deck_sections(deck, arena_root),
+                               allowed_tools=tools)
         self.last_seq = 0
         self.game_id: str | None = None   # item 5/8: the game being advised
         self.pending_context: list[str] = []  # chosen/digest lines awaiting a call

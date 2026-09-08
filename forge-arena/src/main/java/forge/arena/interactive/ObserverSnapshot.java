@@ -43,11 +43,14 @@ import forge.game.zone.ZoneType;
  * GameLogFormatter.java:316), so it receives every event the game posts.
  *
  * <p><b>Fairness / hidden info:</b> the snapshot is OBSERVER/PUBLIC only. It
- * exposes, for every seat, only PUBLIC information — life, poison, and the fully
- * public battlefield (per-card mechanical fields; see {@link #cardState}). Hand
- * and library are exposed as COUNTS only for every seat, including the human, so
- * the operator can never read anyone's hand. The stack is exposed as source
- * names (public).
+ * exposes, for every seat, only PUBLIC information — life, poison, the fully
+ * public battlefield (per-card mechanical fields; see {@link #cardState}), and
+ * since 2026-09-07 the other public zones: graveyard, face-up exile, command
+ * zone, plus what each permanent imprinted or exiled. Hand and library are
+ * exposed as COUNTS only for every seat, including the human, so the operator
+ * can never read anyone's hand. The stack is exposed as source names plus a
+ * detail list (kind, owner, targets). {@code scripts/arena-public-state.py}
+ * renders this file for the advisor.
  *
  * <p><b>Robustness:</b> the handler never throws — a snapshot failure must never
  * disrupt the game — and writes are atomic (temp file + rename). BL-07
@@ -201,18 +204,49 @@ public final class ObserverSnapshot {
                 board.add(cardState(c));
             }
             s.put("battlefield", board);
+            // Ben (2026-09-07, "shouldn't the imprint on Isochron Scepter be
+            // public knowledge?"): every public zone, not just the battlefield.
+            // Graveyards and command zones are public (CR 400.2); exile is public
+            // face up (CR 406.3) — a card exiled FACE DOWN stays a count.
+            s.put("graveyard", names(p.getCardsIn(ZoneType.Graveyard), false));
+            s.put("exile", names(p.getCardsIn(ZoneType.Exile), true));
+            s.put("commandZone", names(p.getCardsIn(ZoneType.Command), false));
             seats.add(s);
         }
         snap.put("seats", seats);
 
-        // PUBLIC stack (source names only), most-recent last.
+        // PUBLIC stack (source names only), most-recent last — kept as-is for
+        // the dashboard; "stackDetail" adds owner, kind and targets (all
+        // public once an item is on the stack, CR 601.2c).
         List<String> stack = new ArrayList<>();
+        List<Map<String, Object>> detail = new ArrayList<>();
         for (SpellAbilityStackInstance si : game.getStack()) {
             SpellAbility sa = si.getSpellAbility();
             Card host = sa != null ? sa.getHostCard() : null;
-            stack.add(host != null ? host.getName() : String.valueOf(si));
+            String name = host != null ? host.getName() : String.valueOf(si);
+            stack.add(name);
+            Map<String, Object> d = new LinkedHashMap<>();
+            d.put("kind", si.isTrigger() ? "trigger" : si.isSpell() ? "spell" : "ability");
+            d.put("name", name);
+            Player owner = si.getActivatingPlayer();
+            d.put("owner", owner != null ? owner.getId() : null);
+            List<String> targets = new ArrayList<>();
+            forge.game.spellability.TargetChoices tc = si.getTargetChoices();
+            if (tc != null) {
+                for (Card tgt : tc.getTargetCards()) {
+                    targets.add(tgt.getName());
+                }
+                for (Player tgt : tc.getTargetPlayers()) {
+                    targets.add("seat " + tgt.getId());
+                }
+            }
+            if (!targets.isEmpty()) {
+                d.put("targets", targets);
+            }
+            detail.add(d);
         }
         snap.put("stack", stack);
+        snap.put("stackDetail", detail);
         return snap;
     }
 
@@ -249,7 +283,31 @@ public final class ObserverSnapshot {
         if (!attached.isEmpty()) {
             m.put("auras", attached);
         }
+        // What this permanent holds: imprinted cards (Isochron Scepter, Chrome
+        // Mox) and cards it exiled (Banishing Light, Grafdigger's-Cage-style
+        // "until it leaves") — public unless exiled face down.
+        List<String> imprinted = names(c.getImprintedCards(), true);
+        if (!imprinted.isEmpty()) {
+            m.put("imprinted", imprinted);
+        }
+        List<String> held = names(c.getExiledCards(), true);
+        if (!held.isEmpty()) {
+            m.put("exiledWith", held);
+        }
         return m;
+    }
+
+    /** Card names in zone order; a face-down card (when {@code hideFaceDown})
+     *  is reported as such, never by name — that is hidden information. */
+    static List<String> names(Iterable<Card> cards, boolean hideFaceDown) {
+        List<String> out = new ArrayList<>();
+        if (cards == null) {
+            return out;
+        }
+        for (Card c : cards) {
+            out.add(hideFaceDown && c.isFaceDown() ? "(face-down card)" : c.getName());
+        }
+        return out;
     }
 
     // ---- atomic write (mirrors MailboxProtocol.writeAtomic) ----------------

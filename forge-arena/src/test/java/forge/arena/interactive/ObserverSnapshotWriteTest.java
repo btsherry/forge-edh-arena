@@ -36,4 +36,29 @@ public class ObserverSnapshotWriteTest {
             Assert.assertTrue(Files.readString(snap).contains("\"life\":27"));
         }
     }
+
+    /** 2026-09-07 (Ben: "shouldn't the imprint on Isochron Scepter be public
+     *  knowledge?"): the snapshot carries every public zone and what each
+     *  permanent holds; a face-down exiled card stays nameless. */
+    @Test(timeOut = 120_000)
+    public void publicZonesAndImprintsAreInTheSnapshot() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            Path snap = k.base.resolve("observer-state.json");
+            forge.game.card.Card scepter = MailboxTestKit.put("Isochron Scepter", k.opp, forge.game.zone.ZoneType.Battlefield);
+            forge.game.card.Card pact = MailboxTestKit.put("Pact of Negation", k.opp, forge.game.zone.ZoneType.Exile);
+            scepter.addImprintedCard(pact);
+            MailboxTestKit.put("Beast Within", k.seat, forge.game.zone.ZoneType.Graveyard);
+            forge.game.card.Card hidden = MailboxTestKit.put("Craterhoof Behemoth", k.seat, forge.game.zone.ZoneType.Exile);
+            hidden.turnFaceDown();
+            k.seat.setLife(35, null);   // an event, so the snapshot rewrites
+            String body = Files.readString(snap);
+            Assert.assertTrue(body.contains("\"imprinted\":[\"Pact of Negation\"]"), body);
+            Assert.assertTrue(body.contains("\"graveyard\":[\"Beast Within\"]"), body);
+            Assert.assertTrue(body.contains("\"exile\":[\"Pact of Negation\"]"), body);
+            Assert.assertTrue(body.contains("\"commandZone\":["), body);
+            Assert.assertTrue(body.contains("(face-down card)"), "face-down exile is a count, not a name: " + body);
+            Assert.assertFalse(body.contains("Craterhoof Behemoth"), "a face-down card is never named: " + body);
+            Assert.assertTrue(body.contains("\"stackDetail\":[]"), body);
+        }
+    }
 }

@@ -74,6 +74,23 @@ spell against an always-indestructible god; the pilot followed it into a
 countered blank. Gods die to exile, tuck, or type-change (Song of the
 Dryads-class), never to destroy.)
 
+## Public state tool
+
+You have exactly one tool. Run
+
+    python3 forge-arena/scripts/arena-public-state.py
+
+to see the COMPLETE public game state: every seat's life, poison, hand and
+library counts, the full battlefields with counters, attachments and what is
+imprinted or exiled with a permanent, the graveyards, exile and command
+zones, and the stack with owners and targets (`--seat N` for one seat,
+`--json` for the raw snapshot). Use it when the question or the decision
+hinges on something the request does not carry — what is in a graveyard or
+exile, what an Isochron Scepter holds, an opponent's exact board — and for
+Chat questions about the table. Do not run it for hands or libraries (it
+does not show them; nothing does). At most one run per reply; it costs a
+few seconds, so the answer should be worth it.
+
 ## Long game discipline
 
 Track their apparent plan (the primer tells you the deck's plans) and adapt:
