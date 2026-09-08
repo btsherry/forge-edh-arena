@@ -295,7 +295,8 @@ class SeatRunner:
                "seq": req.get("seq"),
                "turn": req.get("turn"), "phase": req.get("phase"),
                "type": req.get("decisionType"), "source": source,
-               "model": self.brain.model, "effort": self.brain.effort,
+               "model": self.brain.model,
+               "effort": (meta or {}).get("effort") or self.brain.effort,
                "answer": answer, "why": why, "consumed": consumed,
                "board": stamp}
         # Log the FULL option list for model/plan/hold decisions (the 08-10
@@ -345,7 +346,7 @@ class SeatRunner:
                 "gameId": req.get("gameId"),
                 "turn": rec["turn"], "phase": rec["phase"],
                 "type": rec["type"], "seq": rec["seq"], "source": source,
-                "model": self.brain.model, "effort": self.brain.effort,
+                "model": self.brain.model, "effort": rec["effort"],
                 "answer": answer, "why": why,
                 "deviation": rec.get("deviation"),
                 "latency_s": rec.get("latency_s"), "board": stamp}) + "\n"
@@ -1298,6 +1299,8 @@ class SeatRunner:
                               f"effort low for this window")
             out, meta = self.brain.decide(prompt, deadline=deadline,
                                           effort=fast_eff)
+            if isinstance(meta, dict):
+                meta["effort"] = fast_eff or self.brain.effort   # the effort actually used (game 26 visibility gap)
             clean = rules.validate(req, out) if out is not None else None
             if isinstance(out, dict) and isinstance(out.get("why"), str):
                 why = out["why"][:200]
