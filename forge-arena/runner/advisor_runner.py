@@ -376,13 +376,13 @@ class AdvisorRunner:
         return self.brain.rotate(text, timeout_s=min(120.0, self.timeout))
 
     # ---- auto-pass receipts in the panel (Ben, 2026-09-08: "address the spam") --
-    # ARENA_AUTOPASS_RECEIPTS = summary (default: ONE line per turn, written when
-    # the next turn's first receipt arrives, with counts by reason) | all (every
-    # receipt, the old behaviour) | off (nothing in the panel). "prompt kept"
-    # lines always show at once — they are the rare, useful ones.
+    # ARENA_AUTOPASS_RECEIPTS = all (DEFAULT, Ben 2026-09-08: every receipt) |
+    # summary (ONE line per turn, written when the next turn's first receipt
+    # arrives, with counts by reason) | off (nothing in the panel). "prompt
+    # kept" lines always show at once.
 
     def _show_note(self, body: dict) -> None:
-        mode = os.environ.get("ARENA_AUTOPASS_RECEIPTS", "summary").lower()
+        mode = os.environ.get("ARENA_AUTOPASS_RECEIPTS", "all").lower()   # Ben 2026-09-08: every receipt, by default
         note = str(body.get("note") or "")
         turn = body.get("turn")
         if mode == "off":

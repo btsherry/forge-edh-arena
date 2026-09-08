@@ -11,6 +11,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from seatd import brain as brain_mod  # noqa: E402
 from seatd.brain import SeatBrain  # noqa: E402
+import os as _os
+_os.environ.setdefault("ARENA_BRAIN_TRANSPORT", "spawn")  # these tests exercise the per-call spawn path
 
 DECK = "selvala-heart-of-the-wilds"
 

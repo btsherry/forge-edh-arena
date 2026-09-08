@@ -2,16 +2,15 @@
 
 ## Unreleased — after v3.4
 
-- **A quieter Advisor panel.** Auto-pass receipts collapse to one line per
-  turn with counts by reason (`ARENA_AUTOPASS_RECEIPTS=all|summary|off`; kept
-  prompts still show at once). The two advisor toggles sit on one row with
+- **A quieter Advisor panel.** Auto-pass receipts show every stop by default
+  (`ARENA_AUTOPASS_RECEIPTS=all|summary|off`; `summary` is one line per turn). The two advisor toggles sit on one row with
   short labels: "Advisor: ON - clk to pause", "Advisor Exec: OFF - clk to tgl".
 - **Fewer seconds per seat decision.** Reactions to other players' abilities
   that aim nothing at the seat are answered at low effort. A seat's yields
   are mirrored by the engine, which skips opening windows the runner would
-  pass anyway. An opt-in persistent Claude process per seat
-  (`ARENA_BRAIN_TRANSPORT=persistent`) removes the per-decision process
-  start. `arena-status.py` shows how many decisions the runner answered
+  pass anyway. A persistent Claude process per seat (the default;
+  `ARENA_BRAIN_TRANSPORT=spawn` restores per-call starts) removes the
+  per-decision process start. `arena-status.py` shows how many decisions the runner answered
   itself, each seat's context size and rotations.
 - **Seats keep their chats thin.** A seat's Claude session re-reads its whole
   transcript on every decision (up to 900k tokens late in a long game). Past

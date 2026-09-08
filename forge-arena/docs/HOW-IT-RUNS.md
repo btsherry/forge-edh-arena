@@ -133,7 +133,7 @@ a measurement.
 | Tokens re-read per question, late game | 900k | under 250k |
 | Total tokens read, whole game | 95M | roughly 20M |
 
-## Three more low-risk steps (built 2026-09-07 late; the persistent process is opt-in until a live game validates it)
+## Three more low-risk steps (built 2026-09-07 late; validated in games 26–27; the persistent process is the default since 2026-09-08)
 
 1. **One persistent process per seat.** Today each question spawns a new
    `claude -p` process that resumes the chat. A long-lived process with the

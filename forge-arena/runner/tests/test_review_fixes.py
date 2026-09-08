@@ -175,6 +175,9 @@ class ReceiptSummaryTests(unittest.TestCase):
             ar.SeatBrain, ar.opponent_deck_sections = orig
         out = []
         adv._stream_write = out.append
+        import os as _os
+        _os.environ["ARENA_AUTOPASS_RECEIPTS"] = "summary"   # the default is now "all"
+        self.addCleanup(lambda: _os.environ.pop("ARENA_AUTOPASS_RECEIPTS", None))
         return adv, out
 
     def test_one_line_per_turn_with_counts(self):

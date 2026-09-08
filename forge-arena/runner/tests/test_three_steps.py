@@ -104,11 +104,16 @@ class PersistentClaudeTests(unittest.TestCase):
 
 class BrainTransportTests(unittest.TestCase):
     def _brain(self, persistent=True):
+        prev = os.environ.get("ARENA_BRAIN_TRANSPORT")
         os.environ["ARENA_BRAIN_TRANSPORT"] = "persistent" if persistent else "spawn"
         try:
             b = SeatBrain(2, "giada-font-of-hope", model="opus", effort="medium", log=lambda *_: None)
         finally:
-            os.environ.pop("ARENA_BRAIN_TRANSPORT", None)
+            # restore, never pop: other test modules pinned "spawn" at import (tests/__init__)
+            if prev is None:
+                os.environ.pop("ARENA_BRAIN_TRANSPORT", None)
+            else:
+                os.environ["ARENA_BRAIN_TRANSPORT"] = prev
         b.session_id = "s-live"
         return b
 
@@ -126,7 +131,7 @@ class BrainTransportTests(unittest.TestCase):
                         "cache_read_input_tokens": 10, "cache_creation_input_tokens": 0}}
             def kill(self): self.ok = False
             proc = None
-        orig_cls = brain_mod.PersistentClaude
+        orig_cls, orig_run = brain_mod.PersistentClaude, brain_mod._run
         brain_mod.PersistentClaude = P
         spawned = []
         brain_mod._run = lambda cmd, **kw: spawned.append(cmd) or (_ for _ in ()).throw(OSError("no spawn expected"))
@@ -145,21 +150,19 @@ class BrainTransportTests(unittest.TestCase):
             b._call("again", 10.0, resume=True)
             self.assertEqual(b.persistent_fallbacks, 1); self.assertEqual(len(spawned), 2)
         finally:
-            brain_mod.PersistentClaude = orig_cls
-            import importlib; importlib.reload(brain_mod)
+            brain_mod.PersistentClaude, brain_mod._run = orig_cls, orig_run
 
-    def test_spawn_default_never_touches_the_persistent_class(self):
-        b = self._brain(persistent=False)
+    def test_spawn_mode_never_touches_the_persistent_class(self):
+        b = self._brain(persistent=False)   # ARENA_BRAIN_TRANSPORT=spawn (persistent is the default now)
         touched = []
-        orig_cls = brain_mod.PersistentClaude
+        orig_cls, orig_run = brain_mod.PersistentClaude, brain_mod._run
         brain_mod.PersistentClaude = lambda *a, **k: touched.append(1)
         brain_mod._run = lambda cmd, **kw: (_ for _ in ()).throw(OSError("stop"))
         try:
             b._call("x", 5.0, resume=True)
             self.assertEqual(touched, [])
         finally:
-            brain_mod.PersistentClaude = orig_cls
-            import importlib; importlib.reload(brain_mod)
+            brain_mod.PersistentClaude, brain_mod._run = orig_cls, orig_run
 
 
 def react(**kw):
@@ -231,11 +234,15 @@ class FallbackBudgetTests(unittest.TestCase):
     """Game 26: after a persistent-process timeout the spawn fallback must get
     only the REMAINING window, i.e. nothing — punt at once, never wait twice."""
     def _brain(self):
+        prev = os.environ.get("ARENA_BRAIN_TRANSPORT")
         os.environ["ARENA_BRAIN_TRANSPORT"] = "persistent"
         try:
             b = SeatBrain(2, "giada-font-of-hope", model="opus", effort="medium", log=lambda *_: None)
         finally:
-            os.environ.pop("ARENA_BRAIN_TRANSPORT", None)
+            if prev is None:
+                os.environ.pop("ARENA_BRAIN_TRANSPORT", None)
+            else:
+                os.environ["ARENA_BRAIN_TRANSPORT"] = prev
         b.session_id = "s-live"
         return b
 
@@ -252,7 +259,7 @@ class FallbackBudgetTests(unittest.TestCase):
             def kill(self): self.ok = False
             proc = None
         spawned = []
-        orig = brain_mod.PersistentClaude
+        orig, orig_run = brain_mod.PersistentClaude, brain_mod._run
         brain_mod.PersistentClaude = SlowP
         brain_mod._run = lambda cmd, **kw: spawned.append(cmd) or (_ for _ in ()).throw(OSError("no spawn expected"))
         try:
@@ -260,8 +267,7 @@ class FallbackBudgetTests(unittest.TestCase):
             self.assertEqual(spawned, [], "the window is spent: punt, do not wait a second time")
             self.assertEqual(b.persistent_fallbacks, 1)
         finally:
-            brain_mod.PersistentClaude = orig
-            import importlib; importlib.reload(brain_mod)
+            brain_mod.PersistentClaude, brain_mod._run = orig, orig_run
 
     def test_quick_failure_still_spawns_with_the_remaining_time(self):
         b = self._brain()
@@ -276,7 +282,7 @@ class FallbackBudgetTests(unittest.TestCase):
 
         def fake_run(cmd, **kw):
             seen["timeout"] = kw.get("timeout"); raise OSError("stop here")
-        orig = brain_mod.PersistentClaude
+        orig, orig_run = brain_mod.PersistentClaude, brain_mod._run
         brain_mod.PersistentClaude = DeadP
         brain_mod._run = fake_run
         try:
@@ -284,5 +290,4 @@ class FallbackBudgetTests(unittest.TestCase):
             self.assertIsNotNone(seen.get("timeout"))
             self.assertGreater(seen["timeout"], 29.0, "a quick failure leaves the whole window for the spawn")
         finally:
-            brain_mod.PersistentClaude = orig
-            import importlib; importlib.reload(brain_mod)
+            brain_mod.PersistentClaude, brain_mod._run = orig, orig_run

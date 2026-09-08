@@ -282,9 +282,10 @@ class SeatBrain:
         # model re-read). The runner rotates the session when it passes a cap.
         self.last_prompt_tokens = 0
         self.rotations = 0
-        # Step 1 (opt-in): ARENA_BRAIN_TRANSPORT=persistent keeps one CLI
-        # process per session; "spawn" (default) is the per-call --resume.
-        self.persistent_enabled = os.environ.get("ARENA_BRAIN_TRANSPORT", "spawn").lower() == "persistent"
+        # Step 1: ARENA_BRAIN_TRANSPORT=persistent (DEFAULT since 2026-09-08,
+        # Ben, after games 26-27: 285 calls, 4 fallbacks, 0 stalls of its own)
+        # keeps one CLI process per session; "spawn" is the per-call --resume.
+        self.persistent_enabled = os.environ.get("ARENA_BRAIN_TRANSPORT", "persistent").lower() == "persistent"
         self._persistent: PersistentClaude | None = None
         self._persistent_key: tuple | None = None   # (model, effort) the process was started with
         self.persistent_calls = 0

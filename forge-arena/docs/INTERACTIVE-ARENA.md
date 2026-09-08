@@ -1714,3 +1714,10 @@ Hard-won from two live sessions; read before optimizing anything.
     Effects" command-zone card — stock engine behaviour, not ours. Visibility
     gap closed: the record's `effort` now shows the effort actually used for
     that call (fast_eff), not the seat's default.
+
+88. **Defaults flipped (2026-09-08, Ben, after games 26–27 on the branch):**
+    `ARENA_BRAIN_TRANSPORT` defaults to `persistent` (285 persistent calls,
+    4 fallbacks, no stall of its own across the two games; `spawn` restores
+    the per-call path), `ARENA_REACT_LOW_EFFORT` stays `on`,
+    `ARENA_AUTOPASS_RECEIPTS` defaults to `all` (Ben prefers every receipt in
+    the panel; `summary` remains available).
