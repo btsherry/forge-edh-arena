@@ -1006,6 +1006,16 @@ public final class MailboxController extends PlayerControllerAi
         } finally {
             inPaymentContext = false;
         }
+        if (!played) {
+            // Game 30 t7 (2026-09-08): Scholar of New Horizons' activation failed
+            // in payment ("AI failed to play … rolling back") and the seat saw
+            // only an unchanged window — it retried blind. Say so like a modal
+            // cast failure: the next request names the refusal and omits the
+            // card for one window.
+            System.err.println("[mailbox seat " + seatIndex + "] play FAILED in the engine: "
+                    + (host != null ? host.getName() : sa) + " (cost payment or targeting)");
+            noteRefusal(sa, host, "the engine could not pay its cost or set its targets");
+        }
         // FIZZLE-2 diagnostic (game 7, 2026-08-17): a required-target spell we
         // pre-targeted reached resolution with EMPTY TargetChoices ("[arena]
         // FIZZLE ... (none set)"). If the cast path ever swaps the SA object
@@ -3670,6 +3680,27 @@ public final class MailboxController extends PlayerControllerAi
         }
         state.put("commandZone", ownCmd);
         state.put("manaPool", view.manaPool());
+        // W-11 (game 29 t9, 2026-09-08): Giada floated her ANGEL-ONLY {W} and
+        // planned to spend it on a non-Angel. The pool was a bare total; each
+        // floating mana now carries its colour and restriction so a floated
+        // restricted pip is visibly unusable for the next cast.
+        try {
+            List<Map<String, Object>> poolDetail = new ArrayList<>();
+            for (forge.game.mana.Mana fm : me.getManaPool()) {
+                Map<String, Object> pm = new LinkedHashMap<>();
+                pm.put("color", forge.card.MagicColor.toShortString(fm.getColor()));
+                String restr = fm.getManaAbility() != null ? fm.getManaAbility().getManaRestrictions() : null;
+                if (restr != null && !restr.isEmpty()) {
+                    pm.put("restriction", restr);
+                }
+                poolDetail.add(pm);
+            }
+            if (!poolDetail.isEmpty()) {
+                state.put("poolDetail", poolDetail);
+            }
+        } catch (RuntimeException ignore) {
+            // the total is already there; detail is help
+        }
         // Renamed from "untappedManaSources" 2026-08-10: a brain read the
         // SOURCE COUNT as floating mana ("seven floating mana") and wasted its
         // X spell. The name now says what it is.
@@ -3745,7 +3776,25 @@ public final class MailboxController extends PlayerControllerAi
             Player oppPlayer = playerById(me.getGame(), ov.seatIndex());
             if (oppPlayer != null) {
                 for (Card c : oppPlayer.getCardsIn(ZoneType.Battlefield)) {
-                    oppBattlefield.add(cardState(c, false));
+                    Map<String, Object> oppCard = cardState(c, false);
+                    // W-12 (game 29 t22, 2026-09-08): Urza cast Nexus of Fate under
+                    // Giada's Trouble in Pairs, on the board since t9 — opponents'
+                    // permanents reached the seat by NAME only. A non-land permanent
+                    // with a static or replacement effect now carries its oracle
+                    // text (capped), the way stackOracle grounds stack items.
+                    try {
+                        if (!c.isLand() && c.getRules() != null
+                                && (!c.getStaticAbilities().isEmpty() || !c.getReplacementEffects().isEmpty())) {
+                            String otext = c.getRules().getOracleText();
+                            if (otext != null && !otext.isEmpty()) {
+                                otext = otext.replace("\r\n", " / ").replace("\n", " / ");
+                                oppCard.put("text", otext.length() > 240 ? otext.substring(0, 240) + "…" : otext);
+                            }
+                        }
+                    } catch (RuntimeException ignore) {
+                        // grounding is help, never a precondition
+                    }
+                    oppBattlefield.add(oppCard);
                 }
             }
             o.put("battlefield", oppBattlefield);

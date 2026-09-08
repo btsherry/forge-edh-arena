@@ -2,6 +2,14 @@
 
 ## Unreleased — after v3.4
 
+- **Seats see and pay better.** Opponents' static permanents carry their text
+  in every request; floating mana shows its spend restriction; a "remove a
+  counter" cost is paid from the seat's chosen permanent instead of failing
+  silently; a play the engine cannot complete is reported as a refusal; the
+  payer spends restricted-but-eligible mana (Cavern of Souls, Giada) before
+  general sources. Persistent Claude processes are keyed on model, so effort
+  changes no longer restart them. `arena-play.sh --stops quick|full` sets your
+  opponent-turn stops for the game.
 - **A quieter Advisor panel.** Auto-pass receipts show every stop by default
   (`ARENA_AUTOPASS_RECEIPTS=all|summary|off`; `summary` is one line per turn). The two advisor toggles sit on one row with
   short labels: "Advisor: ON - clk to pause", "Advisor Exec: OFF - clk to tgl".

@@ -258,3 +258,40 @@ class VoiceRunnerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+class AdvisorPauseSilencesVoice(unittest.TestCase):
+    """Ben, 2026-09-08: pausing the advisor in the panel must silence EVERY
+    voice line (advice, quips, colour, your-move, elimination, game over,
+    bleeps), drop what is queued, and cut a line already playing."""
+    def _runner(self):
+        import tempfile, json as _json
+        from pathlib import Path as _P
+        import voice_runner as vr
+        tmp = _P(tempfile.mkdtemp(prefix="vpause-"))
+        (tmp / "logs" / "control").mkdir(parents=True)
+        (tmp / "mailbox").mkdir()
+        r = vr.VoiceRunner(tmp / "logs", tmp / "mailbox", dry_run=True)
+        return r, tmp, _json
+
+    def test_advisor_pause_disables_and_drops_the_queue(self):
+        r, tmp, js = self._runner()
+        self.assertTrue(r.enabled())
+        r.enqueue("game_over", stock="game-over-gg")
+        r.enqueue("your_move", stock="your-move")
+        (tmp / "logs" / "control" / "advisor.json").write_text(js.dumps({"enabled": False}))
+        self.assertFalse(r.enabled(), "the advisor pause silences the voice")
+        r.step()
+        self.assertEqual(r.queue, [], "queued lines are dropped, nothing plays late on resume")
+        (tmp / "logs" / "control" / "advisor.json").write_text(js.dumps({"enabled": True}))
+        self.assertTrue(r.enabled())
+        (tmp / "logs" / "control" / "voice.json").write_text(js.dumps({"enabled": False}))
+        self.assertFalse(r.enabled(), "the voice's own mute still works")
+
+    def test_player_polls_should_stop(self):
+        import voice_runner as vr
+        calls = []
+        p = vr.Player(dry_run=True, log=calls.append)
+        p.play(__import__("pathlib").Path("/nonexistent.wav"), should_stop=lambda: True)  # dry run: no process, no error
+        self.assertTrue(calls and "(dry)" in calls[0])

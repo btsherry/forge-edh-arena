@@ -56,7 +56,15 @@ public class GuiPilotMatchRosterTest {
             }
         }
         shipped.sort(null);
-        Assert.assertEquals(shipped.size(), 10, "ten shipped decks expected, saw " + shipped);
+        // 2026-09-08: the count was pinned at ten on 09-04; three bracket-3 decks
+        // were ingested on 09-06 (Pantlaza, Syr Gwyn, Thalia/Gitrog) and this
+        // extended-group test went red unseen by the standard gate. Assert what
+        // the roster actually needs: the four default-table decks are shipped,
+        // and the folder is not empty or truncated.
+        Assert.assertTrue(shipped.size() >= 10, "at least the original ten shipped decks expected, saw " + shipped);
+        for (String must : List.of(URZA, GIADA, PURPHOROS, SELVALA)) {
+            Assert.assertTrue(shipped.contains(must), must + " missing from decks/: " + shipped);
+        }
     }
 
     // ---- buildRoster ----------------------------------------------------------
@@ -130,13 +138,14 @@ public class GuiPilotMatchRosterTest {
     }
 
     @Test(groups = "extended", timeOut = 120_000)
-    public void allTenShippedDecksVerify() throws Exception {
-        Path status = Files.createTempDirectory("roster-ten").resolve("launch-status.json");
+    public void allShippedDecksVerify() throws Exception {
+        // every deck in decks/ must verify, whatever the count is today (13 since 09-06)
+        Path status = Files.createTempDirectory("roster-all").resolve("launch-status.json");
         List<Deck> decks = GuiPilotMatch.verifyRoster(decksDir.toFile(), shipped, status);
-        Assert.assertEquals(decks.size(), 10);
+        Assert.assertEquals(decks.size(), shipped.size(), "every shipped deck verifies: " + shipped);
         JsonNode st = status(status);
         Assert.assertTrue(st.get("ok").asBoolean(), st.toString());
-        Assert.assertTrue(st.get("detail").asText().contains("10 decks verified"), st.toString());
+        Assert.assertTrue(st.get("detail").asText().contains(shipped.size() + " decks verified"), st.toString());
     }
 
     @Test(groups = "extended", timeOut = 120_000)

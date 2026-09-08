@@ -911,6 +911,34 @@ public class AiCostDecision extends CostDecisionMakerBase {
             }
         }
 
+        // [arena] BL-38 (2026-09-08): the heuristics above remove only counters
+        // they call harmless; Scholar of New Horizons' own +1/+1 was the only
+        // counter on the board and the payment silently failed. When the
+        // controller is a mailbox seat, it names which permanent pays (the seat
+        // already chose the activation): a forced single candidate answers
+        // locally, else the seat is asked — PaymentPickPreference, like the
+        // sacrifice / exile / discard payments. Null preference -> stock's null.
+        if (c > toRemove) {
+            CardCollection holders = new CardCollection();
+            for (Card crd : typeList) {
+                if (!table.filterToRemove(crd).isEmpty()) {
+                    holders.add(crd);
+                }
+            }
+            PaymentDecision pd = preferredPayment(PaymentPickPreference.KIND_REMOVE_COUNTER, holders, c - toRemove);
+            if (pd != null && pd.cards != null) {
+                for (Card crd : pd.cards) {
+                    Multiset<CounterType> left = table.filterToRemove(crd);
+                    if (c > toRemove && !left.isEmpty()) {
+                        CounterType ctype = cost.counter != null && left.contains(cost.counter)
+                                ? cost.counter : left.elementSet().iterator().next();
+                        table.put(null, crd, ctype, 1);
+                        toRemove++;
+                    }
+                }
+            }
+        }
+
         // if table is empty, then no counter was removed
         return table.isEmpty() ? null : PaymentDecision.counters(table);
     }

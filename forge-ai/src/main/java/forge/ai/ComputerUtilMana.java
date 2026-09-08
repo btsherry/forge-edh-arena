@@ -217,6 +217,36 @@ public class ComputerUtilMana {
                 return ability1.compareTo(ability2);
             });
 
+            // [arena] W-11 (game 29 t9, 2026-09-08): spend the LEAST flexible mana
+            // first. A source whose mana carries a spend restriction that THIS
+            // spell satisfies (Cavern of Souls with the spell's creature type,
+            // Giada's Angel-only {W} for an Angel, Mishra's Workshop for an
+            // artifact) is useless for most later spells, while a Plains pays
+            // anything white. Forge ordered any-colour lands last and took the
+            // Plains for Wojek Investigator's generic pip, stranding Mother of
+            // Runes behind a Cavern that could not cast her. Stable partition:
+            // restricted-and-eligible abilities move to the front of the shard's
+            // list; everything else keeps the order computed above.
+            try {
+                final List<SpellAbility> restrictedFirst = new ArrayList<>();
+                final List<SpellAbility> rest = new ArrayList<>();
+                for (SpellAbility ab : newAbilities) {
+                    String restr = ab.getManaPart() != null ? ab.getManaPart().getManaRestrictions() : null;
+                    if (restr != null && !restr.isEmpty() && ab.getManaPart().meetsManaRestrictions(sa)) {
+                        restrictedFirst.add(ab);
+                    } else {
+                        rest.add(ab);
+                    }
+                }
+                if (!restrictedFirst.isEmpty() && !rest.isEmpty()) {
+                    newAbilities.clear();
+                    newAbilities.addAll(restrictedFirst);
+                    newAbilities.addAll(rest);
+                }
+            } catch (RuntimeException ignore) {
+                // ordering is a preference; the computed order stands
+            }
+
             if (DEBUG_MANA_PAYMENT) {
                 System.out.println("Sorted Abilities: " + newAbilities);
             }

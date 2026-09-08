@@ -29,6 +29,9 @@ public interface PaymentPickPreference {
     String KIND_DISCARD = "DISCARD";
     String KIND_RETURN = "RETURN";
     String KIND_PUT_TO_LIBRARY = "PUT TO LIBRARY";
+    /** [arena] BL-38: which permanents lose a counter for a
+     *  "remove a counter from a permanent you control" cost (one counter each). */
+    String KIND_REMOVE_COUNTER = "REMOVE COUNTER";
 
     /**
      * The exact {@code amount} cards (out of {@code valid}, all visible to

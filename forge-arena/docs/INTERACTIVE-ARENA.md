@@ -1766,3 +1766,38 @@ Hard-won from two live sessions; read before optimizing anything.
     holds on empty stacks (49) — no rule can call those dead; Clue tokens sat
     in 152 passed windows as a real instant-speed option. No new dead-window
     rule added, again by evidence.
+
+91. **Game 30 — all-AI (2026-09-08 10:28 launch; model-keyed persistent
+    process live) and four grounding/payment refinements (Java, gated after
+    the game).** (a) **BL-38** counter-removal costs: `AiCostDecision.visit
+    (CostRemoveAnyCounter)` removes only "harmless" counters and returned null
+    for Scholar of New Horizons' own +1/+1 — six DEVIATIONs of blind retries
+    (t3, t7 ×4, t11, t12). Fix: the decision consults `PaymentPickPreference`
+    (new `KIND_REMOVE_COUNTER`) before giving up — forced when one permanent
+    qualifies, else a CHOOSE window via the seat's existing payment seam; and
+    `playChosenSpellAbility` now leaves a refusal note whenever the engine
+    could not play the pick, so the next request says so and omits the card
+    for one window (no more blind retries). (b) **W-11** re-read TWICE: Wojek
+    Investigator IS an Angel (Ben caught my mis-read), so Giada's plan was
+    legal and the payer chose the Plains over the eligible Cavern of Souls for
+    the generic pip. `ComputerUtilMana.sortManaAbilities` now moves
+    restricted-but-eligible mana abilities to the front of each shard's list
+    ("spend the least flexible mana first") — general Forge-AI play, not a
+    mailbox special case. (c) **W-12**: opponents' non-land permanents with
+    static or replacement effects carry oracle text (≤240 chars) in the seat
+    state. (d) `poolDetail`: floating mana with colour and restriction. Also
+    `arena-play.sh --stops quick|full` (Ben's opponent-turn stop presets) and
+    the persistent process keyed on model (effort pinned; `effort_pinned`
+    counter). Deviations this game were otherwise the model's own reasoning
+    (Force of Negation vs a creature spell, Great Henge countered, Concordant
+    Crossroads restraint, Enlightened Tutor timing, an unblockable alpha).
+
+92. **Advisor pause silences the voice (2026-09-08, Ben's question).** The
+    voice runner honoured only its own mute (`control/voice.json`); pausing the
+    advisor stopped advice and quips (no new records) but observer-driven
+    lines — your-move, elimination, game over, startup — kept playing.
+    `VoiceRunner.enabled()` now also reads `control/advisor.json`; when
+    disabled the queue is dropped (nothing plays late on resume) and
+    `Player.play` polls `should_stop` every 200 ms and kills the player
+    process mid-line. Test fakes without the new argument are called the old
+    way (`_play`).

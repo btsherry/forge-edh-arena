@@ -206,24 +206,56 @@ def glitch_wav(data: bytes, level: str, seed: int) -> bytes:
 # ---- players -----------------------------------------------------------------
 
 class Player:
-    """Blocking playback of a WAV on the default output, via whatever the OS has."""
+    """Blocking playback of a WAV on the default output, via whatever the OS has:
+    afplay (macOS), paplay/aplay (Linux), ffplay (anywhere with ffmpeg), or
+    PowerShell's .NET SoundPlayer (Windows, WAV only)."""
 
     def __init__(self, dry_run: bool = False, log=print):
         self.dry_run = dry_run
         self.log = log
         self.cmd = None
+        self.windows = False
         for cand in (["afplay"], ["paplay"], ["aplay", "-q"], ["ffplay", "-nodisp", "-autoexit", "-loglevel", "error"]):
             if shutil.which(cand[0]):
                 self.cmd = cand
                 break
+        if self.cmd is None and shutil.which("powershell"):
+            # Windows (Ben, 2026-09-08): no afplay/aplay; .NET's SoundPlayer plays a
+            # WAV synchronously from PowerShell with nothing to install. Stock and
+            # cached lines are WAV; live lines need ffmpeg (raw MP3 will not play).
+            self.cmd = ["powershell", "-NoProfile", "-Command"]
+            self.windows = True
 
-    def play(self, path: Path) -> None:
+    def play(self, path: Path, should_stop=None) -> None:
+        """Play one file. `should_stop()` is polled every 200 ms; when it turns
+        true the player process is killed (Ben, 2026-09-08: pausing the advisor
+        must silence playback at once, not after the line)."""
         if self.dry_run or self.cmd is None:
             self.log(f"[voice] (dry) play {path.name} {wav_seconds(path):.1f}s")
             time.sleep(min(wav_seconds(path), 0.05) if self.dry_run else 0)
             return
-        subprocess.run(self.cmd + [str(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL, timeout=120)
+        if self.windows:
+            safe = str(path).replace("'", "''")
+            argv = self.cmd + [f"(New-Object Media.SoundPlayer '{safe}').PlaySync()"]
+        else:
+            argv = self.cmd + [str(path)]
+        proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL)
+        deadline = time.time() + 120
+        try:
+            while proc.poll() is None and time.time() < deadline:
+                if should_stop is not None and should_stop():
+                    proc.kill()
+                    self.log("[voice] playback cut: voice disabled")
+                    break
+                time.sleep(0.2)
+            if proc.poll() is None:
+                proc.kill()
+        finally:
+            try:
+                proc.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
 
 
 # ---- renderer -------------------------------------------------------------------
@@ -384,10 +416,22 @@ class VoiceRunner:
 
     # -- control
     def enabled(self) -> bool:
+        """Voice is on unless control/voice.json mutes it OR the Advisor panel's
+        pause toggle (control/advisor.json {"enabled": false}) is set — pausing
+        the advisor silences EVERY line: advice, quips, colour, your-move, the
+        elimination and game-over lines, the bleeps (Ben, 2026-09-08)."""
         try:
-            return bool(json.loads(self._control.read_text()).get("enabled", True))
+            if not bool(json.loads(self._control.read_text()).get("enabled", True)):
+                return False
         except (OSError, ValueError):
-            return True
+            pass
+        try:
+            adv = self._control.parent / "advisor.json"
+            if adv.exists() and not bool(json.loads(adv.read_text()).get("enabled", True)):
+                return False
+        except (OSError, ValueError):
+            pass
+        return True
 
     # -- queue
     def enqueue(self, kind: str, *, text: str = "", stock: str = "", seq: int | None = None, ttl: float = 25.0) -> None:
@@ -420,6 +464,14 @@ class VoiceRunner:
         self.queue.remove(item)
         return item
 
+    def _play(self, path: Path) -> None:
+        """Play through the configured player; a player that does not take the
+        stop poll (test fakes, custom players) is called the old way."""
+        try:
+            self.player.play(path, should_stop=lambda: not self.enabled())
+        except TypeError:
+            self.player.play(path)
+
     def speak(self, item: dict) -> bool:
         path = None
         if item["stock"]:
@@ -432,8 +484,8 @@ class VoiceRunner:
         if self.sfx_on:
             bleep = self.renderer.sfx()
             if bleep is not None:
-                self.player.play(bleep)
-        self.player.play(path)
+                self._play(bleep)
+        self._play(path)
         self.last_spoken_at = self.clock()
         self.record("spoke", kind=item["kind"], text=item["text"][:200], stock=item["stock"], seconds=round(wav_seconds(path), 2),
                     chars_used=self.renderer.chars_used)
@@ -521,6 +573,9 @@ class VoiceRunner:
     # -- loop
     def step(self) -> None:
         if not self.enabled():
+            if self.queue:
+                self.say(f"[voice] disabled — dropping {len(self.queue)} queued line(s)")
+                self.queue = []
             return
         self.scan_advisor()
         self.scan_observer()
