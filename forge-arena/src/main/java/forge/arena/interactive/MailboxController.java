@@ -3717,7 +3717,9 @@ public final class MailboxController extends PlayerControllerAi
         try {
             List<Map<String, Object>> sources = manaSources(me);
             state.put("manaSources", sources);
-            state.put("manaAvailableNow", manaAvailableNow(me, sources));
+            int availNow = manaAvailableNow(me, sources);
+            state.put("manaAvailableNow", availNow);
+            state.put("manaReach", manaReach(availNow, sources));   // BL-43
             List<Map<String, Object>> rituals = ritualsInHand(me);
             if (!rituals.isEmpty()) {
                 state.put("ritualsInHand", rituals);
@@ -4182,6 +4184,13 @@ public final class MailboxController extends PlayerControllerAi
             }
             if (!bestBare && best.getPayCosts() != null) {
                 row.put("cost", best.getPayCosts().toSimpleString());
+                // BL-43 (game 31 t22): when the extra cost is mana and a tap and
+                // nothing else (Selvala {G}, Nykthos {2}), record its mana value
+                // so manaReach can fund the activation from the summed mana.
+                int cm = manaOnlyCostValue(best.getPayCosts());
+                if (cm >= 0) {
+                    row.put("costMana", cm);
+                }
             }
             rows.add(row);
         }
@@ -4223,6 +4232,70 @@ public final class MailboxController extends PlayerControllerAi
             int per = y instanceof Integer ? (Integer) y : 1; // unknown: count one
             Object n = row.get("count");
             total += per * (n instanceof Integer ? (Integer) n : 1);
+        }
+        return total;
+    }
+
+    /** The mana value of a cost made only of a tap and mana ({G}, {T}); -1
+     *  when any other part is present (sacrifice, discard, life, counters)
+     *  or the cost is unreadable — such a source is a sequence the brain must
+     *  choose on purpose, never a reach the payer takes for it. */
+    static int manaOnlyCostValue(Cost cost) {
+        try {
+            if (cost == null || cost.getCostParts() == null) {
+                return -1;
+            }
+            int mana = 0;
+            for (forge.game.cost.CostPart part : cost.getCostParts()) {
+                if (part instanceof CostTap) {
+                    continue;
+                }
+                if (part instanceof forge.game.cost.CostPartMana) {
+                    mana += ((forge.game.cost.CostPartMana) part).getManaCostFor(null).getCMC();
+                    continue;
+                }
+                return -1;
+            }
+            return mana;
+        } catch (RuntimeException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * BL-43 (game 31 t22, 2026-09-08): Selvala's seat passed a Rhonas pump it
+     * could pay — {@code manaAvailableNow} read 2 because Selvala ({G},{T}: add
+     * 8) needs mana to activate and is "listed but not summed", while the
+     * engine's payer WOULD have tapped her (canPayCost said so). The reach is
+     * the ceiling the payer can actually fund: {@code manaAvailableNow} plus
+     * the net yield of every costed source whose extra cost is mana-and-tap
+     * only, unrestricted, non-sick, non-dormant and payable from the running
+     * total — best net first. Colours are ignored: an upper bound, said so in
+     * the brief. Equal to {@code manaAvailableNow} when no such source exists.
+     */
+    static int manaReach(int availableNow, List<Map<String, Object>> sources) {
+        List<int[]> seq = new ArrayList<>(); // {costMana, net, count}
+        for (Map<String, Object> row : sources) {
+            if (row.containsKey("restricted") || row.containsKey("sick") || row.containsKey("dormant")
+                    || !(row.get("costMana") instanceof Integer) || !(row.get("yield") instanceof Integer)) {
+                continue;
+            }
+            int cm = (Integer) row.get("costMana");
+            int net = (Integer) row.get("yield") - cm;
+            if (net <= 0) {
+                continue;
+            }
+            Object n = row.get("count");
+            seq.add(new int[] {cm, net, n instanceof Integer ? (Integer) n : 1});
+        }
+        seq.sort((a, b) -> Integer.compare(b[1], a[1]));
+        int total = availableNow;
+        for (int[] s : seq) {
+            for (int i = 0; i < s[2]; i++) {
+                if (s[0] <= total) {
+                    total += s[1];
+                }
+            }
         }
         return total;
     }

@@ -696,6 +696,12 @@ class SeatRunner:
         avail = st.get("manaAvailableNow")
         if not isinstance(avail, int) or isinstance(avail, bool):
             return None
+        # BL-43 (game 31 t22): the payer funds costed sources (Selvala {G}: add
+        # 8) for an option the seat chooses, so the ceiling for "unaffordable"
+        # is the engine's manaReach when it is published, never the bare sum.
+        reach = st.get("manaReach")
+        if isinstance(reach, int) and not isinstance(reach, bool) and reach > avail:
+            avail = reach
         non_pass = [o for o in req.get("options", []) if o.get("id") != 0]
         if not non_pass:
             return None

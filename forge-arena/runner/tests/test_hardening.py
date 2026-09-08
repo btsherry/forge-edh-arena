@@ -80,6 +80,30 @@ class RestartKeepsTheRecord(unittest.TestCase):
         self.assertIn(r.brain.transport_name, ("spawn", "persistent"))
 
 
+class ManaReachCeiling(unittest.TestCase):
+    """BL-43: the affordability fastpath must not pass a window the payer could
+    fund through a costed source (Selvala) — the engine's manaReach is the
+    ceiling when published."""
+    def _react(self, avail, reach=None):
+        r = json.loads((ROOT / "runner" / "tests" / "fixtures" / "engine" / "react.json").read_text())
+        st = r["state"]
+        st["seat"] = 2; st["life"] = 18; st["manaPool"] = 0; st["untappedManaSourceCount"] = 3
+        st["manaAvailableNow"] = avail
+        if reach is not None:
+            st["manaReach"] = reach
+        st["stack"] = []; st["stackKinds"] = []; st["stackOwners"] = []; st["stackTargets"] = []
+        r["options"] = [{"id": 0, "label": "Pass (do nothing)", "cost": None, "type": "PASS"},
+                        {"id": 1, "label": "Rhonas the Indomitable  {2}{G} — Another target creature gets +2/+0 and gains trample", "cost": "{2}{G}", "type": "Ability"}]
+        return r
+
+    def test_reach_keeps_the_window_open(self):
+        r, _ = _runner()
+        self.assertEqual(r._fastpath(self._react(2))[1], "affordability", "2 mana, {2}{G} pump: dead without a reach")
+        self.assertIsNone(r._fastpath(self._react(2, reach=9)), "Selvala can be tapped by the payer: the model decides")
+        self.assertEqual(r._fastpath(self._react(2, reach=2))[1], "affordability", "reach equal to the sum changes nothing")
+        self.assertEqual(r._fastpath(self._react(2, reach=True))[1], "affordability", "a malformed reach is ignored")
+
+
 class VoiceBackoff(unittest.TestCase):
     def setUp(self):
         self._env = {k: os.environ.get(k) for k in ("ARENA_VOICE_FX", "ARENA_VOICE_GLITCH")}

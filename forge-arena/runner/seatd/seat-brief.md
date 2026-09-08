@@ -47,6 +47,12 @@ your entire job is to answer it.
   creature that cannot tap yet), `cost` (an activation cost beyond a tap).
   `state.manaAvailableNow` is the pool plus every unrestricted, non-sick,
   tap-only yield — the exact number the engine uses when it refuses a cast.
+  `state.manaReach` adds the NET yield of sources that need mana to activate
+  (Selvala {G},{T}: add 8 → +7; Nykthos) when that mana is there: an offered
+  option may cost more than manaAvailableNow, and the payer taps such sources
+  for you when you choose it — treat manaReach as your ceiling, colours
+  permitting. In a reaction window mana abilities are not listed as options;
+  choosing the spell or ability IS how you spend them.
   `state.ritualsInHand` lists spells that MAKE mana: a `ritual` row carries
   its projected `yield` and `net` on the current board (Mana Geyser counts
   the opponents' tapped lands right now); a `multiplier` row (High Tide,

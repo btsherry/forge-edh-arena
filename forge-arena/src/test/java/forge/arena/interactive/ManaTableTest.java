@@ -136,6 +136,53 @@ public class ManaTableTest {
         }
     }
 
+    /** BL-43 (game 31 t22): Selvala needs {G} to activate, so she is listed
+     *  but not summed into manaAvailableNow; manaReach funds her from the
+     *  summed mana and adds her NET yield — the ceiling the payer can reach.
+     *  With no plain mana to pay her {G}, the reach stays at the sum. */
+    @Test(timeOut = 120_000)
+    public void manaReachFundsSelvalaFromPlainMana() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            MailboxTestKit.put("Selvala, Heart of the Wilds", k.seat, ZoneType.Battlefield);
+            MailboxTestKit.put("Craterhoof Behemoth", k.seat, ZoneType.Battlefield); // 5/5
+            Map<String, Object> state = MailboxController.buildState(k.seat, k.seat.getId(), 3);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> sources = (List<Map<String, Object>>) state.get("manaSources");
+            Map<String, Object> selvala = null;
+            for (Map<String, Object> row : sources) {
+                if ("Selvala, Heart of the Wilds".equals(row.get("name"))) {
+                    selvala = row;
+                }
+            }
+            Assert.assertNotNull(selvala, sources.toString());
+            Assert.assertEquals(selvala.get("costMana"), 1, "her {G} is a mana-only extra cost: " + selvala);
+            Assert.assertEquals(state.get("manaAvailableNow"), 0, "nothing bare-tap untapped");
+            Assert.assertEquals(state.get("manaReach"), 0, "no mana to pay her {G}: the reach is the sum");
+            MailboxTestKit.put("Forest", k.seat, ZoneType.Battlefield);
+            MailboxTestKit.put("Forest", k.seat, ZoneType.Battlefield);
+            Map<String, Object> after = MailboxController.buildState(k.seat, k.seat.getId(), 3);
+            Assert.assertEquals(after.get("manaAvailableNow"), 2);
+            Assert.assertEquals(after.get("manaReach"), 2 + 5 - 1, "two Forests, one pays Selvala's {G}, she adds 5");
+        }
+    }
+
+    @Test
+    public void manaReachIgnoresSequencesWithNonManaCosts() {
+        List<Map<String, Object>> rows = new java.util.ArrayList<>();
+        java.util.Map<String, Object> led = new java.util.LinkedHashMap<>();
+        led.put("name", "Lion's Eye Diamond"); led.put("yield", 3); led.put("cost", "Discard your hand"); // no costMana
+        rows.add(led);
+        java.util.Map<String, Object> nyk = new java.util.LinkedHashMap<>();
+        nyk.put("name", "Nykthos, Shrine to Nyx"); nyk.put("yield", 6); nyk.put("costMana", 2);
+        rows.add(nyk);
+        java.util.Map<String, Object> sick = new java.util.LinkedHashMap<>();
+        sick.put("name", "Selvala, Heart of the Wilds"); sick.put("yield", 8); sick.put("costMana", 1); sick.put("sick", true);
+        rows.add(sick);
+        Assert.assertEquals(MailboxController.manaReach(1, rows), 1, "Nykthos needs 2, LED is not mana-only, Selvala is sick");
+        Assert.assertEquals(MailboxController.manaReach(2, rows), 6, "2 pays Nykthos: 2 + (6 - 2)");
+        Assert.assertEquals(MailboxController.manaReach(0, java.util.Collections.emptyList()), 0);
+    }
+
     /** Games 27-28: a mana ability whose activation restriction fails now
      *  (Mox Opal, metalcraft) is listed but flagged dormant and never summed
      *  into manaAvailableNow; with metalcraft it is a normal source. */
