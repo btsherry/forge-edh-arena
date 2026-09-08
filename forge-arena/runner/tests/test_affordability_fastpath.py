@@ -24,6 +24,7 @@ def runner():
 def react(avail, *options):
     r = json.loads((FIX / "react.json").read_text())
     r["state"]["manaAvailableNow"] = avail
+    r["state"].pop("manaReach", None)   # the fixture carries the engine's reach; tests set the sum explicitly
     r["state"]["stack"] = ["Craterhoof Behemoth"]; r["state"]["stackOwners"] = [2]; r["state"]["stackKinds"] = ["spell"]
     r["options"] = [{"id": 0, "label": "Pass (do nothing)", "cost": None, "type": "PASS"}] + [
         {"id": i + 1, "label": lab, "cost": cost, "type": "Instant"} for i, (lab, cost) in enumerate(options)]

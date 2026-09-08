@@ -143,7 +143,8 @@ public class ManaTableTest {
     @Test(timeOut = 120_000)
     public void manaReachFundsSelvalaFromPlainMana() throws Exception {
         try (MailboxTestKit k = new MailboxTestKit(false)) {
-            MailboxTestKit.put("Selvala, Heart of the Wilds", k.seat, ZoneType.Battlefield);
+            Card selvalaCard = MailboxTestKit.put("Selvala, Heart of the Wilds", k.seat, ZoneType.Battlefield);
+            selvalaCard.setSickness(false);   // a sick Selvala is listed but never reached (the gate's first run: reach 2)
             MailboxTestKit.put("Craterhoof Behemoth", k.seat, ZoneType.Battlefield); // 5/5
             Map<String, Object> state = MailboxController.buildState(k.seat, k.seat.getId(), 3);
             @SuppressWarnings("unchecked")

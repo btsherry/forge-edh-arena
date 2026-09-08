@@ -37,6 +37,7 @@ def react(*options, stack=("Staff of Domination",), kinds=("ability",), owners=(
     st["manaPool"] = pool
     st["untappedManaSourceCount"] = untapped
     st["manaAvailableNow"] = pool + untapped
+    st.pop("manaReach", None)   # the fixture carries the engine's reach; tests set the sum explicitly
     st["stack"] = list(stack)
     st["stackKinds"] = list(kinds) if kinds is not None else None
     st["stackOwners"] = list(owners)

@@ -89,6 +89,7 @@ class ManaReachCeiling(unittest.TestCase):
         st = r["state"]
         st["seat"] = 2; st["life"] = 18; st["manaPool"] = 0; st["untappedManaSourceCount"] = 3
         st["manaAvailableNow"] = avail
+        st.pop("manaReach", None)   # the fixture carries the engine's reach; tests set the sum explicitly
         if reach is not None:
             st["manaReach"] = reach
         st["stack"] = []; st["stackKinds"] = []; st["stackOwners"] = []; st["stackTargets"] = []

@@ -35,6 +35,7 @@
       "sick" : true
     } ],
     "manaAvailableNow" : 5,
+    "manaReach" : 5,
     "ritualsInHand" : [ {
       "id" : 10,
       "name" : "Dark Ritual",
