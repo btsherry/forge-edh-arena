@@ -193,6 +193,44 @@ public final class AiControlFile {
         }
     }
 
+    // ---- Voice mute (Ben, 2026-09-08): one button silences every line --------
+
+    /** logs/control/voice.json {"enabled": true|false} — the same file the
+     *  voice runner's --mute/--unmute writes; the runner drops its queue and
+     *  cuts a playing line the moment it reads false. Missing = on. */
+    public static File voiceToggleFile() {
+        return new File(logsDir(), "control/voice.json");
+    }
+
+    public static boolean voiceEnabled() {
+        final File f = voiceToggleFile();
+        if (!f.exists()) {
+            return true;
+        }
+        try {
+            final String s = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            return !s.contains("false");
+        } catch (final IOException e) {
+            return true;
+        }
+    }
+
+    public static void setVoiceEnabled(final boolean enabled) {
+        writeFlag(voiceToggleFile(), "{\"enabled\": " + enabled + "}");
+    }
+
+    private static void writeFlag(final File f, final String json) {
+        try {
+            f.getParentFile().mkdirs();
+            final File tmp = new File(f.getParentFile(), f.getName() + ".tmp");
+            Files.write(tmp.toPath(), json.getBytes(StandardCharsets.UTF_8));
+            Files.move(tmp.toPath(), f.toPath(), StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (final IOException ignored) {
+            // runner absent / dir unwritable — button click shows no effect
+        }
+    }
+
     // ---- Advisor Executive (Ben, 2026-09-07): the advisor plays your seat ----
 
     /** logs/control/executive.json {"on": true|false}; read by the engine side

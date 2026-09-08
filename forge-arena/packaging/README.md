@@ -172,6 +172,10 @@ tab** of the lower-left dock. On by default in `--human` games;
   advice, no model calls) without a teardown; the AI panel's seat-0 row shows
   `advisor paused` meanwhile. An advised game rates as `human+advisor`
   regardless of pausing.
+- **Mute.** The third button on the same row, `Voice: ON - clk to mute`,
+  silences the voice without pausing the advice: every line, stock or live,
+  the bleeps included, and a line already playing is cut. Pausing the advisor
+  silences the voice too. Both are instant and reversible mid-game.
 - **Strictly read-only.** The advisor's feed has no return channel; it cannot
   act or stall the game. Advice that arrives late is skipped, never waited on.
 
@@ -253,10 +257,18 @@ are simply skipped and the stock lines still play; the log says so once.
 
 Discipline is the point: one utterance at a time, at most one every
 `ARENA_VOICE_MIN_GAP` seconds (default 8), and advice for a window you already
-answered is dropped, never read late. **Pausing the advisor in its panel
-silences the voice completely** — advice, quips, colour, "Your move.",
-eliminations, game over and the bleeps — drops anything queued, and cuts a
-line already playing; resuming restores all of it.
+answered is dropped, never read late. **The `Voice` button in the Advisor tab
+and pausing the advisor both silence the voice completely** — advice, quips,
+colour, "Your move.", eliminations, game over and the bleeps — drop anything
+queued, and cut a line already playing; unmuting or resuming restores all
+of it.
+
+**Without live lines the stock phrases fill in.** While the voice can render
+advice live, the short quips stay rare, a garnish. When live lines are down
+(no key, a spent quota, no usable voice, the character cap) the voice tells
+the advisor, which then attaches a stock quip to about one line in two, so
+the table does not fall silent; when live lines return the quips go back to
+rare. The voice's log says which mode it is in.
 
 Knobs: `--no-voice` or `ARENA_VOICE=off`; `ARENA_VOICE_SFX=off` (no bleeps);
 `ARENA_VOICE_FX=off|lite|on` (film processing: off, pure-Python, or ffmpeg

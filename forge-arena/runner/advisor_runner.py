@@ -60,15 +60,40 @@ QUIPS = ("good-swing", "good-counter", "rough-counter", "didnt-see-that", "nice-
          "shall-we-play", "greetings-falken", "strange-game", "nice-game-of-chess", "hello")
 QUIP_QUOTES = ("shall-we-play", "greetings-falken", "strange-game", "nice-game-of-chess", "hello")
 QUIP_RE = re.compile(r"\s*\[quip:([a-z0-9-]+)\]\s*")
-# Frequency (Ben, 2026-09-08, after game 30: "the occurrences of stock lines
-# should be boosted"): from "at most every other turn" to "about one line in
-# two". The reactions fit almost any notable play; the film quotes stay rare.
-QUIP_GUIDE = ("\nVOICE QUIP: end about one line in two with exactly one tag from this list and nothing after it: "
-              + ", ".join(f"[quip:{q}]" for q in QUIPS)
-              + ". The reactions (ouch, must-have-hurt, didnt-see-that, interesting, calculating, well-played, "
-              "good-swing, good-counter, rough-counter, nice-combo, stick-it-to-them) fit any notable play — a big "
-              "attack, a removal, a counter, a combo piece, a swing in life; the four WarGames quotes (shall-we-play, "
-              "greetings-falken, strange-game, nice-game-of-chess) at most once per game each, when they genuinely fit.")
+# Two densities (Ben, 2026-09-08): while the voice can render live lines the
+# quips stay rare ("if the moment earns it"); when live lines are down — no
+# ElevenLabs key (every package user without one), a spent quota, no usable
+# voice — the pre-rendered stock quips are all the voice has, so the advisor
+# is asked for one on about one line in two. The voice runner publishes its
+# state to mailbox/seat-0-voice/state.json; _quip_guide() reads it per prompt.
+_QUIP_LIST = ", ".join(f"[quip:{q}]" for q in QUIPS)
+QUIP_GUIDE_SPARSE = ("\nVOICE QUIP (optional): if the moment earns it, end with exactly one tag from this list and nothing after it: "
+                     + _QUIP_LIST
+                     + ". Use one at most every other turn; the four WarGames quotes (shall-we-play, greetings-falken, "
+                     "strange-game, nice-game-of-chess) at most once per game each, when they genuinely fit.")
+QUIP_GUIDE_DENSE = ("\nVOICE QUIP: the voice has only its stock phrases right now — end about one line in two with exactly "
+                    "one tag from this list and nothing after it: " + _QUIP_LIST
+                    + ". The reactions (ouch, must-have-hurt, didnt-see-that, interesting, calculating, well-played, "
+                    "good-swing, good-counter, rough-counter, nice-combo, stick-it-to-them) fit any notable play — a big "
+                    "attack, a removal, a counter, a combo piece, a swing in life; the four WarGames quotes (shall-we-play, "
+                    "greetings-falken, strange-game, nice-game-of-chess) at most once per game each, when they genuinely fit.")
+QUIP_GUIDE = QUIP_GUIDE_SPARSE   # the default when the voice has published nothing
+
+
+def quip_guide(state_file, log=None, prev=None) -> tuple[str, bool]:
+    """(guidance text, live) from the voice runner's state file; sparse when
+    the file is missing or unreadable. `prev` is the last `live` seen, so a
+    switch is logged once."""
+    live = True
+    try:
+        st = json.loads(Path(state_file).read_text())
+        live = bool(st.get("live", True))
+        reason = st.get("reason", "")
+    except (OSError, ValueError, TypeError):
+        reason = ""
+    if log is not None and prev is not None and live != prev:
+        log(f"[advisor] voice live lines {'back on — quips rare again' if live else 'off (' + reason + ') — stock quips on about one line in two'}")
+    return (QUIP_GUIDE_SPARSE if live else QUIP_GUIDE_DENSE), live
 
 
 def split_quip(text: str, log=None) -> tuple[str, str | None]:
@@ -131,6 +156,8 @@ class AdvisorRunner:
     def __init__(self, deck: str, base: Path, model: str, effort: str, timeout: float,
                  log_dir: Path | None = None):
         self.inbox = base / "seat-0-advisor" / "inbox"
+        self._voice_state = base / "seat-0-voice" / "state.json"
+        self._voice_live = None
         self.timeout = timeout
         log_dir = Path(log_dir) if log_dir else Path(__file__).parent / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -476,7 +503,7 @@ class AdvisorRunner:
                   f"(turn {turn}, {phase}): {req.get('prompt')}\n"
                   f"{self._fmt_options(req)}"
                   f"STATE: {json.dumps(req.get('state'), separators=(',', ':'))}\n\n"
-                  "Advise the human now (1-3 sentences, plain text)." + QUIP_GUIDE)
+                  "Advise the human now (1-3 sentences, plain text)." + self._quip_guide())
         answer, meta = self.brain.decide(prompt, self.timeout)
         text, quip = split_quip((meta.get("raw") or "").strip(), log=self._say)
         if text:
@@ -487,12 +514,17 @@ class AdvisorRunner:
         if quip:
             self._record("quip", {"id": quip, "turn": turn, "with": "advice", "seq": req.get("seq")})
 
+    def _quip_guide(self) -> str:
+        text, live = quip_guide(self._voice_state, log=self._say, prev=self._voice_live)
+        self._voice_live = live
+        return text
+
     def _commentate(self, digest: dict) -> None:
         turn = digest.get("turn")
         lines = digest.get("digest") or []
         prompt = (f"TURN {turn} COMPLETE. Public log of the turn:\n"
                   + "\n".join(f"  {ln}" for ln in lines[-60:])
-                  + "\n\nONE line of color commentary (plain text)." + QUIP_GUIDE)
+                  + "\n\nONE line of color commentary (plain text)." + self._quip_guide())
         answer, meta = self.brain.decide(prompt, min(self.timeout, 45.0))
         text, quip = split_quip((meta.get("raw") or "").strip(), log=self._say)
         if text:

@@ -124,11 +124,22 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             forge.arena.interactive.AiControlFile.setExecutive(next);
             syncExecutive();
         });
-        // Ben (2026-09-08): both toggles on ONE row, short labels
-        final JPanel toggleRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][grow]", "[]"));
+        // Voice mute (Ben, 2026-09-08): writes logs/control/voice.json; the
+        // voice runner silences EVERY line, stock or live, and cuts one playing.
+        // Pausing the advisor does the same through advisor.json.
+        mute.setFocusable(false);
+        mute.setMargin(new java.awt.Insets(1, 8, 1, 8));
+        mute.addActionListener(e -> {
+            final boolean next = !forge.arena.interactive.AiControlFile.voiceEnabled();
+            forge.arena.interactive.AiControlFile.setVoiceEnabled(next);
+            syncMute();
+        });
+        // Ben (2026-09-08): the toggles on ONE row, short labels
+        final JPanel toggleRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][grow][grow]", "[]"));
         toggleRow.setOpaque(false);
         toggleRow.add(toggle, "growx");
         toggleRow.add(executive, "growx");
+        toggleRow.add(mute, "growx");
         body.add(toggleRow, "growx, gaptop 2");
         refresh = new Timer(1000, e -> poll());
         refresh.setRepeats(true);
@@ -138,6 +149,8 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             new javax.swing.JButton("Advisor: OFF");
     private final javax.swing.JButton executive =
             new javax.swing.JButton("Advisor Exec: OFF - clk to tgl");
+    private final javax.swing.JButton mute =
+            new javax.swing.JButton("Voice: ON - clk to mute");
 
     private final javax.swing.JTextField askField = new javax.swing.JTextField();
     private final javax.swing.JButton askButton = new javax.swing.JButton("Chat");
@@ -219,9 +232,21 @@ public class VAdvisor implements IVDoc<CAdvisor> {
                              : "Advisor Exec: OFF - clk to tgl");
     }
 
+    private void syncMute() {
+        if (!forge.arena.interactive.AiControlFile.advisorAttached()) {
+            mute.setText("Voice: OFF - not attached");
+            mute.setEnabled(false);
+            return;
+        }
+        mute.setEnabled(true);
+        final boolean on = forge.arena.interactive.AiControlFile.voiceEnabled();
+        mute.setText(on ? "Voice: ON - clk to mute" : "Voice: MUTED - clk to unmute");
+    }
+
     private void poll() {
         syncToggle();
         syncExecutive();
+        syncMute();
         syncAsk();
         final String fresh = tail.readNew();
         if (!fresh.isEmpty()) {

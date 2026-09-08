@@ -119,6 +119,60 @@ class VoiceBackoff(unittest.TestCase):
         self.assertEqual((rd.fail_streak, rd.renders, rd.pause_s), (0, 1, rd.PAUSE_FIRST_S))
 
 
+class ConditionalQuips(unittest.TestCase):
+    """Ben, 2026-09-08: stock quips are boosted ONLY while live lines are down."""
+    def test_renderer_state_names_the_reason(self):
+        tmp = Path(tempfile.mkdtemp(prefix="st-"))
+        now = [0.0]
+        rd = vr.Renderer(tmp, log=lambda m: None, clock=lambda: now[0])
+        rd.api_key = ""
+        self.assertEqual(rd.state(), (False, "no ELEVENLABS_API_KEY"))
+        rd.api_key = "k"
+        self.assertEqual(rd.state(), (True, "ok"))
+        rd.paused_until = 50.0
+        self.assertEqual(rd.state(), (False, "paused after repeated failures"))
+        now[0] = 60.0
+        self.assertEqual(rd.state()[0], True)
+        rd.chars_used = rd.max_chars
+        self.assertFalse(rd.state()[0])
+
+    def test_runner_publishes_state_once_per_change(self):
+        tmp = Path(tempfile.mkdtemp(prefix="vs-"))
+        (tmp / "logs").mkdir(); (tmp / "mailbox").mkdir()
+        run = vr.VoiceRunner(tmp / "logs", tmp / "mailbox", dry_run=True)
+        run.renderer.api_key = ""
+        run.publish_state()
+        st = tmp / "mailbox" / "seat-0-voice" / "state.json"
+        d = json.loads(st.read_text())
+        self.assertEqual((d["live"], d["enabled"]), (False, True)); self.assertIn("ELEVENLABS", d["reason"])
+        m1 = st.stat().st_mtime_ns
+        run.publish_state()
+        self.assertEqual(st.stat().st_mtime_ns, m1, "unchanged state: no rewrite")
+        run.renderer.api_key = "k"
+        run.publish_state()
+        self.assertTrue(json.loads(st.read_text())["live"])
+
+    def test_advisor_switches_guidance_on_the_state_file(self):
+        import advisor_runner as ar
+        tmp = Path(tempfile.mkdtemp(prefix="qg-"))
+        f = tmp / "state.json"; logs = []
+        text, live = ar.quip_guide(f, log=logs.append, prev=None)
+        self.assertEqual((text, live), (ar.QUIP_GUIDE_SPARSE, True), "no file: sparse")
+        f.write_text(json.dumps({"live": False, "reason": "no ELEVENLABS_API_KEY", "enabled": True}))
+        text, live = ar.quip_guide(f, log=logs.append, prev=True)
+        self.assertEqual((text, live), (ar.QUIP_GUIDE_DENSE, False))
+        self.assertIn("one line in two", text); self.assertIn("stock phrases", text)
+        self.assertEqual(len(logs), 1); self.assertIn("no ELEVENLABS_API_KEY", logs[0])
+        text, live = ar.quip_guide(f, log=logs.append, prev=False)
+        self.assertEqual(len(logs), 1, "same state: no second log line")
+        f.write_text(json.dumps({"live": True, "reason": "ok"}))
+        text, live = ar.quip_guide(f, log=logs.append, prev=False)
+        self.assertEqual((text, len(logs)), (ar.QUIP_GUIDE_SPARSE, 2))
+        f.write_text("{not json")
+        self.assertEqual(ar.quip_guide(f)[0], ar.QUIP_GUIDE_SPARSE, "unreadable: sparse")
+        self.assertIn("at most every other turn", ar.QUIP_GUIDE_SPARSE)
+
+
 class LaunchBanner(unittest.TestCase):
     IGNORE = {"ARENA_RATE_VOIDED", "ARENA_OAI_API_KEY", "ARENA_HUMAN_DECK", "ARENA_MAILBOX_DIR", "ARENA_ADVISOR",
               "ARENA_AUTOSTOP_STATE", "ARENA_AUTOSTOP_STOP", "ARENA_AUTOSTOP_PID_FILE", "ARENA_AUTOSTOP_GUI_PID_FILE",

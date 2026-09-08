@@ -375,6 +375,7 @@ class Renderer:
         self.fail_streak = 0
         self.paused_until = 0.0
         self.pause_s = self.PAUSE_FIRST_S
+        self.stock_only_reason = ""   # set when live lines are switched off for the run
         self.manifest = json.loads((STOCK / "manifest.json").read_text()) if (STOCK / "manifest.json").exists() else {"phrases": {}, "sfx": []}
         self.api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
         self.voice_id = os.environ.get("ARENA_VOICE_ID") or self.manifest.get("voice_id") or DEFAULT_VOICE_ID
@@ -410,6 +411,18 @@ class Renderer:
     @property
     def live(self) -> bool:
         return bool(self.api_key or self.fake_tts) and self.chars_used < self.max_chars
+
+    def state(self) -> tuple[bool, str]:
+        """(live lines available now?, reason when not) — published for the
+        advisor (Ben, 2026-09-08): with live lines down the advisor tags a
+        stock quip on about one line in two to fill the silence."""
+        if not (self.api_key or self.fake_tts):
+            return False, self.stock_only_reason or "no ELEVENLABS_API_KEY"
+        if self.chars_used >= self.max_chars:
+            return False, f"character cap {self.max_chars} reached"
+        if self.clock() < self.paused_until:
+            return False, "paused after repeated failures"
+        return True, "ok"
 
     def stock(self, pid: str) -> Path | None:
         p = STOCK / f"{pid}.wav"
@@ -486,6 +499,7 @@ class Renderer:
             else:
                 self.log("[voice] MP3 fallback needs ffmpeg on this platform — live lines off for this run")
                 self.api_key = ""
+                self.stock_only_reason = "MP3 fallback needs ffmpeg"
                 tmp_out.unlink(missing_ok=True)
                 return None
             if self.glitch != "off":
@@ -583,6 +597,7 @@ class Renderer:
                  f"'{self.manifest.get('voice_name')}' — add it from the ElevenLabs Voice Library or set "
                  f"ARENA_VOICE_ID to any voice you own; live lines are off until then")
         self.api_key = ""   # stock only from here: no more failing calls
+        self.stock_only_reason = "no usable voice in this account"
         return False
 
 
@@ -631,6 +646,8 @@ class VoiceRunner:
         self.game_over_said = False
         self.started_said = False
         self.human_seat = 0
+        self._state_published = None
+        self._state_published_once = False
 
     # -- output
     def say(self, msg: str) -> None:
@@ -808,7 +825,30 @@ class VoiceRunner:
                                "prio": PRIORITY["game_over"], "at": self.clock() + 0.001, "expires": self.clock() + 120.0})
 
     # -- loop
+    def publish_state(self) -> None:
+        """mailbox/seat-0-voice/state.json {"live": bool, "reason": str,
+        "enabled": bool} — rewritten only when it changes."""
+        live, reason = self.renderer.state()
+        cur = {"live": live, "reason": reason, "enabled": self.enabled()}
+        if cur == self._state_published:
+            return
+        self._state_published = cur
+        try:
+            d = self.mailbox / "seat-0-voice"
+            d.mkdir(parents=True, exist_ok=True)
+            tmp = d / "state.json.tmp"
+            tmp.write_text(json.dumps(cur))
+            tmp.replace(d / "state.json")
+        except OSError:
+            pass
+        if not live:
+            self.say(f"[voice] live lines off ({reason}) — stock phrases only; the advisor will quip more often")
+        elif self._state_published_once:
+            self.say("[voice] live lines back on")
+        self._state_published_once = True
+
     def step(self) -> None:
+        self.publish_state()
         if not self.enabled():
             if self.queue:
                 self.say(f"[voice] disabled — dropping {len(self.queue)} queued line(s)")

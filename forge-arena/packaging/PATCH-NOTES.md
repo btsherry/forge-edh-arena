@@ -17,8 +17,11 @@
   when punts, timeouts, fallbacks, tracebacks or wedges are not zero. The
   README gains "Every setting at a glance" and plain-language notes on
   Windows (voice plays there; the arena cannot start there yet) and on stops.
-  The advisor is asked to attach a spoken quip to about one line in two (it was
-  at most every other turn), so the stock lines are heard more often.
+  A `Voice` mute button joins the Advisor tab's row; it and the advisor pause
+  both silence every line, stock or live, and cut one already playing. While
+  live lines are down (no ElevenLabs key, a spent quota, no usable voice) the
+  advisor attaches a stock quip to about one line in two so the table is not
+  silent; with live lines up the quips stay rare.
 - **The voice ships portable.** Live lines come back as PCM and are wrapped in
   a WAV header locally, so `ffmpeg` is optional: the film effects use it when
   present and a built-in pure-Python chain when not. Playback works on Windows
