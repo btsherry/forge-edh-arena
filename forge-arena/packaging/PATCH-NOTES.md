@@ -2,6 +2,12 @@
 
 ## Unreleased — after v3.4
 
+- **Seats stop paying for dead reaction windows.** A seat passes without a
+  model call when every option it is offered costs more mana than it can
+  produce right now, when only plain mana abilities are offered, or when the
+  stack is empty and only counterspells are offered. Free, X, Phyrexian or
+  unknown costs and free-cast keywords still go to the model. Auto-pass
+  receipts in the Advisor tab are one per phase and reason again.
 - **The advisor speaks.** A Joshua/W.O.P.R.-register voice for the Advisor: shipped
   stock lines and terminal bleeps at launch, your turns, eliminations and game
   over, quips the advisor picks when a moment earns one, and — with

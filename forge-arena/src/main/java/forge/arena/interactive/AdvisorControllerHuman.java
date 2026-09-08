@@ -112,6 +112,7 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
     }
 
     private String lastSilentNoteKey;
+    private String lastPassNoteKey;
 
     @Override
     public boolean mayAutoPass() {
@@ -225,7 +226,14 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
             int turn = getGame().getPhaseHandler().getTurn();
             if (d.pass) {
                 oneStopPass = true;
-                feed.publishNote(turn, String.valueOf(phase), "(auto-passed — " + d.reason + ")");
+                // One receipt per turn/phase/reason (game 25 flooded the Advisor
+                // tab with 400+ per-stop receipts; the old silent-skip receipt
+                // was already deduped per phase). The pass itself is unchanged.
+                String key = turn + ":" + phase + ":" + d.reason;
+                if (!key.equals(lastPassNoteKey)) {
+                    lastPassNoteKey = key;
+                    feed.publishNote(turn, String.valueOf(phase), "(auto-passed — " + d.reason + ")");
+                }
             } else if (!plays.isEmpty() && !(myTurn && phase != null && phase.isMain())) {
                 // receipt for a kept prompt outside the sacred stops, once per
                 // phase: says which card held it open (tuning evidence)

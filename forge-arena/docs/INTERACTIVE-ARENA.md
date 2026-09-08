@@ -1505,3 +1505,24 @@ Hard-won from two live sessions; read before optimizing anything.
     own-items-only stacks resolve in the main phase — opt-in. Forge's own APINA
     still handles the truly-empty case first. Wedge threshold left at
     3 by Ben's decision after Urza's game-24 stall (W-2).
+
+77. **Seat affordability fastpath + receipt dedupe (2026-09-07, game 25).** The
+    seats' REACT windows ran 16/turn with 99% model-answered passes (~4 s
+    each). `SeatRunner._unaffordable_react`: when every non-pass option's cost
+    string parses (`_mana_value`: generic + coloured pips, hybrid at its cheapest
+    half, tap/energy/snow free) to strictly more than `state.manaAvailableNow`
+    and no label carries a free-cast marker (without paying, convoke, improvise,
+    delve, affinity, emerge, assist, alt cost, pitch), the window is passed with
+    source `affordability` and a `why` naming the cheapest cost vs the mana —
+    before the memo, after the no-op allowlist. `{0}`, `{X}`, Phyrexian,
+    unknown or missing costs and a missing mana figure fall through to the
+    model (the 2026-08-13 "325th window" rule). Affordability records do not
+    feed the memo. Two more dead shapes: every option a plain mana ability
+    (`_plain_mana_ability`: adds mana, taps, no sacrifice/discard/exile), or an
+    empty stack with only counterspells (`_counterspell`). Measured against game
+    25's 374 model-answered REACT windows: the three rules together catch 19
+    (0 false positives) — most windows carry a genuinely affordable instant or
+    activation the model is choosing to hold, so the remaining cost is the
+    ~4 s per call itself (see [[parked-ai-snappiness]]). Also: the human
+    autopass receipts are deduped per turn:phase:reason (game 25 wrote 400+
+    per-stop notes into the Advisor tab).

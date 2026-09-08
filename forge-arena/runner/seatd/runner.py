@@ -2,6 +2,10 @@
 
 Wiring rules (from docs/AGENT-SDK-SEATS.md):
 - ZERO-API fastpaths run before any model call:
+  (0) dead windows: every non-pass option costs more mana than
+      state.manaAvailableNow (no free/alt/X/Phyrexian option), or every option
+      is a plain mana ability, or the stack is empty and every option is a
+      counterspell → pass
   (a) react_autopass: a REACT whose non-pass options are all on the no-op
       allowlist is passed instantly (the Giver-of-Runes cure);
   (b) memoized same-turn REACT: an identical (turn, stack, options) signature
@@ -16,6 +20,7 @@ Wiring rules (from docs/AGENT-SDK-SEATS.md):
 from __future__ import annotations
 
 import json
+import re
 import os
 import time
 from pathlib import Path
@@ -587,6 +592,104 @@ class SeatRunner:
         return oid
 
     @staticmethod
+    def _mana_value(cost) -> int | None:
+        """Total mana of an option's cost string ("{2}{U}{U}" -> 4). None when
+        it cannot be known — no braces, {X}, a Phyrexian pip (payable with
+        life), an unknown symbol — and the caller treats None as AFFORDABLE
+        (fail open to the model). Hybrid takes its cheapest half; tap/untap/
+        energy/snow symbols cost no mana."""
+        if not cost:
+            return None
+        syms = re.findall(r"\{([^}]*)\}", str(cost))
+        if not syms:
+            return None
+        total = 0
+        for s in syms:
+            s = s.strip().upper()
+            if s.isdigit():
+                total += int(s)
+            elif s in ("W", "U", "B", "R", "G", "C"):
+                total += 1
+            elif "/" in s:
+                parts = s.split("/")
+                if "P" in parts:
+                    return None
+                nums = [int(p) for p in parts if p.isdigit()]
+                total += min(nums) if nums else 1
+            elif s in ("T", "Q", "E", "S", "CHAOS", "PW", "TK"):
+                continue
+            else:
+                return None  # X, Y, or something new — fail open
+        return total
+
+    FREE_MARKERS = ("without paying", "convoke", "improvise", "delve", "affinity",
+                    "emerge", "assist", "alternative cost", "alt cost", "pitch", "free")
+
+    def _unaffordable_react(self, req: dict) -> str | None:
+        """Affordability fastpath (2026-09-07, game 25: 99% of the seats' 338
+        model-answered REACT windows were passes, ~4 s each). When EVERY
+        non-pass option has a knowable mana cost strictly above
+        state.manaAvailableNow (pool + one activation of each untapped source,
+        the engine's own figure) and none is a free/alt-cost play, the window
+        cannot be acted on — pass without a model call. The 2026-08-13 lesson
+        (the 325th "dead" window was a real free/convoke/sac play) is honoured
+        by construction: a zero or unknowable cost, a free-cast marker in the
+        label, or a missing mana figure all fall through to the model."""
+        if req.get("decisionType") != "REACT":
+            return None
+        st = req.get("state") or {}
+        avail = st.get("manaAvailableNow")
+        if not isinstance(avail, int) or isinstance(avail, bool):
+            return None
+        non_pass = [o for o in req.get("options", []) if o.get("id") != 0]
+        if not non_pass:
+            return None
+        # Two more dead shapes, measured on game 25's 374 model-answered REACT
+        # windows (0 false positives): every option is a plain mana ability
+        # (mana with nothing to spend it on floats away), or the stack is empty
+        # and every option is a counterspell (nothing to counter). Mana
+        # abilities with a sacrifice/discard cost are NOT plain (Lion's Eye
+        # Diamond class) and go to the model.
+        stack_empty = not (st.get("stack") or [])
+        if all(self._plain_mana_ability(o) for o in non_pass):
+            return "only mana abilities offered, nothing to spend the mana on"
+        if stack_empty and all(self._counterspell(o) for o in non_pass):
+            return "only counterspells offered and the stack is empty"
+        if stack_empty and all(self._plain_mana_ability(o) or self._counterspell(o) for o in non_pass):
+            return "only mana abilities and counterspells offered with an empty stack"
+        cheapest = None
+        for o in non_pass:
+            label = str(o.get("label", "")).lower()
+            if any(m in label for m in self.FREE_MARKERS):
+                return None
+            mv = self._mana_value(o.get("cost"))
+            if mv is None or mv <= avail:
+                return None
+            cheapest = mv if cheapest is None else min(cheapest, mv)
+        return (f"nothing affordable: cheapest option costs {cheapest}, "
+                f"{avail} mana available now")
+
+    @staticmethod
+    def _plain_mana_ability(o: dict) -> bool:
+        lab = str(o.get("label", ""))
+        low = lab.lower()
+        # the label is "<name>  <cost> — <text>": judge the COST part for
+        # sacrifice/discard/exile (Chrome Mox's text says "exiled card" and is
+        # still a plain mana ability)
+        cost_part = low.split(" — ", 1)[0] if " — " in low else str(o.get("cost", "")).lower()
+        if any(w in cost_part for w in ("sacrifice", "sac<", "discard", "exile")):
+            return False
+        adds = ("add {" in low or "add one mana" in low or "add x mana" in low or "add an amount of mana" in low
+                or "mana of any" in low or re.search(r"\badd [a-z]* ?mana", low) is not None)
+        taps = "{t}" in low or "tap an untapped" in low
+        return bool(adds and taps)
+
+    @staticmethod
+    def _counterspell(o: dict) -> bool:
+        low = str(o.get("label", "")).lower()
+        return "counter target" in low
+
+    @staticmethod
     def _resourceless_react(req: dict) -> bool:
         """Strictly-measured dead-window class (2026-08-13 study): REACT
         with pool AND untapped sources BOTH present and BOTH zero. The brain
@@ -677,6 +780,10 @@ class SeatRunner:
             # state.stackTargets (note 51) names every stack item's targets.
             if not self._threatens_own(req):
                 return {"chosenId": 0}, "autopass"
+        why = self._unaffordable_react(req)
+        if why is not None:
+            self._fast_why = why
+            return {"chosenId": 0}, "affordability"
         if self._react_signature(req) in self.react_seen:
             return {"chosenId": 0}, "memo"
         # #2 reactive hold: brain armed a same-turn hold; auto-pass only when the
@@ -805,6 +912,7 @@ class SeatRunner:
         if fast:
             answer, source = fast
             why = ("all options on the no-op allowlist" if source == "autopass"
+                   else getattr(self, "_fast_why", "") if source == "affordability"
                    else "identical window already passed this turn")
             ok = self.mb.respond(req, answer)
             self._say(f"[seat {self.seat}] seq={seq} {dtype} -> {json.dumps(answer)} "
