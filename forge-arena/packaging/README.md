@@ -36,7 +36,7 @@ Gathering is © Wizards of the Coast.
 
 ## Requirements
 
-- macOS or Linux (POSIX shell; developed on macOS)
+- macOS or Linux (POSIX shell; developed on macOS). Voice playback also works on Windows via PowerShell; the launch scripts themselves are POSIX shell.
 - **JDK 17+** on PATH, or `JAVA_HOME` set
 - **Python 3.9+**, stdlib only, no pip installs
 - **Claude Code CLI** (`claude`), logged in. Brains run on your Claude
@@ -194,23 +194,56 @@ The advisor can speak, in the register of Joshua from *WarGames*. It ships
 on in `--human` games with a set of pre-rendered stock lines and terminal
 bleeps (greeting at launch, "Your move.", eliminations, a win line or "A
 strange game…" at the end, and short quips the advisor picks when a moment
-earns one: "Nice combo.", "Ouch.", "I did not see that coming."). With
-`ELEVENLABS_API_KEY` set it also reads the **first sentence** of each piece
-of advice live (ElevenLabs Flash, about a second to first audio), caching
-every line so a repeated one never costs again. Discipline is the point: one
-utterance at a time, at most one every `ARENA_VOICE_MIN_GAP` seconds
-(default 8), and advice for a window you already answered is dropped, never
-read late.
+earns one: "Nice combo.", "Ouch.", "I did not see that coming."). The stock
+lines are plain WAV files in the package and play offline on macOS
+(`afplay`), Linux (`paplay`/`aplay`) and Windows (PowerShell's built-in
+SoundPlayer) with nothing to install.
+
+**Live spoken advice is optional and needs your own ElevenLabs key.** With
+`ELEVENLABS_API_KEY` set, the advisor also reads the **first sentence** of
+each piece of advice live (ElevenLabs Flash v2.5, about a second to first
+audio) and caches every line, so a repeated one never costs again. Audio
+comes back as raw PCM (`pcm_24000`, available on the Creator tier and above)
+and is wrapped in a WAV header locally; no decoder is needed. A typical game
+reads a few thousand characters. The film-style processing (a loudspeaker EQ,
+the machine tremolo, a slap echo, compression, small digital hitches) runs
+through `ffmpeg` when it is installed and through a built-in pure-Python
+"lite" chain when it is not, so `ffmpeg` is a nicety, not a requirement.
+
+**Which voice.** The stock lines were rendered from the project owner's own
+voice clone. ElevenLabs does not allow a cloned or designed voice to be
+shared to other accounts, so live lines cannot use that exact voice under
+your key. Two ways to get one of your own:
+
+1. Create a voice in your ElevenLabs library and name it exactly
+   `Jousha-W.O.P.R.` — the runner finds it by name the first time the
+   packaged id is not found in your account.
+2. Or set `ARENA_VOICE_ID` to any voice id you own.
+
+`forge-arena/runner/voice/stock/voice-design.md` carries a Voice Design
+prompt and the voice settings the runner uses, so a designed voice in the
+same register takes a minute to make. Until a voice is available, live lines
+are simply skipped and the stock lines still play; the log says so once.
+
+Discipline is the point: one utterance at a time, at most one every
+`ARENA_VOICE_MIN_GAP` seconds (default 8), and advice for a window you already
+answered is dropped, never read late. **Pausing the advisor in its panel
+silences the voice completely** — advice, quips, colour, "Your move.",
+eliminations, game over and the bleeps — drops anything queued, and cuts a
+line already playing; resuming restores all of it.
 
 Knobs: `--no-voice` or `ARENA_VOICE=off`; `ARENA_VOICE_SFX=off` (no bleeps);
-`ARENA_VOICE_FX=off` (no film-style processing on live lines);
-`ARENA_VOICE_MAX_CHARS` per game (default 20000, then stock only);
-`ARENA_VOICE_ID` to use your own ElevenLabs voice. Mute mid-game with
-`python3 forge-arena/runner/voice_runner.py --mute` (`--unmute` to resume);
-`--play startup` or `--say "text"` test the speakers. Live rendering needs
-`ffmpeg` for decoding and the effects chain; without it the stock lines still
-play and live lines are skipped. The voice's own log is
-`runner/logs/voice-0.log` and its structured twin `voice-0.jsonl`.
+`ARENA_VOICE_FX=off|lite|on` (film processing: off, pure-Python, or ffmpeg
+when present); `ARENA_VOICE_FORMAT` (default `pcm_24000`; `mp3_44100_128` if
+your tier rejects PCM — the runner falls back to MP3 by itself for the run);
+`ARENA_VOICE_GLITCH=off|light|heavy`; `ARENA_VOICE_COLOR=off|some|all` (spoken
+recaps on opponents' turns); `ARENA_VOICE_MAX_CHARS` per game (default 20000,
+then stock only). Mute mid-game with `python3 forge-arena/runner/voice_runner.py
+--mute` (`--unmute` to resume); `--play startup` or `--say "text"` test the
+speakers. Rendered lines are cached under `forge-arena/runner/logs/cache/voice/`
+(outside the package, never bundled, no size cap — delete the folder to clear).
+The voice's own log is `runner/logs/voice-0.log` and its structured twin
+`voice-0.jsonl`.
 
 ## The AI panel
 

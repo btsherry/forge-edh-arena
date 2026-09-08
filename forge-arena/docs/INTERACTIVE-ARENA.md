@@ -1801,3 +1801,21 @@ Hard-won from two live sessions; read before optimizing anything.
     `Player.play` polls `should_stop` every 200 ms and kills the player
     process mid-line. Test fakes without the new argument are called the old
     way (`_play`).
+
+93. **Voice made shippable (2026-09-08; research by a subagent, sources in
+    the report).** Facts: ElevenLabs allows only Professional Voice Clones of
+    one's OWN voice to be shared to the Voice Library — Instant Voice Clones
+    and Voice Design voices cannot be shared beyond a workspace; a PVC needs
+    30 min+ of audio AND a live verification read by the speaker, so a PVC of
+    John Wood's Joshua is impossible (and the film holds only ~2–4 minutes of
+    the character's speech); shared library voices carry a different id per
+    account; `pcm_24000` is Creator-tier, `pcm_44100` Pro. Built: `pcm_24000`
+    default with a stdlib WAV header (`pcm_to_wav`), MP3 fallback for the run
+    when a tier rejects the format; `lite_fx_wav` pure-Python effects chain
+    (low-pass 3.4 kHz, 50 Hz tremolo, 90 ms slap, soft compression, −3 dBFS)
+    used when ffmpeg is absent (`ARENA_VOICE_FX=off|lite|on`); voice resolved
+    by NAME from the account's library on a 404 (`_resolve_voice_by_name`),
+    else live lines stop with a one-line hint; `voice-design.md` preset;
+    Windows playback via PowerShell SoundPlayer; advisor pause silences the
+    voice (note 92). Cache stays unbounded by Ben's decision. README "The
+    Advisor's voice" rewritten; PATCH-NOTES entry.

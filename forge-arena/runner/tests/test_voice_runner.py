@@ -295,3 +295,157 @@ class AdvisorPauseSilencesVoice(unittest.TestCase):
         p = vr.Player(dry_run=True, log=calls.append)
         p.play(__import__("pathlib").Path("/nonexistent.wav"), should_stop=lambda: True)  # dry run: no process, no error
         self.assertTrue(calls and "(dry)" in calls[0])
+
+
+class PcmAndLiteChain(unittest.TestCase):
+    """Ben, 2026-09-08: ElevenLabs PCM wrapped in our own WAV header (no ffmpeg
+    to decode), a pure-Python effects chain when ffmpeg is absent, and the
+    voice resolved by NAME from the account's library on a 404."""
+    def test_pcm_to_wav_header(self):
+        import voice_runner as vr, wave, io, array
+        pcm = array.array("h", [0, 1000, -1000, 0] * 600).tobytes()
+        wav = vr.pcm_to_wav(pcm, 24000)
+        self.assertEqual(wav[:4], b"RIFF")
+        with wave.open(io.BytesIO(wav)) as w:
+            self.assertEqual((w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getnframes()), (24000, 1, 2, 2400))
+
+    def test_lite_fx_is_deterministic_bounded_and_keeps_length(self):
+        import voice_runner as vr, wave, io, array, math
+        sr = 24000; n = sr // 2
+        pcm = array.array("h", (int(12000 * math.sin(2 * math.pi * 220 * i / sr)) for i in range(n))).tobytes()
+        wav = vr.pcm_to_wav(pcm, sr)
+        a = vr.lite_fx_wav(wav); b = vr.lite_fx_wav(wav)
+        self.assertEqual(a, b, "deterministic")
+        with wave.open(io.BytesIO(a)) as w:
+            self.assertEqual(w.getnframes(), n); self.assertEqual(w.getframerate(), sr)
+            out = array.array("h"); out.frombytes(w.readframes(n))
+        peak = max(abs(s) for s in out) / 32768.0
+        self.assertLessEqual(peak, 10 ** (-3 / 20) + 0.002, "peak at -3 dBFS")
+        self.assertGreater(peak, 0.5, "not silenced")
+        self.assertEqual(vr.lite_fx_wav(b"not a wav"), b"not a wav", "non-WAV passes through")
+
+    def _renderer(self, tmp, fake_http):
+        import voice_runner as vr, os
+        os.environ["ELEVENLABS_API_KEY"] = "test-key"
+        os.environ["ARENA_VOICE_FX"] = "off"
+        try:
+            r = vr.Renderer(tmp / "cache", log=lambda m: self.logs.append(m))
+        finally:
+            os.environ.pop("ELEVENLABS_API_KEY", None); os.environ.pop("ARENA_VOICE_FX", None)
+        r.manifest = dict(r.manifest, voice_id="old-id", voice_name="Jousha-W.O.P.R.")
+        r.voice_id = "old-id"
+        vr.urllib.request.urlopen = fake_http
+        self.addCleanup(lambda: setattr(vr.urllib.request, "urlopen", self._orig_urlopen))
+        return r
+
+    def setUp(self):
+        import voice_runner as vr
+        self.logs = []
+        self._orig_urlopen = vr.urllib.request.urlopen
+
+    def test_pcm_response_is_wrapped_and_cached_as_wav(self):
+        import voice_runner as vr, tempfile, io, array, wave
+        from pathlib import Path as _P
+        tmp = _P(tempfile.mkdtemp(prefix="pcm-"))
+        pcm = array.array("h", [500, -500] * 2400).tobytes()
+
+        class Resp:
+            headers = {"character-cost": "12"}
+            def __init__(self, data): self.data = data
+            def read(self): return self.data
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        seen = {}
+        def fake_http(req, timeout=30):
+            seen["url"] = req.full_url; return Resp(pcm)
+        r = self._renderer(tmp, fake_http)
+        out = r.render("Would you like to play a game?")
+        self.assertIn("output_format=pcm_24000", seen["url"])
+        self.assertTrue(out and out.suffix == ".wav")
+        with wave.open(str(out)) as w:
+            self.assertEqual(w.getframerate(), 24000); self.assertEqual(w.getnframes(), 4800)
+        self.assertEqual(r.chars_used, 12)
+
+    def test_404_resolves_the_voice_by_library_name(self):
+        import voice_runner as vr, tempfile, json as js, array, urllib.error
+        from pathlib import Path as _P
+        tmp = _P(tempfile.mkdtemp(prefix="v404-"))
+        pcm = array.array("h", [1, -1] * 1200).tobytes()
+
+        class Resp:
+            headers = {}
+            def __init__(self, data): self.data = data
+            def read(self): return self.data
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        calls = []
+        def fake_http(req, timeout=30):
+            calls.append(req.full_url)
+            if "/v1/voices" in req.full_url and "text-to-speech" not in req.full_url:
+                return Resp(js.dumps({"voices": [{"voice_id": "new-id", "name": "Jousha-W.O.P.R."}]}).encode())
+            if "old-id" in req.full_url:
+                raise urllib.error.HTTPError(req.full_url, 404, "voice_not_found", {}, None)
+            return Resp(pcm)
+        r = self._renderer(tmp, fake_http)
+        out = r.render("Greetings, Professor Falken.")
+        self.assertIsNotNone(out)
+        self.assertEqual(r.voice_id, "new-id")
+        self.assertTrue(any("found in this account" in l for l in self.logs))
+        self.assertEqual(sum(1 for c in calls if "text-to-speech" in c), 2, "one failed call, one retry")
+
+    def test_rejected_pcm_format_falls_back_to_mp3_for_the_run(self):
+        import voice_runner as vr, tempfile, urllib.error
+        from pathlib import Path as _P
+        tmp = _P(tempfile.mkdtemp(prefix="vfmt-"))
+
+        class Resp:
+            headers = {}
+            def __init__(self, data): self.data = data
+            def read(self): return self.data
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        class Err(urllib.error.HTTPError):
+            def read(self): return b'{"detail": {"message": "output_format pcm_24000 requires a higher tier"}}'
+        def fake_http(req, timeout=30):
+            if "pcm_24000" in req.full_url:
+                raise Err(req.full_url, 403, "forbidden", {}, None)
+            return Resp(b"ID3fakemp3bytes")
+        r = self._renderer(tmp, fake_http)
+        orig_which = vr.shutil.which
+        vr.shutil.which = lambda name: None          # no ffmpeg: the raw MP3 is kept as-is
+        self.addCleanup(lambda: setattr(vr.shutil, "which", orig_which))
+        out = r.render("A strange game.")
+        self.assertEqual(r.format, "mp3_44100_128")
+        self.assertIsNotNone(out)
+        self.assertTrue(any("falling back to mp3" in l for l in self.logs))
+
+
+class PlayerStopsAProcess(unittest.TestCase):
+    """Gemini pass 3: the stop poll must actually kill the player process."""
+    def test_should_stop_kills_the_player(self):
+        import voice_runner as vr
+        class FakeProc:
+            def __init__(self): self.killed = False; self._rc = None
+            def poll(self): return self._rc
+            def kill(self): self.killed = True; self._rc = -9
+            def wait(self, timeout=None): return self._rc
+        made = []
+        orig_popen = vr.subprocess.Popen
+        vr.subprocess.Popen = lambda *a, **k: made.append(FakeProc()) or made[-1]
+        try:
+            logs = []
+            p = vr.Player(dry_run=False, log=logs.append)
+            p.cmd = ["afplay"]; p.winsound = None; p.windows = False
+            p.play(__import__("pathlib").Path("/x.wav"), should_stop=lambda: True)
+            self.assertTrue(made and made[0].killed, "the process is killed when the poll says stop")
+            self.assertTrue(any("cut" in l for l in logs))
+        finally:
+            vr.subprocess.Popen = orig_popen
+
+    def test_lite_fx_tolerates_an_odd_byte_count(self):
+        import voice_runner as vr, wave, io
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(24000); w.writeframes(b"\x00\x10" * 100 + b"\x7f")
+        out = vr.lite_fx_wav(buf.getvalue())
+        self.assertTrue(out[:4] == b"RIFF")

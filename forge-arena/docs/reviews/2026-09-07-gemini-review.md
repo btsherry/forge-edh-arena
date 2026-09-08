@@ -52,6 +52,20 @@ Tests: `runner/tests/test_review_fixes.py`; `AutopassPolicyTest` (equipment),
 | G7 (P2) | record may exceed `max_chars` when the newest FULL_TURNS blocks alone overflow | yes | fixed: tail-preserving hard cap |
 | G8 (P3) | pipes not closed on kill | yes | fixed |
 
+## Pass 3 — the voice: PCM, lite chain, voice-by-name, pause, Windows (2026-09-08)
+
+| # | Finding | Verified? | Action |
+|---|---|---|---|
+| V1 (High) | `lite_fx_wav` raises ValueError on an odd PCM byte count | yes | fixed: truncate to whole samples; ValueError caught |
+| V2 (High) | normalize step slow + redundant clamps | yes | fixed: list comprehension, no clamp (bounded by construction) |
+| V3 (High) | MP3 fallback without ffmpeg cached under .wav — unplayable on Windows/Linux | yes | fixed: macOS only; elsewhere live lines stop for the run with a log line |
+| V4 (High) | PowerShell path quoting | **no** — the diff already doubles single quotes | no change |
+| V5 (High) | blocking `subprocess.run` ignores the pause | **no** — the diff already polls a Popen | no change |
+| V6 (Med) | big-endian hosts | yes | fixed: byteswap on read and write |
+| V7 (Med) | `voice_id[:6]` on None | yes | fixed |
+| V8 (Med) | spawn PowerShell per line | yes | fixed: stdlib `winsound` (async + purge) first, PowerShell last resort |
+| V9 (Low) | tests do not exercise the kill path | yes | fixed: fake Popen test; odd-byte test |
+
 ## Raw reports
 
 
@@ -510,3 +524,121 @@ This review covers the experimental branch versus the release branch of the Magi
       pass
   # Repeat for stdout/stderr
   ```
+
+### Pass 3
+
+Here is a concrete, severity-ranked code review of the provided diff and associated voice runner architecture.
+
+---
+
+### Severity: High
+
+#### 1. Unhandled `ValueError` crashing the daemon on corrupt WAV payloads
+*   **Location:** `lite_fx_wav(data: bytes)`
+*   **The Issue:** If a cache file or response payload is corrupted and contains an odd number of PCM bytes, `wave.open` will still read it, but `pcm.frombytes()` will raise a `ValueError` because the byte string length is not a multiple of the 2-byte short element size for `"h"`. Since `ValueError` is not in the caught exceptions tuple `(wave.Error, EOFError, OSError)`, it will escape and crash the voice runner daemon.
+*   **Minimal Fix:** Include `ValueError` in the exception handling tuple.
+    ```python
+    except (wave.Error, EOFError, OSError, ValueError):
+        return data
+    ```
+
+#### 2. Huge pure-Python latency bottleneck & redundant bounds checks
+*   **Location:** `lite_fx_wav(data: bytes)`
+*   **The Issue:** The peak normalization step uses a generator expression with nested `max` and `min` calls:
+    `out = array.array("h", (max(-32768, min(32767, int(v * scale * 32767))) for v in y))`
+    Running a generator expression with multiple nested built-in function calls on 150k+ samples in pure Python is extremely slow and introduces a noticeable pre-speech delay of several hundred milliseconds. 
+    Furthermore, because `scale = (10 ** (-3 / 20)) / peak` bounds `v * scale` to exactly `[-0.7079, 0.7079]`, multiplying by `32767` produces values strictly within `[-23196, 23196]`. The bounds checks are mathematically redundant and can never trigger.
+*   **Minimal Fix:** Eliminate the `max`/`min` checks and use a fast list comprehension to generate the array.
+    ```python
+    factor = scale * 32767
+    out = array.array("h", [int(v * factor) for v in y])
+    ```
+
+#### 3. Deafening noise/crashes on Windows/Linux during MP3 fallback without ffmpeg
+*   **Location:** `Renderer.render`
+*   **The Issue:** If the ElevenLabs API rejects the PCM tier and falls back to MP3, and `ffmpeg` is absent, the raw MP3 payload is written directly to cache under a `.wav` extension:
+    `tmp_out.write_bytes(raw)  # raw MP3, no ffmpeg: playable on macOS only`
+    While macOS's `afplay` natively decodes MP3 files regardless of their extension, Windows's `System.Media.SoundPlayer` and Linux's `aplay` expect strict PCM WAV format. Passing MP3 bytes to them will throw an `InvalidOperationException` (corrupted wave header) on Windows, or play loud digital static on Linux.
+*   **Minimal Fix:** Check the platform when fallback to MP3 occurs without `ffmpeg`, and disable live rendering instead of caching unplayable data:
+    ```python
+    if not shutil.which("ffmpeg") and sys.platform != "darwin":
+        self.log("[voice] MP3 fallback requires ffmpeg on this platform — disabling live TTS")
+        self.api_key = ""
+        return None
+    ```
+
+#### 4. Path Quoting vulnerability in PowerShell execution on Windows
+*   **Location:** `Player.play` (Windows path)
+*   **The Issue:** Constructing the PowerShell player command string using single quotes (e.g., `'{path}'`) will fail if the system user name, workspace directory, or file name contains a single quote (e.g., `C:\Users\Ben's PC\...`). The single quote terminates the PowerShell string literal prematurely, resulting in syntax/parsing errors and silent playback failure.
+*   **Minimal Fix:** Escape single quotes in the file path by doubling them before injecting them into the command string:
+    ```python
+    escaped_path = str(path).replace("'", "''")
+    self.cmd = ["powershell", "-Command", f"(New-Object System.Media.SoundPlayer '{escaped_path}').PlaySync()"]
+    ```
+
+#### 5. Blocking subprocess execution ignores the Pause/Silence toggle
+*   **Location:** `Player.play`
+*   **The Issue:** If `Player.play` uses a blocking `subprocess.run(...)`, the thread blocks entirely during the playback of a line. It cannot poll the `should_stop` callback to handle a user pause event, rendering the pause toggle useless until the current line finishes playing.
+*   **Minimal Fix:** Use `subprocess.Popen` to run the process asynchronously, and poll `proc.poll()` in a loop with a short sleep to react immediately if `should_stop()` returns `True`:
+    ```python
+    proc = subprocess.Popen(self.cmd + [str(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    while proc.poll() is None:
+        if should_stop and should_stop():
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            break
+        time.sleep(0.05)
+    ```
+
+---
+
+### Severity: Medium
+
+#### 6. Wrong WAV/PCM Endianness on Big-Endian systems
+*   **Location:** `lite_fx_wav(data: bytes)`
+*   **The Issue:** Python's `array.array("h")` assumes native host-endianness. On a big-endian system, `frombytes()` will read the little-endian WAV samples and byteswap them, producing loud digital noise. Likewise, `out.tobytes()` will write big-endian samples into the WAV file payload, violating the RIFF WAV little-endian specification.
+*   **Minimal Fix:** Perform a byteswap if `sys.byteorder == "big"`:
+    ```python
+    import sys
+    # On read:
+    if sys.byteorder == "big":
+        pcm.byteswap()
+    # On write:
+    if sys.byteorder == "big":
+        out.byteswap()
+    ```
+
+#### 7. TypeError on `None` voice ID during 404 lookup logging
+*   **Location:** `Renderer._resolve_voice_by_name`
+*   **The Issue:** If `self.voice_id` is ever `None` (due to a missing configuration fallback), the string slice `self.voice_id[:6]` inside the log statement will raise a `TypeError: 'NoneType' object is not subscriptable` and crash the runner:
+    `self.log(f"[voice] voice {self.voice_id[:6]}… not in this account ...")`
+*   **Minimal Fix:** Safely stringify or guard the slice:
+    ```python
+    vid_prefix = str(self.voice_id)[:6] if self.voice_id else "None"
+    ```
+
+#### 8. Highly inefficient Windows playback path
+*   **Location:** `Player` (Windows implementation)
+*   **The Issue:** Spawning a full `powershell.exe` instance for every spoken line introduces a severe execution overhead (often 1.0s+ of startup latency) and can cause visible console window flashes.
+*   **Minimal Fix:** Use Python's built-in `winsound` standard library module instead of spawning processes:
+    ```python
+    import winsound
+    # Blocking native play:
+    winsound.PlaySound(str(path), winsound.SND_FILENAME)
+    ```
+
+---
+
+### Severity: Low
+
+#### 9. Test Suite Weaknesses and Leaks
+*   **Location:** `tests/test_voice_runner.py`
+*   **The Issue:**
+    *   `AdvisorPauseSilencesVoice` only asserts the `dry_run=True` behavior, completely failing to test the actual subprocess termination/kill code path.
+    *   The `urlopen` monkeypatching is captured in `setUp`, but lacks restoration in `tearDown` if a test exits early or `_renderer` is bypassed, leading to potential test isolation leaks.
+*   **Minimal Fix:**
+    *   Use `unittest.mock.patch` instead of manual global mutations.
+    *   Mock `subprocess.Popen` to assert that `should_stop=lambda: True` successfully calls `terminate()`.

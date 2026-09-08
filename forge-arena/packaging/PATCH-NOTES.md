@@ -2,6 +2,14 @@
 
 ## Unreleased — after v3.4
 
+- **The voice ships portable.** Live lines come back as PCM and are wrapped in
+  a WAV header locally, so `ffmpeg` is optional: the film effects use it when
+  present and a built-in pure-Python chain when not. Playback works on Windows
+  through PowerShell. Pausing the advisor silences every line, drops the queue
+  and cuts a line mid-play. The packaged voice id belongs to the project
+  owner's account; with your own key the runner finds a voice named
+  `Jousha-W.O.P.R.` in your library or uses `ARENA_VOICE_ID`, and
+  `voice-design.md` gives the prompt and settings to make one.
 - **Seats see and pay better.** Opponents' static permanents carry their text
   in every request; floating mana shows its spend restriction; a "remove a
   counter" cost is paid from the seat's chosen permanent instead of failing
