@@ -84,8 +84,8 @@ class AdvisorAskTests(unittest.TestCase):
         self.assertIn("THE HUMAN AT YOUR SEAT ASKS: Should I attack with everything?",
                       self.r.brain.decisions[0])
         s = self._stream()
-        self.assertIn("[t12 · you] Should I attack with everything?", s)
-        self.assertIn("[t12 · advisor] Hold it — the flyers are the real threat.", s)
+        self.assertIn("[r3-t12 · you] Should I attack with everything?", s)
+        self.assertIn("[r3-t12 · advisor] Hold it — the flyers are the real threat.", s)
         rec = self._records("ask")
         self.assertEqual(len(rec), 1)
         self.assertEqual(rec[0]["text"], "Should I attack with everything?")

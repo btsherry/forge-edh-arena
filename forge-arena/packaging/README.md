@@ -165,7 +165,7 @@ tab** of the lower-left dock. On by default in `--human` games;
   dedicated interruption.
 - **Chat.** The black field at the bottom of the tab (Enter or **Chat**) sends
   one question straight to the advisor; the exchange appears in the same
-  stream as `[t12 · you] …` / `[t12 · advisor] …`. One question at a time
+  stream as `[r3-t12 · you] …` / `[r3-t12 · advisor] …`. One question at a time
   (the button reads *Sending…* until it is picked up), answered even while
   the advisor is paused.
 - **Pause.** The tab's button pauses and resumes the coach mid-game (no
@@ -184,8 +184,13 @@ the AI panel's seat-0 row.
 
 **Autopass** rides along (default `casts`): priority stops where you have
 nothing castable, or only utility activations like tap abilities, pass
-automatically, each
-narrated in the tab as `⏭ (auto-passed — …)`. Hard guarantees: your own main
+automatically. The tab reports them one line per turn once the turn moves
+on, `[r2-t8] ⏭ auto-passed 14 stops (nothing available ×13, declare step ×1)`;
+a stop that was kept for you shows at once with its reason
+(`ARENA_AUTOPASS_RECEIPTS=all` shows every stop, `off` hides them). Every
+line in the tab is stamped `r<round>-t<turn>`: the round is the count of
+times the table has gone around, the turn is the game's running turn
+number. Hard guarantees: your own main
 phases are never auto-passed, nor combat declare steps, nor a stop with an
 opponent's spell on the stack, nor any stop while you have mana floating, nor
 the turn after an equipment lands with its equip affordable. Everywhere else
@@ -436,7 +441,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 |---|---|---|
 | `ARENA_AUTOPASS` | `casts` | off | strict | casts — which of your priority stops the engine passes for you |
 | `ARENA_AUTOPASS_RESOLVE_OWN` | `off` | on = also pass while your own spell resolves in your main phase (mains are sacred: off) |
-| `ARENA_AUTOPASS_RECEIPTS` | `all` | all | summary | off — auto-pass receipts in the Advisor panel |
+| `ARENA_AUTOPASS_RECEIPTS` | `summary` | summary (one line per turn) | all (every stop) | off — auto-pass receipts in the Advisor panel |
 | `ARENA_ADVISOR_TOOLS` | `on` | the advisor may read the public game state with its tool |
 | `ARENA_ADVISOR_ROTATE_TOKENS` | `400000` | advisor session rotation threshold |
 

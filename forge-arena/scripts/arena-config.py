@@ -43,7 +43,7 @@ KNOBS = {
     "human game (advisor + autopass)": [
         ("ARENA_AUTOPASS", "casts", "off | strict | casts — which of your priority stops the engine passes for you"),
         ("ARENA_AUTOPASS_RESOLVE_OWN", "off", "on = also pass while your own spell resolves in your main phase (mains are sacred: off)"),
-        ("ARENA_AUTOPASS_RECEIPTS", "all", "all | summary | off — auto-pass receipts in the Advisor panel"),
+        ("ARENA_AUTOPASS_RECEIPTS", "summary", "summary (one line per turn) | all (every stop) | off — auto-pass receipts in the Advisor panel"),
         ("ARENA_ADVISOR_TOOLS", "on", "the advisor may read the public game state with its tool"),
         ("ARENA_ADVISOR_ROTATE_TOKENS", "400000", "advisor session rotation threshold"),
     ],

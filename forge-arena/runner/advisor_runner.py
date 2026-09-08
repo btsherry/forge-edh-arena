@@ -105,6 +105,47 @@ QUIP_GUIDE_DENSE = ("\nVOICE QUIP: the voice has only its stock phrases right no
 QUIP_GUIDE = QUIP_GUIDE_SPARSE   # the default when the voice has published nothing
 
 
+class TurnClock:
+    """Turn labels as players say them (Ben, 2026-09-08): ``r4-t13`` = the
+    fourth round, thirteenth turn of the game. A round ends when a seat that
+    has already taken a turn this round becomes active again — so any
+    starting seat and any elimination count correctly. The active seat comes
+    from the public observer snapshot; without one, four turns make a round."""
+
+    def __init__(self, observer_state: Path):
+        self.path = observer_state
+        self.round = 1
+        self.turn = None
+        self.seen: set = set()
+        self.known = False   # an active seat has been read at least once
+
+    def _active(self, turn):
+        try:
+            d = json.loads(Path(self.path).read_text())
+        except (OSError, ValueError, TypeError):
+            return None
+        return d.get("activeSeat") if d.get("turn") == turn else None
+
+    def label(self, turn) -> str:
+        if not isinstance(turn, int) or isinstance(turn, bool):
+            return f"t{turn}"
+        if turn != self.turn:
+            active = self._active(turn)
+            if active is None:
+                if not self.known:
+                    self.round = (turn - 1) // 4 + 1
+            else:
+                if not self.known and self.turn is None and turn > 1:
+                    self.round = (turn - 1) // 4 + 1   # joined mid-game: best guess, tracked exactly from here
+                self.known = True
+                if active in self.seen:
+                    self.seen = set()
+                    self.round += 1
+                self.seen.add(active)
+            self.turn = turn
+        return f"r{self.round}-t{turn}"
+
+
 def quip_guide(state_file, log=None, prev=None) -> tuple[str, bool]:
     """(guidance text, live) from the voice runner's state file; sparse when
     the file is missing or unreadable. `prev` is the last `live` seen, so a
@@ -182,6 +223,7 @@ class AdvisorRunner:
                  log_dir: Path | None = None):
         self.inbox = base / "seat-0-advisor" / "inbox"
         self._voice_state = base / "seat-0-voice" / "state.json"
+        self._clock = TurnClock(base / "observer-state.json")
         self._voice_live = None
         self.timeout = timeout
         log_dir = Path(log_dir) if log_dir else Path(__file__).parent / "logs"
@@ -439,14 +481,14 @@ class AdvisorRunner:
     # kept" lines always show at once.
 
     def _show_note(self, body: dict) -> None:
-        mode = os.environ.get("ARENA_AUTOPASS_RECEIPTS", "all").lower()   # Ben 2026-09-08: every receipt, by default
+        mode = os.environ.get("ARENA_AUTOPASS_RECEIPTS", "summary").lower()   # Ben 2026-09-08 (game 32): one line per turn by default
         note = str(body.get("note") or "")
         turn = body.get("turn")
         if mode == "off":
             return
         if mode == "all" or "prompt kept" in note or "auto-passed" not in note:
             self._flush_receipts(turn)
-            self._stream_write(f"[t{turn}] ⏭ {note}\n")
+            self._stream_write(f"[{self._clock.label(turn)}] ⏭ {note}\n")
             return
         if getattr(self, "_receipt_turn", None) != turn:
             self._flush_receipts(turn)
@@ -464,7 +506,7 @@ class AdvisorRunner:
             return
         total = sum(rec.values())
         parts = ", ".join(f"{k} ×{v}" if v > 1 else k for k, v in rec.items())
-        self._stream_write(f"[t{turn}] ⏭ auto-passed {total} stop{'s' if total != 1 else ''} ({parts})\n")
+        self._stream_write(f"[{self._clock.label(turn)}] ⏭ auto-passed {total} stop{'s' if total != 1 else ''} ({parts})\n")
         self._receipts = {}
         self._receipt_turn = None
 
@@ -532,7 +574,7 @@ class AdvisorRunner:
         answer, meta = self.brain.decide(prompt, self.timeout)
         text, quip = split_quip((meta.get("raw") or "").strip(), log=self._say)
         if text:
-            self._stream_write(f"\n[t{turn} · {phase}] {text}\n")
+            self._stream_write(f"\n[{self._clock.label(turn)} · {phase}] {text}\n")
         self._record("advice", {"seq": req.get("seq"), "turn": turn, "phase": phase,
                                 "decisionType": req.get("decisionType"),
                                 "text": text, "latency_s": meta.get("latency_s")})
@@ -553,7 +595,7 @@ class AdvisorRunner:
         answer, meta = self.brain.decide(prompt, min(self.timeout, 45.0))
         text, quip = split_quip((meta.get("raw") or "").strip(), log=self._say)
         if text:
-            self._stream_write(f"\n[t{turn} · color] {text}\n")
+            self._stream_write(f"\n[{self._clock.label(turn)} · color] {text}\n")
         self._record("color", {"seq": digest.get("seq"), "turn": turn,
                                "text": text, "latency_s": meta.get("latency_s")})
         if quip:
@@ -720,10 +762,10 @@ class AdvisorRunner:
                   "Answer them directly (1-4 sentences, plain text). Ground it in the "
                   "most recent board state you were shown; if it needs something you "
                   "have not seen, say so rather than guess.")
-        self._stream_write(f"\n[t{turn} · you] {text}\n")
+        self._stream_write(f"\n[{self._clock.label(turn)} · you] {text}\n")
         answer, meta = self.brain.decide(prompt, self.timeout)
         reply = (meta.get("raw") or "").strip()
-        self._stream_write(f"[t{turn} · advisor] "
+        self._stream_write(f"[{self._clock.label(turn)} · advisor] "
                            + (reply or "(no answer — the call timed out or failed; ask again)")
                            + "\n")
         self._record("ask", {"turn": self._last_turn, "text": text, "answer": reply,

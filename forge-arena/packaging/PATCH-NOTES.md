@@ -46,8 +46,10 @@
   general sources. Persistent Claude processes are keyed on model, so effort
   changes no longer restart them. `arena-play.sh --stops quick|full` sets your
   opponent-turn stops for the game.
-- **A quieter Advisor panel.** Auto-pass receipts show every stop by default
-  (`ARENA_AUTOPASS_RECEIPTS=all|summary|off`; `summary` is one line per turn). The two advisor toggles sit on one row with
+- **A quieter Advisor panel.** Auto-pass receipts collapse to one line per
+  turn by default (`ARENA_AUTOPASS_RECEIPTS=summary|all|off`; `all` shows
+  every stop). Every line in the tab is stamped `r<round>-t<turn>`, e.g.
+  `[r4-t13 · color]`. The two advisor toggles sit on one row with
   short labels: "Advisor: ON - clk to pause", "Advisor Exec: OFF - clk to tgl".
 - **Fewer seconds per seat decision.** Reactions to other players' abilities
   that aim nothing at the seat are answered at low effort. A seat's yields

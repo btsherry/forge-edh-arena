@@ -198,6 +198,61 @@ class ConditionalQuips(unittest.TestCase):
         self.assertIn("at most every other turn", ar.QUIP_GUIDE_SPARSE)
 
 
+class RoundTurnLabels(unittest.TestCase):
+    """Ben, 2026-09-08 (game 32): panel lines read r<round>-t<turn>."""
+    def test_rounds_follow_the_table_not_a_formula(self):
+        import advisor_runner as ar
+        tmp = Path(tempfile.mkdtemp(prefix="clk-"))
+        st = tmp / "observer-state.json"
+        clk = ar.TurnClock(st)
+        self.assertEqual(clk.label(1), "r1-t1", "no snapshot: four turns a round")
+        self.assertEqual(clk.label(5), "r2-t5"); self.assertEqual(clk.label(13), "r4-t13")
+        clk = ar.TurnClock(st)
+        order = {1: 2, 2: 3, 3: 0, 4: 1, 5: 2, 6: 3, 7: 0, 8: 1}   # seat 2 started the game
+        for t, active in order.items():
+            st.write_text(json.dumps({"turn": t, "activeSeat": active}))
+            lab = clk.label(t)
+        self.assertEqual(lab, "r2-t8")
+        self.assertEqual(clk.label(4), "r2-t4"[:0] + clk.label(4), "a repeated call for the current turn is stable")
+        # seat 3 eliminated: turns 9 (s2), 10 (s0), 11 (s1), 12 (s2) -> round 3 begins at t9, round 4 at t12
+        for t, active in {9: 2, 10: 0, 11: 1, 12: 2}.items():
+            st.write_text(json.dumps({"turn": t, "activeSeat": active}))
+            lab = clk.label(t)
+        self.assertEqual(lab, "r4-t12")
+        self.assertEqual(clk.label("?"), "t?")
+        self.assertEqual(clk.label(12), "r4-t12")
+
+    def test_stream_lines_carry_the_label(self):
+        import advisor_runner as ar
+        tmp = Path(tempfile.mkdtemp(prefix="lbl-"))
+
+        class FakeBrain:
+            deck = "selvala-heart-of-the-wilds"; model = "opus"; effort = "low"; session_id = "s1"
+            last_prompt_tokens = 0; totals = {"calls": 0}; backend = None; wedges = 0; calls = 0
+            def ensure_session(self, *a, **k): return True
+            def reset(self): pass
+        orig = (ar.SeatBrain, ar.opponent_deck_sections)
+        ar.SeatBrain, ar.opponent_deck_sections = (lambda *a, **k: FakeBrain()), (lambda *a, **k: [])
+        try:
+            adv = ar.AdvisorRunner("selvala-heart-of-the-wilds", tmp, "opus", "low", 30.0, log_dir=tmp / "logs")
+        finally:
+            ar.SeatBrain, ar.opponent_deck_sections = orig
+        out = []
+        adv._stream_write = out.append
+        (tmp / "observer-state.json").write_text(json.dumps({"turn": 6, "activeSeat": 1}))
+        env = os.environ.get("ARENA_AUTOPASS_RECEIPTS")
+        os.environ.pop("ARENA_AUTOPASS_RECEIPTS", None)   # the default: summary
+        try:
+            adv._show_note({"turn": 6, "note": "(auto-passed — nothing available)"})
+            self.assertEqual(out, [], "summary by default: held until the turn moves on")
+            adv._show_note({"turn": 7, "note": "(prompt kept — castable: Khalni Ambush)"})
+        finally:
+            if env is not None:
+                os.environ["ARENA_AUTOPASS_RECEIPTS"] = env
+        self.assertTrue(out[0].startswith("[r2-t6] ⏭ auto-passed 1 stop"), out)
+        self.assertTrue(out[1].startswith("[r2-t7] ⏭ (prompt kept"), out)
+
+
 class LaunchBanner(unittest.TestCase):
     IGNORE = {"ARENA_RATE_VOIDED", "ARENA_OAI_API_KEY", "ARENA_HUMAN_DECK", "ARENA_MAILBOX_DIR", "ARENA_ADVISOR",
               "ARENA_AUTOSTOP_STATE", "ARENA_AUTOSTOP_STOP", "ARENA_AUTOSTOP_PID_FILE", "ARENA_AUTOSTOP_GUI_PID_FILE",

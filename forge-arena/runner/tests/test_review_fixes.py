@@ -177,7 +177,7 @@ class ReceiptSummaryTests(unittest.TestCase):
         out = []
         adv._stream_write = out.append
         import os as _os
-        _os.environ["ARENA_AUTOPASS_RECEIPTS"] = "summary"   # the default is now "all"
+        _os.environ["ARENA_AUTOPASS_RECEIPTS"] = "summary"   # explicit (the default since game 32)
         self.addCleanup(lambda: _os.environ.pop("ARENA_AUTOPASS_RECEIPTS", None))
         return adv, out
 
@@ -189,7 +189,7 @@ class ReceiptSummaryTests(unittest.TestCase):
         self.assertEqual(out, [], "nothing shown until the turn moves on")
         adv._show_note({"turn": 9, "note": "(auto-passed — nothing available)"})
         self.assertEqual(len(out), 1)
-        self.assertIn("[t8] ⏭ auto-passed 4 stops (nothing available ×3, only utility activations available: Arbor Elf)", out[0])
+        self.assertIn("[r2-t8] ⏭ auto-passed 4 stops (nothing available ×3, only utility activations available: Arbor Elf)", out[0])
 
     def test_kept_prompts_show_at_once_and_flush_first(self):
         adv, out = self._adv()
@@ -197,7 +197,7 @@ class ReceiptSummaryTests(unittest.TestCase):
         adv._show_note({"turn": 8, "note": "(prompt kept — castable: Khalni Ambush)"})
         self.assertEqual(len(out), 1); self.assertIn("prompt kept", out[0])
         adv._show_note({"turn": 9, "note": "(auto-passed — nothing available)"})
-        self.assertIn("[t8] ⏭ auto-passed 1 stop (nothing available)", out[1])
+        self.assertIn("[r2-t8] ⏭ auto-passed 1 stop (nothing available)", out[1])
 
     def test_modes_all_and_off(self):
         adv, out = self._adv()
