@@ -1859,3 +1859,6 @@ Hard-won from two live sessions; read before optimizing anything.
     `engine-events.jsonl`, the persistent stderr files. Runner tests 306 OK.
     Game 31 (all-AI, defaults) launched 13:46 with the banner in place as the
     first live check; the FULL gate runs after it (a Java test comment changed).
+    Addendum: the packager's script list lacked the three new scripts and
+    shipped the 4 MB raw takes (BL-42) — fixed with a drift test that derives
+    the needed set from the shipped scripts themselves.

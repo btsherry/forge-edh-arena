@@ -190,6 +190,25 @@ class HygieneBlock(unittest.TestCase):
         self.assertTrue(ok); self.assertIn("OK: no punts", text)
 
 
+class PackagerShipsWhatTheScriptsCall(unittest.TestCase):
+    """The packager copies scripts by an explicit list; a script arena-play /
+    arena-stop / arena-autostop / the advisor call that is missing from the
+    list breaks the shipped package on first launch (2026-09-08 near-miss:
+    arena-config.py, arena-hygiene.py and arena-public-state.py)."""
+    def test_every_script_the_shipped_scripts_call_is_packaged(self):
+        pk = (ROOT / "packaging" / "build-light-package.sh").read_text()
+        m = re.search(r"for f in ((?:[^;]|\n)*?); do", pk[pk.index("[8/9] scripts"):])
+        shipped = set(re.findall(r"[a-zA-Z_-]+\.(?:py|sh)", m.group(1)))
+        needed = set()
+        for name in ("arena-play.sh", "arena-stop.sh", "arena-autostop.sh"):
+            text = (ROOT / "scripts" / name).read_text()
+            needed |= set(re.findall(r"\$(?:DIR|ROOT/scripts)/([a-zA-Z_-]+\.(?:py|sh))", text))
+        adv = (ROOT / "runner" / "advisor_runner.py").read_text()
+        needed |= set(re.findall(r"forge-arena/scripts/([a-zA-Z_-]+\.py)", adv))
+        self.assertEqual(needed - shipped, set(), "called by shipped code but not in the packager's script list")
+        self.assertIn("--exclude '/voice/stock/raw/'", pk, "raw takes (4 MB) must not ship")
+
+
 class StopsRestore(unittest.TestCase):
     def test_standalone_restore(self):
         home = Path(tempfile.mkdtemp(prefix="home-"))

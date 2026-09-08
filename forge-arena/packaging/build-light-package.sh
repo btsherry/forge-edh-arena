@@ -142,6 +142,7 @@ cp "$REPO/forge-arena/docs/research/mtg-rules-summary.md" \
 echo "[7/9] runner — the seatd tree (no tests, no pycache, empty logs/)"
 rsync -a --exclude '__pycache__/' --exclude '/tests/' --exclude '/logs/' \
   --exclude '/replay.py' \
+  --exclude '/voice/stock/raw/' --exclude '/voice/stock/sfx/legacy/' \
   --exclude '/ratings.json' --exclude '/ratings-history.jsonl' \
   --exclude '/ratings.lock' --exclude '/results/' \
   "$REPO/forge-arena/runner/" "$DEST/forge-arena/runner/"
@@ -158,7 +159,8 @@ echo "[8/9] scripts — play/stop/launch/ingest/observe/cardwatch (batch, canary
 echo "      smoke and the discovery harnesses stay home)"
 mkdir -p "$DEST/forge-arena/scripts"
 for f in arena-play.sh arena-stop.sh arena-autostop.sh run-pilot-match.sh run-gui.sh \
-         arena-add-deck.py arena-status.py arena-digest.py arena-cardwatch.py; do
+         arena-add-deck.py arena-status.py arena-digest.py arena-cardwatch.py \
+         arena-config.py arena-hygiene.py arena-public-state.py; do   # 2026-09-08: play/stop/advisor call these
   cp "$REPO/forge-arena/scripts/$f" "$DEST/forge-arena/scripts/"
 done
 
