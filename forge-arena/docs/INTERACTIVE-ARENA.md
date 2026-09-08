@@ -336,9 +336,12 @@ cost rails — see `packaging/README.md` §"Other models on the backend".
    2026-09-08): the game so far arrives as the machine-built record, so the
    seat's earlier private reasoning beyond its quoted "why" lines is gone,
    and any decision that fell into the two-second gap was answered by stock.
-7. **The Executive take-over and `--stops quick` have been kit-tested, not
-   seen in a live human game** at the time of writing; the first human game
-   on the branch is the test.
+7. **Executive take-over, `--stops quick`, the voice mute and live voice were
+   all seen in a live human game on 2026-09-08 (game 32)**: two hand-offs and
+   a hand-back, the decision already in flight completing under the advisor
+   (by design — aborting it would hand it to stock, not to the human), the
+   mute round trip, and Selvala's Dreadnought line under autopass. Not yet
+   seen: the voice with no key / no ffmpeg (Ben tests at home).
 8. **Windows**: playback only. The launch scripts are POSIX shell.
 
 ## Upgrade roadmap
@@ -1927,3 +1930,39 @@ Hard-won from two live sessions; read before optimizing anything.
     (both log lines matched) and read log-side persistent fallbacks as 0
     while usage.json said 1 — the timeout regex now counts the first line
     only and the fallback count comes from usage.json alone.
+
+97. **Game 32 — the first human game on the branch (2026-09-08 14:49–15:59;
+    Ben as Selvala; Purphoros won t26 after Boseiju took Urza's Grim Monolith +
+    Power Artifact engine).** Everything the release list needed seen live was
+    seen: (a) **Executive** — on at t11 (six mailbox decisions incl. the land
+    drop of t15 that was already in flight when Ben clicked off: by design, an
+    aborted decision would go to stock, not to the human), back to Ben for the
+    Dreadnought line, on again at t19 to the end (168 seat-0 decisions in all;
+    the engine logged both transitions, the advisor's chat still answered Ben's
+    questions while playing); (b) **Dreadnought** — cast, Selvala tapped for 12
+    with the sacrifice trigger on the stack, no autopass interference (mains
+    sacred), the advisor's live line named the play and tracked the pool to the
+    mana ("five green floating plus two more sources — exactly Disciple at
+    six"); (c) **voice mute** — text button in this build: mute 15:32:47,
+    silence, unmute 15:36:04, chat answers and "Your move" resumed; the
+    game-over pair played; (d) **--stops quick** applied, backup written once.
+    Hygiene (archive 20260908-155926-stop): 651 decisions, model 592 (90 %),
+    runner 59 (cycle 23 — Urza's infinite loop replayed, affordability 14,
+    yield 13, memo 9), median 2.5 s, p90 6.8 s, max 51.7 s; rotations 6;
+    yield-mirror 41; punts 0, timeouts 0, fallbacks 0, refusals 0, tracebacks 0.
+    Voice: spoke 35, dropped 19 (stale), skipped 7, render failures 0.
+    Nine deviations, none a seam: Urza's colour sequencing ×3 (Medallion,
+    Transmute Artifact, Power Artifact), the Grim/Top miscount (the payer had
+    one source), Giada's Exemplar (W-15: stock taps basics before drawback
+    sources — brief nudge or payer rule, not built), Flawless Maneuver, Boseiju.
+    Play-quality notes on the advisor as pilot: it banked 17 green under Omnath
+    and passed with Wild Growth, Sanctum Weaver and a free Greaves equip
+    offered, and left Nykthos/Sol Ring untapped (under Omnath every tapped
+    source is a permanent +1/+1) — a brief sentence would fix both (noted with
+    BL-44); Selvala's any-colour picks cost a call per mana point (BL-44, 20
+    calls ≈ 50 s across two taps). Found and fixed during the game: receipts
+    default back to `summary` (Ben: "I thought that was an internal log");
+    `r<round>-t<turn>` labels on every panel line; a mute click logged "live
+    lines back on"; "Your move" spoke while the Executive held the seat.
+    Nit: seat 0's usage file under the Executive shows ctx 0k / rotations 0 —
+    the advisor writes that file from its own counters, not the seat runner's.
