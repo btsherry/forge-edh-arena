@@ -172,10 +172,11 @@ tab** of the lower-left dock. On by default in `--human` games;
   advice, no model calls) without a teardown; the AI panel's seat-0 row shows
   `advisor paused` meanwhile. An advised game rates as `human+advisor`
   regardless of pausing.
-- **Mute.** The third button on the same row, `Voice: ON - clk to mute`,
-  silences the voice without pausing the advice: every line, stock or live,
-  the bleeps included, and a line already playing is cut. Pausing the advisor
-  silences the voice too. Both are instant and reversible mid-game.
+- **Mute.** The speaker icon in the tab's upper right silences the voice
+  without pausing the advice: every line, stock or live, the bleeps included,
+  and a line already playing is cut. The icon shows struck through while
+  muted. Pausing the advisor silences the voice too. Both are instant and
+  reversible mid-game.
 - **Strictly read-only.** The advisor's feed has no return channel; it cannot
   act or stall the game. Advice that arrives late is skipped, never waited on.
 
@@ -268,7 +269,7 @@ are simply skipped and the stock lines still play; the log says so once.
 
 Discipline is the point: one utterance at a time, at most one every
 `ARENA_VOICE_MIN_GAP` seconds (default 8), and advice for a window you already
-answered is dropped, never read late. **The `Voice` button in the Advisor tab
+answered is dropped, never read late. **The speaker icon in the Advisor tab
 and pausing the advisor both silence the voice completely** — advice, quips,
 colour, "Your move.", eliminations, game over and the bleeps — drop anything
 queued, and cut a line already playing; unmuting or resuming restores all

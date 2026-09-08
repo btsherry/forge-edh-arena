@@ -25,7 +25,8 @@
   when punts, timeouts, fallbacks, tracebacks or wedges are not zero. The
   README gains "Every setting at a glance" and plain-language notes on
   Windows (voice plays there; the arena cannot start there yet) and on stops.
-  A `Voice` mute button joins the Advisor tab's row; it and the advisor pause
+  A speaker icon in the Advisor tab's upper right mutes the voice (struck
+  through while muted); it and the advisor pause
   both silence every line, stock or live, and cut one already playing. While
   live lines are down (no ElevenLabs key, a spent quota, no usable voice) the
   advisor attaches a stock quip to about one line in two so the table is not

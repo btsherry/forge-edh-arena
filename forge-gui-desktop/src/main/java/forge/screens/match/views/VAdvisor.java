@@ -64,7 +64,25 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         scroll.setOpaque(false);
         scroll.getViewport().setOpaque(false);
         scroll.setBorder(null);
-        body.add(status, "growx");
+        // Voice mute (Ben, 2026-09-08): a speaker icon in the panel's upper
+        // right — light grey outline on black, struck through when muted.
+        // Writes logs/control/voice.json; the voice runner silences EVERY line,
+        // stock or live, and cuts one already playing. Pausing the advisor does
+        // the same through advisor.json.
+        mute.setFocusable(false);
+        mute.setBorderPainted(false);
+        mute.setContentAreaFilled(false);
+        mute.setMargin(new java.awt.Insets(0, 0, 0, 0));
+        mute.addActionListener(e -> {
+            final boolean next = !forge.arena.interactive.AiControlFile.voiceEnabled();
+            forge.arena.interactive.AiControlFile.setVoiceEnabled(next);
+            syncMute();
+        });
+        final JPanel statusRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][]", "[]"));
+        statusRow.setOpaque(false);
+        statusRow.add(status, "growx");
+        statusRow.add(mute, "w 24!, h 24!");
+        body.add(statusRow, "growx");
         body.add(scroll, "grow, push");
         // Chat with the advisor (Ben, 2026-09-04): one field, one button. The text
         // becomes logs/control/ask/ask-<ts>-<n>.json; the advisor runner
@@ -124,22 +142,11 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             forge.arena.interactive.AiControlFile.setExecutive(next);
             syncExecutive();
         });
-        // Voice mute (Ben, 2026-09-08): writes logs/control/voice.json; the
-        // voice runner silences EVERY line, stock or live, and cuts one playing.
-        // Pausing the advisor does the same through advisor.json.
-        mute.setFocusable(false);
-        mute.setMargin(new java.awt.Insets(1, 8, 1, 8));
-        mute.addActionListener(e -> {
-            final boolean next = !forge.arena.interactive.AiControlFile.voiceEnabled();
-            forge.arena.interactive.AiControlFile.setVoiceEnabled(next);
-            syncMute();
-        });
-        // Ben (2026-09-08): the toggles on ONE row, short labels
-        final JPanel toggleRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][grow][grow]", "[]"));
+        // Ben (2026-09-08): both toggles on ONE row, short labels
+        final JPanel toggleRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][grow]", "[]"));
         toggleRow.setOpaque(false);
         toggleRow.add(toggle, "growx");
         toggleRow.add(executive, "growx");
-        toggleRow.add(mute, "growx");
         body.add(toggleRow, "growx, gaptop 2");
         refresh = new Timer(1000, e -> poll());
         refresh.setRepeats(true);
@@ -149,8 +156,20 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             new javax.swing.JButton("Advisor: OFF");
     private final javax.swing.JButton executive =
             new javax.swing.JButton("Advisor Exec: OFF - clk to tgl");
-    private final javax.swing.JButton mute =
-            new javax.swing.JButton("Voice: ON - clk to mute");
+    private final javax.swing.JButton mute = new javax.swing.JButton();
+    private static final javax.swing.Icon VOICE_ON = loadIcon("voice-on");
+    private static final javax.swing.Icon VOICE_OFF = loadIcon("voice-off");
+
+    /** forge-arena's resources: /forge/arena/icons/<name>.png (24 px) — null
+     *  when missing, and the button falls back to a text label. */
+    private static javax.swing.Icon loadIcon(final String name) {
+        try {
+            final java.net.URL u = VAdvisor.class.getResource("/forge/arena/icons/" + name + ".png");
+            return u == null ? null : new javax.swing.ImageIcon(u);
+        } catch (final RuntimeException e) {
+            return null;
+        }
+    }
 
     private final javax.swing.JTextField askField = new javax.swing.JTextField();
     private final javax.swing.JButton askButton = new javax.swing.JButton("Chat");
@@ -233,14 +252,20 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     }
 
     private void syncMute() {
-        if (!forge.arena.interactive.AiControlFile.advisorAttached()) {
-            mute.setText("Voice: OFF - not attached");
-            mute.setEnabled(false);
-            return;
+        final boolean attached = forge.arena.interactive.AiControlFile.advisorAttached();
+        final boolean on = !attached || forge.arena.interactive.AiControlFile.voiceEnabled();
+        mute.setEnabled(attached);
+        final javax.swing.Icon icon = on ? VOICE_ON : VOICE_OFF;
+        if (icon != null) {
+            mute.setIcon(icon);
+            mute.setDisabledIcon(icon);
+            mute.setText(null);
+        } else {
+            mute.setText(on ? "Voice" : "Muted");   // icon resource missing: a plain label still works
         }
-        mute.setEnabled(true);
-        final boolean on = forge.arena.interactive.AiControlFile.voiceEnabled();
-        mute.setText(on ? "Voice: ON - clk to mute" : "Voice: MUTED - clk to unmute");
+        mute.setToolTipText(!attached ? "Voice: no advisor attached to this game"
+                : on ? "Voice on — click to mute every spoken line"
+                     : "Voice muted — click to unmute");
     }
 
     private void poll() {
