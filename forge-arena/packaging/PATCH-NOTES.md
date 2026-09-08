@@ -17,6 +17,8 @@
   when punts, timeouts, fallbacks, tracebacks or wedges are not zero. The
   README gains "Every setting at a glance" and plain-language notes on
   Windows (voice plays there; the arena cannot start there yet) and on stops.
+  The advisor is asked to attach a spoken quip to about one line in two (it was
+  at most every other turn), so the stock lines are heard more often.
 - **The voice ships portable.** Live lines come back as PCM and are wrapped in
   a WAV header locally, so `ffmpeg` is optional: the film effects use it when
   present and a built-in pure-Python chain when not. Playback works on Windows

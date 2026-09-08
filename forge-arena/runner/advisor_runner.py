@@ -60,10 +60,15 @@ QUIPS = ("good-swing", "good-counter", "rough-counter", "didnt-see-that", "nice-
          "shall-we-play", "greetings-falken", "strange-game", "nice-game-of-chess", "hello")
 QUIP_QUOTES = ("shall-we-play", "greetings-falken", "strange-game", "nice-game-of-chess", "hello")
 QUIP_RE = re.compile(r"\s*\[quip:([a-z0-9-]+)\]\s*")
-QUIP_GUIDE = ("\nVOICE QUIP (optional): if the moment earns it, end with exactly one tag from this list and nothing after it: "
+# Frequency (Ben, 2026-09-08, after game 30: "the occurrences of stock lines
+# should be boosted"): from "at most every other turn" to "about one line in
+# two". The reactions fit almost any notable play; the film quotes stay rare.
+QUIP_GUIDE = ("\nVOICE QUIP: end about one line in two with exactly one tag from this list and nothing after it: "
               + ", ".join(f"[quip:{q}]" for q in QUIPS)
-              + ". Use one at most every other turn; the four WarGames quotes (shall-we-play, greetings-falken, "
-              "strange-game, nice-game-of-chess) at most once per game each, when they genuinely fit.")
+              + ". The reactions (ouch, must-have-hurt, didnt-see-that, interesting, calculating, well-played, "
+              "good-swing, good-counter, rough-counter, nice-combo, stick-it-to-them) fit any notable play — a big "
+              "attack, a removal, a counter, a combo piece, a swing in life; the four WarGames quotes (shall-we-play, "
+              "greetings-falken, strange-game, nice-game-of-chess) at most once per game each, when they genuinely fit.")
 
 
 def split_quip(text: str, log=None) -> tuple[str, str | None]:
