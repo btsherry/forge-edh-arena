@@ -1567,3 +1567,27 @@ Hard-won from two live sessions; read before optimizing anything.
     passes on games 24–25, 0 wrong). The first offer of every shape still
     reaches the model; only repeats are cut. Tests:
     `test_repeat_and_spell_reactor.py`, `AutopassPolicyTest` (14).
+
+80. **Seat auto-yield + the Selvala ceiling check (2026-09-07 late,
+    experimental/voicework).** `_auto_yield` (source `yield`): Forge's GUI
+    lets a human yield to an ability for the turn; a seat now gets the same.
+    Once the MODEL passes a REACT window whose stack is ALL abilities/triggers
+    (`stackKinds` present, aligned, no `spell`), the key (turn, top item name,
+    owner, kind, option set) is remembered with own life / pool / untapped; a
+    later window with that key is passed without a call unless own life
+    dropped, the seat has MORE mana than at the yield, or an opponent item aims
+    at it. Any spell on the stack disables it (game 25 seq 202: Purphoros
+    copied a Genesis Wave under a Hydra trigger — a name-only replay would have
+    cut that take; the kinds guard keeps it). Strictest replay (Staff/Selvala
+    only) on game 25: 27 calls cut, 0 wrong; live, triggers count too. The
+    **Selvala ceiling**: `ManaTableTest.selvalaYieldIsTheGreatestPowerNow`
+    shows the mana table already evaluates her `X` (GreatestCardPower) to the
+    live number, so the human table's ceiling is concrete for her — the
+    earlier "Selvala-class unknown" note was wrong; only an evaluation
+    exception yields null. Per-call cost facts (game 25, Giada): the seat's
+    `claude -p --resume` session re-reads the whole game transcript on every
+    decision — cache reads grew 61k → 807k tokens per call by t23 (94.6M
+    cached tokens read in one game for one seat; ~4.7k tokens appended per
+    decision), while latency stayed ~4 s flat. The lever is context size
+    (session rotation with a summary, smaller request payloads), not process
+    spawn.

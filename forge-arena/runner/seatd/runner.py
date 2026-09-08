@@ -59,6 +59,10 @@ class SeatRunner:
         # resourceless, tap-only REACT window this turn — (turn, option set,
         # own life). Cleared with the turn.
         self._tap_pass: tuple | None = None
+        # Auto-yield (Forge's GUI notion, seat-side; Ben 2026-09-07): keys
+        # (turn, top item name, owner, kind, option set) the MODEL passed on this
+        # turn while the stack held no spell -> (own life, pool, untapped).
+        self._yielded: dict[tuple, tuple] = {}
         # BL-02 follow-up: a trigger-order answer for the SAME set of trigger
         # groups is replayed for the rest of the TURN (Purphoros + Impact
         # Tremors would otherwise ask on every creature). Cleared with the other
@@ -778,6 +782,61 @@ class SeatRunner:
         return tuple(sorted(str(o.get("label", "")).split("  ")[0]
                             for o in req.get("options", []) if o.get("id") != 0))
 
+    def _yield_key(self, req: dict) -> tuple | None:
+        """(turn, top name, top owner, top kind, option set) when the stack is
+        non-empty, the kinds/owners metadata is present and aligned, and NO
+        item on the stack is a spell (abilities and triggers loop; a spell is
+        a one-off decision — game 25 seq 202: Purphoros copied a Genesis Wave
+        with a Hydra trigger on top of it). None otherwise."""
+        st = req.get("state") or {}
+        names = st.get("stack") or []
+        kinds = st.get("stackKinds")
+        owners = st.get("stackOwners")
+        if (not names or not isinstance(kinds, list) or not isinstance(owners, list)
+                or len(kinds) != len(names) or len(owners) != len(names)):
+            return None
+        if any(k == "spell" or k == "?" for k in kinds):
+            return None
+        # the turn is part of the key (the dict is also cleared per turn; the
+        # key makes a stale entry harmless if the clear ever moves)
+        return (req.get("turn"), str(names[0]), owners[0], kinds[0], self._option_set(req))
+
+    def _auto_yield(self, req: dict) -> str | None:
+        """Auto-yield rule (Ben, 2026-09-07: cut the repeat offers). Forge's
+        GUI lets a human yield to an ability for the turn; the seat gets the
+        same: once the MODEL has passed with ability/trigger X on top of an
+        all-abilities stack, later windows this turn with X on top of an
+        all-abilities stack and the same options are passed without a call —
+        unless the seat's life dropped, it has MORE mana than when it yielded
+        (a new possibility), or an opponent item aims at it. The first offer
+        of every X always reaches the model. Replayed on game 25 with the
+        strictest approximation (Staff/Selvala only): 27 calls cut, 0 wrong."""
+        if req.get("decisionType") != "REACT" or not self._yielded:
+            return None
+        key = self._yield_key(req)
+        if key is None or key not in self._yielded:
+            return None
+        if self._threatens_own(req):
+            return None
+        st = req.get("state") or {}
+        life, pool, untapped = self._yielded[key]
+        own = st.get("life")
+        if not isinstance(own, int) or own < life:
+            return None
+        if (st.get("manaPool") or 0) > pool or (st.get("untappedManaSourceCount") or 0) > untapped:
+            return None
+        return f"auto-yield: already passed with {key[1]} on top this turn (no spell on the stack, life not down, no new mana)"
+
+    def _note_yield(self, req: dict, answer: dict) -> None:
+        """Remember a MODEL pass on an all-abilities stack (never a punt)."""
+        if req.get("decisionType") != "REACT" or answer != {"chosenId": 0}:
+            return
+        key = self._yield_key(req)
+        st = req.get("state") or {}
+        if key is not None and isinstance(st.get("life"), int):
+            self._yielded[key] = (st.get("life"), st.get("manaPool") or 0,
+                                  st.get("untappedManaSourceCount") or 0)
+
     def _note_tap_pass(self, req: dict, answer: dict) -> None:
         """Remember a MODEL pass of a repeat-eligible window (never a punt)."""
         if req.get("decisionType") != "REACT" or answer != {"chosenId": 0}:
@@ -890,6 +949,10 @@ class SeatRunner:
         if why is not None:
             self._fast_why = why
             return {"chosenId": 0}, "repeat"
+        why = self._auto_yield(req)
+        if why is not None:
+            self._fast_why = why
+            return {"chosenId": 0}, "yield"
         # #2 reactive hold: brain armed a same-turn hold; auto-pass only when the
         # stack is non-empty AND every object was already shown-and-passed this
         # turn. A new object or an empty-stack (tactical) window escalates.
@@ -963,6 +1026,7 @@ class SeatRunner:
             self.react_seen.clear()
             self.order_memo.clear()
             self._tap_pass = None
+            self._yielded = {}
             self.hold = None  # hold posture is single-turn
             self.turn_intent = None
             self.cycle = None   # loops never survive a turn boundary
@@ -1017,7 +1081,7 @@ class SeatRunner:
         if fast:
             answer, source = fast
             why = ("all options on the no-op allowlist" if source == "autopass"
-                   else getattr(self, "_fast_why", "") if source in ("affordability", "repeat")
+                   else getattr(self, "_fast_why", "") if source in ("affordability", "repeat", "yield")
                    else "identical window already passed this turn")
             ok = self.mb.respond(req, answer)
             self._say(f"[seat {self.seat}] seq={seq} {dtype} -> {json.dumps(answer)} "
@@ -1190,8 +1254,10 @@ class SeatRunner:
         if source == "model" and dtype == "REACT" and answer == {"chosenId": 0}:
             self.react_seen.add(self._react_signature(req))
             self._note_tap_pass(req, answer)
+            self._note_yield(req, answer)
         elif source == "model" and dtype == "REACT":
             self._tap_pass = None  # the seat acted: the next repeat is a fresh question
+            self._yielded = {}
         if source == "model" and dtype == "CHOOSE_MODE":
             self._order_remember(req, answer)
 

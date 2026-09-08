@@ -2,7 +2,9 @@
 - a counterspell / spell-copier is dead when the stack holds only abilities;
 - a resourceless, tap-only REACT window is passed without a model call once
   the MODEL passed the same option set this turn and own life has not dropped;
-- the same-turn memo buckets OPPONENTS' life above 10 (own life exact).
+- the same-turn memo buckets OPPONENTS' life above 10 (own life exact);
+- auto-yield: once the model passed with ability X on top of an all-abilities
+  stack, later windows this turn with X on top are passed (life/mana/threat guards).
 Run: python3 -m unittest discover -s tests"""
 import json
 import sys
@@ -103,6 +105,56 @@ class RepeatTapPassTests(unittest.TestCase):
         self.assertIsNone(r._tap_pass)
         r._note_tap_pass(react(RING), PASS)
         self.assertIsNotNone(r._tap_pass)
+
+
+class AutoYieldTests(unittest.TestCase):
+    # BOLT (affordable with 3 untapped) is a live option: the affordability and
+    # spell-reactor rules stay quiet, so what follows is the yield rule alone.
+    STAFF = dict(stack=("Staff of Domination",), kinds=("ability",), owners=(0,))
+    STAFF_ON_SELVALA = dict(stack=("Staff of Domination", "Selvala, Heart of the Wilds"), kinds=("ability", "ability"), owners=(0, 0))
+
+    def test_first_offer_reaches_the_model_then_the_same_top_item_is_yielded(self):
+        r = runner()
+        first = react(BOLT, untapped=3, **self.STAFF)
+        self.assertIsNone(r._fastpath(first))
+        r._note_yield(first, PASS)
+        again = react(BOLT, untapped=3, opp_life=(36, 4, 40), **self.STAFF_ON_SELVALA)
+        ans, src = r._fastpath(again)
+        self.assertEqual((ans, src), (PASS, "yield"))
+        self.assertIn("Staff of Domination", r._fast_why)
+
+    def test_a_spell_anywhere_on_the_stack_blocks_the_yield(self):
+        r = runner()
+        r._note_yield(react(BOLT, untapped=3, **self.STAFF), PASS)
+        gw = react(BOLT, untapped=3, stack=("Staff of Domination", "Genesis Wave"), kinds=("ability", "spell"), owners=(0, 0))
+        self.assertIsNone(r._fastpath(gw), "Genesis Wave under the Staff: the copy decision stays live")
+        trig = react(BOLT, untapped=3, stack=("Managorger Hydra", "Genesis Wave"), kinds=("trigger", "spell"), owners=(0, 0))
+        self.assertIsNone(r._fastpath(trig))
+
+    def test_life_drop_new_mana_threat_or_new_top_item_reopen(self):
+        r = runner()
+        r._note_yield(react(BOLT, untapped=3, **self.STAFF), PASS)
+        self.assertIsNone(r._fastpath(react(BOLT, untapped=3, life=19, **self.STAFF)), "life dropped")
+        self.assertIsNone(r._fastpath(react(BOLT, untapped=5, **self.STAFF)), "more mana than at the yield")
+        self.assertIsNone(r._fastpath(react(BOLT, untapped=3, targets=[["seat 2"]], **self.STAFF)), "aimed at us")
+        self.assertIsNone(r._fastpath(react(BOLT, untapped=3, stack=("Selvala, Heart of the Wilds",), kinds=("ability",), owners=(0,))), "a different top item")
+        self.assertIsNone(r._fastpath(react(BOLT, untapped=3, turn=24, **self.STAFF)), "next turn is not remembered here")
+        self.assertIsNone(r._fastpath(react(BOLT, RING, untapped=3, **self.STAFF)), "a new option")
+
+    def test_missing_kinds_never_yield_and_acting_clears(self):
+        r = runner()
+        r._note_yield(react(BOLT, untapped=3, kinds=None), PASS)
+        self.assertEqual(r._yielded, {})
+        r._note_yield(react(BOLT, untapped=3, **self.STAFF), PASS)
+        self.assertTrue(r._yielded)
+        r._note_yield(react(BOLT, untapped=3, **self.STAFF), {"chosenId": 1})  # a take is never a yield
+        self.assertEqual(len(r._yielded), 1)
+
+    def test_less_mana_than_at_the_yield_still_yields(self):
+        r = runner()
+        r._note_yield(react(BOLT, untapped=3, **self.STAFF), PASS)
+        ans, src = r._fastpath(react(BOLT, untapped=1, **self.STAFF))
+        self.assertEqual(src, "yield")
 
 
 class LifeBucketMemoTests(unittest.TestCase):

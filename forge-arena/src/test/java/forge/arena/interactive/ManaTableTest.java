@@ -112,4 +112,27 @@ public class ManaTableTest {
         Assert.fail("no row for " + name + " in " + rows);
         return null;
     }
+
+    /** 2026-09-07: the human autopass ceiling treats a non-integer yield as
+     *  unknown (-1 -> keep every stop). Selvala's X is Count$Valid
+     *  Creature.YouCtrl$GreatestCardPower — the engine can evaluate it now,
+     *  so the table must see the live number, not "unknown". */
+    @Test(timeOut = 120_000)
+    public void selvalaYieldIsTheGreatestPowerNow() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            MailboxTestKit.put("Selvala, Heart of the Wilds", k.seat, ZoneType.Battlefield);
+            MailboxTestKit.put("Craterhoof Behemoth", k.seat, ZoneType.Battlefield); // 5/5
+            MailboxTestKit.put("Grizzly Bears", k.seat, ZoneType.Battlefield);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> sources = (List<Map<String, Object>>) MailboxController.buildState(k.seat, k.seat.getId(), 3).get("manaSources");
+            Map<String, Object> selvala = null;
+            for (Map<String, Object> row : sources) {
+                if ("Selvala, Heart of the Wilds".equals(row.get("name"))) {
+                    selvala = row;
+                }
+            }
+            Assert.assertNotNull(selvala, "Selvala row missing: " + sources);
+            Assert.assertEquals(selvala.get("yield"), 5, "X = greatest power among creatures you control: " + selvala);
+        }
+    }
 }

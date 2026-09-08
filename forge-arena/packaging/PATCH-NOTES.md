@@ -10,7 +10,9 @@
   tap-only utilities is passed without a model call once the model has passed
   the same options this turn and the seat's life has not dropped; and the
   same-turn memo ignores an opponent's life moving within a 5-point band above
-  10. The first offer of any shape still goes to the model.
+  10. Once a seat has passed on an ability, later windows this turn with the
+  same ability on top of an all-abilities stack are yielded automatically,
+  Forge-style. The first offer of any shape still goes to the model.
 - **Every public zone is on the table.** The observer snapshot and the seats'
   board state now carry graveyards, face-up exile, command zones, what each
   permanent imprinted or exiled (an Isochron Scepter's instant is public
