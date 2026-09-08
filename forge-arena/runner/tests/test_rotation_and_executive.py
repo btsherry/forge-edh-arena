@@ -147,6 +147,18 @@ class RunnerRotationTests(unittest.TestCase):
         self.assertTrue(r._maybe_rotate()); self.assertEqual(len(calls), 1)
         self.assertIn("## GAME SO FAR (seat 2", calls[0])
 
+    def test_hard_ceiling_rotates_mid_turn(self):
+        r, calls = self._runner()
+        r._game_log.parent.mkdir(parents=True, exist_ok=True)
+        r._game_log.write_text(json.dumps({"seat": 2, "turn": 17, "seq": 1, "type": "CAST_SPELL", "source": "model",
+                                           "answer": {"chosenId": 1}, "why": "w", "board": {"lives": {"2": 40}, "stack": []}}) + "\n")
+        r.rotate_at, r.rotate_hard = 250_000, 600_000
+        r.brain.last_prompt_tokens = 400_000
+        self.assertFalse(r._maybe_rotate(hard=True), "above the soft cap but under the hard ceiling: wait for the turn boundary")
+        r.brain.last_prompt_tokens = 851_000
+        self.assertTrue(r._maybe_rotate(hard=True), "game 28: 851k mid-turn rotates now")
+        self.assertEqual(len(calls), 1)
+
     def test_zero_cap_disables(self):
         r, calls = self._runner()
         r.rotate_at = 0

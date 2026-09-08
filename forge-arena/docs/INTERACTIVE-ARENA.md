@@ -1721,3 +1721,8 @@ Hard-won from two live sessions; read before optimizing anything.
     the per-call path), `ARENA_REACT_LOW_EFFORT` stays `on`,
     `ARENA_AUTOPASS_RECEIPTS` defaults to `all` (Ben prefers every receipt in
     the panel; `summary` remains available).
+    Game 28 addendum: Urza's 145-decision turn 17 grew its chat to 851k before
+    the turn boundary let it rotate (851k → 63k in 3.1 s, record at the 12k
+    budget). `ARENA_ROTATE_HARD` (600k; 0 off) now rotates at the NEXT
+    decision, mid-turn, once the last call re-read that much; the record
+    carries the turn's plays so far.

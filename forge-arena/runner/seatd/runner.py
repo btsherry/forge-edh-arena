@@ -36,6 +36,7 @@ class SeatRunner:
     # Defaults for a runner built without __init__ (offline tests use __new__):
     # rotation off, no game id, no repeat/yield memory yet.
     rotate_at = 0  # class default
+    rotate_hard = 0
     _game_id = None
     _tap_pass = None
     _yielded = None   # dict once the first yield is noted (never a shared class dict)
@@ -56,6 +57,14 @@ class SeatRunner:
             self.rotate_at = int(os.environ.get("ARENA_ROTATE_TOKENS", "250000"))
         except ValueError:
             self.rotate_at = 250000
+        # Hard ceiling (game 28, 2026-09-08: Urza's 145-decision turn 17 grew
+        # the chat to 851k before the turn boundary let it rotate). Past this
+        # the seat rotates at the NEXT decision, mid-turn; the record carries
+        # the turn's plays so far. 0 disables.
+        try:
+            self.rotate_hard = int(os.environ.get("ARENA_ROTATE_HARD", "600000"))
+        except ValueError:
+            self.rotate_hard = 600000
         self._game_id: str | None = None
         self.seat, self.deck = seat, deck
         self.timeout_s = timeout_s
@@ -1074,15 +1083,20 @@ class SeatRunner:
                 continue
             self.handle(req)
 
-    def _maybe_rotate(self) -> bool:
+    def _maybe_rotate(self, hard: bool = False) -> bool:
         """Layer two (Ben, 2026-09-07): when the last call re-read more than
         ARENA_ROTATE_TOKENS, start a fresh session with the same dossier plus
         the machine-built game record (seatd/record.py). Runs at a turn
-        boundary only. A failed rotation keeps the old session."""
+        boundary, or mid-turn past ARENA_ROTATE_HARD (hard=True). A failed
+        rotation keeps the old session."""
         size = getattr(self.brain, "last_prompt_tokens", 0)
-        if (not self.rotate_at or not isinstance(size, int) or size < self.rotate_at
+        cap = self.rotate_hard if hard else self.rotate_at
+        if (not cap or not isinstance(size, int) or size < cap
                 or not getattr(self.brain, "session_id", None)):
             return False
+        if hard:
+            self._say(f"[seat {self.seat}] context {size // 1000}k past the hard ceiling "
+                      f"{cap // 1000}k — rotating mid-turn")
         try:
             from . import record as _record
             text = _record.render(self._game_log, self._jsonl_path, self.seat, game_id=self._game_id)
@@ -1138,9 +1152,14 @@ class SeatRunner:
             self._publish_yields()
         if req.get("gameId"):
             self._game_id = req.get("gameId")
-        if self._last_turn != req.get("turn"):
+        new_turn = self._last_turn != req.get("turn")
+        if not new_turn and self.rotate_hard \
+                and isinstance(getattr(self.brain, "last_prompt_tokens", 0), int) \
+                and getattr(self.brain, "last_prompt_tokens", 0) >= self.rotate_hard:
+            self._maybe_rotate(hard=True)   # mid-turn, past the hard ceiling
+        if new_turn:
             self._last_turn = req.get("turn")
-            self._maybe_rotate()   # turn boundary: the one safe moment
+            self._maybe_rotate()   # turn boundary: the preferred moment
             self.react_seen.clear()
             self.order_memo.clear()
             self._tap_pass = None
