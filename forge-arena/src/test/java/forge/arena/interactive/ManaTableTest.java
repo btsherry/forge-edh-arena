@@ -166,4 +166,21 @@ public class ManaTableTest {
             }
         }
     }
+
+    /** Game 29 t7: a ready land-untapper (Arbor Elf) makes a deliberate land
+     *  tap a real line; without one (or while the Elf is summoning sick) bare
+     *  land taps stay hidden. */
+    @Test(timeOut = 120_000)
+    public void landUntapperReadyDetectsArborElf() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            MailboxTestKit.put("Forest", k.seat, ZoneType.Battlefield);
+            Assert.assertFalse(MailboxController.landUntapperReady(k.seat), "no untapper");
+            Card elf = MailboxTestKit.put("Arbor Elf", k.seat, ZoneType.Battlefield);
+            Assert.assertFalse(MailboxController.landUntapperReady(k.seat), "a summoning-sick Elf cannot tap yet");
+            elf.setSickness(false);
+            Assert.assertTrue(MailboxController.landUntapperReady(k.seat), "untapped, unsick Arbor Elf");
+            elf.tap(true, null, null);
+            Assert.assertFalse(MailboxController.landUntapperReady(k.seat), "a tapped Elf is no enabler");
+        }
+    }
 }

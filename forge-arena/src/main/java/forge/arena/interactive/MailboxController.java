@@ -461,6 +461,8 @@ public final class MailboxController extends PlayerControllerAi
 
         int turn = game.getPhaseHandler().getTurn();
         List<SpellAbility> playable = new ArrayList<>();
+        java.util.Set<String> floatOfferedNames = new java.util.HashSet<>(); // one float option per land name
+        java.util.Set<SpellAbility> floatEnabled = new java.util.HashSet<>();     // labelled as untapper enablers
         // getSpellAbilities() deliberately STRIPS alternative-cost versions of a
         // spell whenever the base spell is castable (stock AI re-derives them at
         // cast time via getOriginalAndAltCostAbilities). The mailbox plays the
@@ -498,9 +500,17 @@ public final class MailboxController extends PlayerControllerAi
                 // mana abilities (like own-main), because "tap Selvala for 12" in
                 // response to Dreadnought's ETB is exactly the point.
                 if (isTrivialLandMana(sa, host)) {
-                    continue;
-                }
-                if (reactive || tactical) {
+                    // Game 29 t7 (2026-09-08): Selvala planned "tap Forest, Arbor Elf
+                    // untaps it, tap again" for her third mana and had no way to
+                    // tap the Forest on purpose — bare land taps are hidden. When
+                    // the seat controls a READY land-untapper, ONE float option per
+                    // land name is offered and labelled as the enabler.
+                    if (reactive || tactical || !landUntapperReady(me)
+                            || !floatOfferedNames.add(host.getName())) {
+                        continue;
+                    }
+                    floatEnabled.add(sa);
+                } else if (reactive || tactical) {
                     continue;
                 }
             }
@@ -659,6 +669,9 @@ public final class MailboxController extends PlayerControllerAi
             String name = host != null ? host.getName() : sa.getDescription();
             String cost = sa.getPayCosts() != null ? sa.getPayCosts().toSimpleString() : null;
             String lab = label(sa, host);
+            if (floatEnabled.contains(sa)) {
+                lab += " [FLOAT — you control an untapper: tap this land now, untap it, tap again]";
+            }
             // Commander tax is applied by CostAdjustment at PAYMENT time, so
             // the SA's stored cost never shows it: Selvala's third cast read
             // {1}{G}{G} when the true bill was 7. The brain sequenced around 3,
@@ -951,6 +964,40 @@ public final class MailboxController extends PlayerControllerAi
                 sa.resetTargets();
                 return true;
             }
+        }
+        // Game 29 t19 (2026-09-08): Bridgeworks Battle — the seat chose the pump
+        // target and was never asked for the fight target ("up to one target
+        // creature you don't control", a SUB-ability, TargetMin 0). The AI cast
+        // path never runs the target chooser for sub-abilities, so the fight
+        // had no target and Serra Paragon lived. Pre-target every targeting
+        // part of the chain the same way as the root: single-target parts go
+        // to the seat (with "No target (decline)" when optional), multi-target
+        // parts to stock. A required part with no answer keeps the card in hand.
+        try {
+            SpellAbility prev = sa;
+            for (SpellAbility part = sa.getSubAbility(); part != null; part = part.getSubAbility()) {
+                if (part instanceof forge.game.spellability.AbilitySub) {
+                    ((forge.game.spellability.AbilitySub) part).setParent(prev);
+                }
+                prev = part;
+                if (!part.usesTargeting() || part.isTargetNumberValid() && part.getTargets() != null
+                        && !part.getTargets().isEmpty()) {
+                    continue;
+                }
+                part.setActivatingPlayer(getPlayer());
+                forge.game.spellability.TargetRestrictions ptgt = part.getTargetRestrictions();
+                boolean partRequired = ptgt != null && host != null && ptgt.getMinTargets(host, part) > 0;
+                if (!chooseTargetsFor(part) && partRequired) {
+                    System.err.println("[mailbox seat " + seatIndex + "] sub-ability target unanswered for "
+                            + (host != null ? host.getName() : sa) + " — keeping the card in hand");
+                    sa.resetTargets();
+                    part.resetTargets();
+                    return true;
+                }
+            }
+        } catch (RuntimeException subTargeting) {
+            // never let chain pre-targeting break the cast: stock takes the sub-targets as before
+            System.err.println("[mailbox seat " + seatIndex + "] sub-ability pre-targeting threw: " + subTargeting);
         }
         inPaymentContext = true;
         boolean played;
@@ -3972,6 +4019,38 @@ public final class MailboxController extends PlayerControllerAi
      * until it's live. Costed land abilities (Nykthos {2},{T}) were never
      * filtered and still aren't.
      */
+    /** True when the seat controls an untapped, non-sick permanent with an
+     *  activated Untap ability that targets lands (Arbor Elf: Forest; Voyaging
+     *  Satyr: Land; Kiora's Follower: Permanent). Then a deliberate land tap
+     *  is a real line (float, untap, tap again), not option flood. */
+    static boolean landUntapperReady(Player me) {
+        try {
+            for (Card c : me.getCardsIn(ZoneType.Battlefield)) {
+                if (c.isTapped() || (c.isCreature() && c.hasSickness())) {
+                    continue;
+                }
+                for (SpellAbility sa : c.getSpellAbilities()) {
+                    if (sa == null || !sa.isActivatedAbility()
+                            || sa.getApi() != forge.game.ability.ApiType.Untap
+                            || sa.getTargetRestrictions() == null) {
+                        continue;
+                    }
+                    for (String v : sa.getTargetRestrictions().getValidTgts()) {
+                        String head = v.split("\\.")[0];
+                        if (head.equals("Land") || head.equals("Permanent") || head.equals("Forest")
+                                || head.equals("Island") || head.equals("Swamp") || head.equals("Mountain")
+                                || head.equals("Plains")) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } catch (RuntimeException ignore) {
+            // unreadable ability: no float offer (the old behaviour)
+        }
+        return false;
+    }
+
     private static boolean isTrivialLandMana(SpellAbility sa, Card host) {
         if (host == null || !host.isLand()) {
             return false;

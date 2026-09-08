@@ -1748,3 +1748,21 @@ Hard-won from two live sessions; read before optimizing anything.
     skip it. `ManaTableTest.conditionLockedManaSourceIsDormantNotAvailable`.
     arena-stop now archives `engine-events.jsonl` and the persistent-process
     stderr files too.
+
+90. **Game 29 — all-AI, defaults on (2026-09-08 10:28–11:12; Urza won t23 at
+    5 life).** 23 turns, 760 decisions: model 439 (57%), runner 321 (cycle 239,
+    memo 72, affordability 6, yield 4); 0 timeouts / punts / refusals /
+    TARGETLOSS; persistent 385 calls / 0 fallbacks; rotations 5 (soft cap) +
+    the hard ceiling's first live firing (Urza at 596k mid-turn); total cache
+    reads 84.7M across four seats (game 28: 119.5M). Urza's turn 20: 202
+    decisions, 181 absorbed by cycle + memo, 21 to the model. Seven
+    deviations, each checked: BL-37 Arbor-Elf float line (seam, fixed);
+    BL-36 Bridgeworks Battle sub-ability target never asked (seam, fixed);
+    W-11 payer spent the Plains not Dust Bowl (payer, watch); W-12 Nexus of
+    Fate under Trouble in Pairs (grounding gap, candidate); three honest model
+    calls (Sphinx mana count, Craterhoof timing, Wash Out). Autopass hygiene:
+    the model passed 160 of 172 REACT windows; the dominant shapes are own-
+    trigger windows with real options (48) and Smuggler's Surprise / Arbor Elf
+    holds on empty stacks (49) — no rule can call those dead; Clue tokens sat
+    in 152 passed windows as a real instant-speed option. No new dead-window
+    rule added, again by evidence.
