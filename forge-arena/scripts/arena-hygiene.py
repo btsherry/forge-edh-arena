@@ -21,9 +21,10 @@ import sys
 # The same signals the game watchers key on. Each: (label, regex over seat-*.log
 # and run_table.out lines, must-be-zero?)
 SEAT_LOG_SIGNALS = [
-    ("timeouts", re.compile(r"timed out|no spawn retry|used the window"), True),
+    # one stalled call writes "call timed out" AND "used the window … no spawn
+    # retry": count the first line only (game 31 read 2 for one stall)
+    ("timeouts", re.compile(r"call timed out|timed out \("), True),
     ("punts", re.compile(r"\[punt|answering the safe default"), True),
-    ("persistent fallbacks", re.compile(r"persistent .*fall(ing)? back|fallback"), True),
     ("tracebacks", re.compile(r"Traceback|INTERNAL ERROR"), True),
     ("windows lost", re.compile(r"WINDOW LOST"), True),
     ("wedges", re.compile(r"SESSION WEDGED"), True),

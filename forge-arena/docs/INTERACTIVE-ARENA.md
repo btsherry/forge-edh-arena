@@ -1907,3 +1907,23 @@ Hard-won from two live sessions; read before optimizing anything.
     `Renderer.stock(id)` resolves each; `StockLibrary` tests pin the count,
     the registers, the WAV format and the QUIPS ⊆ manifest invariant. A
     listen-check and any re-take is Ben's, after a game.
+
+96. **Game 31 — all-AI, defaults, first game with the launch banner and the
+    teardown hygiene block (2026-09-08 13:46–14:36; Urza won t30 with an
+    unblockable 14/14 Construct via Manifold Key; Purphoros out t24, Selvala
+    t27).** Hygiene (archive 20260908-143631-stop): 576 decisions, model 557
+    (96 % — few dead reaction windows this game: runner answered 18), median
+    2.7 s, p90 8.8 s, max 33.5 s; rotations 10 (seat 0: 5, ctx 215k after);
+    yield-mirror 16; refusals 0; tracebacks 0; restarts 0. ONE punt: seat 2
+    t21 MAIN1, a persistent call that produced nothing for 72 s (killed, the
+    window spent by design, a fresh process answered the next call in 5 s;
+    the other seats were normal that minute) — W-13. Nine deviations: one
+    seam (BL-43, Selvala's reach — fixed 6460a521d38, gate this afternoon),
+    one deliberate gate (W-14, no window over the seat's own activation), the
+    rest reasoning or outcome notes (Reality Shift hold; Kabira Takedown "6
+    is not enough" for a 4/6; chump after pumps; The One Ring bounce vs
+    last-known burden; "survive the alpha"). The hygiene block's loud line
+    fired correctly on the punt; it double-counted the stall as two timeouts
+    (both log lines matched) and read log-side persistent fallbacks as 0
+    while usage.json said 1 — the timeout regex now counts the first line
+    only and the fallback count comes from usage.json alone.
