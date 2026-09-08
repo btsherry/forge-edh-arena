@@ -36,7 +36,11 @@ Gathering is © Wizards of the Coast.
 
 ## Requirements
 
-- macOS or Linux (POSIX shell; developed on macOS). Voice playback also works on Windows via PowerShell; the launch scripts themselves are POSIX shell.
+- macOS or Linux. The arena is started from the command line with scripts
+  written for the Unix shell. On Windows those scripts do not run, so there is
+  no way to start a game on Windows yet. The advisor's voice files do play on
+  Windows, and the code for that is in place, but it only matters once the rest
+  of the arena can run there.
 - **JDK 17+** on PATH, or `JAVA_HOME` set
 - **Python 3.9+**, stdlib only, no pip installs
 - **Claude Code CLI** (`claude`), logged in. Brains run on your Claude
@@ -71,6 +75,12 @@ Defaults: `--model opus --effort medium`, 90 s decision timeout. Knobs:
 `--model haiku|sonnet|opus|fable`, `--effort low|medium|high|xhigh|max`,
 `--timeout N` (use 300 at xhigh/max or seats punt past the deadline). Any
 seat can be re-dialed mid-game from [the AI panel](#the-ai-panel).
+In human games your opponent-turn priority stops are set to `quick` for the
+game (see [Opponent-turn stops](#opponent-turn-stops)); `--stops full`,
+`--stops keep` and `--stops restore` change that. Every setting in effect is
+printed once at launch and saved with the logs; at stop a hygiene block
+summarises the game (see [Logs and data out](#logs-and-data-out)). The
+complete list of settings is in [Every setting at a glance](#every-setting-at-a-glance).
 
 **The table tears itself down when the match is over.** Once the engine
 reports game over, or you close the game window, the launcher lingers
@@ -188,6 +198,21 @@ get any-colour mana picks (Gemstone Caverns, City of Brass…) auto-answered in
 the commander's colour, with one receipt in the tab; multicolour commanders
 keep the dialog.
 
+### Opponent-turn stops
+
+Forge asks you for priority during your opponents' turns at the steps you
+have ticked in its preferences. The autopass table already passes any stop
+where you cannot act, so a stop only costs a click when you *can*. For a
+smooth game with the counterplay windows kept, `arena-play.sh` sets your
+stops to **quick** before each human game: after attackers are declared, and
+the end step. `--stops full` adds the beginning of combat and the
+declare-blockers step. `--stops keep` leaves your preferences exactly as they
+are. The first time the launcher rewrites them it saves your originals next
+to Forge's preferences file (`forge.preferences.bak-arena`), and never
+overwrites that copy; `--stops restore` puts them back, for the game or on
+its own (`arena-play.sh --stops restore` restores and exits). Spectator games
+never touch your preferences.
+
 ## The Advisor's voice
 
 The advisor can speak, in the register of Joshua from *WarGames*. It ships
@@ -196,8 +221,9 @@ bleeps (greeting at launch, "Your move.", eliminations, a win line or "A
 strange game…" at the end, and short quips the advisor picks when a moment
 earns one: "Nice combo.", "Ouch.", "I did not see that coming."). The stock
 lines are plain WAV files in the package and play offline on macOS
-(`afplay`), Linux (`paplay`/`aplay`) and Windows (PowerShell's built-in
-SoundPlayer) with nothing to install.
+(`afplay`) and Linux (`paplay`/`aplay`) with nothing to install. The player
+can also make sound on Windows, but the arena itself cannot be started
+there yet (see Requirements).
 
 **Live spoken advice is optional and needs your own ElevenLabs key.** With
 `ELEVENLABS_API_KEY` set, the advisor also reads the **first sentence** of
@@ -238,7 +264,10 @@ when present); `ARENA_VOICE_FORMAT` (default `pcm_24000`; `mp3_44100_128` if
 your tier rejects PCM — the runner falls back to MP3 by itself for the run);
 `ARENA_VOICE_GLITCH=off|light|heavy`; `ARENA_VOICE_COLOR=off|some|all` (spoken
 recaps on opponents' turns); `ARENA_VOICE_MAX_CHARS` per game (default 20000,
-then stock only). Mute mid-game with `python3 forge-arena/runner/voice_runner.py
+then stock only). If ElevenLabs refuses three lines in a row (a spent quota,
+a bad key, an outage), live lines pause for a minute, then twice as long each
+time up to ten minutes, with one log line per pause; stock phrases keep
+playing and the first successful line afterwards logs the recovery. Mute mid-game with `python3 forge-arena/runner/voice_runner.py
 --mute` (`--unmute` to resume); `--play startup` or `--say "text"` test the
 speakers. Rendered lines are cached under `forge-arena/runner/logs/cache/voice/`
 (outside the package, never bundled, no size cap — delete the folder to clear).
@@ -314,14 +343,17 @@ Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 | `game.jsonl` | **The dataset.** One JSON object per decision, all seats, one plain append-only file for the whole session (every game since the last stop); the `tail -f` target |
 | `game-<gameId>.jsonl` | The same records, one file per game (each record carries its `gameId`); the ratings sweep reads these |
 | `seat-N.log` / `seat-N.jsonl` | Seat N's decision stream, readable and structured (`deviation` and `turn_intent` fields per record), with `DEVIATION` lines whenever the plan met reality ("wanted X — blocked by Y"); `grep DEVIATION` is the fastest play-quality review |
-| `seat-N.usage.json` | Rolling token and cost snapshot |
+| `seat-N.usage.json` | Rolling token and cost snapshot: context size of the last call, rotations, persistent-process calls and fallbacks |
+| `launch-config.txt` | The launch banner: every setting in effect for this table, defaults marked; also the first lines of `run_table.out` and `gui.out` |
+| `engine-events.jsonl` | Engine-side events: yields the engine mirrored for a seat without opening a window |
+| `claude-persistent-seat-N.err` | Standard error of seat N's long-lived `claude` process |
 | `advisor-0.log` / `advisor-0.jsonl` | The Advisor tab's stream and its structured twin: advice, commentary, autopass notes, your Chat exchanges, and your actual choices paired to their decision seq |
 | `voice-0.log` / `voice-0.jsonl` | The advisor's voice: what it spoke, dropped (stale, expired) or skipped, with live characters used |
 | `gui.out`, `run_table.out`, `ratings.out`, `advisor_runner.out`, `autostop.out` | Engine, runners, ratings sweep, advisor supervisor, auto-teardown watcher |
 | `transport-events.jsonl` | Punt and wedge events; the ratings sweep voids games contaminated inside their window |
 | `elo/seat-N.json` | Per-seat rating digest the AI panel reads |
 | `control/seat-N.json`, `control/advisor.json`, `control/voice.json`, `control/ask/` | The GUI↔runner control plane: seat re-dials, the Advisor pause state, the voice mute, Chat questions (one file each, deleted on pickup); cleared at teardown |
-| `archive/<timestamp>-stop/` | Every finished game's full log set, moved here at stop |
+| `archive/<timestamp>-stop/` | Every finished game's full log set, moved here at stop, plus `hygiene.txt`: the teardown summary (decisions by who answered them, model share and latency, per-seat context and rotations, punts, refusals, deviations, timeouts, restarts, engine events, voice and advisor counts, and a loud `!! HYGIENE` line when anything that must be zero is not) |
 
 Nothing is clobbered. Stop moves the session's whole log set into a
 timestamped archive folder and prints `N decisions across M game(s)
@@ -351,12 +383,91 @@ ground-truth snapshot (turn, phase, per-seat life, hand, library and board,
 `gameOver` and the winner) refreshed as the game runs; `arena-status.py`
 pretty-prints it with the pending decisions.
 
+## Every setting at a glance
+
+The launch flags and every environment variable the arena reads, with the
+default that applies when you set nothing. The defaults lean towards
+everything on. `scripts/arena-config.py` prints this same list with the
+values in effect; `arena-play.sh` prints it at every launch.
+
+**Launch flags** (`arena-play.sh`): `--all-ai` | `--human [deck.dck]` (default deck
+Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
+(`low|medium|high|xhigh|max`); `--timeout 90`; `--no-advisor`; `--no-voice`;
+`--stops quick` (`full|keep|restore`, human games); `--linger 120` (human) /
+`60` (all-AI); `--no-autostop`.
+
+**Seats (the AI brains)**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SEAT_MODEL` | `opus` | Claude model for every AI seat (arena-play --model) |
+| `SEAT_EFFORT` | `medium` | reasoning effort pinned per seat (arena-play --effort) |
+| `ARENA_MAILBOX_TIMEOUT` | `90` | seconds the engine waits for a seat before stock answers (arena-play --timeout) |
+| `ARENA_BRAIN_TRANSPORT` | `persistent` | persistent = one long-lived claude process per seat; spawn = a process per call |
+| `ARENA_REACT_LOW_EFFORT` | `on` | unthreatened reaction windows are answered at low effort |
+| `ARENA_ROTATE_TOKENS` | `250000` | fresh session (dossier + game record) at the next turn boundary past this many tokens |
+| `ARENA_ROTATE_HARD` | `600000` | rotate mid-turn past this many tokens |
+| `ARENA_SEAT_DECKS` | the table roster (Urza, Giada, Purphoros, Selvala) | four deck slugs in seat order (the table roster) |
+| `ARENA_SEAT_MODELS` | unset | per-seat model overrides; or/<vendor>/<model> = OpenRouter (API-billed) |
+| `SEAT_SPECULATIVE` | `0` | brain-authored turn plans executed locally (experimental) |
+| `SEAT_REACT_HOLD` | `0` | brain-armed same-turn reaction hold posture (experimental) |
+
+**Human game (advisor + autopass)**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ARENA_AUTOPASS` | `casts` | off | strict | casts — which of your priority stops the engine passes for you |
+| `ARENA_AUTOPASS_RESOLVE_OWN` | `off` | on = also pass while your own spell resolves in your main phase (mains are sacred: off) |
+| `ARENA_AUTOPASS_RECEIPTS` | `all` | all | summary | off — auto-pass receipts in the Advisor panel |
+| `ARENA_ADVISOR_TOOLS` | `on` | the advisor may read the public game state with its tool |
+| `ARENA_ADVISOR_ROTATE_TOKENS` | `400000` | advisor session rotation threshold |
+
+**Voice**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ARENA_VOICE` | `on` | the advisor's voice (arena-play --no-voice = off) |
+| `ELEVENLABS_API_KEY` | unset | live spoken advice needs it; stock phrases play without it |
+| `ARENA_VOICE_FORMAT` | `pcm_24000` | ElevenLabs output; PCM needs no decoder |
+| `ARENA_VOICE_FX` | `on` | on = film effects (ffmpeg when present, else the lite chain) | lite | off |
+| `ARENA_VOICE_MODEL` | `eleven_flash_v2_5` | ElevenLabs model |
+| `ARENA_VOICE_ID` | unset | override the voice (id or library name); default from the stock manifest |
+| `ARENA_VOICE_SFX` | `on` | the bleeps before a line |
+| `ARENA_VOICE_YOUR_MOVE` | `on` | the 'your move' line at your priority |
+| `ARENA_VOICE_COLOR` | `some` | off | some | all — spoken recaps on opponents' turns |
+| `ARENA_VOICE_COLOR_P` | `0.5` | probability a recap is spoken when COLOR=some |
+| `ARENA_VOICE_MIN_GAP` | `8` | seconds between spoken lines |
+| `ARENA_VOICE_MAX_CHARS` | `20000` | live characters per run before the voice goes stock-only |
+| `ARENA_VOICE_GLITCH` | `light` | off | light | heavy — the radio glitch |
+
+**Backends (optional, API-billed)**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPENROUTER_API_KEY` | unset | needed by or/ seats |
+| `ARENA_OAI_BASE_URL` | unset | OpenAI-compatible endpoint for oai/ seats |
+
+**Teardown watcher**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ARENA_AUTOSTOP_POLL` | `5` | seconds between game-over checks |
+| `ARENA_AUTOSTOP_GUI_GONE_LINGER` | `10` | seconds after the GUI vanishes before teardown |
+
+Two settings stay off on purpose: `ARENA_AUTOPASS_RESOLVE_OWN` (your main
+phases are never passed for you) and the two experimental seat postures
+(`SEAT_SPECULATIVE`, `SEAT_REACT_HOLD`). The Advisor's Executive take-over is
+a button, off at every launch.
+
 ## Scripts
 
 | Script | What it does |
 |---|---|
-| `scripts/arena-play.sh` | One-shot launch: preflight → teardown → brains → Advisor (human) → GUI → auto-teardown watcher. `--all-ai` or `--human [deck.dck]`; `--no-advisor` (`--advisor` accepted, no-op); `--no-voice`; `--linger N`, `--no-autostop` |
-| `scripts/arena-stop.sh` | Stop now: kill GUI and runners by PID file, rate the game, archive the session's logs, clear the mailbox |
+| `scripts/arena-play.sh` | One-shot launch: preflight → teardown → banner → brains → Advisor (human) → GUI → auto-teardown watcher. `--all-ai` or `--human [deck.dck]`; `--no-advisor` (`--advisor` accepted, no-op); `--no-voice`; `--stops quick\|full\|keep\|restore` (human games; `quick` default); `--linger N`, `--no-autostop` |
+| `scripts/arena-stop.sh` | Stop now: kill GUI and runners by PID file, rate the game, archive the session's logs, print and save the hygiene block, clear the mailbox |
+| `scripts/arena-config.py` | The launch banner: every setting in effect, defaults marked, secrets shown as set/unset (`arena-play.sh` runs it; run it by hand to see what a launch would use) |
+| `scripts/arena-hygiene.py <archive-dir>` | The hygiene block for any archived session (or the live `runner/logs`); exit 1 when something that must be zero is not |
+| `scripts/arena-public-state.py` | The public table state (life, boards, graveyards, exile, stack) as text; the Advisor's read-only tool |
 | `scripts/arena-autostop.sh` | The watcher `arena-play.sh` starts: waits for the engine's `gameOver` or the window to close, lingers, runs `arena-stop.sh` |
 | `scripts/arena-add-deck.py` | Bare `.dck` → playable seat (dossier, combos, lint, load probe, primer) |
 | `scripts/arena-status.py` | Ground-truth table snapshot: pending decision, every seat's life and board |
@@ -441,6 +552,13 @@ running, so a driving agent sees the reminder in the teardown output.
   has hit its session limit; stop the table and wait for the reset.
 - **The table vanished after the game**: that is the auto-teardown; the logs
   are in `archive/`. Use `--linger N` or `--no-autostop` to change it.
+- **A seat's runner crashed or was killed mid-game**: its supervisor restarts
+  it within two seconds and the new process reads the game so far from the
+  logs, so the seat resumes with its memory of the game (the seat log says
+  `RESTART mid-game detected`). Stock plays any decision that fell into the gap.
+- **Your opponent-turn stops changed**: the launcher sets them to `quick` for
+  human games. `arena-play.sh --stops restore` puts your originals back;
+  `--stops keep` stops the launcher touching them.
 - **`java` errors at launch**: JDK 17+ is required; set `JAVA_HOME` if the
   PATH java is older.
 - **Start the GUI through the scripts**: the engine resolves `res/` (card

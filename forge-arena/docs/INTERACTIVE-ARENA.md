@@ -312,7 +312,7 @@ Any seat can instead run an **OpenRouter or OpenAI-compatible backend model**
 (`ARENA_SEAT_MODELS=",or/google/gemini-2.5-pro,,oai/llama3.1"`) with $-and-call
 cost rails — see `packaging/README.md` §"Other models on the backend".
 
-## Known limitations (current, 2026-09-04)
+## Known limitations (current, 2026-09-08)
 
 1. **Deliberately-stock surfaces** — multi-target spells, whole-DB card
    naming, combat damage assignment, convoke/improvise payment, colour picks
@@ -332,6 +332,14 @@ cost rails — see `packaging/README.md` §"Other models on the backend".
 5. **Latency floor is model think-time** (~4-6s p50 at opus/low-medium after
    the MCP-skip + fastpath + cycle-replay work). Remaining tail: mixed-owner
    cascades (#2) and first-iteration loop passes before `repeat_cycle` arms.
+6. **A restarted runner resumes from the record, not the transcript** (since
+   2026-09-08): the game so far arrives as the machine-built record, so the
+   seat's earlier private reasoning beyond its quoted "why" lines is gone,
+   and any decision that fell into the two-second gap was answered by stock.
+7. **The Executive take-over and `--stops quick` have been kit-tested, not
+   seen in a live human game** at the time of writing; the first human game
+   on the branch is the test.
+8. **Windows**: playback only. The launch scripts are POSIX shell.
 
 ## Upgrade roadmap
 
@@ -1819,3 +1827,35 @@ Hard-won from two live sessions; read before optimizing anything.
     Windows playback via PowerShell SoundPlayer; advisor pause silences the
     voice (note 92). Cache stays unbounded by Ben's decision. README "The
     Advisor's voice" rewritten; PATCH-NOTES entry.
+
+94. **Hardening pass (2026-09-08 13:00–14:00, Ben's direction after the
+    release-candidate discussion: "simplify, harden, and improve what we
+    have").** Built and committed on `experimental/voicework` (8f14c8f8349):
+    (a) runner restart keeps the game — `SeatRunner._restart_record` finds the
+    seat's own rows in `game.jsonl` for a game that is not over, seeds the
+    mailbox's game id, and `SeatBrain.ensure_session(record_text=…)` sends
+    dossier + record + READY through the same `_init_prompt` rotation uses; a
+    `restart` transport event is written; (b) voice: `Renderer._render_failed`
+    — three consecutive failures pause live renders 60 s, doubling to 600 s, one
+    log line per pause, `render-failed`/`live-paused` events in `voice-0.jsonl`,
+    recovery logged; (c) `arena-play.sh --stops quick|full|keep|restore`, quick
+    the default for human games, the `.bak-arena` backup written once (the
+    09-08 morning version overwrote it on every launch — it would have
+    destroyed the originals on the second launch; BL-40), standalone restore;
+    (d) `scripts/arena-config.py` launch banner, `runner/logs/launch-config.txt`,
+    copied to the head of `run_table.out` and `gui.out`, secrets as set/unset;
+    `tests/test_hardening.py` scans the sources for every `environ.get`/`${…:-}`
+    default and fails when the banner's table drifts or a knob is missing;
+    (e) `scripts/arena-hygiene.py` run by `arena-stop.sh` after the archive,
+    saved as `hygiene.txt` (game 30's archive: 436 decisions, model 86 %,
+    persistent fallbacks 0, yield-mirror 3, OK); seat logs only — `run_table.out`
+    echoes them and would double-count; (f) the three 09-06 random test
+    imports (Pantlaza, Syr Gwyn, Thalia+Gitrog) removed with dossiers and
+    primers — only decks Ben built ship, the packager's ten are unchanged;
+    (g) README: Requirements and voice sections say in plain words that the
+    voice plays on Windows but the arena cannot start there; "Opponent-turn
+    stops" subsection; "Every setting at a glance" generated from the
+    banner's table; logs table rows for `launch-config.txt`, `hygiene.txt`,
+    `engine-events.jsonl`, the persistent stderr files. Runner tests 306 OK.
+    Game 31 (all-AI, defaults) launched 13:46 with the banner in place as the
+    first live check; the FULL gate runs after it (a Java test comment changed).

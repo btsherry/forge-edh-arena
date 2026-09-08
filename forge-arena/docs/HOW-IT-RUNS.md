@@ -148,3 +148,26 @@ a measurement.
    call but still pays a mailbox round trip, about a third of a second. If the
    engine skipped opening a window the runner would yield anyway, that trip
    disappears too. Same rule, one layer lower, with the same guards.
+
+## When a runner dies (added 2026-09-08)
+
+Each seat's runner sits in a restart loop. If it crashes or is killed, a new
+one starts two seconds later. Before today the new one had a fresh chat and
+no memory of the game. Now it reads its own decisions so far from the game
+log, renders the same record a rotation uses, and pastes dossier + record +
+READY into its first message. The seat log says `RESTART mid-game detected`.
+Whatever the engine asked during the two-second gap was answered by stock.
+
+## What you see at launch and at stop (added 2026-09-08)
+
+At launch, one banner: every setting in effect, with `[default]` or
+`[SET — default …]` after each. It is saved as `runner/logs/launch-config.txt`
+and copied to the top of `run_table.out` and `gui.out`, so each log explains
+its own run. Keys are shown as set or unset, never printed.
+
+At stop, one hygiene block: decisions and who answered them, model share and
+latency, each seat's context size, rotations and persistent-process
+fallbacks, punts, refusals, deviations, timeouts, restarts, wedges, the
+engine's mirrored yields, voice and advisor counts. The last line is `OK` or
+`!! HYGIENE: …` naming what was not zero. It is saved as `hygiene.txt` in the
+archive folder beside the logs.

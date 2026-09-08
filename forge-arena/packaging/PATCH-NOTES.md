@@ -2,6 +2,21 @@
 
 ## Unreleased — after v3.4
 
+- **Hardening before the release candidate (2026-09-08).** A seat runner that
+  dies mid-game comes back with its memory: the restarted process hands its
+  fresh session the game record built from the logs, the same record a
+  session rotation uses. The voice backs off after three failed live renders
+  (one log line per pause, stock phrases continue) instead of logging every
+  attempt. `arena-play.sh` sets opponent-turn stops to `quick` by default in
+  human games, saves your originals once, and `--stops keep|restore` leave
+  them alone or put them back (`arena-play.sh --stops restore` on its own
+  restores and exits). Every launch prints a banner of every setting in
+  effect (`launch-config.txt`, also at the head of `run_table.out` and
+  `gui.out`); every stop prints and saves a hygiene block (`hygiene.txt`)
+  with the numbers a reviewer would otherwise compute by hand and a loud line
+  when punts, timeouts, fallbacks, tracebacks or wedges are not zero. The
+  README gains "Every setting at a glance" and plain-language notes on
+  Windows (voice plays there; the arena cannot start there yet) and on stops.
 - **The voice ships portable.** Live lines come back as PCM and are wrapped in
   a WAV header locally, so `ffmpeg` is optional: the film effects use it when
   present and a built-in pure-Python chain when not. Playback works on Windows

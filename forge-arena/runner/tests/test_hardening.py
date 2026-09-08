@@ -147,6 +147,12 @@ class LaunchBanner(unittest.TestCase):
         missing = {n for n in seen if n not in table and n not in self.IGNORE and not n.startswith("ARENA_PF_")}
         self.assertEqual(missing, set(), "knobs read by the code but absent from the banner (add to KNOBS)")
 
+    def test_readme_lists_every_knob(self):
+        cfg = _load_script("arena-config")
+        readme = (ROOT / "packaging" / "README.md").read_text()
+        missing = [name for rows in cfg.KNOBS.values() for name, _, _ in rows if f"`{name}`" not in readme]
+        self.assertEqual(missing, [], "knobs in the banner but not in the README's settings table")
+
     def test_banner_never_prints_a_secret(self):
         cfg = _load_script("arena-config")
         env = {"ELEVENLABS_API_KEY": "sk-very-secret", "ARENA_ROTATE_TOKENS": "1000"}

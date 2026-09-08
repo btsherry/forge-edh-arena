@@ -194,6 +194,8 @@ round-trip for onboarding a deck for local testing — spends credits, uses the
 **Stray (candidates for removal):** `selvala-wholedeck-ingestion-wf_87514c03-1a9.js`
 (one-off workflow artifact), `scripts/__pycache__/`.
 
+Added 2026-09-08: `arena-config.py` (the launch banner: every knob in effect with defaults marked, secrets as set/unset; arena-play writes it to `runner/logs/launch-config.txt` and the head of `run_table.out`/`gui.out`; 2026-09-08), `arena-hygiene.py` (the teardown hygiene block arena-stop prints and saves as `hygiene.txt`; exit 1 when a must-be-zero count is not; 2026-09-08), `arena-public-state.py` (public table state as text; the Advisor's read-only tool; 2026-09-07).
+
 ## 6. Runtime artifacts — who writes, who reads, lifecycle
 
 | Artifact | Writer | Reader | Lifecycle |
@@ -221,6 +223,8 @@ round-trip for onboarding a deck for local testing — spends credits, uses the
 | `runner/ratings.json`, `ratings-history.jsonl`, `ratings.lock` | `ratings.py` | panel, plots | per-installation state; survives package rebuilds; gitignored, never ships. |
 | `runner/logs/advisor-0.{log,jsonl}` | advisor (stream + structured twin) | Advisor tab tail / reviews | archived at stop. In an advised human game, `seat-0.usage.json` is the ADVISOR's spend snapshot (seat 0 is the human). |
 | `runner/logs/archive/<ts>-stop/` | `arena-stop.sh` | forensics, later ELO re-sweeps | every finished game's full log set + consumed spools; grows unbounded by design. |
+| `runner/logs/launch-config.txt` | `arena-play.sh` via `scripts/arena-config.py` | humans, forensics (also the first lines of `run_table.out` and `gui.out`) | one per launch; archived by arena-stop. gitignored. |
+| `runner/logs/archive/<ts>-stop/hygiene.txt` | `arena-stop.sh` via `scripts/arena-hygiene.py` | humans, release review | written once per stop beside the archived logs. |
 | `schemas/arena.mailbox-request.1.schema.json` + `runner/tests/fixtures/engine/*.json` | schema: hand-maintained (09-04: `gameId` serial, `state.purpose`, `state.controllerBoard`); fixtures: `ProtocolContractTest` under `-Darena.fixtures.refresh=true` only — otherwise it COMPARES and fails on drift (BL-25) | `runner/tests/test_engine_fixtures.py` | the mailbox wire contract, tested from both sides (2026-09-03); fixtures are tracked. |
 | `decks/<slug>/dossier/*`, `.cache/`, `.dck`, primers | `arena-add-deck.py` | brains at init | per-deck. `decks/*.dck` and `docs/primers/*` are tracked; `decks/*/` is gitignored, so dossiers are disk-only — the package carries them — except the five files `git ls-files forge-arena/decks` still shows under `swords-plunder/dossier/` and `swords-plunder-gc/dossier/` (tracked before the ignore). `.cache/` is a local ingestion accelerator only and is never packaged (BL-18: its DeckCheck payloads carry the account's username; the packager fails if one reaches the tree). `dossier/manifest.json` (2026-09-03, plan item 7): the registered `.dck`'s SHA-256, card count, card-DB stamp and every Scryfall→Forge name resolution; the launch preflight compares the hash in ms, no JVM. `deck-cards.json` entries carry `scryfall_id`/`set`/`collector_number` (Scryfall canonical) and `forge_name` (the loader's name, from `DeckLoadProbe --resolve`). |
 
