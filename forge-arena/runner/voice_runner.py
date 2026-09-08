@@ -647,7 +647,7 @@ class VoiceRunner:
         self.started_said = False
         self.human_seat = 0
         self._state_published = None
-        self._state_published_once = False
+        self._live_published = None
 
     # -- output
     def say(self, msg: str) -> None:
@@ -686,6 +686,14 @@ class VoiceRunner:
         except (OSError, ValueError):
             pass
         return True
+
+    def executive_on(self) -> bool:
+        """control/executive.json {"on": true}: the advisor is playing the
+        human's seat, so "Your move." would be addressed to nobody."""
+        try:
+            return bool(json.loads((self._control.parent / "executive.json").read_text()).get("on", False))
+        except (OSError, ValueError):
+            return False
 
     # -- queue
     def enqueue(self, kind: str, *, text: str = "", stock: str = "", seq: int | None = None, ttl: float = 25.0) -> None:
@@ -812,8 +820,8 @@ class VoiceRunner:
                 else:
                     self.enqueue("event", stock="player-eliminated", ttl=20.0)
         if self.your_move_on and turn is not None and (turn, active) != (self.seen_turn, self.seen_active):
-            if active == self.human_seat and self.seen_turn is not None:
-                self.enqueue("your_move", stock="your-move", ttl=12.0)
+            if active == self.human_seat and self.seen_turn is not None and not self.executive_on():
+                self.enqueue("your_move", stock="your-move", ttl=12.0)   # not while the advisor plays the seat
             self.seen_turn, self.seen_active = turn, active
         if d.get("gameOver") and not self.game_over_said:
             self.game_over_said = True
@@ -841,11 +849,14 @@ class VoiceRunner:
             tmp.replace(d / "state.json")
         except OSError:
             pass
-        if not live:
-            self.say(f"[voice] live lines off ({reason}) — stock phrases only; the advisor will quip more often")
-        elif self._state_published_once:
-            self.say("[voice] live lines back on")
-        self._state_published_once = True
+        # log LIVE transitions only — a mute/unmute also changes the state file
+        # (game 32: "live lines back on" printed on a mute click)
+        if self._live_published is None or live != self._live_published:
+            if not live:
+                self.say(f"[voice] live lines off ({reason}) — stock phrases only; the advisor will quip more often")
+            elif self._live_published is not None:
+                self.say("[voice] live lines back on")
+        self._live_published = live
 
     def step(self) -> None:
         self.publish_state()

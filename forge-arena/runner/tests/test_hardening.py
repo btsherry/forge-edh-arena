@@ -177,6 +177,32 @@ class ConditionalQuips(unittest.TestCase):
         run.publish_state()
         self.assertTrue(json.loads(st.read_text())["live"])
 
+    def test_mute_does_not_log_a_live_transition_and_your_move_waits_while_executive(self):
+        tmp = Path(tempfile.mkdtemp(prefix="vs2-"))
+        (tmp / "logs" / "control").mkdir(parents=True); (tmp / "mailbox").mkdir()
+        run = vr.VoiceRunner(tmp / "logs", tmp / "mailbox", dry_run=True)
+        run.renderer.api_key = "k"
+        logs = []; run.say = logs.append
+        run.publish_state()
+        (tmp / "logs" / "control" / "voice.json").write_text(json.dumps({"enabled": False}))
+        run.publish_state()
+        self.assertFalse(json.loads((tmp / "mailbox" / "seat-0-voice" / "state.json").read_text())["enabled"])
+        self.assertEqual([l for l in logs if "live lines" in l], [], "a mute is not a live transition")
+        run.renderer.api_key = ""; run.publish_state()
+        run.renderer.api_key = "k"; run.publish_state()
+        self.assertEqual(sum("live lines off" in l for l in logs), 1); self.assertEqual(sum("back on" in l for l in logs), 1)
+        # your move: seat 0 becomes active with the Executive on -> silence; off -> the line
+        (tmp / "logs" / "control" / "voice.json").write_text(json.dumps({"enabled": True}))
+        st = tmp / "mailbox" / "observer-state.json"
+        st.write_text(json.dumps({"turn": 3, "activeSeat": 1, "seats": []})); run.scan_observer()
+        (tmp / "logs" / "control" / "executive.json").write_text(json.dumps({"on": True}))
+        st.write_text(json.dumps({"turn": 4, "activeSeat": 0, "seats": []})); run.scan_observer()
+        self.assertEqual([q["kind"] for q in run.queue if q["kind"] == "your_move"], [])
+        (tmp / "logs" / "control" / "executive.json").write_text(json.dumps({"on": False}))
+        st.write_text(json.dumps({"turn": 5, "activeSeat": 1, "seats": []})); run.scan_observer()
+        st.write_text(json.dumps({"turn": 6, "activeSeat": 0, "seats": []})); run.scan_observer()
+        self.assertEqual([q["kind"] for q in run.queue if q["kind"] == "your_move"], ["your_move"])
+
     def test_advisor_switches_guidance_on_the_state_file(self):
         import advisor_runner as ar
         tmp = Path(tempfile.mkdtemp(prefix="qg-"))
