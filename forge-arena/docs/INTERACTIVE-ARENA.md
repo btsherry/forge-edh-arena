@@ -1966,3 +1966,29 @@ Hard-won from two live sessions; read before optimizing anything.
     lines back on"; "Your move" spoke while the Executive held the seat.
     Nit: seat 0's usage file under the Executive shows ctx 0k / rotations 0 —
     the advisor writes that file from its own counters, not the seat runner's.
+
+98. **Games 33–37 (2026-09-08 evening → 09-09 01:30): the round-label fix,
+    three idle launches, and the Tezzeret seam.** Game 33 (human, torn down by
+    Ben at t18 for a demo): the first round label lagged a turn — `TurnClock`
+    read the snapshot only when its turn matched the line's; it now observes
+    the snapshot from the poll loop (629332d70b4). Games 34–36 never got past
+    the opening hand (Ben demoed the intro and the voice to guests, then shut
+    the laptop; the table survived the sleep — persistent processes and all —
+    and resumed with one cache miss per seat). Game 37 (human, Ben as Selvala;
+    Giada won t33 at 110 life): hygiene 471 decisions, model 357 (75 %),
+    runner 114 (affordability 103 — the highest share yet, yield 7, memo 3,
+    repeat 1), median 2.9 s, p90 10.5 s, max 35.6 s; rotations 5; punts 0,
+    timeouts 0, fallbacks 0, refusals 0, tracebacks 0; voice spoke 63 incl.
+    the first new-library quip heard live (organic-life-fragile). Nine
+    deviations: ONE seam — **BL-45**, Tezzeret the Seeker's −X (loyalty)
+    capped at 0 by the MANA X-ceiling ("your affordable X is 0"); the seat
+    fetched Seat of the Synod instead of The One Ring — fixed 1fd92b44a36
+    (`xPaidWithMana`, kit test), gate this session; one under-count — **W-16**,
+    Cavern of Souls summed as its restricted ability only (fastpath read 4
+    with 5 sources; the payer was fine); the rest planning/outcome notes
+    (Pact upkeep math, Isochron with no imprint, Winter Orb, Boseiju's land
+    gift — Ben's Boseiju at an Urza permanent handed Urza the fifth source
+    that paid Pact's upkeep; at Smothering Tithe, Urza would have lost the
+    game to its own Pact). Mainline lesson re-learned: I named Tempt with
+    Discovery from memory for the land gift; the stack in the record said
+    Boseiju. Card facts come from the record or the card text, never memory.
