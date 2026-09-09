@@ -184,6 +184,34 @@ public class ManaTableTest {
         Assert.assertEquals(MailboxController.manaReach(0, java.util.Collections.emptyList()), 0);
     }
 
+    /** BL-45 (game 37 t27): Tezzeret the Seeker's −X is a LOYALTY X — the
+     *  mana affordability ceiling must not apply; Walking Ballista's X is a
+     *  mana X and must. */
+    @Test(timeOut = 120_000)
+    public void loyaltyXIsNotAManaX() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            Card tez = MailboxTestKit.put("Tezzeret the Seeker", k.seat, ZoneType.Battlefield);
+            boolean sawMinusX = false;
+            for (forge.game.spellability.SpellAbility sa : tez.getSpellAbilities()) {
+                String d = String.valueOf(sa.getDescription());
+                if (d.startsWith("-X")) {
+                    sawMinusX = true;
+                    Assert.assertTrue(sa.getPayCosts().hasXInAnyCostPart(), "Forge sees an X in the cost: " + d);
+                    Assert.assertFalse(MailboxController.xPaidWithMana(sa.getPayCosts()), "but it is loyalty, not mana: " + d);
+                }
+            }
+            Assert.assertTrue(sawMinusX, "Tezzeret's −X ability not found: " + tez.getSpellAbilities());
+            Card ballista = MailboxTestKit.put("Walking Ballista", k.seat, ZoneType.Hand);
+            boolean sawCast = false;
+            for (forge.game.spellability.SpellAbility sa : ballista.getSpells()) {
+                sawCast = true;
+                Assert.assertTrue(MailboxController.xPaidWithMana(sa.getPayCosts()), "Ballista's {X}{X} is mana");
+            }
+            Assert.assertTrue(sawCast);
+            Assert.assertFalse(MailboxController.xPaidWithMana(null));
+        }
+    }
+
     /** Games 27-28: a mana ability whose activation restriction fails now
      *  (Mox Opal, metalcraft) is listed but flagged dormant and never summed
      *  into manaAvailableNow; with metalcraft it is a normal source. */

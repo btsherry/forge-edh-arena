@@ -1105,6 +1105,23 @@ public final class MailboxController extends PlayerControllerAi
         }
     }
 
+    /** BL-45 (game 37 t27, 2026-09-09): true iff the X lives in the MANA part of
+     *  the cost. {@link Cost#hasXInAnyCostPart()} is also true for a
+     *  planeswalker's −X loyalty cost (Tezzeret the Seeker) or "remove X
+     *  counters"; those Xs are not paid with mana and must never be capped by
+     *  the affordability ceiling. */
+    static boolean xPaidWithMana(Cost cost) {
+        if (cost == null || cost.getCostParts() == null) {
+            return false;
+        }
+        for (forge.game.cost.CostPart p : cost.getCostParts()) {
+            if (p instanceof forge.game.cost.CostPartMana && ((forge.game.cost.CostPartMana) p).getAmountOfX() > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** True for a spell whose X the card doesn't set itself (mirrors
      *  PlaySpellAbility: Count$xPaid or empty SVar with an X in the cost). */
     private static boolean needsManaX(SpellAbility sa) {
@@ -1126,14 +1143,19 @@ public final class MailboxController extends PlayerControllerAi
     private Integer mailboxManaX(SpellAbility ability, int min, int max) {
         Game game = getGame();
         int hi = max;
-        try {
-            int afford = ComputerUtilMana.determineLeftoverMana(
-                    ability, getPlayer(), false);
-            if (afford >= 0) {
-                hi = Math.min(hi, afford);
+        // BL-45: the affordability ceiling applies to a MANA X only. A loyalty
+        // or counter X keeps the engine's own bounds (Tezzeret −X: [0, loyalty]).
+        final boolean manaX = ability == null || xPaidWithMana(ability.getPayCosts());
+        if (manaX) {
+            try {
+                int afford = ComputerUtilMana.determineLeftoverMana(
+                        ability, getPlayer(), false);
+                if (afford >= 0) {
+                    hi = Math.min(hi, afford);
+                }
+            } catch (RuntimeException ignored) {
+                // best-effort ceiling; max stands
             }
-        } catch (RuntimeException ignored) {
-            // best-effort ceiling; max stands
         }
         if (hi < min) {
             hi = min;
@@ -1143,19 +1165,28 @@ public final class MailboxController extends PlayerControllerAi
         state.put("min", min);
         state.put("max", hi);
         state.put("cancelable", true);
-        state.put("puntHigh", true); // X: max is affordability-capped (F3)
+        state.put("puntHigh", manaX); // mana X: max is affordability-capped (F3); loyalty X: max is the loyalty
+        state.put("xKind", manaX ? "mana" : "non-mana");
         Card host = ability.getHostCard();
         String what = host != null ? host.getName() : String.valueOf(ability);
-        String prompt = "Announce 'X' for " + what + " — pick a number in ["
-                + min + ", " + hi + "] (max counts your floating pool + untapped "
-                + "sources). ";
-        prompt += (hi == 0)
-                ? "Your affordable X RIGHT NOW is 0 — you have floated no mana. "
-                  + "Almost certainly answer -1 to CANCEL, then activate mana "
-                  + "abilities (commander, Cradle-class lands, untappers) and "
-                  + "re-cast for a real X."
-                : "Answer -1 to CANCEL the cast instead (do that when max is far "
-                  + "below your intent; float mana, then re-cast).";
+        String prompt;
+        if (manaX) {
+            prompt = "Announce 'X' for " + what + " — pick a number in ["
+                    + min + ", " + hi + "] (max counts your floating pool + untapped "
+                    + "sources). ";
+            prompt += (hi == 0)
+                    ? "Your affordable X RIGHT NOW is 0 — you have floated no mana. "
+                      + "Almost certainly answer -1 to CANCEL, then activate mana "
+                      + "abilities (commander, Cradle-class lands, untappers) and "
+                      + "re-cast for a real X."
+                    : "Answer -1 to CANCEL the cast instead (do that when max is far "
+                      + "below your intent; float mana, then re-cast).";
+        } else {
+            prompt = "Announce 'X' for " + what + " — pick a number in [" + min + ", " + hi
+                    + "]. This X is NOT paid with mana (loyalty counters, counters removed, or "
+                    + "permanents sacrificed — see the ability's cost); the max is the engine's own "
+                    + "bound, e.g. the planeswalker's current loyalty. Answer -1 to CANCEL.";
+        }
         MailboxProtocol.Request req = req(turn, "CHOOSE_NUMBER", prompt)
                 .state(state);
         JsonNode resp = exchange(req);
