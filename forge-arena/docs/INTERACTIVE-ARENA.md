@@ -2008,3 +2008,20 @@ Hard-won from two live sessions; read before optimizing anything.
     ElevenLabs render tool `runner/voice/build_stock.py` (dev only, needs the
     owner's key), raw takes, legacy bleeps, `.DS_Store`; `forge-arena/voice/
     typing_cut.py` is outside the packager's reach.
+
+100. **v4.0 SHIPPED (2026-09-10 05:0x UTC / 2026-09-09 22:0x PDT).** Built from
+    `cf3b6ef239e (arena)` by `packaging/build-light-package.sh` (staging tree
+    cleared of undeletable Finder `.DS_Store` files first — the packager now
+    excludes and sweeps them, and the tar excludes them); 49,969 entries, 337 MB
+    unpacked, **131,359,358 bytes**, sha256
+    `82ec26d1896d06e342f4bb3bc99f33ff5d6136e854ff0666d893a7e6e9612152`.
+    Checks: no strays/caches/logs, no home paths, no key-shaped strings, 10
+    decks + 10 primers, 12 scripts, every shipped .py compiles, preflight OK
+    from the package root, voice runtime complete (63 + 7, manifest, fx chain,
+    voice-design.md) with the ElevenLabs render tool excluded. Uploaded with
+    the now-committed `packaging/ship-release.sh` (Ben reviewed the script
+    first; REST R2 PUT, dated object + `-latest`, both downloaded back and
+    byte-exact). Acceptance: game 38 (all-AI) ran FROM THE PACKAGE ROOT during
+    the ship — zero punts/refusals through t14, BL-46 found (tap-type payment
+    takes stock's artifact; 4.1). Tag `v4.0` = cf3b6ef239e; rollback tag
+    `pre-v4.0` = 2beca4d9903 (note 99).
