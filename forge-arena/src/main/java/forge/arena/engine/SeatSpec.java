@@ -6,7 +6,7 @@ import java.nio.file.Path;
 /**
  * One seat of a pod: a Commander .dck file plus the AI configuration —
  * personality profile, the per-seat simulation-AI toggle (Forge's
- * {@code AIOption.USE_SIMULATION}, off in stock CLI runs, T0 §3), the
+ * {@code AIOption.USE_FULL_SIMULATION}, off in stock CLI runs, T0 §3), the
  * goldfish flag (non-interactive seat: keeps every hand, never acts), and
  * the combo-aware flag (PR-15: ComboPilot fed by the deck's dossier
  * artifacts — {@code dossierDir} must contain combos.json).

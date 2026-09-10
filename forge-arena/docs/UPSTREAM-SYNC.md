@@ -9,15 +9,15 @@ divergence list). Read both before ANY merge from upstream.*
 - We are a fork of [Card-Forge/forge](https://github.com/Card-Forge/forge)
   (`origin`), working on branch `arena`, pushed to `private`
   (btsherry/forge-edh-arena). **Never push to `origin`.**
-- Upstream base: `0eec0a16d0a` (2026-07-15). We are 512 commits ahead
-  (2026-09-09 count, `git rev-list --count`, at the v4.0 merge); upstream is
-  604 commits ahead of the same base at that date (GitHub compare) — very
-  active (daily card-script updates, regular engine work). No sync has been
-  run yet; the first is planned as its own session after v4.0 ships.
+- Upstream base: **`a5f4f9e4796` (origin/master, 2026-09-10)** since the first sync
+  (branch `sync-20260910`, merged into `arena` 2026-09-10; the original fork
+  point was `0eec0a16d0a`, 2026-07-15). We are 523 commits ahead of the new
+  base (`git rev-list --count a5f4f9e4796..HEAD`). `UpstreamMarkerTest` takes the
+  live merge base with `origin/master` and falls back to this constant.
 - The early rule "all new code lives in forge-arena, no parent-module
   patches" was **deliberately dropped**. The full delta outside
   `forge-arena/` (2026-09-04 recount, `git diff --name-status
-  0eec0a16d0a..HEAD -- . ':(exclude)forge-arena'`) is **33 files** (2026-09-09 recount; INVENTORY §1 is the current table):
+  a5f4f9e4796..HEAD -- . ':(exclude)forge-arena'`) is **12 modified upstream files** plus our new parent-module files (2026-09-10 recount against the NEW base; INVENTORY §1 is the current table):
   - **12 modified**: 9 upstream Java files (301 insertions / 22 deletions —
     ComputerUtil, ComputerUtilMana, AiCostDecision, MyRandom, Combat,
     StaticAbilityTurnPhaseReversed, MagicStack, EDocID, CMatchUI), plus
@@ -150,6 +150,25 @@ git checkout arena && git merge --ff-only sync-$(date +%Y%m%d)
 git push private arena
 # update INVENTORY §1 (sizes/upstream-fixed rows), note the new upstream base here
 ```
+
+## The first sync, as it happened (2026-09-10) — the record for the next one
+
+Stages, each on Ben's go: reconnaissance with `git merge-tree --write-tree`
+(no checkout; it predicted the two conflicts and showed every marker surviving
+the auto-merges) → tag `pre-sync-20260910`, branch, merge, stop at conflicts →
+resolve by the playbook (`.gitignore` union; the AiCostDecision discard hook
+re-inserted ahead of upstream's restructured fallback) → API drift in OUR code
+(`handlePlayingSpellAbility` Runnable→Consumer at five call sites;
+`setUseSimulation` moved to AiController with an enum; `AIOption.USE_SIMULATION`
+→ `USE_FULL_SIMULATION`) → ONE online compile for two new upstream deps →
+FULL gate: 6 red = the marker test's base (moved to the merge base) + five
+seeded headless scenarios (fenced, HL-21) → re-ingest all ten decks
+(`arena-add-deck.py <dck> --slug <slug> --manifest-only`; four decks needed
+`--slug` because the file's deck NAME slugs differently) → three games (two
+all-AI, one human) → 4.1 items → merge. Found only by the live games, never by
+the gate: BL-47 — upstream's `<revision>` bump left a stale fat jar beside the
+new one and the launcher's first-match glob loaded it (`NoSuchMethodError`
+mid-game). Budget: about six hours wall-clock including games.
 
 ## Seeded scenario tests drift under engine upgrades (learned 2026-09-10)
 

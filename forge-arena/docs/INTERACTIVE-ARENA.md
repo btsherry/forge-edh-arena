@@ -2025,3 +2025,33 @@ Hard-won from two live sessions; read before optimizing anything.
     the ship — zero punts/refusals through t14, BL-46 found (tap-type payment
     takes stock's artifact; 4.1). Tag `v4.0` = cf3b6ef239e; rollback tag
     `pre-v4.0` = 2beca4d9903 (note 99).
+
+101. **First upstream sync (2026-09-10; origin/master a5f4f9e4796, 605 commits;
+    branch `sync-20260910`).** Staged with a go per stage (UPSTREAM-SYNC.md
+    now carries the as-run record). Conflicts: 2, both by the playbook; our
+    ten patched upstream files kept every marker through the auto-merge; three
+    kinds of API drift fixed in OUR code; one online compile for jupnp 3.0.5 +
+    gson 2.13.2. Gate: marker test rebased to the live merge base; five seeded
+    headless scenarios fenced as `headless-scenario` (HL-21) — no behavioural
+    patch reverted. All ten decks re-verified at 100 (db stamp 33697:679).
+    Games on the merged engine: sync game 1 stalled t12 with
+    `NoSuchMethodError` — **BL-47**, the launcher/packager loaded the stale
+    2.0.14 fat jar left by upstream's version bump; fixed (select by pom
+    revision) and relaunched: Purphoros t33, 754 decisions, 0 punts, 41
+    deviations (5 Selvala deck-out, 20 "wanted nothing" noise, 5 payer, rest
+    outcome). Game 2: Urza t19 at 253 life — Hullbreaker Horror + Cloud Key +
+    Sol Ring/Chalice loop, 1,534 of 1,890 decisions replayed by the runner's
+    cycle machinery, seat ctx 404k inside one turn. Game 3 (Ben, Selvala): won
+    t18, 187 decisions, clean. Then 4.1 items 1–5 (BL-46 seat-chosen tap
+    payments, BL-44 mono-colour auto-pick, W-16 Cavern row, two brief
+    sentences for W-15/Omnath banking, empty-deviation filter) — gate 465/465 —
+    and a validation game (archive 20260910-120209-stop): Selvala t29, 682
+    decisions, model 464 (68 %), runner 218 (affordability 102, **color 50**,
+    cycle 59, memo 7), median 2.9 s, yield-mirror 73, 0 punts/refusals/
+    tracebacks, 0 "wanted nothing" deviations; no multi-candidate tap payment
+    arose, so BL-46 rests on its kit test. Ben's standing rule recorded this
+    day: live with stock Forge limitations rather than widen the upstream
+    divergence. Cleanup: stale 2.0.14 jars removed from module targets; `~/.m2`
+    forge snapshots removed (nothing builds from them). Stage 6: `arena`
+    fast-forwarded to ae5579d5b00 (tag `post-sync-20260910`); rollback tag
+    `pre-sync-20260910` = 93f2f16d189.
