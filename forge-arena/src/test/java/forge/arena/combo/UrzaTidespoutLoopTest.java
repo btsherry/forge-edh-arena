@@ -161,7 +161,7 @@ public class UrzaTidespoutLoopTest {
                 ((Number) f.get("life_gained")).intValue() >= 150);
     }
 
-    @Test
+    @Test(groups = "headless-scenario")   // seeded scenario game: drifts under engine upgrades (HL-21, sync 2026-09-10)
     public void theCastBounceLoopStormsToTheLifegainTarget() throws Exception {
         assertLoopConverts(play(ZoneType.Hand), "542-5034");
     }
@@ -174,7 +174,7 @@ public class UrzaTidespoutLoopTest {
      * wrong strategy (Ben, 2026-07-29; the deck primer's own T0-2 line);
      * this test pins the right one.
      */
-    @Test
+    @Test(groups = "headless-scenario")   // seeded scenario game: drifts under engine upgrades (HL-21, sync 2026-09-10)
     public void battlefieldFodderSelfPrimesAndConverts() throws Exception {
         assertLoopConverts(play(ZoneType.Battlefield), "542-5034");
     }

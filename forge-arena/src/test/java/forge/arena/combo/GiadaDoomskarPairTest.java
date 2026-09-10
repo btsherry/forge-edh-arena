@@ -120,7 +120,7 @@ public class GiadaDoomskarPairTest {
      * swept its own board; the joint check must instead hold the pair (or
      * retry) until both fit — and then complete at retail cost.
      */
-    @Test
+    @Test(groups = "headless-scenario")   // seeded scenario game: drifts under engine upgrades (HL-21, sync 2026-09-10)
     public void theRetailCostPathNeverFiresUnprotected() throws Exception {
         runScenario(new PairBoardProbe(false, 9));
     }

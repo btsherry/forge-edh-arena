@@ -92,7 +92,7 @@ public class GiadaArmageddonPairTest {
         }
     }
 
-    @Test
+    @Test(groups = "headless-scenario")   // seeded scenario game: drifts under engine upgrades (HL-21, sync 2026-09-10)
     public void protectedArmageddonFiresOnAssemblyAndOurLandsReturn() throws Exception {
         System.setProperty("arena.stall.dir",
                 Files.createTempDirectory("armageddon-pair-stalls").toString());
