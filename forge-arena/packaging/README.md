@@ -457,12 +457,16 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_VOICE_MODEL` | `eleven_flash_v2_5` | ElevenLabs model |
 | `ARENA_VOICE_ID` | unset | override the voice (id or library name); default from the stock manifest |
 | `ARENA_VOICE_SFX` | `on` | the bleeps before a line |
-| `ARENA_VOICE_YOUR_MOVE` | `on` | the 'your move' line at your priority |
+| `ARENA_VOICE_YOUR_MOVE` | `some` | on \| some \| off — the 'your move' line at your priority (some = about six turns in ten; four wordings, never the same twice running) |
+| `ARENA_VOICE_YOUR_MOVE_P` | `0.6` | probability 'your move' is spoken on a turn when YOUR_MOVE=some |
 | `ARENA_VOICE_COLOR` | `some` | off | some | all — spoken recaps on opponents' turns |
 | `ARENA_VOICE_COLOR_P` | `0.5` | probability a recap is spoken when COLOR=some |
 | `ARENA_VOICE_MIN_GAP` | `8` | seconds between spoken lines |
 | `ARENA_VOICE_MAX_CHARS` | `20000` | live characters per run before the voice goes stock-only |
 | `ARENA_VOICE_GLITCH` | `light` | off | light | heavy — the radio glitch |
+| `ARENA_BARKS` | `some` | off \| some \| all — the AI seats' spoken barks in their own voices (seat 1 Harry, 2 Bill, 3 Lily); the advisor must be on and unmuted |
+| `ARENA_BARKS_P` | `0.75` | probability a bark the advisor asked for is spoken when BARKS=some |
+| `ARENA_BARKS_COOLDOWN` | `30` | seconds before the same seat barks again |
 
 **Backends (optional, API-billed)**
 

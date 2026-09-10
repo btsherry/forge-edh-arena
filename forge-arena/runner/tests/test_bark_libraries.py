@@ -69,6 +69,34 @@ class SharedVocabulary(unittest.TestCase):
         self.assertEqual(seats, {1, 2, 3})
 
 
+class RenderedAudio(unittest.TestCase):
+    """Stage 2b (2026-09-10): every wording of every library is a baked WAV in the
+    runner's format — 22.05 kHz mono 16-bit for the seat voices, 44.1 kHz for the
+    Joshua variants — and no take is silent or longer than a bark should be."""
+    def test_every_seat_wording_is_a_baked_wav(self):
+        import wave
+        for lib in LIBS:
+            m = load(lib)
+            for pid, n, text, stem in bs.variants(m):
+                f = VOICES / lib / f"{stem}.wav"
+                self.assertTrue(f.exists(), f"{lib}/{stem}.wav missing for {text!r}")
+                with wave.open(str(f)) as w:
+                    self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 22050), f"{lib}/{stem}")
+                    secs = w.getnframes() / w.getframerate()
+                    self.assertTrue(0.5 <= secs <= 6.0, f"{lib}/{stem}: {secs:.1f}s")
+                self.assertTrue((VOICES / lib / "raw" / f"{stem}.wav").exists(), f"{lib}/raw/{stem}.wav: the dry take is the source for re-bakes")
+
+    def test_joshua_variants_are_baked_beside_the_originals(self):
+        import wave
+        J = json.loads((RUNNER / "voice" / "stock" / "manifest.json").read_text())
+        for pid, n, text, stem in bs.variants(J):
+            f = RUNNER / "voice" / "stock" / f"{stem}.wav"
+            self.assertTrue(f.exists(), f"{stem}.wav missing for {text!r}")
+            if n > 1:
+                with wave.open(str(f)) as w:
+                    self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 44100), stem)
+
+
 class Builder(unittest.TestCase):
     def test_variants_enumerate_str_and_list_texts(self):
         m = {"phrases": {"your-move": {"text": ["Your move.", "Your turn to play."]},

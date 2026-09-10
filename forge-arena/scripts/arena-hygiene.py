@@ -131,8 +131,10 @@ def report(d: str) -> tuple[str, bool]:
     voice = rows_of(os.path.join(d, "voice-0.jsonl"))
     if voice:
         vc = collections.Counter(v.get("event") for v in voice)
+        bk = collections.Counter(v.get("event") for v in voice if v.get("kind") == "bark")
         out.append(f"  voice: spoke {vc.get('spoke', 0)} | skipped {vc.get('skipped', 0)} | dropped {vc.get('dropped', 0)} | "
-                   f"render failures {vc.get('render-failed', 0)} | live paused {vc.get('live-paused', 0)}")
+                   f"render failures {vc.get('render-failed', 0)} | live paused {vc.get('live-paused', 0)}"
+                   f" | barks spoke {bk.get('spoke', 0)} / skipped {bk.get('skipped', 0)} / dropped {bk.get('dropped', 0)}")
         if vc.get("live-paused"):
             bad["voice live paused"] = vc["live-paused"]
     adv = rows_of(os.path.join(d, "advisor-0.jsonl"))

@@ -221,7 +221,7 @@ done
 if [ -f "$ROOT/mailbox/observer-state.json" ]; then
   seats=$(python3 "$ROOT/runner/arena-ctl.py" status 2>/dev/null | grep -c "model=")
   echo "arena live [$MODE]: $seats AI seats @ $MODEL/$EFFORT, timeout=${TIMEOUT}s"$([ "$MODE" = human ] && echo ", human=$HUMAN_DECK")
-  [ "$ADVISOR" = "1" ] && [ "$VOICE" != "off" ] && echo "  voice: stock phrases on$([ -n "${ELEVENLABS_API_KEY:-}" ] && echo ", live advice on" || echo ", live advice off (no ELEVENLABS_API_KEY)") (--no-voice to silence)"
+  [ "$ADVISOR" = "1" ] && [ "$VOICE" != "off" ] && echo "  voice: stock phrases on$([ -n "${ELEVENLABS_API_KEY:-}" ] && echo ", live advice on" || echo ", live advice off (no ELEVENLABS_API_KEY)"), seat barks ${ARENA_BARKS:-some} (--no-voice to silence)"
   # 6) auto-teardown once the match has clearly concluded (Ben, 2026-09-04):
   # a plain sleep-loop watcher (no scheduler) waits for the engine's gameOver
   # flag or the GUI JVM to vanish, lingers, then runs arena-stop.sh exactly as

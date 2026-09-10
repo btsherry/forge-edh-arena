@@ -181,6 +181,7 @@ class ConditionalQuips(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp(prefix="vs2-"))
         (tmp / "logs" / "control").mkdir(parents=True); (tmp / "mailbox").mkdir()
         run = vr.VoiceRunner(tmp / "logs", tmp / "mailbox", dry_run=True)
+        run.your_move_mode = "on"          # this test is about the Executive gate, not the 2026-09-10 dice
         run.renderer.api_key = "k"
         logs = []; run.say = logs.append
         run.publish_state()
@@ -387,13 +388,16 @@ class HygieneBlock(unittest.TestCase):
         (d / "game.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
         (d / "seat-1.log").write_text("ok\n[seat 1] INTERNAL ERROR in handle()\nTraceback (most recent call last)\n[seat 1] session rotated #1 in 3s\n")
         (d / "run_table.out").write_text("[seat 1] INTERNAL ERROR in handle()\nTraceback (most recent call last)\n[seat 1] runner exited (1) — restarting in 2s\n")
-        (d / "voice-0.jsonl").write_text(json.dumps({"event": "spoke"}) + "\n" + json.dumps({"event": "live-paused"}) + "\n")
+        (d / "voice-0.jsonl").write_text(json.dumps({"event": "spoke"}) + "\n" + json.dumps({"event": "live-paused"}) + "\n"
+                                         + json.dumps({"event": "spoke", "kind": "bark", "seat": 2}) + "\n"
+                                         + json.dumps({"event": "skipped", "kind": "bark", "why": "dice"}) + "\n")
         text, ok = hy.report(str(d))
         self.assertFalse(ok)
         self.assertIn("decisions 4 | model 2 (50%) | runner-answered 1 (memo 1) | punts 1 | deviations 1", text)
         self.assertIn("tracebacks 2", text, "seat log only — run_table.out echoes are not counted twice")
         self.assertIn("restarts 1", text); self.assertIn("rotations 1", text)
-        self.assertIn("voice: spoke 1", text)
+        self.assertIn("voice: spoke 2", text)
+        self.assertIn("barks spoke 1 / skipped 1 / dropped 0", text)
         self.assertIn("!! HYGIENE: punts (game log) 1, tracebacks 2, voice live paused 1", text)
         clean = Path(tempfile.mkdtemp(prefix="hy2-"))
         (clean / "game.jsonl").write_text(json.dumps({"seat": 1, "gameId": "g", "source": "model"}) + "\n")
@@ -418,6 +422,7 @@ class PackagerShipsWhatTheScriptsCall(unittest.TestCase):
         needed |= set(re.findall(r"forge-arena/scripts/([a-zA-Z_-]+\.py)", adv))
         self.assertEqual(needed - shipped, set(), "called by shipped code but not in the packager's script list")
         self.assertIn("--exclude '/voice/stock/raw/'", pk, "raw takes (4 MB) must not ship")
+        self.assertIn("--exclude '/voice/stock/voices/*/raw/'", pk, "the seat voices' dry takes (~30 MB) must not ship either")
         self.assertIn("--exclude '/voice/build_stock.py'", pk, "the ElevenLabs render tool is dev-only")
         for name in ("packaging/build-light-package.sh", "scripts/run-pilot-match.sh"):
             text = (ROOT / name).read_text()

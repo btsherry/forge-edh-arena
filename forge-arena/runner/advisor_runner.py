@@ -79,6 +79,68 @@ QUIP_QUOTES = ("shall-we-play", "greetings-falken", "strange-game", "nice-game-o
                "buy-that-for-a-dollar", "serve-public-trust", "somewhere-a-crime", "i-am-the-law")
 QUIPS = QUIP_REACTIONS + QUIP_EVENTS + QUIP_QUOTES
 QUIP_RE = re.compile(r"\s*\[quip:([a-z0-9-]+)\]\s*")
+
+# Seat barks (2026-09-10): the three AI seats have static voices (runner/voice/
+# stock/voices/<lib>/, one library per seat number). The advisor — which already
+# sees each turn's public log and knows the decks — picks the SEAT and the MOMENT;
+# the persona is in the pre-rendered wording. Closed vocabulary, shared by every
+# voice; unknown ids and seats outside 1-3 are dropped. The voice runner applies
+# the knob (ARENA_BARKS), the dice, a per-seat cooldown and the global gap.
+BARK_WHEN = {
+    "commander-cast": "casts or recasts its commander",
+    "big-swing": "declares a large attack",
+    "landed-hit": "its attack connects for big damage",
+    "removal": "destroys or exiles a key permanent",
+    "sweep": "wipes the board",
+    "counter": "counters a spell",
+    "engine-online": "its engine or combo pieces are visibly assembled",
+    "big-mana": "makes an explosive amount of mana",
+    "kill": "eliminates another player",
+    "win": "wins the game",
+    "that-hurt": "takes a big hit",
+    "lost-commander": "its commander dies or leaves",
+    "got-countered": "its spell is countered",
+    "got-swept": "its board is wiped",
+    "low-life": "drops to about ten life or less",
+    "eliminated": "is out of the game",
+    "taunt": "needles whoever is ahead",
+    "respect": "acknowledges another player's good play, the human included",
+    "archenemy": "calls out the table leader",
+    "slow-turn": "its own turn passes with nothing done",
+    "my-turn": "opens the turn that is just beginning (the recap arrives as the next seat's turn starts)",
+}
+BARKS = tuple(BARK_WHEN)
+BARK_RE = re.compile(r"\s*\[bark:\s*(\d)\s*:\s*([a-z0-9-]+)\s*\]\s*")
+BARK_SEATS = (1, 2, 3)   # never the human (seat 0)
+
+
+def split_bark(text: str, log=None) -> tuple[str, tuple[int, str] | None]:
+    """Strip the [bark:<seat>:<id>] tag from a reply; return (clean text, (seat, id) or None).
+    Unknown ids and seats outside 1-3 are dropped and logged, like quips."""
+    m = BARK_RE.search(text or "")
+    if not m:
+        return (text or "").strip(), None
+    seat, bid = int(m.group(1)), m.group(2)
+    clean = BARK_RE.sub(" ", text).strip()
+    if bid not in BARKS or seat not in BARK_SEATS:
+        if log is not None:
+            log(f"[advisor] bark tag dropped: [bark:{seat}:{bid}] "
+                + ("(unknown id)" if bid not in BARKS else "(seat must be 1-3)"))
+        return clean, None
+    return clean, (seat, bid)
+
+
+def bark_guide(seat_voices: dict, mode: str) -> str:
+    """The prompt sentence offering the seat-bark tag, or "" when barks are off
+    or no seat voice library exists. `seat_voices` is voice_runner.load_seat_libraries()."""
+    if mode == "off" or not seat_voices:
+        return ""
+    who = "; ".join(f"seat {k}: {v['voice']} — {v['temperament']}" for k, v in sorted(seat_voices.items()) if v.get("voice"))
+    ids = "; ".join(f"[bark:<seat>:{b}] when it {w}" for b, w in BARK_WHEN.items())
+    return ("\nSEAT BARK (optional, sparse): the AI seats have voices (" + who + "). If ONE seat's situation "
+            "in what you just saw clearly earns a line, end with exactly one tag naming that seat and the moment: "
+            + ids + ". Never seat 0. Only public events; never a hidden hand. One tag per reply: a quip OR a bark, "
+            "not both. Most replies carry no tag.")
 # Two densities (Ben, 2026-09-08): while the voice can render live lines the
 # quips stay rare ("if the moment earns it"); when live lines are down — no
 # ElevenLabs key (every package user without one), a spent quota, no usable
@@ -233,6 +295,14 @@ class AdvisorRunner:
                  log_dir: Path | None = None):
         self.inbox = base / "seat-0-advisor" / "inbox"
         self._voice_state = base / "seat-0-voice" / "state.json"
+        # seat barks: the voices at the table (from the stock libraries) and the knob
+        self._barks_mode = os.environ.get("ARENA_BARKS", "some").lower()
+        try:
+            from voice_runner import load_seat_libraries
+            self._seat_voices = load_seat_libraries()
+        except Exception:  # noqa: BLE001 — the voice runner is optional
+            self._seat_voices = {}
+        self._bark_guide_text = bark_guide(self._seat_voices, self._barks_mode)
         self._clock = TurnClock(base / "observer-state.json")
         self._voice_live = None
         self.timeout = timeout
@@ -580,9 +650,10 @@ class AdvisorRunner:
                   f"(turn {turn}, {phase}): {req.get('prompt')}\n"
                   f"{self._fmt_options(req)}"
                   f"STATE: {json.dumps(req.get('state'), separators=(',', ':'))}\n\n"
-                  "Advise the human now (1-3 sentences, plain text)." + self._quip_guide())
+                  "Advise the human now (1-3 sentences, plain text)." + self._quip_guide() + self._bark_guide_text)
         answer, meta = self.brain.decide(prompt, self.timeout)
         text, quip = split_quip((meta.get("raw") or "").strip(), log=self._say)
+        text, bark = split_bark(text, log=self._say)
         if text:
             self._stream_write(f"\n[{self._clock.label(turn)} · {phase}] {text}\n")
         self._record("advice", {"seq": req.get("seq"), "turn": turn, "phase": phase,
@@ -590,6 +661,8 @@ class AdvisorRunner:
                                 "text": text, "latency_s": meta.get("latency_s")})
         if quip:
             self._record("quip", {"id": quip, "turn": turn, "with": "advice", "seq": req.get("seq")})
+        if bark:
+            self._record("bark", {"seat": bark[0], "id": bark[1], "turn": turn, "with": "advice", "seq": req.get("seq")})
 
     def _quip_guide(self) -> str:
         text, live = quip_guide(self._voice_state, log=self._say, prev=self._voice_live)
@@ -601,15 +674,18 @@ class AdvisorRunner:
         lines = digest.get("digest") or []
         prompt = (f"TURN {turn} COMPLETE. Public log of the turn:\n"
                   + "\n".join(f"  {ln}" for ln in lines[-60:])
-                  + "\n\nONE line of color commentary (plain text)." + self._quip_guide())
+                  + "\n\nONE line of color commentary (plain text)." + self._quip_guide() + self._bark_guide_text)
         answer, meta = self.brain.decide(prompt, min(self.timeout, 45.0))
         text, quip = split_quip((meta.get("raw") or "").strip(), log=self._say)
+        text, bark = split_bark(text, log=self._say)
         if text:
             self._stream_write(f"\n[{self._clock.label(turn)} · color] {text}\n")
         self._record("color", {"seq": digest.get("seq"), "turn": turn,
                                "text": text, "latency_s": meta.get("latency_s")})
         if quip:
             self._record("quip", {"id": quip, "turn": turn, "with": "color", "seq": digest.get("seq")})
+        if bark:
+            self._record("bark", {"seat": bark[0], "id": bark[1], "turn": turn, "with": "color", "seq": digest.get("seq")})
 
     # ---- game identity (plan items 5 + 8) ----------------------------------------
 

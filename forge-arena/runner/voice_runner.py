@@ -74,11 +74,35 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent          # forge-arena/runner
 ARENA = HERE.parent
 STOCK = HERE / "voice" / "stock"
+VOICES_DIR = STOCK / "voices"               # seat-bark libraries: voices/<name>/manifest.json + <id>[-N].wav
 DEFAULT_VOICE_ID = ""                        # resolved from stock/manifest.json ("voice_id") unless ARENA_VOICE_ID is set
 POLL_S = 0.5
 FIRST_SENTENCE_MAX = 220
 ASK_MAX = 300
-PRIORITY = {"game_over": 0, "human_out": 0, "startup": 1, "ask": 2, "advice": 3, "quip": 4, "event": 5, "color": 6, "your_move": 7}
+PRIORITY = {"game_over": 0, "human_out": 0, "startup": 1, "ask": 2, "advice": 3, "quip": 4, "event": 5, "color": 6, "your_move": 7, "bark": 8}
+# An AI seat's elimination is voiced ONCE: by the dying seat itself (its `eliminated`
+# bark, at once) with this probability, else by Joshua's "A player has been eliminated."
+ELIM_SEAT_P = 0.7
+
+
+def load_seat_libraries(voices_dir: Path | None = None) -> dict[int, dict]:
+    """{seat: {"library": name, "voice": first name, "temperament": str}} from every
+    voices/<name>/manifest.json that names a seat. Missing dir -> {} (barks silently off)."""
+    out: dict[int, dict] = {}
+    d = voices_dir or VOICES_DIR
+    try:
+        mans = sorted(d.glob("*/manifest.json"))
+    except OSError:
+        return out
+    for mp in mans:
+        try:
+            m = json.loads(mp.read_text())
+            seat = int(m["seat"])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        out[seat] = {"library": mp.parent.name, "voice": str(m.get("voice_name", mp.parent.name)).split(" - ")[0],
+                     "temperament": str(m.get("temperament", ""))}
+    return out
 
 
 # ---- helpers ------------------------------------------------------------------
@@ -365,8 +389,11 @@ class Renderer:
     PAUSE_FIRST_S = 60.0
     PAUSE_MAX_S = 600.0
 
-    def __init__(self, cache_dir: Path, log=print, fake_tts=None, record=None, clock=time.monotonic):
+    def __init__(self, cache_dir: Path, log=print, fake_tts=None, record=None, clock=time.monotonic, rng=None):
         self.cache_dir = cache_dir
+        self.rng = rng or random.Random()
+        self._bags: dict[tuple[str, str], list[Path]] = {}     # (library, id) -> wordings still to play this round
+        self._last_variant: dict[tuple[str, str], Path] = {}
         self.log = log
         self.record = record          # callable(event, **body) -> the voice jsonl; optional
         self.clock = clock
@@ -424,9 +451,33 @@ class Renderer:
             return False, "paused after repeated failures"
         return True, "ok"
 
-    def stock(self, pid: str) -> Path | None:
-        p = STOCK / f"{pid}.wav"
-        return p if p.exists() else None
+    def variants(self, pid: str, library: str = "") -> list[Path]:
+        """<id>.wav plus <id>-N.wav (N numeric) in the Joshua library or voices/<library>/."""
+        d = (VOICES_DIR / library) if library else STOCK
+        files = [d / f"{pid}.wav"] + sorted(d.glob(f"{pid}-[0-9]*.wav"))
+        return [f for f in files if f.exists()]
+
+    def stock(self, pid: str, library: str = "") -> Path | None:
+        """One wording of a stock line. Several wordings (2026-09-10: four for the
+        lines that repeat) play from a shuffle bag — every wording once, in random
+        order, before any repeats, and never the same one twice running."""
+        files = self.variants(pid, library)
+        if not files:
+            return None
+        if len(files) == 1:
+            return files[0]
+        key = (library, pid)
+        bag = self._bags.get(key)
+        if not bag:
+            bag = files[:]
+            self.rng.shuffle(bag)
+            last = self._last_variant.get(key)
+            if last is not None and bag[0] == last:
+                bag.append(bag.pop(0))
+            self._bags[key] = bag
+        pick = bag.pop(0)
+        self._last_variant[key] = pick
+        return pick
 
     def sfx(self) -> Path | None:
         names = self.manifest.get("sfx") or []
@@ -612,12 +663,29 @@ class VoiceRunner:
         self._log_path = logs_dir / "voice-0.log"
         self._jsonl = logs_dir / "voice-0.jsonl"
         self._control = logs_dir / "control" / "voice.json"
+        self.rng = random.Random()
         self.renderer = Renderer(logs_dir / "cache" / "voice", log=self.say, fake_tts=fake_tts,
-                                 record=self.record, clock=clock)
+                                 record=self.record, clock=clock, rng=self.rng)
         self.player = player or Player(dry_run=dry_run, log=self.say)
         self.min_gap = float(os.environ.get("ARENA_VOICE_MIN_GAP", "8"))
         self.sfx_on = os.environ.get("ARENA_VOICE_SFX", "on").lower() != "off"
-        self.your_move_on = os.environ.get("ARENA_VOICE_YOUR_MOVE", "on").lower() != "off"
+        # "Your move" (Ben, 2026-09-10: "cool the first time, okay the second, lame
+        # every time after"): on = every turn | some = about YOUR_MOVE_P of turns |
+        # off; the wordings come from a shuffle bag either way.
+        self.your_move_mode = os.environ.get("ARENA_VOICE_YOUR_MOVE", "some").lower()
+        if self.your_move_mode not in ("on", "some", "off"):
+            self.your_move_mode = "some"
+        self.your_move_p = float(os.environ.get("ARENA_VOICE_YOUR_MOVE_P", "0.6"))
+        # Seat barks (2026-09-10): the advisor tags [bark:<seat>:<id>] on its
+        # replies; the seat's static voice (voices/<lib>/) says its own wording.
+        # Advisor off or muted => nothing (both already silence this runner).
+        self.barks_mode = os.environ.get("ARENA_BARKS", "some").lower()
+        if self.barks_mode not in ("off", "some", "all"):
+            self.barks_mode = "some"
+        self.barks_p = float(os.environ.get("ARENA_BARKS_P", "0.75"))
+        self.barks_cooldown = float(os.environ.get("ARENA_BARKS_COOLDOWN", "30"))
+        self.seat_libraries = load_seat_libraries()
+        self._bark_spoken_at: dict[int, float] = {}
         # Colour commentary (Ben, 2026-09-07: "it could say a thing during
         # opponents' turns some of the time"): the advisor's per-turn recap
         # arrives after every turn, the opponents' included. off | some | all;
@@ -626,7 +694,6 @@ class VoiceRunner:
         if self.color_mode not in ("off", "some", "all"):
             self.color_mode = "some"
         self.color_p = float(os.environ.get("ARENA_VOICE_COLOR_P", "0.5"))
-        self.rng = random.Random()
         self.queue: list[dict] = []
         self.last_spoken_at = -1e9
         # Start at the END of the advisor's stream: a (re)started runner speaks
@@ -696,11 +763,12 @@ class VoiceRunner:
             return False
 
     # -- queue
-    def enqueue(self, kind: str, *, text: str = "", stock: str = "", seq: int | None = None, ttl: float = 25.0) -> None:
+    def enqueue(self, kind: str, *, text: str = "", stock: str = "", seq: int | None = None, ttl: float = 25.0,
+                library: str = "", seat: int | None = None) -> None:
         item = {"kind": kind, "text": text, "stock": stock, "seq": seq, "prio": PRIORITY.get(kind, 9),
-                "at": self.clock(), "expires": self.clock() + ttl}
+                "at": self.clock(), "expires": self.clock() + ttl, "library": library, "seat": seat}
         # one pending item per kind for the chatty kinds: newest wins
-        if kind in ("advice", "your_move", "quip", "event", "color"):
+        if kind in ("advice", "your_move", "quip", "event", "color", "bark"):
             self.queue = [q for q in self.queue if q["kind"] != kind]
         self.queue.append(item)
 
@@ -737,7 +805,7 @@ class VoiceRunner:
     def speak(self, item: dict) -> bool:
         path = None
         if item["stock"]:
-            path = self.renderer.stock(item["stock"])
+            path = self.renderer.stock(item["stock"], item.get("library") or "")
         elif item["text"]:
             path = self.renderer.render(item["text"])
         if path is None:
@@ -749,9 +817,38 @@ class VoiceRunner:
                 self._play(bleep)
         self._play(path)
         self.last_spoken_at = self.clock()
+        if item.get("seat") is not None and item.get("library"):
+            self._bark_spoken_at[int(item["seat"])] = self.clock()
         self.record("spoke", kind=item["kind"], text=item["text"][:200], stock=item["stock"], seconds=round(wav_seconds(path), 2),
-                    chars_used=self.renderer.chars_used)
-        self.say(f"[voice] {item['kind']}: {item['stock'] or item['text'][:90]}")
+                    chars_used=self.renderer.chars_used, library=item.get("library") or "", seat=item.get("seat"),
+                    file=path.name)
+        who = f" seat {item['seat']} ({item['library']})" if item.get("library") else ""
+        self.say(f"[voice] {item['kind']}{who}: {item['stock'] or item['text'][:90]}" + (f" [{path.name}]" if item["stock"] and path.name != f"{item['stock']}.wav" else ""))
+        return True
+
+    # -- seat barks
+    def library_for_seat(self, seat: int) -> str:
+        info = self.seat_libraries.get(int(seat))
+        return info["library"] if info else ""
+
+    def maybe_bark(self, seat: int, pid: str, turn=None) -> bool:
+        """An advisor-authored bark for an AI seat, subject to the knob, the
+        seat's cooldown and the dice. Records why when it does not play."""
+        if self.barks_mode == "off":
+            self.record("skipped", kind="bark", why="barks off (ARENA_BARKS=off)", stock=pid, seat=seat)
+            return False
+        lib = self.library_for_seat(seat)
+        if not lib:
+            self.record("skipped", kind="bark", why=f"no voice library for seat {seat}", stock=pid, seat=seat)
+            return False
+        since = self.clock() - self._bark_spoken_at.get(int(seat), -1e9)
+        if since < self.barks_cooldown:
+            self.record("skipped", kind="bark", why=f"seat cooldown ({since:.0f}s < {self.barks_cooldown:.0f}s)", stock=pid, seat=seat)
+            return False
+        if self.barks_mode == "some" and self.rng.random() >= self.barks_p:
+            self.record("skipped", kind="bark", why="dice (ARENA_BARKS=some)", stock=pid, seat=seat)
+            return False
+        self.enqueue("bark", stock=pid, library=lib, seat=int(seat), ttl=20.0)
         return True
 
     # -- sources
@@ -790,6 +887,11 @@ class VoiceRunner:
                     self.record("skipped", kind="color", why="dice (ARENA_VOICE_COLOR=some)", text=r["text"][:80])
             elif k == "quip" and r.get("id"):
                 self.enqueue("quip", stock=str(r["id"]), ttl=20.0)
+            elif k == "bark" and r.get("id") and r.get("seat") is not None:
+                try:
+                    self.maybe_bark(int(r["seat"]), str(r["id"]), turn=r.get("turn"))
+                except (TypeError, ValueError):
+                    pass
             elif k == "chosen" and r.get("seq") is not None:
                 self.answered.add(int(r["seq"]))
 
@@ -818,10 +920,18 @@ class VoiceRunner:
                     rotation = self.renderer.manifest.get("human_out") or ["winner-none"]
                     self.enqueue("human_out", stock=self.rng.choice(rotation), ttl=60.0)
                 else:
-                    self.enqueue("event", stock="player-eliminated", ttl=20.0)
-        if self.your_move_on and turn is not None and (turn, active) != (self.seen_turn, self.seen_active):
+                    # one line, at once: the dying seat's own exit bark (ELIM_SEAT_P) or Joshua's
+                    lib = self.library_for_seat(s.get("seat")) if self.barks_mode != "off" else ""
+                    if lib and self.rng.random() < ELIM_SEAT_P:
+                        self.enqueue("event", stock="eliminated", library=lib, seat=int(s.get("seat")), ttl=20.0)
+                    else:
+                        self.enqueue("event", stock="player-eliminated", ttl=20.0)
+        if self.your_move_mode != "off" and turn is not None and (turn, active) != (self.seen_turn, self.seen_active):
             if active == self.human_seat and self.seen_turn is not None and not self.executive_on():
-                self.enqueue("your_move", stock="your-move", ttl=12.0)   # not while the advisor plays the seat
+                if self.your_move_mode == "on" or self.rng.random() < self.your_move_p:
+                    self.enqueue("your_move", stock="your-move", ttl=12.0)   # not while the advisor plays the seat
+                else:
+                    self.record("skipped", kind="your_move", why="dice (ARENA_VOICE_YOUR_MOVE=some)", stock="your-move")
             self.seen_turn, self.seen_active = turn, active
         if d.get("gameOver") and not self.game_over_said:
             self.game_over_said = True
@@ -874,7 +984,10 @@ class VoiceRunner:
     def run(self) -> None:
         self.say(f"[voice] up — stock {len(self.renderer.manifest.get('phrases', {}))} phrases, "
                  f"live={'on' if self.renderer.live else 'off (no ELEVENLABS_API_KEY)'}, min_gap={self.min_gap}s, "
-                 f"fx={self.renderer.fx_mode}, format={self.renderer.format}, glitch={self.renderer.glitch}, sfx={'on' if self.sfx_on else 'off'}, color={self.color_mode}")
+                 f"fx={self.renderer.fx_mode}, format={self.renderer.format}, glitch={self.renderer.glitch}, sfx={'on' if self.sfx_on else 'off'}, color={self.color_mode}, "
+                 f"your_move={self.your_move_mode}, barks={self.barks_mode}"
+                 + (f" (p={self.barks_p}, cooldown={self.barks_cooldown:.0f}s; " + ", ".join(f"seat {k} {v['voice']}" for k, v in sorted(self.seat_libraries.items())) + ")"
+                    if self.barks_mode != "off" and self.seat_libraries else (" (no seat voice libraries found)" if self.barks_mode != "off" else "")))
         hb = self.mailbox / "seat-0-voice" / "heartbeat"
         hb.parent.mkdir(parents=True, exist_ok=True)
 

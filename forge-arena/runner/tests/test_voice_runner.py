@@ -5,6 +5,7 @@ Run: python3 -m unittest discover -s tests"""
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -23,12 +24,17 @@ def silent_wav(seconds: float = 0.2) -> bytes:
     return buf.getvalue()
 
 
+def base(name: str) -> str:
+    """'strange-game-4.wav' -> 'strange-game.wav': the line, not the wording (2026-09-10 variants)."""
+    return re.sub(r"-\d+\.wav$", ".wav", name)
+
+
 class FakePlayer:
     def __init__(self):
         self.played = []
 
     def play(self, path):
-        self.played.append(Path(path).name)
+        self.played.append(base(Path(path).name))
 
 
 class Clock:
@@ -50,6 +56,11 @@ class VoiceRunnerTests(unittest.TestCase):
         os.environ["ARENA_VOICE_MIN_GAP"] = "8"
         os.environ["ARENA_VOICE_SFX"] = "off"
         os.environ["ARENA_VOICE_FX"] = "off"
+        # 2026-09-10: these tests pin the ORIGINAL behaviour — every "your move",
+        # Joshua announcing eliminations; the dice and the seat barks have their
+        # own suite (test_barks_runtime.py).
+        os.environ["ARENA_VOICE_YOUR_MOVE"] = "on"
+        os.environ["ARENA_BARKS"] = "off"
         self.clock = Clock()
         self.calls = []
 
@@ -155,7 +166,7 @@ class VoiceRunnerTests(unittest.TestCase):
     def test_game_events_your_move_elimination_and_game_over_order(self):
         self._observer(1, 1); self.r.step()                      # startup
         self.clock.t += 10; self._observer(2, 0); self.r.step()  # human's turn
-        self.assertEqual(self.player.played[-1], "your-move.wav")
+        self.assertEqual(self.player.played[-1], "your-move.wav")   # one of its wordings; FakePlayer folds the -N
         self.clock.t += 10; self._observer(3, 1, elim=(2,)); self.r.step()
         self.assertEqual(self.player.played[-1], "player-eliminated.wav")
         self.clock.t += 1; self._observer(9, 1, game_over=True, elim=(1, 2, 3)); self.r.step(); self.r.step()
