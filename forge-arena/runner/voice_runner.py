@@ -811,7 +811,8 @@ class VoiceRunner:
         if path is None:
             self.record("skipped", kind=item["kind"], why="no audio (stock missing or live off)", text=item["text"][:80], stock=item["stock"])
             return False
-        if self.sfx_on:
+        # the typing bleeps belong to the mainframe: never before a seat's own voice (Ben, 2026-09-10)
+        if self.sfx_on and not item.get("library"):
             bleep = self.renderer.sfx()
             if bleep is not None:
                 self._play(bleep)

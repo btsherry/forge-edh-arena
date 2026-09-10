@@ -134,6 +134,19 @@ class BarkRuntime(unittest.TestCase):
         self.assertEqual((spoke["kind"], spoke["library"], spoke["seat"]), ("bark", "harry", 1))
         self.assertTrue(spoke["file"].startswith("big-swing"))
 
+    def test_bleeps_precede_joshua_only_never_a_seat_voice(self):
+        (Path(vr.STOCK) / "sfx" / "typing-01.wav").write_bytes(silent_wav())
+        self.r.renderer.manifest["sfx"] = ["typing-01.wav"]
+        self.r.sfx_on = True
+        self._advisor(kind="bark", seat=1, id="big-swing", turn=4)
+        self._step()
+        self.assertEqual(len(self.player.played), 1, self.player.played)
+        self.assertTrue(self.player.played[0].startswith("big-swing"), "a bark plays bare — no typing bleep")
+        self._observer(5, 0); self.r.seen_turn, self.r.seen_active = 4, 3; self.r.scan_observer()
+        self._step()
+        self.assertEqual(self.player.played[1], "typing-01.wav", "Joshua's lines keep their bleep")
+        self.assertTrue(self.player.played[2].startswith("your-move"))
+
     def test_barks_sort_last_and_one_pending_bark_newest_wins(self):
         self._advisor(kind="bark", seat=1, id="big-swing", turn=4)
         self._advisor(kind="bark", seat=2, id="big-swing", turn=4)
