@@ -53,6 +53,14 @@ your entire job is to answer it.
   for you when you choose it — treat manaReach as your ceiling, colours
   permitting. In a reaction window mana abilities are not listed as options;
   choosing the spell or ability IS how you spend them.
+- The payer taps your cheapest-looking sources first (basics before rocks and
+  utility lands) and never looks at your NEXT spell. When a later spell this
+  turn needs a colour, FLOAT the colourless sources first (Sol Ring, Mana
+  Vault, Urza's Saga), then cast — otherwise the payer spends your Plains on
+  a generic cost and strands the white pip.
+- If unspent mana persists for you (Omnath, Kruphix), float unused mana
+  before ending your main phase to bank it, but keep interactive mana up and
+  avoid banking everything on one fragile creature.
   `state.ritualsInHand` lists spells that MAKE mana: a `ritual` row carries
   its projected `yield` and `net` on the current board (Mana Geyser counts
   the opponents' tapped lands right now); a `multiplier` row (High Tide,

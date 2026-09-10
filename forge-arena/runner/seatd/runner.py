@@ -38,6 +38,7 @@ class SeatRunner:
     rotate_at = 0  # class default
     rotate_hard = 0
     _game_id = None
+    _mono_color = None
     _tap_pass = None
     _yielded = None   # dict once the first yield is noted (never a shared class dict)
     def __init__(self, seat: int, deck: str, base, model: str = "sonnet",
@@ -67,6 +68,7 @@ class SeatRunner:
             self.rotate_hard = 600000
         self._game_id: str | None = None
         self.seat, self.deck = seat, deck
+        self._mono_color = self._deck_mono_color()   # BL-44: e.g. "green" for Selvala, None for multi-colour
         self.timeout_s = timeout_s
         self.autopass = tuple(autopass)
         self.speculative = speculative
@@ -1027,11 +1029,49 @@ class SeatRunner:
         except (KeyError, TypeError):
             pass
 
+    COLOR_NAMES = {"W": "white", "U": "blue", "B": "black", "R": "red", "G": "green"}
+
+    def _deck_mono_color(self):
+        """BL-44 (game 32 t23; Gemini review 2026-09-08): the deck's single colour
+        name when its commander(s') colour identity is exactly one colour, else
+        None. Read once from decks/<slug>/dossier/deck-cards.json (the commander
+        entries' `color_identity`, unioned for partners). Colourless decks,
+        multi-colour decks and any read problem -> None (the model decides)."""
+        try:
+            root = Path(getattr(self.brain, "root", Path(__file__).resolve().parents[3]))
+            p = root / "forge-arena" / "decks" / self.deck / "dossier" / "deck-cards.json"
+            cards = json.loads(p.read_text()).get("cards", [])
+            letters = set()
+            for c in cards:
+                if isinstance(c, dict) and c.get("zone") == "commander":
+                    letters |= {ch for ch in str(c.get("color_identity") or "") if ch in "WUBRG"}
+            return self.COLOR_NAMES[next(iter(letters))] if len(letters) == 1 else None
+        except Exception:  # noqa: BLE001 — a preference, never a failure
+            return None
+
+    def _mono_color_pick(self, req: dict):
+        """A mana-colour CHOOSE_MODE (state.purpose == "COLOR") for a mono-colour
+        deck: pick the deck's colour without a model call when it is offered.
+        Mirrors the human side (AdvisorControllerHuman: mono commanders get their
+        colour). The engine tags the window; labels are the colour names."""
+        if self._mono_color is None or (req.get("state") or {}).get("purpose") != "COLOR":
+            return None
+        for i, o in enumerate(req.get("options") or []):
+            label = str(o.get("label", "") if isinstance(o, dict) else o).strip().lower()
+            if label.split("  ")[0] == self._mono_color:
+                idx = o.get("id", i) if isinstance(o, dict) else i
+                ans = {"chosen": [idx]}
+                return ans if rules.validate(req, ans) is not None else None
+        return None
+
     def _fastpath(self, req: dict) -> tuple[dict, str] | None:
         if req.get("decisionType") == "CHOOSE_MODE":
             replay = self._order_replay(req)
             if replay is not None and rules.validate(req, replay) is not None:
                 return replay, "memo"
+            pick = self._mono_color_pick(req)
+            if pick is not None:
+                return pick, "color"
             return None
         if req.get("decisionType") != "REACT":
             return None
@@ -1394,6 +1434,11 @@ class SeatRunner:
                         and req.get("phase") in ("MAIN1", "MAIN2")):
                     self.turn_intent = tp.strip()[:600]
                 dev = out.get("deviation")
+                # Sync game 1 (2026-09-10): a seat filed "wanted nothing, blocked by n/a"
+                # twenty times — noise in the play-quality review. No intent = no deviation.
+                if isinstance(dev, dict) and str(dev.get("wanted", "")).strip().lower() in (
+                        "", "nothing", "nothing further", "n/a", "none", "no"):
+                    dev = None
                 if isinstance(dev, dict) and (dev.get("wanted") or dev.get("blocked_by")):
                     self._deviation = {"wanted": str(dev.get("wanted", ""))[:200],
                                        "blocked_by": str(dev.get("blocked_by", ""))[:200]}

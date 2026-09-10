@@ -286,6 +286,50 @@ class RoundTurnLabels(unittest.TestCase):
         self.assertTrue(out[1].startswith("[r2-t7] ⏭ (prompt kept"), out)
 
 
+class EmptyDeviationsAreDropped(unittest.TestCase):
+    def test_wanted_nothing_is_not_a_deviation(self):
+        r, _ = _runner()
+        req = {"seq": 5, "turn": 3, "phase": "MAIN1", "decisionType": "CAST_SPELL", "gameId": "g", "options": [{"id": 0, "label": "Pass (do nothing)"}]}
+        meta = {"latency_s": 0.1, "usage": None, "raw": "{}"}
+        r.brain.decide = lambda *a, **k: ({"chosenId": 0, "deviation": {"wanted": "nothing", "blocked_by": "n/a"}}, meta)
+        r.brain.session_id = "s"; r.brain.ensure_session = lambda *a, **k: True
+        r.mb.respond = lambda req, ans: True
+        r.handle(req)
+        self.assertIsNone(r._deviation, "wanted nothing: no deviation recorded")
+        r.brain.decide = lambda *a, **k: ({"chosenId": 0, "deviation": {"wanted": "hold Force", "blocked_by": "no blue"}}, meta)
+        r.handle(dict(req, seq=6))
+        self.assertEqual(r._deviation, {"wanted": "hold Force", "blocked_by": "no blue"})
+
+
+class MonoColorPick(unittest.TestCase):
+    """BL-44: a mono-colour deck answers a mana-colour CHOOSE_MODE itself."""
+    def _color_req(self, opts=("white", "blue", "black", "red", "green")):
+        r = json.loads((ROOT / "runner" / "tests" / "fixtures" / "engine" / "react.json").read_text())
+        r["decisionType"] = "CHOOSE_MODE"; r["seq"] = 900
+        r["state"] = dict(r.get("state") or {}, purpose="COLOR", min=1, max=1)
+        r["options"] = [{"id": i, "label": o} for i, o in enumerate(opts)]
+        return r
+
+    def test_giada_picks_white_and_only_for_colour_windows(self):
+        tmp = Path(tempfile.mkdtemp(prefix="mono-"))
+        r = SeatRunner(2, "giada-font-of-hope", str(tmp), log_dir=str(tmp / "logs"))
+        self.assertEqual(r._mono_color, "white")
+        ans = r._fastpath(self._color_req())
+        self.assertEqual(ans, ({"chosen": [0]}, "color"))
+        self.assertIsNone(r._fastpath(self._color_req(opts=("blue", "black"))), "the colour is not offered: the model decides")
+        other = self._color_req(); other["state"]["purpose"] = "TRIGGER_ORDER"
+        self.assertIsNone(r._fastpath(other), "not a colour window")
+        r._mono_color = None
+        self.assertIsNone(r._fastpath(self._color_req()), "multi-colour or unknown identity: the model decides")
+
+    def test_identity_from_commander_entries(self):
+        tmp = Path(tempfile.mkdtemp(prefix="mono2-"))
+        r = SeatRunner(2, "selvala-heart-of-the-wilds", str(tmp), log_dir=str(tmp / "logs"))
+        self.assertEqual(r._mono_color, "green")
+        r.deck = "no-such-deck"
+        self.assertIsNone(r._deck_mono_color(), "missing dossier: None, never an error")
+
+
 class LaunchBanner(unittest.TestCase):
     IGNORE = {"ARENA_RATE_VOIDED", "ARENA_OAI_API_KEY", "ARENA_HUMAN_DECK", "ARENA_MAILBOX_DIR", "ARENA_ADVISOR",
               "ARENA_AUTOSTOP_STATE", "ARENA_AUTOSTOP_STOP", "ARENA_AUTOSTOP_PID_FILE", "ARENA_AUTOSTOP_GUI_PID_FILE",

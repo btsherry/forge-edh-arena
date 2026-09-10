@@ -136,6 +136,29 @@ public class ManaTableTest {
         }
     }
 
+    /** W-16 (game 37 t19): Cavern of Souls carries a plain {C} tap and a
+     *  type-restricted colour tap; the row must take the UNRESTRICTED one so
+     *  the sum counts the Cavern, and note the restricted twin for the brain. */
+    @Test(timeOut = 120_000)
+    public void cavernOfSoulsCountsAsAPlainSource() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            MailboxTestKit.put("Cavern of Souls", k.seat, ZoneType.Battlefield);
+            Map<String, Object> state = MailboxController.buildState(k.seat, k.seat.getId(), 3);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> sources = (List<Map<String, Object>>) state.get("manaSources");
+            Map<String, Object> cavern = null;
+            for (Map<String, Object> row : sources) {
+                if ("Cavern of Souls".equals(row.get("name"))) {
+                    cavern = row;
+                }
+            }
+            Assert.assertNotNull(cavern, sources.toString());
+            Assert.assertNull(cavern.get("restricted"), "the plain {C} tap is the row: " + cavern);
+            Assert.assertNotNull(cavern.get("alsoRestricted"), "the typed colour tap is noted: " + cavern);
+            Assert.assertEquals(state.get("manaAvailableNow"), 1, "the Cavern counts once");
+        }
+    }
+
     /** BL-43 (game 31 t22): Selvala needs {G} to activate, so she is listed
      *  but not summed into manaAvailableNow; manaReach funds her from the
      *  summed mana and adds her NET yield — the ceiling the payer can reach.

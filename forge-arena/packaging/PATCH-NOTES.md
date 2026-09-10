@@ -1,5 +1,21 @@
 # forge-light-llm — Patch Notes
 
+## Unreleased — after v4.0 (upstream sync + 4.1 fixes)
+
+- **Engine updated to upstream Card-Forge of 2026-09-10** (605 commits: new card
+  scripts, engine and AI fixes). All ten decks re-verified against the new card
+  database.
+- **Seats choose which artifact pays a tap cost** (Urza's mana ability no longer
+  taps your Winter Orb when a Construct would do), and mono-colour decks answer
+  mana-colour choices themselves (Selvala's ten-per-activation colour prompts
+  cost no model calls). The mana table counts Cavern of Souls' plain tap, so
+  the seats' affordability figure is exact with a Cavern out.
+- **Seat brief:** float colourless sources first when a later spell needs a
+  colour; bank mana under Omnath-class effects but keep interaction up.
+- **Launcher and packager pick the engine jar by version**, not by the first
+  match, so an upgrade can never load a stale jar.
+- Empty "wanted nothing" deviations are no longer logged.
+
 ## v4.0 — 2026-09-09
 
 The advisor speaks, the seats remember, and the launch explains itself. Every

@@ -346,7 +346,53 @@ public final class MailboxController extends PlayerControllerAi
         if (piece == null && ability != null) {
             piece = pendingTapPreference.get(ability.getRootAbility());
         }
-        return piece == null ? null : new CardCollection(piece);
+        if (piece != null) {
+            return new CardCollection(piece);   // symmetry-break offer: the pre-selected piece
+        }
+        // BL-46 (games 22, 38 — Urza's "tap an untapped artifact: add {U}" paid by
+        // tapping Winter Orb / Everflowing Chalice / The One Ring while the seat
+        // wanted the Construct): a tap-type payment with MORE candidates than the
+        // cost needs is the seat's choice, like sacrifice and pitch payments.
+        // Forced or short payments answer locally (null -> stock, byte-identical);
+        // vehicles and shares-type costs stay on stock; anything odd -> stock.
+        if (!inPaymentContext || ability == null || ability.getPayCosts() == null) {
+            return null;
+        }
+        try {
+            forge.game.cost.CostTapType part = null;
+            for (forge.game.cost.CostPart p : ability.getPayCosts().getCostParts()) {
+                if (p instanceof forge.game.cost.CostTapType) {
+                    part = (forge.game.cost.CostTapType) p;
+                    break;
+                }
+            }
+            if (part == null) {
+                return null;
+            }
+            String type = part.getType();
+            if (type == null || type.contains("+withTotalPowerGE") || type.contains("sharesCreatureTypeWith")) {
+                return null;
+            }
+            int amount = part.getAbilityAmount(ability);
+            Player me = getPlayer();
+            Card host = ability.getHostCard();
+            CardCollection valid = CardLists.getValidCards(
+                    me.getCardsIn(ZoneType.Battlefield), type.split(";"), me, host, ability);
+            valid = CardLists.filter(valid, forge.game.card.CardPredicates.UNTAPPED);
+            if (!part.canTapSource && host != null) {
+                valid.remove(host);
+            }
+            if (amount <= 0 || valid.size() <= amount) {
+                return null;   // forced or short: nothing to decide
+            }
+            List<Card> picked = cardChoiceViaSeat(
+                    "TAP PAYMENT for " + (host != null ? host.getName() : "an ability") + " (" + ability
+                            + ") — choose exactly " + amount + " to tap",
+                    valid, amount, amount);
+            return picked == null ? null : new CardCollection(picked);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /**
@@ -4171,24 +4217,36 @@ public final class MailboxController extends PlayerControllerAi
             }
             SpellAbility best = null;
             boolean bestBare = false;
-            String restricted = null;
+            boolean bestRestricted = false;
+            String alsoRestricted = null;   // W-16: a SECOND, restricted ability on the same permanent
             for (SpellAbility ma : mas) {
                 if (ma == null) {
                     continue;
                 }
-                if (restricted == null && ma.hasParam("RestrictValid")) {
-                    restricted = ma.getParam("RestrictValid");
-                }
                 Cost cost = ma.getPayCosts();
                 boolean bare = cost == null
                         || (cost.hasTapCost() && cost.hasOnlySpecificCostType(CostTap.class));
-                if (best == null || (bare && !bestBare)) {
+                boolean restr = ma.hasParam("RestrictValid");
+                // W-16 (game 37 t19): Cavern of Souls has two bare-tap abilities — {C}
+                // unrestricted and a creature-type-restricted colour; the row took the
+                // restricted one, so the sum read one low and the affordability fastpath
+                // passed a live window. Rank: bare+unrestricted > bare > costed+unrestricted > first.
+                int rank = (bare ? 2 : 0) + (restr ? 0 : 1);
+                int bestRank = best == null ? -1 : (bestBare ? 2 : 0) + (bestRestricted ? 0 : 1);
+                if (best == null || rank > bestRank) {
                     best = ma;
                     bestBare = bare;
+                    bestRestricted = restr;
                 }
             }
             if (best == null) {
                 continue;
+            }
+            String restricted = bestRestricted ? best.getParam("RestrictValid") : null;
+            for (SpellAbility ma : mas) {
+                if (ma != null && ma != best && ma.hasParam("RestrictValid")) {
+                    alsoRestricted = ma.getParam("RestrictValid");
+                }
             }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", c.getId());
@@ -4198,6 +4256,9 @@ public final class MailboxController extends PlayerControllerAi
             row.put("colors", producedColors(best));
             if (restricted != null) {
                 row.put("restricted", restricted);
+            }
+            if (alsoRestricted != null) {
+                row.put("alsoRestricted", alsoRestricted);   // e.g. Cavern's typed colour beside its plain {C}
             }
             if (c.isCreature() && c.hasSickness()) {
                 row.put("sick", true);
