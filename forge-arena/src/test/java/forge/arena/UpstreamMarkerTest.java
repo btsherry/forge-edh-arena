@@ -23,7 +23,9 @@ import org.testng.annotations.Test;
  */
 public class UpstreamMarkerTest {
 
-    static final String UPSTREAM_BASE = "0eec0a16d0a";
+    /** Fallback when origin/master is not fetched: the upstream commit of the
+     *  latest sync (2026-09-10). Prefer the live merge base with origin/master. */
+    static final String UPSTREAM_BASE = "a5f4f9e4796";
 
     @Test
     public void everyModifiedUpstreamSourceCarriesAMarker() throws Exception {
@@ -48,7 +50,7 @@ public class UpstreamMarkerTest {
                 unmarked.add(f);
             }
         }
-        Assert.assertTrue(checked > 0, "expected at least one modified upstream source vs " + UPSTREAM_BASE);
+        Assert.assertTrue(checked > 0, "expected at least one modified upstream source vs " + upstreamBase(repo));
         Assert.assertTrue(unmarked.isEmpty(), "modified upstream files without an [arena]/ARENA-PATCH marker "
                 + "(see docs/UPSTREAM-SYNC.md, INVENTORY.md 1a): " + unmarked);
     }
@@ -64,9 +66,30 @@ public class UpstreamMarkerTest {
     }
 
     /** Modified (M) paths outside forge-arena/ vs the upstream base; null when git cannot answer. */
+    /** The upstream point this checkout diverges from: the merge base with
+     *  origin/master when that ref exists locally, else the recorded constant.
+     *  After a sync the base MUST move, or every file upstream itself touched
+     *  reads as "ours" (the 2026-09-10 sync gate showed exactly that). */
+    static String upstreamBase(Path repo) {
+        try {
+            Process proc = new ProcessBuilder("git", "merge-base", "HEAD", "origin/master").directory(repo.toFile())
+                    .redirectErrorStream(true).start();
+            String out;
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
+                out = r.readLine();
+            }
+            if (proc.waitFor() == 0 && out != null && out.trim().matches("[0-9a-f]{7,40}")) {
+                return out.trim();
+            }
+        } catch (Exception ignored) {
+            // fall through
+        }
+        return UPSTREAM_BASE;
+    }
+
     private static List<String> gitModifiedOutsideArena(Path repo) {
         try {
-            Process proc = new ProcessBuilder("git", "diff", "--name-status", "--diff-filter=M", UPSTREAM_BASE, "HEAD",
+            Process proc = new ProcessBuilder("git", "diff", "--name-status", "--diff-filter=M", upstreamBase(repo), "HEAD",
                     "--", ".", ":(exclude)forge-arena").directory(repo.toFile()).redirectErrorStream(true).start();
             List<String> out = new ArrayList<>();
             try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
