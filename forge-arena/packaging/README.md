@@ -8,7 +8,7 @@ growing dataset for deck analysis and for crafting deterministic game AI.
 Two uses: watch four brains play any deck you hand them, or pilot your own
 deck with an AI coach at your shoulder.
 
-As of v4.0 the seats own essentially every decision: casting, targeting
+As of v4.1 the seats own essentially every decision: casting, targeting
 (retargets and copy aiming included), triggers and their order, colour
 choices, sacrifices and every cost payment, scry/surveil/library order,
 mulligan bottoming, cleanup discards, optional costs, votes, pile splits. Two fail-safes back that up. On the
@@ -24,9 +24,9 @@ block is "no blocks". The table is in `forge-arena/runner/seatd/seat-brief.md`
 and pinned by a test; `PATCH-NOTES.md` lists every surface.
 
 **Download:** [forge-light-llm-latest.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-latest.tar.gz)
-(always the current release; v4.0, 2026-09-09, ~130 MB). Each release also
+(always the current release; v4.1, 2026-09-10, ~130 MB). Each release also
 keeps its dated object, this one
-[forge-light-llm-20260909.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-20260909.tar.gz);
+[forge-light-llm-20260910.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-20260910.tar.gz);
 `PATCH-NOTES.md` inside says which version you have. Unpack anywhere:
 `tar xzf forge-light-llm-latest.tar.gz`.
 

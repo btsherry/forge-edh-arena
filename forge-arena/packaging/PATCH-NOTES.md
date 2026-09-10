@@ -1,6 +1,6 @@
 # forge-light-llm — Patch Notes
 
-## Unreleased — after v4.0 (upstream sync + 4.1 fixes)
+## v4.1 — 2026-09-10
 
 - **Engine updated to upstream Card-Forge of 2026-09-10** (605 commits: new card
   scripts, engine and AI fixes). All ten decks re-verified against the new card
