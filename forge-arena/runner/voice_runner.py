@@ -83,6 +83,10 @@ PRIORITY = {"game_over": 0, "human_out": 0, "startup": 1, "ask": 2, "advice": 3,
 # An AI seat's elimination is voiced ONCE: by the dying seat itself (its `eliminated`
 # bark, at once) with this probability, else by Joshua's "A player has been eliminated."
 ELIM_SEAT_P = 0.7
+# A recap that carries a bark tag is voiced ONCE (Ben, 2026-09-10): the seat's own
+# line with probability ARENA_BARKS_OVER_COLOR, else Joshua's colour line. The two
+# records land a moment apart, so a colour record waits this long for its bark.
+PAIR_WAIT_S = 1.0
 
 
 def load_seat_libraries(voices_dir: Path | None = None) -> dict[int, dict]:
@@ -684,6 +688,8 @@ class VoiceRunner:
             self.barks_mode = "some"
         self.barks_p = float(os.environ.get("ARENA_BARKS_P", "0.75"))
         self.barks_cooldown = float(os.environ.get("ARENA_BARKS_COOLDOWN", "30"))
+        self.barks_over_color = float(os.environ.get("ARENA_BARKS_OVER_COLOR", "0.7"))
+        self._pending_color: dict[int, dict] = {}     # seq -> colour record waiting to learn whether a bark follows
         self.seat_libraries = load_seat_libraries()
         self._bark_spoken_at: dict[int, float] = {}
         # Colour commentary (Ben, 2026-09-07: "it could say a thing during
@@ -832,9 +838,10 @@ class VoiceRunner:
         info = self.seat_libraries.get(int(seat))
         return info["library"] if info else ""
 
-    def maybe_bark(self, seat: int, pid: str, turn=None) -> bool:
+    def maybe_bark(self, seat: int, pid: str, turn=None, paired: bool = False) -> bool:
         """An advisor-authored bark for an AI seat, subject to the knob, the
-        seat's cooldown and the dice. Records why when it does not play."""
+        seat's cooldown and the dice (a bark that already won its recap's
+        seat-vs-Joshua roll skips the dice). Records why when it does not play."""
         if self.barks_mode == "off":
             self.record("skipped", kind="bark", why="barks off (ARENA_BARKS=off)", stock=pid, seat=seat)
             return False
@@ -846,14 +853,50 @@ class VoiceRunner:
         if since < self.barks_cooldown:
             self.record("skipped", kind="bark", why=f"seat cooldown ({since:.0f}s < {self.barks_cooldown:.0f}s)", stock=pid, seat=seat)
             return False
-        if self.barks_mode == "some" and self.rng.random() >= self.barks_p:
+        if not paired and self.barks_mode == "some" and self.rng.random() >= self.barks_p:
             self.record("skipped", kind="bark", why="dice (ARENA_BARKS=some)", stock=pid, seat=seat)
             return False
         self.enqueue("bark", stock=pid, library=lib, seat=int(seat), ttl=20.0)
         return True
 
+    # -- colour vs bark: one line per recap
+    def _voice_color(self, r: dict) -> None:
+        """Joshua's colour line under its own dice (the only alternative is silence)."""
+        if self.color_mode == "all" or self.rng.random() < self.color_p:
+            self.enqueue("color", text=first_sentence(r["text"]), ttl=40.0)
+        else:
+            self.record("skipped", kind="color", why="dice (ARENA_VOICE_COLOR=some)", text=r["text"][:80])
+
+    def _hold_color(self, r: dict) -> None:
+        """A recap's colour line waits PAIR_WAIT_S for a bark on the same seq;
+        with barks off nothing can pair, so it goes straight to the dice."""
+        seq = r.get("seq")
+        if self.barks_mode == "off" or seq is None:
+            self._voice_color(r)
+            return
+        self._pending_color[int(seq)] = {"text": r["text"], "since": self.clock()}
+
+    def _pair(self, seq: int, seat: int, pid: str, turn=None) -> None:
+        """The recap offered both: roll once. Seat wins -> its bark (no further
+        dice); Joshua wins -> the colour line (no further dice). A seat on
+        cooldown, or without a library, hands the line to Joshua."""
+        col = self._pending_color.pop(seq)
+        seat_line = self.rng.random() < self.barks_over_color
+        if seat_line and self.maybe_bark(seat, pid, turn=turn, paired=True):
+            self.record("skipped", kind="color", why="yielded to seat bark (ARENA_BARKS_OVER_COLOR)", text=col["text"][:80], seq=seq)
+            return
+        if not seat_line:
+            self.record("skipped", kind="bark", why="yielded to Joshua (ARENA_BARKS_OVER_COLOR)", stock=pid, seat=seat, seq=seq)
+        self.enqueue("color", text=first_sentence(col["text"]), ttl=40.0)
+
+    def _flush_colors(self) -> None:
+        now = self.clock()
+        for seq in [k for k, v in self._pending_color.items() if now - v["since"] >= PAIR_WAIT_S]:
+            self._voice_color(self._pending_color.pop(seq))
+
     # -- sources
     def scan_advisor(self) -> None:
+        self._flush_colors()
         path = self.logs / "advisor-0.jsonl"
         try:
             st = path.stat()
@@ -882,17 +925,18 @@ class VoiceRunner:
             elif k == "ask" and r.get("answer"):
                 self.enqueue("ask", text=first_sentence(r["answer"], ASK_MAX), ttl=60.0)
             elif k == "color" and r.get("text") and self.color_mode != "off":
-                if self.color_mode == "all" or self.rng.random() < self.color_p:
-                    self.enqueue("color", text=first_sentence(r["text"]), ttl=40.0)
-                else:
-                    self.record("skipped", kind="color", why="dice (ARENA_VOICE_COLOR=some)", text=r["text"][:80])
+                self._hold_color(r)
             elif k == "quip" and r.get("id"):
                 self.enqueue("quip", stock=str(r["id"]), ttl=20.0)
             elif k == "bark" and r.get("id") and r.get("seat") is not None:
                 try:
-                    self.maybe_bark(int(r["seat"]), str(r["id"]), turn=r.get("turn"))
+                    seat, pid, seq = int(r["seat"]), str(r["id"]), r.get("seq")
                 except (TypeError, ValueError):
-                    pass
+                    continue
+                if seq is not None and int(seq) in self._pending_color:
+                    self._pair(int(seq), seat, pid, turn=r.get("turn"))
+                else:
+                    self.maybe_bark(seat, pid, turn=r.get("turn"))
             elif k == "chosen" and r.get("seq") is not None:
                 self.answered.add(int(r["seq"]))
 
@@ -987,7 +1031,7 @@ class VoiceRunner:
                  f"live={'on' if self.renderer.live else 'off (no ELEVENLABS_API_KEY)'}, min_gap={self.min_gap}s, "
                  f"fx={self.renderer.fx_mode}, format={self.renderer.format}, glitch={self.renderer.glitch}, sfx={'on' if self.sfx_on else 'off'}, color={self.color_mode}, "
                  f"your_move={self.your_move_mode}, barks={self.barks_mode}"
-                 + (f" (p={self.barks_p}, cooldown={self.barks_cooldown:.0f}s; " + ", ".join(f"seat {k} {v['voice']}" for k, v in sorted(self.seat_libraries.items())) + ")"
+                 + (f" (p={self.barks_p}, over_color={self.barks_over_color}, cooldown={self.barks_cooldown:.0f}s; " + ", ".join(f"seat {k} {v['voice']}" for k, v in sorted(self.seat_libraries.items())) + ")"
                     if self.barks_mode != "off" and self.seat_libraries else (" (no seat voice libraries found)" if self.barks_mode != "off" else "")))
         hb = self.mailbox / "seat-0-voice" / "heartbeat"
         hb.parent.mkdir(parents=True, exist_ok=True)

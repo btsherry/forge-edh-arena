@@ -467,6 +467,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_BARKS` | `some` | off \| some \| all — the AI seats' spoken barks in their own voices (seat 1 Harry, 2 Bill, 3 Lily); the advisor must be on and unmuted |
 | `ARENA_BARKS_P` | `0.75` | probability a bark the advisor asked for is spoken when BARKS=some |
 | `ARENA_BARKS_COOLDOWN` | `30` | seconds before the same seat barks again |
+| `ARENA_BARKS_OVER_COLOR` | `0.7` | when a recap offers both, probability the seat's bark is voiced instead of Joshua's colour line (one or the other, never both) |
 
 **Backends (optional, API-billed)**
 

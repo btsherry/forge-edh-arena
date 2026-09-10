@@ -147,6 +147,49 @@ class BarkRuntime(unittest.TestCase):
         self.assertEqual(self.player.played[1], "typing-01.wav", "Joshua's lines keep their bleep")
         self.assertTrue(self.player.played[2].startswith("your-move"))
 
+    # ---- a recap with a bark tag is voiced once: the seat (70 %) or Joshua
+    def _recap(self, seq, seat=1, pid="big-swing", split=False):
+        self._advisor(kind="color", seq=seq, turn=seq, text="Urza did a thing. And more.")
+        if split:
+            self.r.scan_advisor(); self.clock.t += 0.4          # the bark lands in the NEXT poll
+        self._advisor(kind="bark", seq=seq, turn=seq, seat=seat, id=pid)
+        self.r.scan_advisor()
+
+    def test_pair_seat_wins_or_joshua_wins_never_both(self):
+        self.r.color_mode = "all"
+        self.r.rng.random = lambda: 0.1                          # < 0.7 -> the seat
+        self._recap(1)
+        self.assertEqual([q["kind"] for q in self.r.queue], ["bark"])
+        self.assertIn("yielded to seat bark", self._records("skipped", "color")[-1]["why"])
+        self.r.queue.clear()
+        self.r.rng.random = lambda: 0.9                          # >= 0.7 -> Joshua
+        self._recap(2, seat=2)
+        self.assertEqual([q["kind"] for q in self.r.queue], ["color"])
+        self.assertIn("yielded to Joshua", self._records("skipped", "bark")[-1]["why"])
+
+    def test_pair_survives_a_split_poll_and_an_unpaired_colour_still_plays(self):
+        self.r.color_mode = "all"
+        self.r.rng.random = lambda: 0.1
+        self._recap(3, split=True)                               # colour seen alone first, bark 0.4 s later
+        self.assertEqual([q["kind"] for q in self.r.queue], ["bark"], "still paired inside PAIR_WAIT_S")
+        self.r.queue.clear()
+        self._advisor(kind="color", seq=4, turn=4, text="No tag this time.")
+        self.r.scan_advisor()
+        self.assertEqual(self.r.queue, [], "held while a bark might follow")
+        self.clock.t += 1.1; self.r.scan_advisor()
+        self.assertEqual([q["kind"] for q in self.r.queue], ["color"], "flushed to Joshua's own dice after the wait")
+
+    def test_pair_falls_back_to_joshua_when_the_seat_is_on_cooldown_and_barks_off_means_no_hold(self):
+        self.r.color_mode = "all"
+        self.r.rng.random = lambda: 0.1
+        self._recap(5); self._step()                             # seat 1 spoke -> cooldown
+        self._recap(6)
+        self.assertEqual([q["kind"] for q in self.r.queue], ["color"])
+        self.assertIn("seat cooldown", self._records("skipped", "bark")[-1]["why"])
+        self.r.queue.clear(); self.r.barks_mode = "off"
+        self._advisor(kind="color", seq=7, turn=7, text="Barks are off."); self.r.scan_advisor()
+        self.assertEqual([q["kind"] for q in self.r.queue], ["color"], "no pairing possible -> immediate, as before")
+
     def test_barks_sort_last_and_one_pending_bark_newest_wins(self):
         self._advisor(kind="bark", seat=1, id="big-swing", turn=4)
         self._advisor(kind="bark", seat=2, id="big-swing", turn=4)
@@ -231,7 +274,7 @@ class BarkRuntime(unittest.TestCase):
         for k in ("ARENA_BARKS", "ARENA_VOICE_YOUR_MOVE", "ARENA_BARKS_P", "ARENA_BARKS_COOLDOWN", "ARENA_VOICE_YOUR_MOVE_P"):
             os.environ.pop(k, None)
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
-        self.assertEqual((r.barks_mode, r.barks_p, r.barks_cooldown), ("some", 0.75, 30.0))
+        self.assertEqual((r.barks_mode, r.barks_p, r.barks_cooldown, r.barks_over_color), ("some", 0.75, 30.0, 0.7))
         self.assertEqual((r.your_move_mode, r.your_move_p), ("some", 0.6))
         os.environ["ARENA_BARKS"] = "bogus"; os.environ["ARENA_VOICE_YOUR_MOVE"] = "bogus"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
