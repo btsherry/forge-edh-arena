@@ -61,7 +61,7 @@ class SharedVocabulary(unittest.TestCase):
             model, settings, formats = bs.render_settings(m)
             self.assertEqual(model, "eleven_v3", "tags need v3")
             self.assertIn(settings["stability"], (0.0, 0.5), f"{lib}: v3 tags only take at Creative/Natural stability")
-            self.assertEqual(formats[0], "pcm_44100")
+            self.assertEqual(formats, ("pcm_24000",), f"{lib}: 24 kHz raws like the Joshua takes")
             b = bs.bake_settings(m)
             self.assertEqual((b["fx"], b["glitch"], b["rate"]), ("none", "off", 22050), f"{lib}: a seat voice stays clean and small")
             self.assertEqual((b["gain"], b["target_lufs"], b["true_peak_max"]), ("library", -24.0, -1.0), f"{lib}: library-relative gain to the Joshua level")
@@ -78,6 +78,24 @@ class Builder(unittest.TestCase):
             ("your-move", 2, "Your turn to play.", "your-move-2"),
             ("calculating", 1, "Calculating.", "calculating"),
         ])
+
+    def test_ids_selectors_pick_a_phrase_or_one_wording(self):
+        self.assertTrue(bs.selected(None, "win", 3))
+        self.assertTrue(bs.selected({"win"}, "win", 3))
+        self.assertTrue(bs.selected({"win:3"}, "win", 3))
+        self.assertFalse(bs.selected({"win:3"}, "win", 1))
+        self.assertFalse(bs.selected({"taunt"}, "win", 1))
+
+    def test_joshua_manifest_lists_four_wordings_for_the_nine_repeaters(self):
+        J = json.loads((RUNNER / "voice" / "stock" / "manifest.json").read_text())
+        nine = ("your-move", "calculating", "interesting", "ouch", "startup", "game-over-gg", "strange-game", "you-win", "player-eliminated")
+        for pid in nine:
+            self.assertIsInstance(J["phrases"][pid]["text"], list, pid)
+            self.assertEqual(len(J["phrases"][pid]["text"]), 4, pid)
+        self.assertEqual(J["phrases"]["your-move"]["text"][0], "Your move.", "wording 1 is the shipped file")
+        self.assertEqual(J["phrases"]["startup"]["text"][0], "Would you like to play a game?", "Ben's own take stays wording 1")
+        others = [pid for pid, ph in J["phrases"].items() if pid not in nine]
+        self.assertTrue(all(isinstance(J["phrases"][p]["text"], str) for p in others), "the other 54 lines are unchanged")
 
     def test_joshua_defaults_are_the_original_settings(self):
         """The shipped manifest carries no render/bake block; the defaults must

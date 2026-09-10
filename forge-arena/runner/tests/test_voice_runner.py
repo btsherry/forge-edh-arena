@@ -285,7 +285,9 @@ class StockLibrary(unittest.TestCase):
                 secs = w.getnframes() / w.getframerate()
                 self.assertEqual((w.getframerate(), w.getnchannels(), w.getsampwidth()), (44100, 1, 2), pid)
             self.assertTrue(0.4 <= secs <= 6.0, f"{pid}: {secs:.2f}s")
-            self.assertTrue(1 <= len(ph["text"].split()) <= 12, f"{pid}: {ph['text']!r} is not a short line")
+            texts = ph["text"] if isinstance(ph["text"], list) else [ph["text"]]
+            for txt in texts:
+                self.assertTrue(1 <= len(txt.split()) <= 12, f"{pid}: {txt!r} is not a short line")
 
     def test_quotes_human_out_and_advisor_tags_are_manifest_phrases(self):
         import advisor_runner as ar

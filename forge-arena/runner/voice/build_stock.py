@@ -99,6 +99,11 @@ def variants(m: dict) -> list[tuple[str, int, str, str]]:
     return out
 
 
+def selected(ids: set[str] | None, pid: str, n: int) -> bool:
+    """--ids entries: "pid" selects every wording of that phrase, "pid:N" one wording."""
+    return ids is None or pid in ids or f"{pid}:{n}" in ids
+
+
 def render_settings(m: dict) -> tuple[str, dict, tuple[str, ...]]:
     r = m.get("render") or {}
     return (r.get("model") or RENDER_MODEL,
@@ -167,8 +172,8 @@ def render_missing(lib: Path, ids: set[str] | None, limit: int | None = None) ->
     (lib / "raw").mkdir(exist_ok=True)
     fmt_i = 0
     n = chars = 0
-    for pid, _num, text, stem in variants(m):
-        if ids is not None and pid not in ids:
+    for pid, num, text, stem in variants(m):
+        if not selected(ids, pid, num):
             continue
         raw = lib / "raw" / f"{stem}.wav"
         if raw.exists():
@@ -210,7 +215,7 @@ def render_missing(lib: Path, ids: set[str] | None, limit: int | None = None) ->
 def bake(lib: Path, ids: set[str] | None, glitch_override: str | None = None) -> int:
     m = manifest(lib)
     b = bake_settings(m, glitch_override)
-    stems = {stem: pid for pid, _n, _t, stem in variants(m)}
+    stems = {stem: (pid, n) for pid, n, _t, stem in variants(m)}
     raws = sorted((lib / "raw").glob("*.wav"))
     gain = None
     peaks: dict[str, float] = {}
@@ -222,8 +227,8 @@ def bake(lib: Path, ids: set[str] | None, glitch_override: str | None = None) ->
     n = 0
     for raw in raws:
         stem = raw.stem
-        pid = stems.get(stem, stem)
-        if ids is not None and pid not in ids:
+        pid, num = stems.get(stem, (stem, 1))
+        if not selected(ids, pid, num):
             continue
         g = None
         if gain is not None:
@@ -245,7 +250,7 @@ def main() -> None:
     ap.add_argument("--library", default="", help="stock library: a name under voice/stock/voices/ (harry, bill, lily) or a directory; default = the Joshua library")
     ap.add_argument("--glitch", default=None, choices=["off", "light", "heavy"], help="override the manifest's bake glitch level")
     ap.add_argument("--render", action="store_true", help="render missing raw takes from the manifest first (needs ELEVENLABS_API_KEY)")
-    ap.add_argument("--ids", default="", help="comma-separated phrase ids to render/bake (default: all)")
+    ap.add_argument("--ids", default="", help="comma-separated selectors: a phrase id (every wording) or id:N (one wording); default: all")
     ap.add_argument("--limit", type=int, default=None, help="render at most N missing takes (probe batch)")
     a = ap.parse_args()
     lib = resolve_library(a.library)
