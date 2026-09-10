@@ -130,17 +130,25 @@ def split_bark(text: str, log=None) -> tuple[str, tuple[int, str] | None]:
     return clean, (seat, bid)
 
 
-def bark_guide(seat_voices: dict, mode: str) -> str:
+def bark_guide(seat_voices: dict, mode: str, seat_decks: dict | None = None) -> str:
     """The prompt sentence offering the seat-bark tag, or "" when barks are off
-    or no seat voice library exists. `seat_voices` is voice_runner.load_seat_libraries()."""
+    or no seat voice library exists. `seat_voices` is voice_runner.load_seat_libraries();
+    `seat_decks` maps seat -> deck slug so the model can name the seat it means.
+
+    The VOICE NAMES are deliberately absent (Ben, 2026-09-10, game 38: Joshua
+    called a player "Bill"): the model sees each seat's deck and temperament
+    only, and the convention — players are their commanders — is spelled out."""
     if mode == "off" or not seat_voices:
         return ""
-    who = "; ".join(f"seat {k}: {v['voice']} — {v['temperament']}" for k, v in sorted(seat_voices.items()) if v.get("voice"))
+    decks = seat_decks or {}
+    who = "; ".join(f"seat {k} ({decks.get(k, 'AI deck')}): {v['temperament']}"
+                    for k, v in sorted(seat_voices.items()) if v.get("temperament"))
     ids = "; ".join(f"[bark:<seat>:{b}] when it {w}" for b, w in BARK_WHEN.items())
-    return ("\nSEAT BARK (optional, sparse): the AI seats have voices (" + who + "). If ONE seat's situation "
-            "in what you just saw clearly earns a line, end with exactly one tag naming that seat and the moment: "
-            + ids + ". Never seat 0. Only public events; never a hidden hand. One tag per reply: a quip OR a bark, "
-            "not both. Most replies carry no tag.")
+    return ("\nSEAT BARK (optional, sparse): the AI seats speak in their own voices (" + who + "). If ONE seat's "
+            "situation in what you just saw clearly earns a line, end with exactly one tag naming that seat and the "
+            "moment: " + ids + ". Never seat 0. Only public events; never a hidden hand. One tag per reply: a quip OR "
+            "a bark, not both. Most replies carry no tag. In your own words always call a player by their COMMANDER "
+            "(Urza, Giada, Purphoros…), never by a seat number or any other name.")
 # Two densities (Ben, 2026-09-08): while the voice can render live lines the
 # quips stay rare ("if the moment earns it"); when live lines are down — no
 # ElevenLabs key (every package user without one), a spent quota, no usable
@@ -302,7 +310,9 @@ class AdvisorRunner:
             self._seat_voices = load_seat_libraries()
         except Exception:  # noqa: BLE001 — the voice runner is optional
             self._seat_voices = {}
-        self._bark_guide_text = bark_guide(self._seat_voices, self._barks_mode)
+        roster = (os.environ.get("ARENA_SEAT_DECKS", "").split() or DEFAULT_TABLE.split())
+        seat_decks = {i + 1: slug for i, slug in enumerate(table_opponents(deck, roster))}
+        self._bark_guide_text = bark_guide(self._seat_voices, self._barks_mode, seat_decks)
         self._clock = TurnClock(base / "observer-state.json")
         self._voice_live = None
         self.timeout = timeout

@@ -85,11 +85,15 @@ class BarkTests(unittest.TestCase):
         self.assertEqual(len(dropped), 3)
         self.assertIn("unknown id", dropped[0]); self.assertIn("seat must be 1-3", dropped[1])
 
-    def test_guide_names_the_voices_and_the_moments_or_is_empty(self):
-        g = ar.bark_guide(VOICES, "some")
-        for frag in ("seat 1: Harry — fiery young warrior", "seat 3: Lily — warm and wise", "[bark:<seat>:that-hurt] when it takes a big hit",
-                     "[bark:<seat>:my-turn]", "Never seat 0", "a quip OR a bark"):
+    def test_guide_names_decks_and_moments_never_the_voices(self):
+        decks = {1: "urza-lord-high-artificer", 2: "giada-font-of-hope", 3: "purphoros-god-of-the-forge"}
+        g = ar.bark_guide(VOICES, "some", decks)
+        for frag in ("seat 1 (urza-lord-high-artificer): fiery young warrior", "seat 3 (purphoros-god-of-the-forge): warm and wise",
+                     "[bark:<seat>:that-hurt] when it takes a big hit", "[bark:<seat>:my-turn]", "Never seat 0", "a quip OR a bark",
+                     "always call a player by their COMMANDER"):
             self.assertIn(frag, g)
+        for name in ("Harry", "Bill", "Lily"):
+            self.assertNotIn(name, g, "game 38: Joshua called a player 'Bill' — the voice names never reach the model")
         self.assertEqual(ar.bark_guide(VOICES, "off"), "")
         self.assertEqual(ar.bark_guide({}, "some"), "", "no voice libraries, no offer")
 
@@ -98,7 +102,7 @@ class BarkTests(unittest.TestCase):
         (self.r.inbox / "digest-9.json").write_text(json.dumps({"gameId": "g1", "seq": 9, "turn": 6, "digest": ["a", "b"]}))
         self.r._process(self.r._scan())
         self.assertIn("SEAT BARK", self.r.brain.last_prompt)
-        self.assertIn("seat 2: Bill — elder professor", self.r.brain.last_prompt)
+        self.assertIn("seat 2 (", self.r.brain.last_prompt); self.assertNotIn("Bill", self.r.brain.last_prompt)
         self.assertEqual(self._records("color")[0]["text"], "Purphoros swung fourteen into Urza.")
         self.assertNotIn("[bark", self.r._stream.read_text())
         b = self._records("bark")
