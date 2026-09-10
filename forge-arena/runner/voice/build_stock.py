@@ -11,13 +11,19 @@ name (harry, bill, lily) or a directory. Every knob comes from the manifest:
 
   "render": {"model": "eleven_v3", "voice_settings": {"stability": 1.0, "speed": 0.92},
              "formats": ["pcm_44100", "pcm_24000"]}
-  "bake":   {"rate": 44100, "fx": "chain" | "none", "glitch": "light|heavy|off", "target_lufs": -18}
+  "bake":   {"rate": 44100, "fx": "chain" | "none", "glitch": "light|heavy|off",
+             "gain": "library", "target_lufs": -24.0, "true_peak_max": -1.0}
 
 Absent fields fall back to the Joshua settings the original 63 lines were made
 with (eleven_v3, stability 1.0, speed 0.92; fx-chain.txt + light glitch at 44.1 kHz),
 so the shipped manifest needs no edits. A seat library bakes with fx "none":
-loudness-normalised to target_lufs and resampled to its rate, no film effects
-and no glitch — those belong to the mainframe.
+ONE gain for the whole library (its mean integrated loudness moved to
+target_lufs — the Joshua library measures -24.3 LUFS, peaks under -5.8 dBTP),
+then a resample to its rate. No per-line normalisation, no compressor, no film
+effects, no glitch: a shout stays louder than a sigh (Ben, 2026-09-10: "be
+careful not to squash the delivery … or over boost a tired sigh"). A take whose
+true peak would pass true_peak_max after the gain gets that much less gain,
+alone, and says so.
 
 Variants: a phrase's "text" may be a string or a list. Wording 1 is <id>.wav,
 wording N>1 is <id>-N.wav (raw takes likewise). The voice runner draws a
@@ -57,7 +63,7 @@ VOICES = STOCK / "voices"
 RENDER_MODEL = "eleven_v3"
 RENDER_SETTINGS = {"stability": 1.0, "speed": 0.92}
 RENDER_FORMATS = ("pcm_44100", "pcm_24000")
-BAKE_DEFAULTS = {"rate": 44100, "fx": "chain", "glitch": "light", "target_lufs": -18}
+BAKE_DEFAULTS = {"rate": 44100, "fx": "chain", "glitch": "light", "target_lufs": -24.0, "true_peak_max": -1.0}
 
 
 def resolve_library(name: str | None) -> Path:
@@ -108,17 +114,45 @@ def bake_settings(m: dict, glitch_override: str | None = None) -> dict:
     return b
 
 
-def bake_argv(raw: Path, tmp: Path, lib: Path, m: dict, b: dict) -> list[str]:
+def bake_argv(raw: Path, tmp: Path, lib: Path, m: dict, b: dict, gain_db: float | None = None) -> list[str]:
     """The ffmpeg command for one take. fx "chain": the library's fx-chain.txt at
-    44.1 kHz (the mainframe). fx "none": single-pass loudnorm to target_lufs and
-    a resample to the library rate — a seat voice stays clean."""
+    44.1 kHz (the mainframe). fx "none": a plain gain (the library's, see
+    library_gain) and a resample to the library rate — a seat voice stays clean."""
     base = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(raw)]
     if b.get("fx", "chain") == "chain":
         chain = (lib / m.get("fx_chain_file", "fx-chain.txt")).read_text().strip()
         af = chain
     else:
-        af = f"loudnorm=I={b.get('target_lufs', -18)}:TP=-1.5:LRA=11"
+        af = f"volume={gain_db or 0.0:.2f}dB"
     return base + ["-af", af, "-ar", str(b.get("rate", 44100)), "-ac", "1", str(tmp)]
+
+
+def parse_loudnorm(stderr: str) -> tuple[float, float]:
+    """(integrated LUFS, true peak dBTP) from ffmpeg's loudnorm print_format=json
+    block — it is the last {...} in stderr, followed by trailing lines."""
+    a = stderr.rindex("{")
+    j = json.loads(stderr[a:stderr.index("}", a) + 1])
+    return float(j["input_i"]), float(j["input_tp"])
+
+
+def measure(path: Path) -> tuple[float, float]:
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-af", "loudnorm=print_format=json",
+                        "-f", "null", "-"], capture_output=True, text=True)
+    return parse_loudnorm(r.stderr)
+
+
+def library_gain(measures: list[tuple[float, float]], target_lufs: float) -> float:
+    """One gain for the library: target minus the mean integrated loudness of
+    its takes (silent/unmeasurable takes below -70 LUFS are ignored)."""
+    vals = [i for i, _tp in measures if i > -70]
+    if not vals:
+        return 0.0
+    return round(target_lufs - sum(vals) / len(vals), 2)
+
+
+def file_gain(gain_db: float, true_peak: float, ceiling: float) -> float:
+    """The library gain, reduced for this take only if it would clip the ceiling."""
+    return round(min(gain_db, ceiling - true_peak), 2) if true_peak > -70 else gain_db
 
 
 def render_missing(lib: Path, ids: set[str] | None, limit: int | None = None) -> tuple[int, int]:
@@ -177,14 +211,27 @@ def bake(lib: Path, ids: set[str] | None, glitch_override: str | None = None) ->
     m = manifest(lib)
     b = bake_settings(m, glitch_override)
     stems = {stem: pid for pid, _n, _t, stem in variants(m)}
+    raws = sorted((lib / "raw").glob("*.wav"))
+    gain = None
+    peaks: dict[str, float] = {}
+    if b.get("fx", "chain") != "chain" and raws:
+        measures = {r.stem: measure(r) for r in raws}           # the WHOLE library, not just --ids:
+        gain = library_gain(list(measures.values()), float(b.get("target_lufs", -24.0)))   # the gain is a library constant
+        peaks = {k: tp for k, (_i, tp) in measures.items()}
+        print(f"[build_stock] library gain {gain:+.2f} dB ({len(measures)} takes -> {b.get('target_lufs', -24.0)} LUFS mean)")
     n = 0
-    for raw in sorted((lib / "raw").glob("*.wav")):
+    for raw in raws:
         stem = raw.stem
         pid = stems.get(stem, stem)
         if ids is not None and pid not in ids:
             continue
+        g = None
+        if gain is not None:
+            g = file_gain(gain, peaks.get(stem, -99.0), float(b.get("true_peak_max", -1.0)))
+            if g != gain:
+                print(f"[build_stock] {stem}: gain held to {g:+.2f} dB (true peak would pass {b.get('true_peak_max', -1.0)} dBTP)")
         tmp = lib / f"{stem}.tmp.wav"
-        subprocess.run(bake_argv(raw, tmp, lib, m, b), check=True)
+        subprocess.run(bake_argv(raw, tmp, lib, m, b, g), check=True)
         seed = int(hashlib.sha1(stem.encode()).hexdigest()[:8], 16)
         (lib / f"{stem}.wav").write_bytes(glitch_wav(tmp.read_bytes(), b.get("glitch", "off"), seed))
         tmp.unlink()

@@ -64,6 +64,7 @@ class SharedVocabulary(unittest.TestCase):
             self.assertEqual(formats[0], "pcm_44100")
             b = bs.bake_settings(m)
             self.assertEqual((b["fx"], b["glitch"], b["rate"]), ("none", "off", 22050), f"{lib}: a seat voice stays clean and small")
+            self.assertEqual((b["gain"], b["target_lufs"], b["true_peak_max"]), ("library", -24.0, -1.0), f"{lib}: library-relative gain to the Joshua level")
             self.assertTrue(m.get("temperament"), f"{lib}: the advisor's guide quotes the temperament")
         self.assertEqual(seats, {1, 2, 3})
 
@@ -83,7 +84,7 @@ class Builder(unittest.TestCase):
         reproduce the 2026-09-07 takes exactly or a re-bake would change them."""
         m = {}
         self.assertEqual(bs.render_settings(m), ("eleven_v3", {"stability": 1.0, "speed": 0.92}, ("pcm_44100", "pcm_24000")))
-        self.assertEqual(bs.bake_settings(m), {"rate": 44100, "fx": "chain", "glitch": "light", "target_lufs": -18})
+        self.assertEqual(bs.bake_settings(m), {"rate": 44100, "fx": "chain", "glitch": "light", "target_lufs": -24.0, "true_peak_max": -1.0})
         self.assertEqual(bs.bake_settings(m, "off")["glitch"], "off")
 
     def test_bake_argv_chain_vs_none(self):
@@ -94,10 +95,27 @@ class Builder(unittest.TestCase):
             chain = bs.bake_argv(raw, tmp, lib, {}, bs.bake_settings({}))
             self.assertIn("volume=1.0", chain)
             self.assertEqual(chain[chain.index("-ar") + 1], "44100")
-            clean = bs.bake_argv(raw, tmp, lib, {}, bs.bake_settings({"bake": {"fx": "none", "rate": 22050, "target_lufs": -18}}))
-            self.assertIn("loudnorm=I=-18:TP=-1.5:LRA=11", clean)
+            clean = bs.bake_argv(raw, tmp, lib, {}, bs.bake_settings({"bake": {"fx": "none", "rate": 22050}}), gain_db=-7.25)
+            self.assertIn("volume=-7.25dB", clean, "a plain gain, never loudnorm/compression (Ben: don't squash the delivery)")
             self.assertEqual(clean[clean.index("-ar") + 1], "22050")
             self.assertNotIn("volume=1.0", clean)
+
+    def test_library_gain_is_one_number_and_the_peak_guard_is_per_take(self):
+        # dry ElevenLabs takes measure about -17 LUFS; the Joshua library sits at -24.3
+        measures = [(-16.9, -0.7), (-18.7, -1.9), (-17.6, -3.0), (-99.0, -99.0)]   # the last is silence: ignored
+        g = bs.library_gain(measures, -24.0)
+        self.assertAlmostEqual(g, -24.0 - (-16.9 - 18.7 - 17.6) / 3, places=2)
+        self.assertLess(g, 0)
+        # a shout keeps the same gain as a sigh (relative dynamics preserved)...
+        self.assertEqual(bs.file_gain(g, -0.7, -1.0), g)
+        self.assertEqual(bs.file_gain(g, -12.0, -1.0), g)
+        # ...unless that one take would clip the ceiling after a POSITIVE library gain
+        self.assertEqual(bs.file_gain(+4.0, -2.0, -1.0), 1.0)
+        self.assertEqual(bs.library_gain([], -24.0), 0.0)
+
+    def test_parse_loudnorm_reads_the_last_json_block(self):
+        err = 'size=N/A time=00:00:02.1\n[Parsed_loudnorm_0 @ 0x1] \n{\n\t"input_i" : "-17.61",\n\t"input_tp" : "-3.02",\n\t"input_lra" : "5.1"\n}\ntrailing line\n'
+        self.assertEqual(bs.parse_loudnorm(err), (-17.61, -3.02))
 
     def test_resolve_library_by_name_and_default(self):
         self.assertEqual(bs.resolve_library(""), bs.STOCK)

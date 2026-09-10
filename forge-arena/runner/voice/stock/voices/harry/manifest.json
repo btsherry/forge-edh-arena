@@ -21,7 +21,10 @@
     "rate": 22050,
     "fx": "none",
     "glitch": "off",
-    "target_lufs": -18
+    "gain": "library",
+    "target_lufs": -24.0,
+    "true_peak_max": -1.0,
+    "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
   },
   "sample_rate": 22050,
   "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
