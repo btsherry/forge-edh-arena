@@ -912,7 +912,7 @@ public final class MailboxController extends PlayerControllerAi
             inPaymentContext = true;
             boolean charmPlayed;
             try {
-            charmPlayed = ComputerUtil.handlePlayingSpellAbility(getPlayer(), sa, () -> {
+            charmPlayed = ComputerUtil.handlePlayingSpellAbility(getPlayer(), sa, played -> {   // upstream 2026-09: Consumer<SpellAbility> (was Runnable)
                 // Target the CHAINED MODES, never the Charm shell. Calling
                 // chooseTargetsFor(sa) on the shell fell through to stock
                 // (no TargetRestrictions on a Charm) -> brains.doTrigger ->

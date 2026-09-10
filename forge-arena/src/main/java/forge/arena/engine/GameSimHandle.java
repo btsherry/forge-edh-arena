@@ -100,7 +100,7 @@ public final class GameSimHandle implements SimHandle {
             }
             return paid;
         }
-        boolean played = ComputerUtil.handlePlayingSpellAbility(player, sa, () -> {
+        boolean played = ComputerUtil.handlePlayingSpellAbility(player, sa, ignored -> {
         });
         if (!played) {
             lastFailure = "play_refused: '" + cardName + "' " + costHint
@@ -135,7 +135,7 @@ public final class GameSimHandle implements SimHandle {
                     return ComputerUtil.playStack(tgtSa, player, sim);
                 }
             };
-            yes.setUseSimulation(true);
+            yes.getAi().setUseSimulation(forge.ai.AIOption.USE_FULL_SIMULATION);   // upstream 2026-09: moved to AiController, enum-valued
             player.runWithController(
                     () -> GameSimulator.resolveStack(sim, player.getWeakestOpponent()), yes);
         }
@@ -153,7 +153,7 @@ public final class GameSimHandle implements SimHandle {
         if (sa == null) {
             return false;
         }
-        boolean played = ComputerUtil.handlePlayingSpellAbility(player, sa, () -> {
+        boolean played = ComputerUtil.handlePlayingSpellAbility(player, sa, ignored -> {
         });
         if (!played) {
             lastFailure = "play_refused: '" + cardName + "' " + costHint

@@ -86,7 +86,7 @@ public final class EngineFacade {
                 autoSubscribers.add(comboDetectionBridge(seat, seatIndex, eventSink));
             } else {
                 Set<AIOption> options = seat.simulationAi()
-                        ? Collections.singleton(AIOption.USE_SIMULATION)
+                        ? Collections.singleton(AIOption.USE_FULL_SIMULATION)   // upstream 2026-09: USE_SIMULATION split into FULL / HYBRID
                         : Collections.emptySet();
                 rp.setPlayer(GamePlayerUtil.createAiPlayer(name, seatIndex, seatIndex, options, seat.aiProfile()));
             }

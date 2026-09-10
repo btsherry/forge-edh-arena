@@ -97,13 +97,14 @@ public class AiCostDecision extends CostDecisionMakerBase {
                 return null;
             }
             return PaymentDecision.card(player.getLastDrawnCard());
-        } else if (cost.payCostFromSource()) {
+        }
+        if (cost.payCostFromSource()) {
             if (!hand.contains(source)) {
                 return null;
             }
-
             return PaymentDecision.card(source);
-        } else if (type.equals("Hand")) {
+        }
+        if (type.equals("Hand")) {
             if (hand.size() > 1 && ability.getActivatingPlayer() != null) {
                 hand = ability.getActivatingPlayer().getController().orderMoveToZoneList(hand, ZoneType.Graveyard, ability);
             }
@@ -121,7 +122,8 @@ public class AiCostDecision extends CostDecisionMakerBase {
                 randomSubset = ability.getActivatingPlayer().getController().orderMoveToZoneList(randomSubset, ZoneType.Graveyard, ability);
             }
             return PaymentDecision.card(randomSubset);
-        } else if (type.contains("+WithDifferentNames")) {
+        }
+        if (type.contains("+WithDifferentNames")) {
             CardCollection differentNames = new CardCollection();
             CardCollection discardMe = CardLists.filter(hand, CardPredicates.hasSVar("DiscardMe"));
             while (c > 0) {
@@ -138,25 +140,24 @@ public class AiCostDecision extends CostDecisionMakerBase {
                 c--;
             }
             return PaymentDecision.card(differentNames);
-        } else {
-            // [arena] controller-preferred discard payment (PaymentPickPreference)
-            CardCollection validD = CardLists.getValidCards(
-                    hand, type.split(";"), player, source, ability);
-            validD.removeAll(discarded);
-            PaymentDecision pd = preferredPayment(PaymentPickPreference.KIND_DISCARD, validD, c);
-            if (pd != null) {
-                discarded.addAll(pd.cards);
-                return pd;
-            }
-
-            final AiController aic = ((PlayerControllerAi)player.getController()).getAi();
-
-            CardCollection result = aic.getCardsToDiscard(c, type.split(";"), ability, discarded);
-            if (result != null) {
-                discarded.addAll(result);
-            }
-            return PaymentDecision.card(result);
         }
+        // [arena] controller-preferred discard payment (PaymentPickPreference) —
+        // consulted ahead of stock's getCardsToDiscard; no preference -> stock, byte-identical
+        CardCollection validD = CardLists.getValidCards(
+                hand, type.split(";"), player, source, ability);
+        validD.removeAll(discarded);
+        PaymentDecision pd = preferredPayment(PaymentPickPreference.KIND_DISCARD, validD, c);
+        if (pd != null) {
+            discarded.addAll(pd.cards);
+            return pd;
+        }
+        final AiController aic = ((PlayerControllerAi)player.getController()).getAi();
+
+        CardCollection result = aic.getCardsToDiscard(c, type.split(";"), ability, discarded);
+        if (result != null) {
+            discarded.addAll(result);
+        }
+        return PaymentDecision.card(result);
     }
 
     @Override

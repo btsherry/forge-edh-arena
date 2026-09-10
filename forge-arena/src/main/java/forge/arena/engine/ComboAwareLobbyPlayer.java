@@ -511,7 +511,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                         activeDrill.prereqCard(), activeDrill.prereqCost(),
                         List.of(activeDrill.outletCard()));
                 if (regrant != null
-                        && ComputerUtil.handlePlayingSpellAbility(player, regrant, () -> { })) {
+                        && ComputerUtil.handlePlayingSpellAbility(player, regrant, ignored -> { })) {
                     pilot.observe(forge.arena.report.ArenaEvent.of(
                             "loop_prereq", turn, seatIndex)
                             .with("card", activeDrill.prereqCard())
@@ -1121,7 +1121,7 @@ public final class ComboAwareLobbyPlayer extends LobbyPlayerAi {
                                 action.drill().prereqCost(), List.of(outlet));
                         if (grant != null) {
                             grantedThisWindow = ComputerUtil.handlePlayingSpellAbility(
-                                    player, grant, () -> { });
+                                    player, grant, ignored -> { });
                             pilot.observe(forge.arena.report.ArenaEvent.of(
                                     "loop_prereq", turn, seatIndex)
                                     .with("card", action.drill().prereqCard())
