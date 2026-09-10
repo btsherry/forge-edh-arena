@@ -93,7 +93,7 @@ cp "$REPO/forge-gui-desktop/pom.xml" "$DEST/forge-gui-desktop/"
 echo "[3/9] arena classes — wholesale (classpath.txt itself does NOT ship;"
 echo "      run-pilot-match.sh takes the lib/* branch when lib/ exists)"
 mkdir -p "$DEST/forge-arena/target"
-rsync -a "$CLASSES/" "$DEST/forge-arena/target/classes/"
+rsync -a --exclude '.DS_Store' "$CLASSES/" "$DEST/forge-arena/target/classes/"
 
 echo "[4/9] forge-gui/res — pruned: adventure (separate app), music (optional"
 echo "      audio), non-English card names. Everything else ships: the desktop"
@@ -101,7 +101,7 @@ echo "      home screen eagerly class-inits every submenu (quest/puzzle/draft),"
 echo "      and FModel.initialize reads deckgendecks — pruning those crashed"
 echo "      startup (ExceptionInInitializerError via VSubmenuQuestStart)."
 mkdir -p "$DEST/forge-gui"
-rsync -a \
+rsync -a --exclude '.DS_Store' \
   --exclude '/adventure/' --exclude '/music/' \
   --exclude '/languages/cardnames-*.txt' \
   "$REPO/forge-gui/res/" "$DEST/forge-gui/res/"
@@ -140,7 +140,7 @@ cp "$REPO/forge-arena/docs/research/mtg-rules-summary.md" \
    "$DEST/forge-arena/docs/research/"
 
 echo "[7/9] runner — the seatd tree (no tests, no pycache, empty logs/)"
-rsync -a --exclude '__pycache__/' --exclude '/tests/' --exclude '/logs/' \
+rsync -a --exclude '.DS_Store' --exclude '__pycache__/' --exclude '/tests/' --exclude '/logs/' \
   --exclude '/replay.py' \
   --exclude '/voice/stock/raw/' --exclude '/voice/stock/sfx/legacy/' \
   --exclude '/voice/build_stock.py' --exclude '.DS_Store' \
@@ -165,6 +165,8 @@ for f in arena-play.sh arena-stop.sh arena-autostop.sh run-pilot-match.sh run-gu
   cp "$REPO/forge-arena/scripts/$f" "$DEST/forge-arena/scripts/"
 done
 
+# Finder droppings never ship, wherever a copy step picked them up (v4.0 build found seven under res/)
+find "$DEST" -name .DS_Store -type f -delete
 echo "[9/9] top level — README (from packaging/), LICENSE, provenance stamp"
 if [ -f "$DIR/README.md" ]; then
   cp "$DIR/README.md" "$DEST/README.md"   # a failed cp now fails the build (set -e), not "WARN: missing"
