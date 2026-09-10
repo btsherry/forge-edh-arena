@@ -143,6 +143,7 @@ echo "[7/9] runner — the seatd tree (no tests, no pycache, empty logs/)"
 rsync -a --exclude '__pycache__/' --exclude '/tests/' --exclude '/logs/' \
   --exclude '/replay.py' \
   --exclude '/voice/stock/raw/' --exclude '/voice/stock/sfx/legacy/' \
+  --exclude '/voice/build_stock.py' --exclude '.DS_Store' \
   --exclude '/ratings.json' --exclude '/ratings-history.jsonl' \
   --exclude '/ratings.lock' --exclude '/results/' \
   "$REPO/forge-arena/runner/" "$DEST/forge-arena/runner/"

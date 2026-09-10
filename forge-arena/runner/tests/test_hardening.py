@@ -374,6 +374,8 @@ class PackagerShipsWhatTheScriptsCall(unittest.TestCase):
         needed |= set(re.findall(r"forge-arena/scripts/([a-zA-Z_-]+\.py)", adv))
         self.assertEqual(needed - shipped, set(), "called by shipped code but not in the packager's script list")
         self.assertIn("--exclude '/voice/stock/raw/'", pk, "raw takes (4 MB) must not ship")
+        self.assertIn("--exclude '/voice/build_stock.py'", pk, "the ElevenLabs render tool is dev-only")
+        self.assertIn("--exclude '.DS_Store'", pk)
 
 
 class StopsRestore(unittest.TestCase):

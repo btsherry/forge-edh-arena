@@ -1992,3 +1992,19 @@ Hard-won from two live sessions; read before optimizing anything.
     game to its own Pact). Mainline lesson re-learned: I named Tempt with
     Discovery from memory for the land gift; the stack in the record said
     Boseiju. Card facts come from the record or the card text, never memory.
+
+99. **v4.0 merge (2026-09-09): `arena` fast-forwarded to the voicework tree;
+    rollback point tagged.** Stage plan agreed with Ben (upload method A —
+    committed `packaging/ship-release.sh`; gate; fast-forward; build + checks;
+    Ben's acceptance games; ship; record). Stage 1: FULL gate on 088830d3c33 —
+    468 tests, 0 failures, 0 skipped (the new `UpstreamMarkerTest` ran).
+    Stage 2: `arena` 2beca4d9903 → 088830d3c33, a pure fast-forward (the
+    merge base WAS `arena`); tag **`pre-v4.0` = 2beca4d9903**, pushed to
+    private. **Rollback, if the whole release is ever dropped:** on `arena`,
+    `git reset --hard pre-v4.0` then `git push --force-with-lease private
+    arena` (the 2026-09-07 recovery move); the branch keeps the work. Stage 3
+    packaging audit before the build: ship the voice RUNTIME (voice_runner,
+    63 lines + 7 bleeps, manifest, fx-chain.txt, voice-design.md); exclude the
+    ElevenLabs render tool `runner/voice/build_stock.py` (dev only, needs the
+    owner's key), raw takes, legacy bleeps, `.DS_Store`; `forge-arena/voice/
+    typing_cut.py` is outside the packager's reach.
