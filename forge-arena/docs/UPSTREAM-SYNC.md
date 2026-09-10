@@ -9,13 +9,15 @@ divergence list). Read both before ANY merge from upstream.*
 - We are a fork of [Card-Forge/forge](https://github.com/Card-Forge/forge)
   (`origin`), working on branch `arena`, pushed to `private`
   (btsherry/forge-edh-arena). **Never push to `origin`.**
-- Upstream base: `0eec0a16d0a` (2026-07-15). We are 439 commits ahead
-  (2026-09-04 count, `git rev-list --count`); upstream is very active (daily
-  card-script updates, regular engine work).
+- Upstream base: `0eec0a16d0a` (2026-07-15). We are 512 commits ahead
+  (2026-09-09 count, `git rev-list --count`, at the v4.0 merge); upstream is
+  604 commits ahead of the same base at that date (GitHub compare) — very
+  active (daily card-script updates, regular engine work). No sync has been
+  run yet; the first is planned as its own session after v4.0 ships.
 - The early rule "all new code lives in forge-arena, no parent-module
   patches" was **deliberately dropped**. The full delta outside
   `forge-arena/` (2026-09-04 recount, `git diff --name-status
-  0eec0a16d0a..HEAD -- . ':(exclude)forge-arena'`) is **32 files**:
+  0eec0a16d0a..HEAD -- . ':(exclude)forge-arena'`) is **33 files** (2026-09-09 recount; INVENTORY §1 is the current table):
   - **12 modified**: 9 upstream Java files (301 insertions / 22 deletions —
     ComputerUtil, ComputerUtilMana, AiCostDecision, MyRandom, Combat,
     StaticAbilityTurnPhaseReversed, MagicStack, EDocID, CMatchUI), plus
@@ -47,7 +49,7 @@ divergence list). Read both before ANY merge from upstream.*
    `orderAndPlaySimultaneousSa` is a modified copy). Upstream can change the
    *originals'* semantics (new parameters, new call sites, new decision
    surfaces) without touching our files — compiles clean, behaves wrong.
-   *Defense: the 318-test arena suite exercises the seams end-to-end through
+   *Defense: the 467-test arena suite (FULL gate) exercises the seams end-to-end through
    real games; plus the mirror-audit step below.*
 3. **Card-script behavior shifts.** `forge-gui/res/cardsfolder` changes daily
    upstream. Our brains read live oracle text (fine), but the
@@ -60,10 +62,11 @@ divergence list). Read both before ANY merge from upstream.*
 ## Standing discipline (do these NOW and always)
 
 - **Marker rule:** every edit to an upstream file carries an
-  `[arena]`/`ARENA-PATCH` comment at the edit site. 6/9 comply;
-  `Combat.java`, `EDocID.java` and `CMatchUI.java` do not — add markers on
-  the next touch (Combat's edit is logged in UPSTREAM-PATCHES.md §3 but
-  unmarked in-file). Verification:
+  `[arena]`/`ARENA-PATCH` comment at the edit site. All 9 comply since 2026-09-09
+  (`Combat.java`, `EDocID.java`, `CMatchUI.java` were the last), and
+  `forge-arena/src/test/java/forge/arena/UpstreamMarkerTest.java` runs the
+  check in the gate: every modified upstream `.java`/`pom.xml` must contain a
+  marker or the build is red. Manual verification:
   `git grep -lE "\[arena\]|ARENA-PATCH" -- forge-ai/src forge-core/src forge-game/src forge-gui-desktop/src pom.xml`
   must enumerate every modified upstream file (a bare `grep -ln "arena"`
   false-positives on `GameFormat.java`'s "Arena" format name).
@@ -82,7 +85,7 @@ session; never mix a sync with feature work.
 ```sh
 # 0) preconditions: clean tree, all tests green, tag the pre-sync point
 git status --porcelain            # must be empty
-mvn -o -pl forge-arena -am package   # 318 green, checkstyle on
+mvn -o -pl forge-arena -am package -Darena.excluded.groups=none   # FULL gate: 467 green (2026-09-09)
 git tag pre-sync-$(date +%Y%m%d)
 
 # 1) fetch and branch — NEVER merge into arena directly

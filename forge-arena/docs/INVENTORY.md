@@ -16,20 +16,22 @@ package), `packaging/PATCH-NOTES.md` (release history), `../BUILDING.md`
 
 The original "no parent-module patches" rule was deliberately dropped
 (first for the vanished-commander engine fix, 2026-08-17). The full delta
-outside `forge-arena/` (2026-09-04 recount: `git diff --name-status
-0eec0a16d0a..HEAD -- . ':(exclude)forge-arena'`) is **32 files**: 12 modified
-(9 upstream Java files, 301 insertions / 22 deletions; plus `match.xml`, root
-`pom.xml`, root `.gitignore`), 9 new code files parked in parent modules
-(1b), 10 `runs/*.json` batch templates + the historical
-`UPSTREAM-PATCHES.md` at root.
+outside `forge-arena/` (2026-09-09 recount before the v4.0 merge: `git diff --name-status
+0eec0a16d0a..HEAD -- . ':(exclude)forge-arena'`) is **33 files**: 12 modified
+(9 upstream Java files; plus `match.xml`, root `pom.xml`, root `.gitignore`),
+10 new code files parked in parent modules (1b — `HotkeyGuard` joined 09-06),
+10 `runs/*.json` batch templates + the historical `UPSTREAM-PATCHES.md` at
+root. Every modified upstream Java file and `pom.xml` now carries an
+`[arena]`/`ARENA-PATCH` marker (the last three were marked 2026-09-09), and
+`UpstreamMarkerTest` fails the gate if one is missing.
 
 ### 1a. MODIFIED upstream files (merge-conflict surface — see UPSTREAM-SYNC.md)
 
 | File | Δ | Kind | Why | Marker | Guarding test |
 |---|---|---|---|---|---|
 | `forge-ai/.../ComputerUtil.java` | ~+30 −9 | **BEHAVIORAL** | `handlePlayingSpellAbility`'s failed-payment path: (a) spells roll back to origin zone (upstream FIXME orphaned commanders); (b) ACTIVATED abilities refund-in-place — rollbackAbility's zone surgery resolves a GRANTED ability's card-state to the GRANTOR and vanished the host (Sanctum Weaver + Gauntlets, 2026-08-19). | ✓ | `UnaffordableCastRollbackTest`, `GrantedAbilityRollbackTest` |
-| `forge-ai/.../AiCostDecision.java` | ~+120 | Additive hooks | `visit(CostTapType)` → `TapCostPreference`; `visit(CostSacrifice)` → `SacCostPreference` (+ `Amount$ All` consent); `visit(CostExile/CostDiscard/CostReturn/CostPutCardToLib)` → one shared `PaymentPickPreference` consult (wave-2: which card a pitch/return cost eats), all with vet-else-stock. No preference → stock paths byte-identical. | ✓ | `TapSymmetryBreakTest`, `SacrificeSeatChoiceTest`, `PaymentPickPreferenceTest` |
-| `forge-ai/.../ComputerUtilMana.java` | +15 | **BEHAVIORAL** | `canPayShardWithSpellAbility` vetted candidates by the ROOT mana part only — condition-forked scripts (Gemstone Caverns' luck-counter Any-branch; upstream TODO in the card file) were invisible at payment time, so colored shards went unpaid while explicit floats worked (six live incidents). Now uses the first chain part whose conditions are met; root fallback preserves old behavior when none are. | ✓ | `PainSourcePaymentTest` |
+| `forge-ai/.../AiCostDecision.java` | ~+135 | Additive hooks | `visit(CostTapType)` → `TapCostPreference`; `visit(CostSacrifice)` → `SacCostPreference` (+ `Amount$ All` consent); `visit(CostExile/CostDiscard/CostReturn/CostPutCardToLib)` → one shared `PaymentPickPreference` consult (wave-2: which card a pitch/return cost eats); **2026-09-08 (BL-38):** `visit(CostRemoveAnyCounter)` consults `PaymentPickPreference` (`KIND_REMOVE_COUNTER`) before stock's harmless-counter heuristic gives up (Scholar of New Horizons) — all vet-else-stock. No preference → stock paths byte-identical. | ✓ | `TapSymmetryBreakTest`, `SacrificeSeatChoiceTest`, `PaymentPickPreferenceTest` |
+| `forge-ai/.../ComputerUtilMana.java` | +45 | **BEHAVIORAL** | **2026-09-08 (W-11):** `sortManaAbilities` — stable partition, restricted-and-eligible abilities first (Cavern of Souls for its type, Giada's Angel-only {W}, Workshop for artifacts) so the least flexible mana is spent first; `ManaTableTest`/game 29 evidence. Earlier: `canPayShardWithSpellAbility` vetted candidates by the ROOT mana part only — condition-forked scripts (Gemstone Caverns' luck-counter Any-branch; upstream TODO in the card file) were invisible at payment time, so colored shards went unpaid while explicit floats worked (six live incidents). Now uses the first chain part whose conditions are met; root fallback preserves old behavior when none are. | ✓ | `PainSourcePaymentTest` |
 | `forge-game/.../MagicStack.java` | ~+45 | Diagnostic only | `[arena] FIZZLE:`/`DECLINED-TRIGGER:` stderr lines in the fizzle branch — targets snapshotted BEFORE the fizzle-check strips them (the old print said "(none set)" for stripped targets, mislabeling legitimate dead-target fizzles). No behavior change. | ✓ | `SiblingTriggerBatchTest` |
 | `forge-core/.../MyRandom.java` | +36 −6 | **BEHAVIORAL** | Seedable RNG (`setSeed`) for reproducible headless batches (Project 1). | ✓ (ARENA-PATCH) | `SeedDeterminismTest` |
 | `forge-game/.../Combat.java` | +6 −1 | Defensive fix | `getAttackers` snapshot vs concurrent modification crash. Upstream-worthy. | ✓ | (crash class) |
@@ -44,7 +46,7 @@ outside `forge-arena/` (2026-09-04 recount: `git diff --name-status
 |---|---|---|
 | `forge-ai/.../TapCostPreference.java` | forge-ai | The AiCostDecision hook interface must be visible to forge-ai. |
 | `forge-ai/.../SacCostPreference.java` | forge-ai | Sacrifice-payment hook interface (same pattern/reason). |
-| `forge-ai/.../PaymentPickPreference.java` | forge-ai | One hook interface for exile/discard/return/put-to-library payments (wave-2). |
+| `forge-ai/.../PaymentPickPreference.java` | forge-ai | One hook interface for exile/discard/return/put-to-library payments (wave-2); `KIND_REMOVE_COUNTER` added 2026-09-08 (BL-38). |
 | `forge-gui-desktop/.../forge/arena/interactive/AiControlFile.java` | gui-desktop | AI-panel file protocol (per-seat model/effort dials, ELO line). Moved here 2026-08-12 so the desktop reactor builds it. `advisorAttached()` (2026-08-31) distinguishes no-advisor games from a paused advisor. |
 | `forge-gui-desktop/.../forge/arena/interactive/AdvisorLogTail.java` | gui-desktop | Advisor tab's log tailer. |
 | `forge-gui-desktop/.../controllers/CAiControl.java` + `views/VAiControl.java` | gui-desktop | AI dock tab (steppers, telemetry, ELO). |

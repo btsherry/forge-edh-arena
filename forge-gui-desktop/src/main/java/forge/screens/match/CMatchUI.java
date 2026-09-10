@@ -170,6 +170,7 @@ public final class CMatchUI
 
     private final CCombat cCombat = new CCombat();
     private final CDependencies cDependencies = new CDependencies(this);
+    // [arena] ARENA-PATCH: the two arena dock tabs (AI panel, Advisor) — INVENTORY §1a
     private final CAiControl cAiControl = new CAiControl(this);
     private final CAdvisor cAdvisor = new CAdvisor(this);
     private final CDetailPicture cDetailPicture = new CDetailPicture(this);
@@ -192,8 +193,8 @@ public final class CMatchUI
         this.myDocs.put(EDocID.REPORT_COMBAT, cCombat.getView());
         this.myDocs.put(EDocID.REPORT_DEPENDENCIES, cDependencies.getView());
         this.myDocs.put(EDocID.REPORT_LOG, cLog.getView());
-        this.myDocs.put(EDocID.REPORT_AI, cAiControl.getView());
-        this.myDocs.put(EDocID.REPORT_ADVISOR, cAdvisor.getView());
+        this.myDocs.put(EDocID.REPORT_AI, cAiControl.getView());          // [arena]
+        this.myDocs.put(EDocID.REPORT_ADVISOR, cAdvisor.getView());       // [arena]
         this.myDocs.put(EDocID.DEV_MODE, getCDev().getView());
         this.myDocs.put(EDocID.BUTTON_DOCK, getCDock().getView());
     }

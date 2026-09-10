@@ -1,6 +1,10 @@
 # forge-light-llm — Patch Notes
 
-## Unreleased — after v3.4
+## v4.0 — 2026-09-09
+
+The advisor speaks, the seats remember, and the launch explains itself. Every
+item below was validated in live games 26–37 on the `experimental/voicework`
+branch before the merge.
 
 - **The Advisor's voice has more to say (2026-09-08).** The stock phrase
   library grows from 25 to 63 lines: 18 *RoboCop* (1987) one-liners and 20

@@ -355,7 +355,7 @@ public class Combat {
 
     public final CardCollection getAttackers() {
         CardCollection result = new CardCollection();
-        // ARENA UPSTREAM PATCH #3 (see forge-arena UPSTREAM-PATCHES.md):
+        // ARENA-PATCH [arena] upstream patch #3 (see forge-arena UPSTREAM-PATCHES.md §3, INVENTORY §1a):
         // snapshot the band collection before iterating — AI speculative
         // combat evaluation (AnimateAi -> doesSpecifiedCreatureAttackAI ->
         // declareAttackers) mutates attackedByBands mid-iteration and threw

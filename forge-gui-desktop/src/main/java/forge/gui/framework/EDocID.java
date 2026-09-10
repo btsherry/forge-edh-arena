@@ -95,8 +95,8 @@ public enum EDocID {
     REPORT_COMBAT (),
     REPORT_DEPENDENCIES (),
     REPORT_LOG (),
-    REPORT_AI (),
-    REPORT_ADVISOR (),
+    REPORT_AI (),       // [arena] AI-panel dock tab (ARENA-PATCH, INVENTORY §1a)
+    REPORT_ADVISOR (),  // [arena] Advisor dock tab
 
     DEV_MODE (),
     BUTTON_DOCK (),
