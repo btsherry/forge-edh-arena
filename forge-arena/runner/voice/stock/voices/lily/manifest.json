@@ -1,0 +1,264 @@
+{
+  "schema": "arena.voice-stock/1",
+  "library": "lily",
+  "seat": 3,
+  "voice": "Lily - Velvety Actress (ElevenLabs default library), eleven_v3 stability 0.5 speed 0.95",
+  "voice_id": "pFZP5JQG7iQjIQuC4Bku",
+  "voice_name": "Lily - Velvety Actress",
+  "temperament": "warm and wise, a little theatrical; gentle even when winning; calls the table 'dears'",
+  "render": {
+    "model": "eleven_v3",
+    "voice_settings": {
+      "stability": 0.5,
+      "speed": 0.95
+    },
+    "formats": [
+      "pcm_44100",
+      "pcm_24000"
+    ]
+  },
+  "bake": {
+    "rate": 22050,
+    "fx": "none",
+    "glitch": "off",
+    "target_lufs": -18
+  },
+  "sample_rate": 22050,
+  "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
+  "phrases": {
+    "commander-cast": {
+      "text": [
+        "[warmly] There you are, old friend. Let's begin.",
+        "[fondly] Welcome back, dear. We've work to do.",
+        "[softly] Ah, good. Now we're whole again.",
+        "[warmly] Come, my friend. Stand with me."
+      ],
+      "when": "casts/recasts its commander",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "big-swing": {
+      "text": [
+        "[gently] Nothing personal, dear. Brace yourself.",
+        "[softly] Forgive me. This will sting.",
+        "[warmly] Here we go, loves. Hold on.",
+        "[sighs] I'm sorry, but I must."
+      ],
+      "when": "declares a large attack",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "landed-hit": {
+      "text": [
+        "[gently] That will leave a mark, I'm afraid.",
+        "[softly] Oh dear. That connected.",
+        "[warmly] Deep breath. It'll pass.",
+        "[chuckles] There, there. It's only a game."
+      ],
+      "when": "its attack connects for big damage",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "removal": {
+      "text": [
+        "[gently] Best to let that one go.",
+        "[softly] Gone. It was time.",
+        "[whispers] Hush now. Off it goes.",
+        "[warmly] Sometimes we prune, dear."
+      ],
+      "when": "destroys/exiles a key permanent",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "sweep": {
+      "text": [
+        "[sighs] Sometimes the garden needs clearing.",
+        "[warmly] A fresh start for everyone.",
+        "[chuckles] There. Nice and tidy.",
+        "[softly] Let it all rest, now."
+      ],
+      "when": "wipes the board",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "counter": {
+      "text": [
+        "[gently] Not today, I think.",
+        "[softly] No, dear. Not that one.",
+        "[mischievously] Let's not, hmm?",
+        "[whispers] Gently, no."
+      ],
+      "when": "counters a spell",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "engine-online": {
+      "text": [
+        "[warmly] Patience rewards those who wait.",
+        "[softly] There. All the pieces, together.",
+        "[chuckles] Slow and steady, as promised.",
+        "[fondly] Now, isn't that lovely."
+      ],
+      "when": "engine/combo pieces visibly assembled",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "big-mana": {
+      "text": [
+        "[gasps] My, what a bounty.",
+        "[laughs softly] Goodness. Plenty to work with.",
+        "[warmly] The harvest is generous today.",
+        "[chuckles] Well now. Look at all this."
+      ],
+      "when": "explosive amount of mana",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "kill": {
+      "text": [
+        "[gently] Rest now. You played well.",
+        "[softly] Sleep well, dear. It was time.",
+        "[warmly] Off you go. No hard feelings.",
+        "[fondly] A good fight. Rest easy."
+      ],
+      "when": "eliminates another player",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "win": {
+      "text": [
+        "[warmly] A good game, all of you. Truly.",
+        "[laughs softly] Thank you, dears. That was lovely.",
+        "[mischievously] The old ways still win, you see.",
+        "[fondly] Well fought. All of you."
+      ],
+      "when": "wins the game",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "that-hurt": {
+      "text": [
+        "[sighs] Oof. Well. I've had worse.",
+        "[gasps] Goodness. That was unkind.",
+        "[chuckles] Ouch, dear. Point taken.",
+        "[exhales] I felt that one. My my."
+      ],
+      "when": "takes a big hit",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "lost-commander": {
+      "text": [
+        "[gently] Go rest. I'll call you back shortly.",
+        "[softly] Off you go. Come back soon.",
+        "[sighs] A brief rest, then. Not the end.",
+        "[warmly] We'll meet again shortly, friend."
+      ],
+      "when": "its commander dies/leaves",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "got-countered": {
+      "text": [
+        "[curious] Ah. So that's how it is.",
+        "[softly] Well then. Noted, dear.",
+        "[chuckles] Hmm. Someone's paying attention.",
+        "[sighs] Very well. Another time."
+      ],
+      "when": "its spell is countered",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "got-swept": {
+      "text": [
+        "[sighs] Ashes to ashes. We rebuild.",
+        "[softly] All gone. Well. We begin again.",
+        "[gasps] Oh my. That was thorough.",
+        "[warmly] The garden will grow back."
+      ],
+      "when": "its board is wiped",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "low-life": {
+      "text": [
+        "[softly] Careful. I've little left to give.",
+        "[whispers] Steady now. Not much left.",
+        "[exhales] I'm tiring, dears. Mind me.",
+        "[gently] Close to the edge, I'm afraid."
+      ],
+      "when": "drops to ~10 life or less",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "eliminated": {
+      "text": [
+        "[warmly] Well then. Enjoy the rest, dears.",
+        "[softly] My part is done. Play kindly.",
+        "[fondly] Off I go. Be good to each other.",
+        "[laughs softly] That's me. Lovely game, all."
+      ],
+      "when": "out of the game",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "taunt": {
+      "text": [
+        "[mischievously] Someone's flying rather close to the sun.",
+        "[chuckles] Confidence is lovely. Until it isn't.",
+        "[mischievously] Someone's getting ahead of themselves.",
+        "[gently] Pride goes before a fall, dear."
+      ],
+      "when": "needle at whoever is ahead",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "respect": {
+      "text": [
+        "[warmly] Beautifully done. Truly.",
+        "[laughs softly] Oh, that was clever. Well done.",
+        "[fondly] Lovely play, dear. Lovely.",
+        "[chuckles] Now that was a fine move."
+      ],
+      "when": "another player's good play (human incl.)",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "archenemy": {
+      "text": [
+        "[softly] Friends, we may need to talk about them.",
+        "[gently] Everyone see that? Let's be sensible.",
+        "[warmly] Best we deal with that together.",
+        "[whispers] That one needs our attention, dears."
+      ],
+      "when": "calling out the table leader",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "slow-turn": {
+      "text": [
+        "[softly] A quiet turn. Storms come later.",
+        "[gently] Nothing today. Patience, dears.",
+        "[warmly] Some turns are for thinking.",
+        "[chuckles] I'll bide my time, thank you."
+      ],
+      "when": "its own turn passes with nothing done",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "my-turn": {
+      "text": [
+        "[warmly] Ah, my turn. Let's see what we have.",
+        "[gently] My turn, dears. Patience.",
+        "[softly] Right then. Let's see.",
+        "[chuckles] Now, where were we?"
+      ],
+      "when": "opener for the seat whose turn just began",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    }
+  },
+  "sources": {
+    "elevenlabs-v3-2026-09-10": "seat-bark library 'lily' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10"
+  }
+}

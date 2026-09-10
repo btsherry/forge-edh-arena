@@ -1,0 +1,264 @@
+{
+  "schema": "arena.voice-stock/1",
+  "library": "harry",
+  "seat": 1,
+  "voice": "Harry - Fierce Warrior (ElevenLabs default library), eleven_v3 stability 0.0 speed 1.05",
+  "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+  "voice_name": "Harry - Fierce Warrior",
+  "temperament": "fiery young warrior: loud, cocky, quick to anger and quick to laugh; never sulks for long",
+  "render": {
+    "model": "eleven_v3",
+    "voice_settings": {
+      "stability": 0.0,
+      "speed": 1.05
+    },
+    "formats": [
+      "pcm_44100",
+      "pcm_24000"
+    ]
+  },
+  "bake": {
+    "rate": 22050,
+    "fx": "none",
+    "glitch": "off",
+    "target_lufs": -18
+  },
+  "sample_rate": 22050,
+  "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
+  "phrases": {
+    "commander-cast": {
+      "text": [
+        "[shouting] Here I come. Deal with it!",
+        "[mischievously] Look who's back. Scared yet?",
+        "[excited] My champion takes the field!",
+        "[laughs] Alright! Now it's a fight!"
+      ],
+      "when": "casts/recasts its commander",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "big-swing": {
+      "text": [
+        "[shouting] Everything in! Hold on tight!",
+        "[shouting] Charge! No mercy!",
+        "[excited] All of it. Right at your face!",
+        "[laughs] Turn 'em sideways! Here we go!"
+      ],
+      "when": "declares a large attack",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "landed-hit": {
+      "text": [
+        "[smug] Feel that? There's more coming.",
+        "[excited] Boom! That's what I'm talking about!",
+        "[shouting] Direct hit! Stay down!",
+        "[laughs] Ha! Right through the teeth!"
+      ],
+      "when": "its attack connects for big damage",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "removal": {
+      "text": [
+        "[shouting] Gone! Try again.",
+        "[excited] Smash! Nothing left of it!",
+        "[mischievously] That thing? Not anymore.",
+        "[scoffs] Trash. Next!"
+      ],
+      "when": "destroys/exiles a key permanent",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "sweep": {
+      "text": [
+        "[shouting] Burn it all down!",
+        "[shouting] Clear the table! All of it!",
+        "[laughs] Everything dies! Everything!",
+        "[excited] Scorched earth, baby!"
+      ],
+      "when": "wipes the board",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "counter": {
+      "text": [
+        "[shouting] Denied! Sit down!",
+        "[laughs] Nope! Not happening!",
+        "[excited] Blocked! Try harder!",
+        "[laughs] Ha! Nice try, genius!"
+      ],
+      "when": "counters a spell",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "engine-online": {
+      "text": [
+        "[excited] Now we're cooking!",
+        "[laughs] It's alive! Ha ha!",
+        "[mischievously] Pieces are set. Buckle up!",
+        "[excited] Oh, now the fun starts!"
+      ],
+      "when": "engine/combo pieces visibly assembled",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "big-mana": {
+      "text": [
+        "[excited] Look at all this power!",
+        "[laughs] So much fuel! Unbelievable!",
+        "[excited] Feel the surge? I do!",
+        "[shouting] Loaded! Fully loaded!"
+      ],
+      "when": "explosive amount of mana",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "kill": {
+      "text": [
+        "[shouting] One down! Who's next?",
+        "[laughs] Crushed! Anyone else?",
+        "[excited] Boom! Off the table!",
+        "[smug] That's one. Keep 'em coming!"
+      ],
+      "when": "eliminates another player",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "win": {
+      "text": [
+        "[laughs] Ha! Told you! All of you!",
+        "[shouting] Victory! Never doubted it!",
+        "[laughs] Champion! Read it and weep!",
+        "[excited] That's how it's done! Ha!"
+      ],
+      "when": "wins the game",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "that-hurt": {
+      "text": [
+        "[angry] Argh! You'll pay for that!",
+        "[groans] Ow! Okay, that's it!",
+        "[angry] Cheap shot! Cheap!",
+        "[frustrated] Grr! Lucky hit!"
+      ],
+      "when": "takes a big hit",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "lost-commander": {
+      "text": [
+        "[angry] You'll see me again. Soon.",
+        "[shouting] Down, not out! Back soon!",
+        "[angry] Fine! I'll come back angrier!",
+        "[groans] Knocked down. Getting up!"
+      ],
+      "when": "its commander dies/leaves",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "got-countered": {
+      "text": [
+        "[angry] Are you kidding me?!",
+        "[frustrated] Oh, come on! Seriously?!",
+        "[shouting] You did NOT just do that!",
+        "[angry] Cowards! Fight fair!"
+      ],
+      "when": "its spell is countered",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "got-swept": {
+      "text": [
+        "[angry] My whole board! Unbelievable!",
+        "[shouting] Everything?! You took everything?!",
+        "[frustrated] Rebuild? Fine. Watch me!",
+        "[angry] That's low! Real low!"
+      ],
+      "when": "its board is wiped",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "low-life": {
+      "text": [
+        "[shouting] I'm not done yet! Come on!",
+        "[laughs] Bleeding? Good. I fight better bleeding!",
+        "[exhales] Still standing! Barely, but standing!",
+        "[angry] Come finish it, if you dare!"
+      ],
+      "when": "drops to ~10 life or less",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "eliminated": {
+      "text": [
+        "[angry] This isn't over! Next time!",
+        "[frustrated] I'm out?! Unbelievable!",
+        "[shouting] Went down swinging! Remember that!",
+        "[scoffs] Fine! Enjoy it while it lasts!"
+      ],
+      "when": "out of the game",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "taunt": {
+      "text": [
+        "[mischievously] Somebody's getting cocky over there.",
+        "[laughs] Big board. Bigger target.",
+        "[smug] Enjoying the lead? Won't last.",
+        "[shouting] Somebody's asking for it!"
+      ],
+      "when": "needle at whoever is ahead",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "respect": {
+      "text": [
+        "[sighs] Okay, that was good. I hate it.",
+        "[scoffs] Fine. That was a good play.",
+        "[laughs] Huh. Didn't see that coming. Nice.",
+        "[angry] Respect. Now I'm mad."
+      ],
+      "when": "another player's good play (human incl.)",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "archenemy": {
+      "text": [
+        "[shouting] Everybody on them! Now!",
+        "[excited] You see that? Get 'em!",
+        "[shouting] Team up! Take 'em down!",
+        "[angry] They're the problem! Hit them!"
+      ],
+      "when": "calling out the table leader",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "slow-turn": {
+      "text": [
+        "[mischievously] Nothing yet. Don't get comfortable.",
+        "[scoffs] Quiet turn. Enjoy it.",
+        "[whispers] Saving it. You'll see.",
+        "[laughs] Just warming up."
+      ],
+      "when": "its own turn passes with nothing done",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    },
+    "my-turn": {
+      "text": [
+        "[excited] My turn. Finally! Stand back.",
+        "[shouting] About time. Watch this.",
+        "[excited] Let's go! My turn!",
+        "[laughs] Move over. I'm up!"
+      ],
+      "when": "opener for the seat whose turn just began",
+      "category": "bark",
+      "source": "elevenlabs-v3-2026-09-10"
+    }
+  },
+  "sources": {
+    "elevenlabs-v3-2026-09-10": "seat-bark library 'harry' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10"
+  }
+}
