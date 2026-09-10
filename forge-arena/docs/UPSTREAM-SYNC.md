@@ -70,6 +70,11 @@ divergence list). Read both before ANY merge from upstream.*
   `git grep -lE "\[arena\]|ARENA-PATCH" -- forge-ai/src forge-core/src forge-game/src forge-gui-desktop/src pom.xml`
   must enumerate every modified upstream file (a bare `grep -ln "arena"`
   false-positives on `GameFormat.java`'s "Arena" format name).
+- **Build JDK rule (2026-09-10, W-17):** run gates and package builds with
+  `JAVA_HOME` pinned to the JDK 17 install (`/usr/local/Cellar/openjdk@17/…/Contents/Home`
+  on this machine) — Homebrew's OpenJDK 25.0.2 crashed twice in its G1 collector
+  during the v4.1 gate; the launcher already runs games on the PATH JDK 17 and
+  the classes are compiled for release 17 whichever JDK builds them.
 - **Test-per-divergence rule:** a behavioral upstream patch does not land
   without a test that fails when the patch is absent.
 - **INVENTORY §1 is maintained:** any new parent-module edit updates that

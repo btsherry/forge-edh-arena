@@ -2055,3 +2055,16 @@ Hard-won from two live sessions; read before optimizing anything.
     forge snapshots removed (nothing builds from them). Stage 6: `arena`
     fast-forwarded to ae5579d5b00 (tag `post-sync-20260910`); rollback tag
     `pre-sync-20260910` = 93f2f16d189.
+
+102. **v4.1 SHIPPED (2026-09-10 12:5x PDT).** Built from `7ed30c62210 (arena)`:
+    the first upstream sync (engine at Card-Forge a5f4f9e4796) plus the 4.1
+    items (BL-44/46, W-15/16 via brief, deviation-noise filter, BL-47 jar
+    selection). 50,409 entries, 340 MB unpacked, **132,197,248 bytes**, sha256
+    `5dbdaa305e6258adae15c296cee2c0af9fff1c53858192a74227221235ad749b`. Gate
+    465/465 on JDK 17 after two JDK 25.0.2 GC crashes (W-17). Checks: no
+    strays, one fat jar (2.0.15), voice runtime complete with the render tool
+    excluded, no home paths or key shapes, ten decks + primers + manifests at
+    the new db stamp, preflight OK from the package root. Acceptance: all-AI
+    game from the package root, Giada t16, 166 decisions, 0 punts/refusals/
+    tracebacks. Shipped with `packaging/ship-release.sh`: dated + `-latest`,
+    both byte-exact. Tag `v4.1` = 7ed30c62210.
