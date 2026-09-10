@@ -377,8 +377,10 @@ class PackagerShipsWhatTheScriptsCall(unittest.TestCase):
         self.assertIn("--exclude '/voice/build_stock.py'", pk, "the ElevenLabs render tool is dev-only")
         for name in ("packaging/build-light-package.sh", "scripts/run-pilot-match.sh"):
             text = (ROOT / name).read_text()
-            self.assertIn("<revision>", text, f"{name}: fat jar must be chosen by the pom revision (BL-47), not the first glob match")
-            self.assertNotIn("jar-with-dependencies.jar 2>/dev/null | head -n1)\n", text.replace("ls -t", ""), f"{name}: no alphabetical first-match")
+            self.assertIn("BL-47", text, f"{name}: fat jar must be chosen by the pom revision (BL-47), not the first glob match")
+            self.assertIn("<versionCode>", text, f"{name}: the revision is composed from the pom's versionCode + snapshotName")
+            self.assertNotIn('$(ls "$REPO_ROOT"/forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)', text)
+            self.assertNotIn('$(ls "$REPO"/forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)', text)
         self.assertIn("--exclude '.DS_Store'", pk)
 
 

@@ -45,7 +45,14 @@ TIMEOUT="${ARENA_MAILBOX_TIMEOUT:-90}"
 # target/ and the first alphabetically was the STALE one (NoSuchMethodError at
 # runtime). Pick the jar matching the reactor's <revision>; else the newest.
 JARDIR="$REPO_ROOT/forge-gui-desktop/target"
-REV=$(sed -n 's:.*<revision>\(.*\)</revision>.*:\1:p' "$REPO_ROOT/pom.xml" 2>/dev/null | head -n1)
+# <revision> is ${versionCode}${snapshotName} in the root pom: compose it from the two properties
+REV=$(python3 - "$REPO_ROOT/pom.xml" 2>/dev/null <<'PYREV'
+import re, sys
+s = open(sys.argv[1], encoding="utf-8").read()
+vc = re.search(r"<versionCode>([^<]*)</versionCode>", s); sn = re.search(r"<snapshotName>([^<]*)</snapshotName>", s)
+print((vc.group(1) if vc else "") + (sn.group(1) if sn else ""))
+PYREV
+)
 JAR="$JARDIR/forge-gui-desktop-${REV}-jar-with-dependencies.jar"
 [ -n "$REV" ] && [ -f "$JAR" ] || JAR=$(ls -t "$JARDIR"/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)
 NJARS=$(ls "$JARDIR"/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | wc -l | tr -d ' ')
