@@ -164,6 +164,17 @@ as separate work, never patched to pass during a sync. A first-run compile
 after a sync may need ONE online Maven build for new upstream dependencies
 (2026-09-10: jupnp 3.0.5, gson 2.13.2); offline resolves again afterwards.
 
+## Version bumps leave stale fat jars (learned 2026-09-10, BL-47)
+
+Upstream bumps `<revision>` regularly. `mvn package` then writes a NEW
+`forge-gui-desktop-<rev>-jar-with-dependencies.jar` beside the old one, and a
+first-match glob loads the stale jar: new arena classes over old engine
+classes, `NoSuchMethodError` in a live game. The launcher and the packager now
+select by the pom's `<revision>` (newest-by-time fallback) and say so when
+several are present. After any sync: `ls forge-gui-desktop/target/*.jar` and
+remove the old revision (`mvn -o -pl forge-gui-desktop clean` before the gate
+is simplest).
+
 ## Cadence & triggers
 
 - **Default: deliberate and infrequent** (quarterly-ish). We gain card-script

@@ -41,7 +41,15 @@ MAILBOX_DIR="${ARENA_MAILBOX_DIR:-$REPO_ROOT/forge-arena/mailbox}"
 TIMEOUT="${ARENA_MAILBOX_TIMEOUT:-90}"
 
 # Self-contained desktop jar (all forge + deps); survives version bumps.
-JAR=$(ls "$REPO_ROOT"/forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)
+# BL-47 (sync 2026-09-10): after upstream's version bump two fat jars sat in
+# target/ and the first alphabetically was the STALE one (NoSuchMethodError at
+# runtime). Pick the jar matching the reactor's <revision>; else the newest.
+JARDIR="$REPO_ROOT/forge-gui-desktop/target"
+REV=$(sed -n 's:.*<revision>\(.*\)</revision>.*:\1:p' "$REPO_ROOT/pom.xml" 2>/dev/null | head -n1)
+JAR="$JARDIR/forge-gui-desktop-${REV}-jar-with-dependencies.jar"
+[ -n "$REV" ] && [ -f "$JAR" ] || JAR=$(ls -t "$JARDIR"/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)
+NJARS=$(ls "$JARDIR"/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | wc -l | tr -d ' ')
+[ "${NJARS:-0}" -gt 1 ] && echo "note: $NJARS fat jars in $JARDIR — using $(basename "$JAR") (pom revision '${REV:-?}'); remove stale ones with: mvn -o -pl forge-gui-desktop clean" >&2
 if [ -z "$JAR" ]; then
   echo "ERROR: no forge-gui-desktop jar-with-dependencies.jar found — build it first." >&2
   exit 1
