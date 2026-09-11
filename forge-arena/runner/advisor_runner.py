@@ -117,6 +117,9 @@ BARK_WHEN = {
     "attack-them": "deflects an attack onto someone else",
     "read-that": "wants an unfamiliar card read again",
     "play-slower": "is overwhelmed by a flurry of plays",
+    "game-changer": "casts one of its game changers (the bracket list; the runner also fires this from the cast itself)",
+    "gc-react": "sees another seat cast a game changer",
+    "gc-gone": "is glad a game changer left the battlefield",
 }
 BARKS = tuple(BARK_WHEN)
 BARK_RE = re.compile(r"\s*\[bark:\s*(\d)\s*:\s*([a-z0-9-]+)\s*\]\s*")
@@ -139,6 +142,15 @@ def split_bark(text: str, log=None) -> tuple[str, tuple[int, str] | None]:
     return clean, (seat, bid)
 
 
+def game_changers_of(deck_slug: str) -> set:
+    """Names Scryfall flags game_changer in the deck's dossier (deck-cards.json)."""
+    try:
+        from voice_runner import game_changers_of as _gc
+        return _gc(deck_slug)
+    except Exception:  # noqa: BLE001
+        return set()
+
+
 def bark_guide(seat_voices: dict, mode: str, seat_decks: dict | None = None, owner=None) -> str:
     """The prompt sentence offering the seat-bark tag, or "" when barks are off
     or no seat voice library exists. `seat_voices` is voice_runner.load_seat_libraries();
@@ -158,7 +170,9 @@ def bark_guide(seat_voices: dict, mode: str, seat_decks: dict | None = None, own
     who = "; ".join(f"seat {k} ({decks.get(k, 'AI deck')}): {v['temperament']}"
                     for k, v in sorted(seat_voices.items()) if v.get("temperament"))
     ids = "; ".join(f"{b} when it {w}" for b, w in BARK_WHEN.items())
-    common = (" Tag form [bark:<seat>:<id>]; ids: " + ids + ". Never seat 0. Only public events; never a hidden hand. "
+    gcs = "; ".join(f"seat {k}: " + ", ".join(sorted(game_changers_of(v))[:8]) for k, v in sorted(decks.items()) if game_changers_of(v))
+    common = ((" GAME CHANGERS at the table (bracket list): " + gcs + "." if gcs else "")
+              + " Tag form [bark:<seat>:<id>]; ids: " + ids + ". Never seat 0. Only public events; never a hidden hand. "
               "A quip and a bark never share one reply. In your own words always call a player by their COMMANDER "
               "(Urza, Giada, Purphoros…), never by a seat number or any other name.")
     if owner is not None and int(owner) in seat_voices:

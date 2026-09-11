@@ -24,8 +24,10 @@ public final class VoiceFocus {
 
     private static final Pattern SEAT = Pattern.compile("\"seat\"\\s*:\\s*(\\d+)");
     private static final Pattern UNTIL = Pattern.compile("\"until\"\\s*:\\s*(\\d+)");
-    /** A mailbox seat's field tab reads "mailbox-seat3-Purphoros, God of the Forge Field". */
-    private static final Pattern TAB_SEAT = Pattern.compile("mailbox-seat(\\d)-");
+    /** A seat's field tab reads "Purphoros, God of the Forge-S3 Field" (2026-09-10 naming);
+     *  the older "mailbox-seat3-…" form is still recognised. */
+    private static final Pattern TAB_SEAT = Pattern.compile("-S(\\d)\\b");
+    private static final Pattern TAB_SEAT_OLD = Pattern.compile("mailbox-seat(\\d)-");
 
     private VoiceFocus() {
     }
@@ -53,7 +55,11 @@ public final class VoiceFocus {
             return -1;
         }
         final Matcher m = TAB_SEAT.matcher(tabTitle);
-        return m.find() ? Integer.parseInt(m.group(1)) : -1;
+        if (m.find()) {
+            return Integer.parseInt(m.group(1));
+        }
+        final Matcher old = TAB_SEAT_OLD.matcher(tabTitle);
+        return old.find() ? Integer.parseInt(old.group(1)) : -1;
     }
 
     /** A line still counts as playing until {@code until} plus a grace; after that the record is stale. */

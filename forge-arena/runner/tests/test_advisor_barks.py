@@ -74,7 +74,7 @@ class BarkTests(unittest.TestCase):
             self.assertEqual(barks, ar.BARKS, lib)
             others = [pid for pid, ph in m["phrases"].items() if ph.get("category") in ("reply", "patter")]
             self.assertEqual(len(others), 34, f"{lib}: replies and patter are the runner's vocabulary, never the advisor's")
-        self.assertEqual(len(ar.BARKS), 29)
+        self.assertEqual(len(ar.BARKS), 32)
 
     def test_split_bark_strips_known_tags_and_drops_bad_ones(self):
         self.assertEqual(ar.split_bark("Big turn. [bark:2:big-swing]"), ("Big turn.", (2, "big-swing")))

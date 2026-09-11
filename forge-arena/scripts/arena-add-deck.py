@@ -209,6 +209,7 @@ def build_deck_cards(parsed, scry, slug):
                 "mana_cost": c.get("mana_cost")
                 or (c.get("card_faces", [{}])[0].get("mana_cost", "")),
                 "type_line": c.get("type_line", ""),
+                "game_changer": bool(c.get("game_changer")),   # WotC's bracket list, as Scryfall flags it (2026-09-10)
                 "color_identity": "".join(c.get("color_identity", [])) or "C",
                 "oracle_text": _oracle(c),
             })

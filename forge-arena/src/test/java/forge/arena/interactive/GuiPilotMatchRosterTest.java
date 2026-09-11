@@ -79,6 +79,16 @@ public class GuiPilotMatchRosterTest {
         Assert.assertFalse(r.warnAboutAICards(), "the stock AI's complaints mean nothing for mailbox seats");
     }
 
+    /** 2026-09-10: seats are named for their commander with the seat as a suffix; the human is Player One. */
+    @Test(groups = "extended", timeOut = 30_000)
+    public void seatsAreNamedForTheirCommanderAndTheHumanIsPlayerOne() {
+        Assert.assertEquals(GuiPilotMatch.seatLabel("Purphoros, God of the Forge", 3), "Purphoros, God of the Forge-S3");
+        Assert.assertEquals(GuiPilotMatch.seatLabel("Urza, Lord High Artificer", 1), "Urza, Lord High Artificer-S1");
+        Assert.assertEquals(GuiPilotMatch.HUMAN_NAME, "Player One");
+        forge.deck.Deck bare = new forge.deck.Deck("some-deck");
+        Assert.assertEquals(GuiPilotMatch.seatName(bare, 2), "some-deck-S2", "no commander section: the deck name");
+    }
+
     @Test(groups = "extended", timeOut = 30_000)
     public void rosterConstantsAreTheDefaultTable() {
         Assert.assertEquals(Arrays.asList(GuiPilotMatch.DECKS), List.of(URZA, GIADA, PURPHOROS, SELVALA));

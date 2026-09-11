@@ -133,10 +133,6 @@
       {
         "role": "bystander",
         "reply": "gg"
-      },
-      {
-        "role": "bystander",
-        "reply": "you-cheat"
       }
     ],
     "taunt": [
@@ -194,11 +190,11 @@
       },
       {
         "role": "bystander",
-        "reply": "you-cheat"
+        "reply": "disagree"
       },
       {
         "role": "bystander",
-        "reply": "disagree"
+        "reply": "scoff"
       }
     ],
     "commander-cast": [
@@ -651,6 +647,52 @@
       {
         "role": "bystander",
         "reply": "you-cheat"
+      }
+    ],
+    "game-changer": [
+      {
+        "role": "bystander",
+        "reply": "gc-react"
+      },
+      {
+        "role": "bystander",
+        "reply": "gc-react"
+      },
+      {
+        "role": "bystander",
+        "reply": "oh-no"
+      },
+      {
+        "role": "bystander",
+        "reply": "kill-that"
+      }
+    ],
+    "gc-react": [
+      {
+        "role": "origin",
+        "reply": "not-sorry"
+      },
+      {
+        "role": "origin",
+        "reply": "laugh"
+      },
+      {
+        "role": "bystander",
+        "reply": "agree"
+      }
+    ],
+    "gc-gone": [
+      {
+        "role": "target",
+        "reply": "scoff"
+      },
+      {
+        "role": "target",
+        "reply": "you-suck"
+      },
+      {
+        "role": "bystander",
+        "reply": "agree"
       }
     ]
   },

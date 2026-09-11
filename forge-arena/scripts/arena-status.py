@@ -17,7 +17,7 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
 def _seat_labels():
     """Live seat labels from the observer snapshot (2026-08-24: the old
     hardcoded default-roster map mislabeled any non-default table). AI seats
-    are named mailbox-seat<N>-<Deck>; anything else is the human/advisor
+    are named <Commander>-S<N> (2026-09-10; formerly mailbox-seat<N>-<Deck>); anything else is the human/advisor
     seat. Missing snapshot -> generic seat N."""
     import re
     labels = {}
@@ -25,7 +25,7 @@ def _seat_labels():
         snap = json.load(open(os.path.join(BASE, "observer-state.json")))
         for seat in snap.get("seats", []):
             n, name = seat.get("seat"), seat.get("name") or ""
-            m = re.match(r"mailbox-seat\d+-(.+)", name)
+            m = re.match(r"^(.+)-S\d+$", name) or re.match(r"mailbox-seat\d+-(.+)", name)
             labels[n] = m.group(1) if m else f"{name} (YOU/human)"
     except (OSError, ValueError):
         pass

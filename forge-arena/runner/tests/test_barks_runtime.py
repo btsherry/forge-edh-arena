@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import voice_runner as vr  # noqa: E402
 
 LINES = ("big-swing", "eliminated", "my-turn", "that-hurt", "landed-hit", "counter", "got-countered", "slow-turn", "respect",
+         "game-changer", "gc-react", "gc-gone",
          "commander-cast", "wow", "play-slower", "sweep", "got-swept", "lost-commander", "removal", "win", "kill", "big-mana",
          "play-faster", "thinking-hard", "youre-the-threat", "whats-your-life", "low-life-jab", "cards-in-hand", "empty-hand",
          "kill-that", "board-envy", "nothing-happening", "this-is-fine", "good-hand", "what-turn", "deal", "pass-already")
@@ -382,6 +383,22 @@ class BarkRuntime(_TreeCase):
         self._observer(4, 1, events=ev); self.r.scan_observer()
         called = [r["stock"] for r in self._records("queued", "bark") if r.get("source") == "event"]
         self.assertTrue(any(x in ("nice-play", "read-that", "oh-no") for x in called[-2:]), f"a five-mana spell draws a bystander's reaction: {called}")
+
+    def test_game_changers_the_caster_crows_and_someone_is_glad_when_one_leaves(self):
+        self.r.game_changers = {1: {"Rhystic Study", "Mana Vault"}, 2: set()}
+        self._prime()
+        ev = [{"seq": 2, "kind": "cast", "turn": 3, "seat": 1, "spell": "Rhystic Study", "commander": False, "cmc": 3}]
+        self._observer(3, 1, events=ev); self.r.scan_observer()
+        self.assertEqual(self._queued(), [("bark", "game-changer", "harry", 1)], "the bracket card, not a plain cast")
+        self.r.queue.clear()
+        ev.append({"seq": 3, "kind": "cast", "turn": 3, "seat": 2, "spell": "Rhystic Study", "commander": False, "cmc": 3})
+        self._observer(3, 1, events=ev); self.r.scan_observer()
+        self.assertEqual(self._queued(), [], "the same name from a seat whose deck does not flag it is just a three-mana spell")
+        ev.append({"seq": 4, "kind": "left", "turn": 3, "by": 2, "cards": ["Mana Vault"], "seats": [1], "commanders": [], "n": 1, "tokens": 0})
+        self._observer(3, 1, events=ev); self.r.scan_observer()
+        got = [q for q in self._queued() if q[0] == "bark"]
+        self.assertTrue(any(q[1] in ("gc-gone", "removal") for q in got), got)
+        self.assertEqual(vr.game_changers_of("no-such-deck"), set())
 
     def test_left_events_removal_sweep_and_lost_commander_with_the_right_speaker(self):
         self._prime()

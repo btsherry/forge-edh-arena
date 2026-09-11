@@ -38,8 +38,8 @@ class SharedVocabulary(unittest.TestCase):
             self.assertEqual(m["library"], lib)
             these = list(m["phrases"])
             cats = collections.Counter(ph.get("category") for ph in m["phrases"].values())
-            self.assertEqual(len(these), 63, f"{lib}: 21 barks + 8 reactions + 19 replies + 15 patter lines")
-            self.assertEqual((cats["bark"], cats["reaction"], cats["reply"], cats["patter"]), (21, 8, 19, 15), f"{lib}: {dict(cats)}")
+            self.assertEqual(len(these), 66, f"{lib}: 21 barks + 11 reactions + 19 replies + 15 patter lines")
+            self.assertEqual((cats["bark"], cats["reaction"], cats["reply"], cats["patter"]), (21, 11, 19, 15), f"{lib}: {dict(cats)}")
             if ids is None:
                 ids = these
             self.assertEqual(these, ids, f"{lib} must share the vocabulary, in the same order")

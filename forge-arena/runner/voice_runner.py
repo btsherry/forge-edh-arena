@@ -201,6 +201,20 @@ def seat_decks_from_roster(human_deck: str | None, roster: str | None) -> dict[i
     return {i + 1: d for i, d in enumerate([d for d in slugs if d != human_deck][:3])}
 
 
+def game_changers_of(deck_slug: str, decks_dir: Path | None = None) -> set[str]:
+    """Card names Scryfall flags game_changer in this deck's dossier (deck-cards.json,
+    written by arena-add-deck since 2026-09-10). Empty when the dossier is missing."""
+    try:
+        d = json.loads(((decks_dir or (ARENA / "decks")) / deck_slug / "dossier" / "deck-cards.json").read_text())
+    except (OSError, ValueError, TypeError):
+        return set()
+    out: set[str] = set()
+    for c in d.get("cards") or []:
+        if isinstance(c, dict) and c.get("game_changer") and c.get("name"):
+            out.add(str(c["name"])); out.add(str(c["name"]).split(" // ")[0])
+    return out
+
+
 def seat_decks_from_game_log(game_log: Path) -> dict[int, str]:
     """{seat: deck slug} from the runners' shared game log (each record carries
     seat + deck); empty until the first decisions land."""
@@ -845,6 +859,7 @@ class VoiceRunner:
         # default seats until the game log names all three AI decks
         self._seat_decks: dict[int, str] = seat_decks_from_roster(os.environ.get("ARENA_HUMAN_DECK"), os.environ.get("ARENA_SEAT_DECKS", ""))
         self.seat_libraries = load_seat_libraries(seat_decks=self._seat_decks or None)
+        self.game_changers: dict[int, set[str]] = {k: game_changers_of(v) for k, v in self._seat_decks.items()}
         self._bark_spoken_at: dict[int, float] = {}
         # Colour commentary (Ben, 2026-09-07: "it could say a thing during
         # opponents' turns some of the time"): the advisor's per-turn recap
@@ -1100,6 +1115,7 @@ class VoiceRunner:
             if ai != self._seat_decks:
                 self._seat_decks = ai
                 self.seat_libraries = load_seat_libraries(seat_decks=ai)
+            self.game_changers = {k: game_changers_of(v) for k, v in self._seat_decks.items()}
             self.say("[voice] table: " + ", ".join(f"seat {k} {ai.get(k, '?')} -> {v['voice']}" for k, v in sorted(self.seat_libraries.items())))
 
     def library_for_seat(self, seat: int) -> str:
@@ -1304,7 +1320,11 @@ class VoiceRunner:
                 elif kind == "cast":
                     seat = int(e.get("seat"))
                     if seat != self.human_seat and self.library_for_seat(seat):
-                        if e.get("commander"):
+                        spell = str(e.get("spell") or "")
+                        if spell in self.game_changers.get(seat, set()):
+                            # one of the bracket's game changers: the caster crows, the table reacts (chain)
+                            self.maybe_bark(seat, "game-changer", turn=turn, source="event", ctx={"targets": []})
+                        elif e.get("commander"):
                             self.maybe_bark(seat, "commander-cast", turn=turn, source="event", ctx={"targets": []})
                         elif int(e.get("cmc", 0)) >= 5:
                             # a big spell draws a bystander's reaction: wow at seven-plus, else admiration / read that / oh no
@@ -1325,6 +1345,12 @@ class VoiceRunner:
                     n, tokens = int(e.get("n", 0)), int(e.get("tokens", 0))
                     commanders = e.get("commanders") or []
                     ai_owners = [o for o in owners if o != self.human_seat and self.library_for_seat(o)]
+                    gone_gc = [c for c in (e.get("cards") or []) if any(c in self.game_changers.get(o, set()) for o in owners)]
+                    if gone_gc and n < 3:
+                        # a game changer left the board: someone other than its owner is glad
+                        others = [x for x in self.seat_libraries if int(x) not in owners and int(x) not in self.eliminated]
+                        if others:
+                            self.maybe_bark(int(self.rng.choice(others)), "gc-gone", turn=turn, source="event", ctx={"targets": owners})
                     if n >= 3 and len(set(owners)) >= 2:
                         if by is not None and int(by) != self.human_seat and self.library_for_seat(int(by)):
                             self.maybe_bark(int(by), "sweep", turn=turn, source="event", ctx={"targets": [o for o in owners if o != int(by)]})

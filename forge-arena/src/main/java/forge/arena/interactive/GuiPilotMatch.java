@@ -18,7 +18,6 @@ import forge.gamemodes.match.HostedMatch;
 import forge.gui.FThreads;
 import forge.gui.GuiBase;
 import forge.gui.interfaces.IGuiGame;
-import forge.player.GamePlayerUtil;
 
 /**
  * Launcher for a 4-player Commander game in the DESKTOP GUI where seat 0 is a
@@ -128,11 +127,11 @@ public final class GuiPilotMatch {
      */
     private static forge.LobbyPlayer advisorLobbyOrGuiPlayer() {
         if (!advisorEnabled()) {
-            return GamePlayerUtil.getGuiPlayer();
+            return new forge.player.LobbyPlayerHuman(HUMAN_NAME);
         }
         String mode = System.getProperty(AUTOPASS_PROPERTY, "casts");
         AdvisorFeed feed = new AdvisorFeed(MailboxProtocol.baseDir(), 0);
-        return new AdvisorLobbyPlayer("Human", feed, "casts".equals(mode));
+        return new AdvisorLobbyPlayer(HUMAN_NAME, feed, "casts".equals(mode));
     }
 
     public static void main(String[] args) {
@@ -178,6 +177,33 @@ public final class GuiPilotMatch {
                 e.printStackTrace();
             }
         });
+    }
+
+    /** The human's table name (Ben, 2026-09-10): "Player One", not "Human". */
+    static final String HUMAN_NAME = "Player One";
+
+    /**
+     * An AI seat's table name: the commander's name plus the seat as a suffix —
+     * {@code Purphoros, God of the Forge-S3} — so two copies of one commander
+     * stay distinct and every log line, tab title and advisor digest reads as
+     * the commander (Ben, 2026-09-10; before: {@code mailbox-seat3-<deck name>}).
+     * A deck without a commander section falls back to the deck's own name.
+     */
+    static String seatName(Deck deck, int seat) {
+        String who = deck.getName();
+        try {
+            java.util.List<forge.item.PaperCard> cmd = deck.getCommanders();
+            if (cmd != null && !cmd.isEmpty() && cmd.get(0) != null && cmd.get(0).getName() != null) {
+                who = cmd.get(0).getName();
+            }
+        } catch (RuntimeException ignored) {
+            // no commander section: the deck name is the label
+        }
+        return seatLabel(who, seat);
+    }
+
+    static String seatLabel(String commander, int seat) {
+        return commander + "-S" + seat;
     }
 
     /** Deck file name → slug ({@code path/x.dck} → {@code x}). */
@@ -289,7 +315,7 @@ public final class GuiPilotMatch {
             } else {
                 // mailbox seats (all four of them under --all-ai; the GUI then
                 // rides along as HostedMatch's humanCount==0 spectator).
-                rp.setPlayer(new MailboxLobbyPlayer("mailbox-seat" + seat + "-" + deck.getName()));
+                rp.setPlayer(new MailboxLobbyPlayer(seatName(deck, seat)));
             }
             players.add(rp);
         }

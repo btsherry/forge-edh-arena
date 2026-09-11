@@ -591,7 +591,9 @@
     },
     "you-cheat": {
       "text": [
-        "[dryly] That was almost legal."
+        "[dryly] That was almost legal.",
+        "[dryly] I'm certain that's not legal.",
+        "[calmly] Cheating, but with style."
       ],
       "when": "light name-calling",
       "category": "reply",
@@ -673,11 +675,41 @@
       "when": "filler, a bluff",
       "category": "patter",
       "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "game-changer": {
+      "text": [
+        "[calmly] A game changer. Adjust your plans.",
+        "[dryly] Yes, it's on the list. Deal with it.",
+        "[chuckles] The bracket police may write me up."
+      ],
+      "when": "casts one of its game changers",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-gamechangers"
+    },
+    "gc-react": {
+      "text": [
+        "[dryly] Ah. One of THOSE cards.",
+        "[sighs] A game changer. Naturally.",
+        "[calmly] Noted. That is a real card."
+      ],
+      "when": "sees another seat cast a game changer",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-gamechangers"
+    },
+    "gc-gone": {
+      "text": [
+        "[calmly] And good riddance.",
+        "[dryly] The table breathes again."
+      ],
+      "when": "a game changer leaves the battlefield",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-gamechangers"
     }
   },
   "sources": {
     "elevenlabs-v3-2026-09-10": "seat-bark library 'bill' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
     "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py",
-    "elevenlabs-v3-2026-09-10-patter": "table patter (board-state, pace, name-calling, filler) after five Game Knights episodes were measured: ~190 words/min, a silence over 4 s only every ~78 s"
+    "elevenlabs-v3-2026-09-10-patter": "table patter (board-state, pace, name-calling, filler) after five Game Knights episodes were measured: ~190 words/min, a silence over 4 s only every ~78 s",
+    "elevenlabs-v3-2026-09-10-gamechangers": "game-changer lines (WotC bracket list, per Scryfall's game_changer flag in each dossier) + more you-cheat wordings (Purphoros repeated it)"
   }
 }

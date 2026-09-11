@@ -13,9 +13,11 @@ public class VoiceFocusTest {
         Assert.assertEquals(VoiceFocus.parseSpeaking("{}"), new long[] {-1, 0}, "nobody talking");
         Assert.assertEquals(VoiceFocus.parseSpeaking(null), new long[] {-1, 0});
         Assert.assertEquals(VoiceFocus.parseSpeaking("garbage"), new long[] {-1, 0});
-        Assert.assertEquals(VoiceFocus.seatOfTab("mailbox-seat3-Purphoros, God of the Forge Field"), 3);
-        Assert.assertEquals(VoiceFocus.seatOfTab("mailbox-seat1-Urza, Lord High Artificer Field"), 1);
-        Assert.assertEquals(VoiceFocus.seatOfTab("Human Field"), -1, "the human's field is never followed");
+        Assert.assertEquals(VoiceFocus.seatOfTab("Purphoros, God of the Forge-S3 Field"), 3);
+        Assert.assertEquals(VoiceFocus.seatOfTab("Urza, Lord High Artificer-S1 Field"), 1);
+        Assert.assertEquals(VoiceFocus.seatOfTab("mailbox-seat3-Purphoros, God of the Forge Field"), 3, "the old naming still parses");
+        Assert.assertEquals(VoiceFocus.seatOfTab("Player One Field"), -1, "the human's field is never followed");
+        Assert.assertEquals(VoiceFocus.seatOfTab("Human Field"), -1);
         Assert.assertEquals(VoiceFocus.seatOfTab(null), -1);
     }
 
