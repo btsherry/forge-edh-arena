@@ -158,6 +158,20 @@ class BarkRuntime(_TreeCase):
         self.assertEqual({k: v["library"] for k, v in got.items()}, {1: "harry", 2: "bill"})
         self.assertEqual(vr.assign_voices({}, {1: "x"}, prefs), {})
 
+    def test_the_launcher_hands_the_runner_the_table_at_startup(self):
+        self.assertEqual(vr.seat_decks_from_roster("selvala-heart-of-the-wilds", ""),
+                         {1: "urza-lord-high-artificer", 2: "giada-font-of-hope", 3: "purphoros-god-of-the-forge"})
+        self.assertEqual(vr.seat_decks_from_roster("giada-font-of-hope", "a b c d"), {1: "a", 2: "b", 3: "c"})
+        self.assertEqual(vr.seat_decks_from_roster(None, ""), {}, "all-AI or an old launcher: default seats")
+        (Path(vr.VOICES_DIR) / "assign.json").write_text(json.dumps({"by_deck": {"purphoros-god-of-the-forge": "harry", "urza-lord-high-artificer": "bill", "giada-font-of-hope": "lily"}}))
+        os.environ["ARENA_HUMAN_DECK"] = "selvala-heart-of-the-wilds"
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.assertEqual({k: v["library"] for k, v in r.seat_libraries.items()}, {1: "bill", 3: "harry"},
+                         "before a single card is drawn: Urza is Bill, Purphoros is Harry (no Lily in this tree)")
+        # the launcher's default roster is the arena's (arena-config ROSTER)
+        cfg = (Path(__file__).resolve().parents[2] / "scripts" / "arena-config.py").read_text()
+        self.assertIn('ROSTER = "' + vr.DEFAULT_TABLE + '"', cfg)
+
     def test_the_runner_learns_the_table_from_the_game_log_and_reseats_the_voices(self):
         (self.logs / "game.jsonl").write_text("\n".join(json.dumps(r) for r in (
             {"seat": 1, "deck": "giada-font-of-hope", "type": "MULLIGAN"},

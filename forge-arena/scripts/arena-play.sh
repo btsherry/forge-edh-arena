@@ -190,7 +190,7 @@ fi
 # ELEVENLABS_API_KEY is set. One-way like the advisor; supervised the same way.
 # Off with --no-voice or ARENA_VOICE=off; no advisor → no voice.
 if [ "$ADVISOR" = "1" ] && [ "$VOICE" != "off" ]; then
-  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
+  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY ARENA_HUMAN_DECK="$HUMAN_SLUG" \
     "$ROOT/runner/run_voice.sh" >"$LOGS/voice_runner.out" 2>&1 &
   echo $! > "$LOGS/pids/voice-loop.pid"
 fi

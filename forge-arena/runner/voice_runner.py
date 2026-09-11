@@ -181,6 +181,19 @@ def load_seat_libraries(voices_dir: Path | None = None, seat_decks: dict[int, st
     return assign_voices(load_libraries(voices_dir), seat_decks, load_assignments(voices_dir))
 
 
+DEFAULT_TABLE = "urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds"
+
+
+def seat_decks_from_roster(human_deck: str | None, roster: str | None) -> dict[int, str]:
+    """{1..3: deck} the way GuiPilotMatch/run_table.sh/the advisor seat a human
+    table: the roster minus the human's deck, in roster order, first three.
+    Empty when the human deck is unknown (an all-AI table, or an old launcher)."""
+    if not human_deck:
+        return {}
+    slugs = (roster or "").split() or DEFAULT_TABLE.split()
+    return {i + 1: d for i, d in enumerate([d for d in slugs if d != human_deck][:3])}
+
+
 def seat_decks_from_game_log(game_log: Path) -> dict[int, str]:
     """{seat: deck slug} from the runners' shared game log (each record carries
     seat + deck); empty until the first decisions land."""
@@ -791,8 +804,10 @@ class VoiceRunner:
         self.chains = ChainTable.load(VOICES_DIR)
         self._chain: dict | None = None      # {"origin": seat, "hop": n, "turn": t} while an exchange is running
         self._last_snapshot: dict = {}
-        self.seat_libraries = load_seat_libraries()          # default seats until the table is known
-        self._seat_decks: dict[int, str] = {}
+        # the table: from the launcher at startup (ARENA_HUMAN_DECK + the roster), else
+        # default seats until the game log names all three AI decks
+        self._seat_decks: dict[int, str] = seat_decks_from_roster(os.environ.get("ARENA_HUMAN_DECK"), os.environ.get("ARENA_SEAT_DECKS", ""))
+        self.seat_libraries = load_seat_libraries(seat_decks=self._seat_decks or None)
         self._bark_spoken_at: dict[int, float] = {}
         # Colour commentary (Ben, 2026-09-07: "it could say a thing during
         # opponents' turns some of the time"): the advisor's per-turn recap
@@ -1007,13 +1022,15 @@ class VoiceRunner:
     def learn_table(self) -> None:
         """Once the game log names the decks at the table, re-seat the voices by
         deck (Ben, 2026-09-10: Purphoros fiery, Urza cool, Giada warm)."""
-        if len(self._seat_decks) >= 3:
+        if getattr(self, "_table_confirmed", False):
             return
         decks = seat_decks_from_game_log(self.logs / "game.jsonl")
         ai = {k: v for k, v in decks.items() if k != self.human_seat}
-        if len(ai) >= 3 and ai != self._seat_decks:          # the whole table, or keep the default seats
-            self._seat_decks = ai
-            self.seat_libraries = load_seat_libraries(seat_decks=ai)
+        if len(ai) >= 3:                                      # the whole table: confirm, or correct the launcher's roster
+            self._table_confirmed = True
+            if ai != self._seat_decks:
+                self._seat_decks = ai
+                self.seat_libraries = load_seat_libraries(seat_decks=ai)
             self.say("[voice] table: " + ", ".join(f"seat {k} {ai.get(k, '?')} -> {v['voice']}" for k, v in sorted(self.seat_libraries.items())))
 
     def library_for_seat(self, seat: int) -> str:
