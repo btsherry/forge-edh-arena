@@ -108,9 +108,11 @@ OPTIONAL_SOURCES = ("patter", "chain")
 # below are multiplied by ARENA_TABLE_P; the governor treats them as anchored.
 TABLE_LIB = "table"
 TABLE_P = {"grudge": 0.6, "again-countered": 0.7, "not-again-sweep": 0.7, "heads-up": 0.8, "early-game": 0.3, "you-promised": 0.7,
-           "land-go": 0.6, "pass": 0.4, "mana-up": 0.5, "tapped-out": 0.4, "untap-draw": 0.5, "come-on-land": 0.5, "thinking": 0.3,
-           "cast": 0.3, "cast-big": 0.5, "in-response": 0.6, "poke": 0.35, "attack-you": 0.35, "no-blocks": 0.4, "take-it": 0.3,
-           "sure": 0.15, "hold-on": 0.4, "life": 0.5, "address": 0.5}
+           "land-go": 0.6, "pass": 0.5, "mana-up": 0.5, "tapped-out": 0.4, "untap-draw": 0.5, "come-on-land": 0.4, "thinking": 0.3,
+           "cast": 0.45, "cast-big": 0.6, "in-response": 0.7, "poke": 0.5, "attack-you": 0.45, "no-blocks": 0.4, "take-it": 0.35,
+           "sure": 0.25, "hold-on": 0.4, "life": 0.5, "address": 0.5}
+# game 46 (turns 8-13): "come on, land" four times in seven minutes — these lines are said by a seat at most once in RECENT_S
+RARE_REPEATS = {"come-on-land", "thinking", "holding-mana", "tapped-out", "mana-up", "land-go", "early-game", "long-game"}
 LIFE_FOLLOWUP = {"that-hurt": 0.6, "take-it": 0.5, "low-life": 0.5}          # the speaker announces its total right after
 STATE_ANSWERS = {"whats-your-life": "life", "low-life-jab": "life", "cards-in-hand": "hand", "empty-hand": "hand"}
 ADDRESS_SWAP = {"kill-that": ("hit", "target"), "archenemy": ("hit", "target"), "youre-the-threat": ("threat", "target"),
@@ -1502,6 +1504,9 @@ class VoiceRunner:
         if (int(seat), named or pid) in self._said_this_turn:
             self.record("skipped", kind="bark", why="already said this turn", stock=named or pid, seat=seat, source=source)
             return False
+        if pid in RARE_REPEATS and self.clock() - self._seat_said_at.get((int(seat), pid), -1e9) < RECENT_S:
+            self.record("skipped", kind="bark", why=f"said lately ({pid} within {RECENT_S:.0f}s)", stock=pid, seat=seat, source=source)
+            return False
         since = self.clock() - self._bark_spoken_at.get(int(seat), -1e9)
         if since < self.barks_cooldown:
             self.record("skipped", kind="bark", why=f"seat guard ({since:.0f}s < {self.barks_cooldown:.0f}s)", stock=pid, seat=seat, source=source)
@@ -1646,8 +1651,8 @@ class VoiceRunner:
             life, hand = x.get("life") or 0, x.get("handSize") or 0
             if 0 < life <= 10:
                 add("low-life-jab", sid, 2.0); add("whats-your-life", sid, 1.0)
-            if hand >= 6:
-                add("cards-in-hand", sid, 2.0)
+            if hand >= 7:
+                add("cards-in-hand", sid, 1.0)
             if hand <= 1 and sid != active:
                 add("empty-hand", sid, 1.0)
             creatures = [c for c in (x.get("battlefield") or []) if isinstance(c, dict) and c.get("power") is not None]
@@ -1805,7 +1810,7 @@ class VoiceRunner:
         gap, evict = (0.4, False) if follow else (None, True)
         lands, _ = self._lands(self._seat_rec(active, d))
         own_turn = max(1, (int(turn) + 3) // 4)
-        if self.table_ids and "come-on-land" in self.table_ids and lands < min(4, own_turn):
+        if self.table_ids and "come-on-land" in self.table_ids and lands < min(4, own_turn - 1):
             if self.maybe_bark(int(active), "come-on-land", turn=turn, source="opener", p=self.table_p("come-on-land"), gap=gap, evict=evict):
                 return
         if int(turn) <= 4 and "early-game" in self.table_ids and self.rng.random() < self.table_p("early-game"):

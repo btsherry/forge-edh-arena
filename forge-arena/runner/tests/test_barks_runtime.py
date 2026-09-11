@@ -707,7 +707,7 @@ class InteractionChains(_TreeCase):
         self.assertLess(w, 0.5, "said a minute ago: weak")
         self.r._said_at["cards-in-hand"] = self.clock.t - 600
         cands = self.r.patter_candidates({"turn": 3, "activeSeat": 1, "seats": seats}, [1, 2])
-        self.assertEqual({pid: wgt for _, pid, _, wgt in cands if pid == "cards-in-hand"}["cards-in-hand"], 2.0, "ten minutes ago: full weight")
+        self.assertEqual({pid: wgt for _, pid, _, wgt in cands if pid == "cards-in-hand"}["cards-in-hand"], 1.0, "ten minutes ago: full weight (1.0 since game 46)")
         # chain: Bill's brace was used lately -> the table order puts it behind fresher replies
         self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
         self.r._seat_said_at[(2, "brace")] = self.clock.t - 30
@@ -826,6 +826,21 @@ class PatterClock(_TreeCase):
         cands = self.r.patter_candidates(self.r._last_snapshot, [1, 2])
         self.assertNotIn((2, "empty-hand"), {(sp, pid) for sp, pid, _, _ in cands}, "seat 2 said it this turn: not offered again, the gap is not wasted")
         self.assertTrue(any(sp == 2 for sp, *_ in cands), "seat 2 still has other things to say")
+
+    def test_rare_lines_are_not_repeated_by_a_seat_within_the_recency_window(self):
+        """Game 46: 'come on, land' four times in seven minutes."""
+        self._board(active=1)
+        self.r._roll_turn(5)
+        self.assertTrue(self.r.maybe_bark(1, "come-on-land", turn=5, source="opener", p=1.0))
+        self.r._seat_said_at[(1, "come-on-land")] = self.clock.t          # it played
+        self.r._roll_turn(9)
+        self.assertFalse(self.r.maybe_bark(1, "come-on-land", turn=9, source="opener", p=1.0))
+        self.assertIn("said lately", self._records("skipped", "bark")[-1]["why"])
+        self.assertTrue(self.r.maybe_bark(2, "come-on-land", turn=9, source="opener", p=1.0), "another seat may")
+        self.clock.t += vr.RECENT_S + 1; self.r._roll_turn(13)
+        self.assertTrue(self.r.maybe_bark(1, "come-on-land", turn=13, source="opener", p=1.0), "four minutes on: fair game")
+        self.r._seat_said_at[(1, "pass")] = self.clock.t
+        self.assertTrue(self.r.maybe_bark(1, "pass", turn=13, source="procedural", p=1.0), "'pass' every turn is what a table does")
 
     def test_a_restarted_runner_does_not_replay_the_startup_line(self):
         (self.logs / "voice-0.jsonl").write_text(json.dumps({"ts": 1.0, "event": "spoke", "kind": "startup", "stock": "startup"}) + "\n")

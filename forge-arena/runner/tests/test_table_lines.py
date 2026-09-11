@@ -273,10 +273,10 @@ class TableRuntime(_TableCase):
         self.assertEqual(r._who, {0: "giada", 1: "urza", 2: "purphoros", 3: "selvala"})
         self.assertEqual(vr.card_kind(r.cards_of(1).get("Arcum Dagsson")), "creature")
         self.assertEqual(vr.card_kind(r.cards_of(1).get("Counterspell")), "instant")
-        self.assertEqual((r.table_p("land-go"), r.table_p("sure")), (0.6, 0.15))
+        self.assertEqual((r.table_p("land-go"), r.table_p("sure")), (0.6, 0.25))
         os.environ["ARENA_TABLE_P"] = "0.5"
         r2 = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
-        self.assertAlmostEqual(r2.table_p("land-go"), 0.3); self.assertEqual(r2.table_p("in-response"), 0.3)
+        self.assertAlmostEqual(r2.table_p("land-go"), 0.3); self.assertEqual(r2.table_p("in-response"), 0.35)
 
     def test_casts_are_narrated_by_type_twice_a_turn_and_game_changers_keep_their_own_line(self):
         self._snap(4, 0, events=[{"seq": 1, "kind": "cast", "turn": 3, "seat": 1, "spell": "x", "cmc": 1}])   # prime the event seq
@@ -381,38 +381,38 @@ class TableRuntime(_TableCase):
         self.assertEqual(self.r._turn_start[1], {"lands": 2, "casts": 0, "narrations": 0})
         self._snap(5, 1, seats=[two(0), self._seat(1, lands=(False, False, False)), two(2), two(3)])   # a land was played, nothing cast
         self.r.queue.clear()
-        self._snap(6, 2, seats=[two(0), self._seat(1, lands=(False, False, False)), self._seat(2, lands=()), two(3)])
+        self._snap(10, 2, seats=[two(0), self._seat(1, lands=(False, False, False)), self._seat(2, lands=()), two(3)])
         got = [(q["stock"], q["library"], q["seat"], q["ctx"].get("targets", [])) for q in self.r.queue if q["kind"] == "bark"]
         self.assertIn(("land-go", "harry/table", 1, [2]), got, "seat 1: a land and nothing else — 'land, go', to seat 2")
-        self.assertIn(("come-on-land", "bill/table", 2, []), got, "seat 2 starts turn two of its own with no lands: 'come on, land'")
+        self.assertIn(("come-on-land", "bill/table", 2, []), got, "seat 2 starts its third turn with no lands (two behind): 'come on, land'")
         self.r.queue.clear()
         # seat 2 casts, ends with three lands up and two cards: "pass with mana up"
         self.r._turn_start[2] = {"lands": 0, "casts": 1, "narrations": 0}
         s2 = self._seat(2, hand=2, lands=(False, False, False))
-        self._snap(6, 2, seats=[two(0), two(1), s2, two(3)]); self.r.queue.clear()
-        self._snap(7, 3, seats=[two(0), two(1), s2, two(3)])
+        self._snap(10, 2, seats=[two(0), two(1), s2, two(3)]); self.r.queue.clear()
+        self._snap(11, 3, seats=[two(0), two(1), s2, two(3)])
         self.assertEqual(self._barks(), [("mana-up", "bill/table", 2)])
         # tapped out with cards -> "tapped out"; otherwise -> "pass"
-        self.r.seen_turn, self.r.seen_active = 6, 2
+        self.r.seen_turn, self.r.seen_active = 12, 2
         self.r._turn_start[2] = {"lands": 0, "casts": 2, "narrations": 0}
-        self.r._roll_turn(8)
+        self.r._roll_turn(13)
         s2 = self._seat(2, hand=1, lands=(True, True, True))
-        self._snap(6, 2, seats=[two(0), two(1), s2, two(3)]); self.r.queue.clear()
-        self._snap(8, 3, seats=[two(0), two(1), s2, two(3)])
+        self._snap(12, 2, seats=[two(0), two(1), s2, two(3)]); self.r.queue.clear()
+        self._snap(13, 3, seats=[two(0), two(1), s2, two(3)])
         self.assertEqual(self._barks(), [("tapped-out", "bill/table", 2)])
-        self.r.seen_turn, self.r.seen_active = 8, 2
+        self.r.seen_turn, self.r.seen_active = 14, 2
         self.r._turn_start[2] = {"lands": 0, "casts": 2, "narrations": 0}
-        self.r._roll_turn(9)
+        self.r._roll_turn(15)
         s2 = self._seat(2, hand=0, lands=(True, False, False))
-        self._snap(8, 2, seats=[two(0), two(1), s2, two(3)]); self.r.queue.clear()
-        self._snap(9, 3, seats=[two(0), two(1), s2, two(3)])
+        self._snap(14, 2, seats=[two(0), two(1), s2, two(3)]); self.r.queue.clear()
+        self._snap(15, 3, seats=[two(0), two(1), s2, two(3)])
         self.assertEqual(self._barks(), [("pass", "bill/table", 2)])
         # nothing cast, no land: the seat says nothing here (the advisor's recap tags slow-turn)
-        self.r.seen_turn, self.r.seen_active = 9, 2
+        self.r.seen_turn, self.r.seen_active = 16, 2
         self.r._turn_start[2] = {"lands": 3, "casts": 0, "narrations": 0}
-        self.r._roll_turn(10)
-        self._snap(9, 2, seats=[two(0), two(1), s2, two(3)]); self.r.queue.clear()
-        self._snap(10, 3, seats=[two(0), two(1), s2, two(3)])
+        self.r._roll_turn(17)
+        self._snap(16, 2, seats=[two(0), two(1), s2, two(3)]); self.r.queue.clear()
+        self._snap(17, 3, seats=[two(0), two(1), s2, two(3)])
         self.assertEqual(self._barks(), [])
 
     def test_hold_on_when_the_stack_targets_a_seats_things_and_a_mutter_when_its_decision_drags(self):
