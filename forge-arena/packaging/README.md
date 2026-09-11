@@ -473,7 +473,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_BARKS_CHAIN_P` | `0.6` | interaction chains: chance a spoken line gets a reply (the first hop) |
 | `ARENA_BARKS_CHAIN_DECAY` | `0.5` | each further hop multiplies the chance by this |
 | `ARENA_BARKS_CHAIN_MAX` | `3` | most hops in one exchange (reply, counter-reply, last word) |
-| `ARENA_BARKS_CHAIN_GAP` | `3.5` | seconds between the lines of an exchange (the normal gap is `ARENA_VOICE_MIN_GAP`) |
+| `ARENA_BARKS_CHAIN_GAP` | `1.5` | seconds between the lines of an exchange, a retort's beat (the normal gap is `ARENA_VOICE_MIN_GAP`) |
 | `ARENA_BARKS_CHAIN_HUMAN_P` | `0.5` | multiplier on a chain the human's own play started (so the table doesn't feel like it gangs up) |
 
 **Backends (optional, API-billed)**

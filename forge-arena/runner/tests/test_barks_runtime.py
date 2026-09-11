@@ -408,7 +408,7 @@ class InteractionChains(_TreeCase):
 
     def test_table_loaded_and_the_banner_says_so(self):
         self.assertIsNotNone(self.r.chains)
-        self.assertEqual((self.r.chains.first_hop_p, self.r.chains.decay, self.r.chains.max_hops, self.r.chains.gap_s), (0.6, 0.5, 3, 3.5))
+        self.assertEqual((self.r.chains.first_hop_p, self.r.chains.decay, self.r.chains.max_hops, self.r.chains.gap_s), (0.6, 0.5, 3, 1.5))
         # the BarkRuntime tree has no chains.json: chains off, nothing else changes
         self.assertIsNone(vr.ChainTable.load(Path(self.tmp.name) / "nowhere"))
 
@@ -419,7 +419,7 @@ class InteractionChains(_TreeCase):
         self._spoken(1, "big-swing", ctx={"targets": [2], "aggressor": None})
         self.assertEqual(self._queued(), [("bark", "brace", "bill", 2)], "the defender braces")
         hop1 = self.r.queue[0]
-        self.assertEqual((hop1["gap"], hop1["chain"]["hop"], hop1["chain"]["origin"]), (3.5, 1, 1))
+        self.assertEqual((hop1["gap"], hop1["chain"]["hop"], hop1["chain"]["origin"]), (1.5, 1, 1))
         self.r.queue.clear()
         self._spoken(2, "brace", ctx=hop1["ctx"], chain=hop1["chain"])
         self.assertEqual(self._queued(), [("bark", "laugh", "harry", 1)], "the attacker laughs it off")
@@ -455,7 +455,7 @@ class InteractionChains(_TreeCase):
         self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
         self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
         self._spoken(1, "landed-hit", ctx={"targets": [0], "aggressor": None})   # the seat hit the HUMAN
-        self.assertEqual([(q["kind"], q["stock"], q["gap"]) for q in self.r.queue], [("quip", "ouch", 3.5)], "Joshua's stock quip, at the chain's pace")
+        self.assertEqual([(q["kind"], q["stock"], q["gap"]) for q in self.r.queue], [("quip", "ouch", 1.5)], "Joshua's stock quip, at the chain's pace")
         self.assertIsNone(self.r._chain, "nobody answers Joshua")
         self.r.queue.clear()
         self.r.after_spoken({"kind": "quip", "stock": "ouch", "text": "", "seat": None, "library": "", "ctx": {}, "chain": None})
