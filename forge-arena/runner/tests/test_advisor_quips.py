@@ -75,6 +75,27 @@ class QuipTests(unittest.TestCase):
         self.assertEqual(self._records("color")[0]["text"], "Purphoros just dealt twelve.")
         self.assertEqual(self._records("quip")[0]["with"], "color")
 
+    def test_a_window_where_an_opponent_targets_you_is_always_advised(self):
+        """Game 43: Jwari Disruption on Sheltering Ancient fell to the dice; nobody said 'Earthcraft now'."""
+        snap = {"turn": 14, "activeSeat": 0, "seats": [{"seat": 0, "battlefield": [{"name": "Earthcraft"}, {"name": "Forest"}]}],
+                "stackDetail": [{"kind": "spell", "name": "Jwari Disruption", "owner": 1, "targets": ["Sheltering Ancient (on the stack)"]},
+                                {"kind": "spell", "name": "Sheltering Ancient", "owner": 0}]}
+        self.assertEqual(ar.danger_targets(snap), ["Jwari Disruption targets Sheltering Ancient (on the stack)"])
+        snap2 = {"seats": [{"seat": 0, "battlefield": [{"name": "Earthcraft"}]}],
+                 "stackDetail": [{"name": "Beast Within", "owner": 2, "targets": ["Earthcraft"]}, {"name": "Lightning Bolt", "owner": 3, "targets": ["seat 0"]},
+                                 {"name": "Counterspell", "owner": 1, "targets": ["Rhystic Study (on the stack)"]}]}
+        self.assertEqual(ar.danger_targets(snap2), ["Beast Within targets Earthcraft", "Lightning Bolt targets you"], "an opponent countering another opponent is not your danger")
+        self.assertEqual(ar.danger_targets({"stackDetail": [{"name": "Sol Ring", "owner": 1}]}), [])
+        self.assertEqual(ar.danger_targets({}), []); self.assertEqual(ar.danger_targets(None), [])
+        # through the governor: dice at zero, budget spent — still admitted
+        self.r.RANDOM_ADMIT_P = 0.0
+        self.r._clock.last = snap
+        ok, why = self.r._admit({"decisionType": "PRIORITY", "turn": 14, "seq": 40})
+        self.assertTrue(ok); self.assertTrue(why.startswith("danger: Jwari Disruption targets"), why)
+        self.r._clock.last = {"stackDetail": []}
+        ok, why = self.r._admit({"decisionType": "PRIORITY", "turn": 14, "seq": 41})
+        self.assertEqual((ok, why), (False, "budget"), "no danger: the dice rule as before")
+
     def test_the_humans_choice_is_recorded_for_the_voice_runner(self):
         (self.r.inbox / "chosen-3.json").write_text(json.dumps({"gameId": "g1", "seq": 3, "decisionType": "PRIORITY", "chosen": "pass"}))
         self.r._process(self.r._scan())

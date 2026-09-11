@@ -205,6 +205,7 @@ class TurnClock:
 
     def __init__(self, observer_state: Path):
         self.path = observer_state
+        self.last: dict = {}          # the last snapshot read (danger detection reads its stack)
         self.active_of: dict = {}     # turn -> active seat, as observed
         self.round_of: dict = {}      # turn -> round, computed in turn order
         self._seen: set = set()       # seats active in the round being built
@@ -217,6 +218,7 @@ class TurnClock:
             d = json.loads(Path(self.path).read_text())
         except (OSError, ValueError, TypeError):
             return
+        self.last = d if isinstance(d, dict) else {}
         turn, active = d.get("turn"), d.get("activeSeat")
         if not isinstance(turn, int) or isinstance(turn, bool) or active is None or turn in self.active_of:
             return
@@ -241,6 +243,35 @@ class TurnClock:
         if r is None:
             r = self._round if (self.round_of and turn >= self._last_turn) else (turn - 1) // 4 + 1
         return f"r{r}-t{turn}"
+
+
+def danger_targets(snapshot: dict, human_seat: int = 0) -> list[str]:
+    """Opponents' stack items aimed at the human: "<spell> targets <your thing>".
+    Reads the public snapshot's stackDetail (owner, targets); a target is the
+    human's when it names their seat, one of their own stack items, or a card on
+    their battlefield. Game 43 (2026-09-10): Jwari Disruption on Sheltering
+    Ancient fell to the governor's dice and nobody said "Earthcraft now" —
+    a window like this is always advised."""
+    if not isinstance(snapshot, dict):
+        return []
+    detail = snapshot.get("stackDetail") or []
+    mine: set[str] = set()
+    for item in detail:
+        if isinstance(item, dict) and item.get("owner") == human_seat and item.get("name"):
+            mine.add(f"{item['name']} (on the stack)")
+    for seat in snapshot.get("seats") or []:
+        if isinstance(seat, dict) and seat.get("seat") == human_seat:
+            for c in seat.get("battlefield") or []:
+                if isinstance(c, dict) and c.get("name"):
+                    mine.add(c["name"])
+    out: list[str] = []
+    for item in detail:
+        if not isinstance(item, dict) or item.get("owner") in (None, human_seat):
+            continue
+        hits = [t for t in (item.get("targets") or []) if t == f"seat {human_seat}" or t in mine]
+        if hits:
+            out.append(f"{item.get('name', '?')} targets " + ", ".join(h.replace(f"seat {human_seat}", "you") for h in hits))
+    return out
 
 
 def quip_guide(state_file, log=None, prev=None) -> tuple[str, bool]:
@@ -410,6 +441,9 @@ class AdvisorRunner:
             self._gov_new_turn(turn)
         if (req.get("decisionType") or "") == "MULLIGAN":
             return True, "mulligan"
+        danger = danger_targets(self._clock.last)
+        if danger:
+            return True, "danger: " + "; ".join(danger)[:160]
         # Everything else — priority windows, combat declares, danger (opponent
         # spell on the stack), targets/X — is tied to the range: seeded dice
         # while the per-turn budget remains. No guaranteed main/combat/danger.
@@ -816,6 +850,11 @@ class AdvisorRunner:
                 self._push_context(
                     f"- turn {d.get('turn')} public log: "
                     + " | ".join((d.get("digest") or [])[-25:]))
+            if admitted[1].startswith("danger: "):
+                # the window is being advised BECAUSE an opponent aimed at the human: say so
+                self._push_context("- DANGER on the stack: " + admitted[1][len("danger: "):]
+                                   + " — advise the response now (an ability must be activated in THIS window; nothing can be activated once the spell resolves)")
+                self._record("danger", {"seq": admitted[0].get("seq"), "turn": admitted[0].get("turn"), "what": admitted[1][len("danger: "):]})
             self._advise(admitted[0])
         else:
             for d in digests:
