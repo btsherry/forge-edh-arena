@@ -171,6 +171,19 @@ class CardRuntime(_TableCase):
         got = self._barks()
         self.assertEqual([g[0] for g in got], ["combo-heliod-ballista-react"]); self.assertTrue(got[0][1].endswith("/cards"))
 
+    def test_the_advisors_commander_tag_takes_the_seats_own_commander_line(self):
+        """Game 46: the advisor tagged commander-cast for Purphoros and the generic line played beside Giada's named one."""
+        with (self.logs / "advisor-0.jsonl").open("a") as f:
+            f.write(json.dumps({"ts": 1.0, "kind": "bark", "seat": 1, "id": "commander-cast", "turn": 4, "with": "color"}) + "\n")
+            f.write(json.dumps({"ts": 1.0, "kind": "bark", "seat": 2, "id": "big-swing", "turn": 4, "with": "color"}) + "\n")
+        self.r.scan_advisor()
+        self.assertEqual([(q["stock"], q["library"]) for q in self.r.queue if q["kind"] == "bark"], [("big-swing", "bill")], "newest tag wins the one pending slot")
+        self.r.queue.clear(); self.r._roll_turn(5)
+        with (self.logs / "advisor-0.jsonl").open("a") as f:
+            f.write(json.dumps({"ts": 2.0, "kind": "bark", "seat": 1, "id": "commander-cast", "turn": 5, "with": "color"}) + "\n")
+        self.r.scan_advisor()
+        self.assertEqual([(q["stock"], q["library"]) for q in self.r.queue if q["kind"] == "bark"], [("cmd-urza-cast", "harry/cards")])
+
     def test_without_the_take_or_the_library_the_generic_line_stays(self):
         (vr.VOICES_DIR / "harry" / "cards" / "gc-rhystic-study-cast.wav").unlink()
         ev = self._prime()

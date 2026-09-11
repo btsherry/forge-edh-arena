@@ -2134,7 +2134,9 @@ class VoiceRunner:
                     seat, pid = int(r["seat"]), str(r["id"])
                 except (TypeError, ValueError):
                     continue
-                self.maybe_bark(seat, pid, turn=r.get("turn"), source="recap" if r.get("with") == "color" else "advice")
+                # the advisor's tag names no card; a commander tag can still take the seat's own commander line
+                ctx = {"targets": [], "card": self._who.get(int(seat), ""), "card_kind": "cmd"} if pid in ("commander-cast", "lost-commander") else None
+                self.maybe_bark(seat, pid, turn=r.get("turn"), source="recap" if r.get("with") == "color" else "advice", ctx=ctx)
             elif k == "chosen" and r.get("seq") is not None:
                 self.answered.add(int(r["seq"]))
 
