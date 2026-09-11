@@ -258,9 +258,120 @@
       "when": "opener for the seat whose turn just began",
       "category": "bark",
       "source": "elevenlabs-v3-2026-09-10"
+    },
+    "agree": {
+      "text": [
+        "[warmly] Well said, dear.",
+        "[softly] Mm. Yes. Just so.",
+        "[chuckles] I couldn't agree more.",
+        "[fondly] There's wisdom in that."
+      ],
+      "when": "agrees with what another seat just said",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "disagree": {
+      "text": [
+        "[gently] Oh, I don't think so, dear.",
+        "[chuckles] Hardly.",
+        "[softly] We see it differently.",
+        "[mischievously] Sweet, but no."
+      ],
+      "when": "disagrees with what another seat just said",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "scoff": {
+      "text": [
+        "[chuckles] Oh, really?",
+        "[mischievously] Someone's feeling clever.",
+        "[softly] Was that meant to sting?",
+        "[gently] Bless your heart."
+      ],
+      "when": "brushes off a boast, a counter or a removal aimed at it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "clapback": {
+      "text": [
+        "[chuckles] Oh, hush, dear.",
+        "[mischievously] Jealousy is so unbecoming.",
+        "[gently] Mind your own garden.",
+        "[warmly] Sticks and stones, love."
+      ],
+      "when": "answers a taunt or a call-out aimed at it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "brace": {
+      "text": [
+        "[gently] Come on, then, dear.",
+        "[softly] I'm ready.",
+        "[chuckles] Oh, you've decided on me.",
+        "[warmly] Do your worst, love."
+      ],
+      "when": "faces an attack just declared at it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "pile-on": {
+      "text": [
+        "[chuckles] Oh, dear. Oh, dear.",
+        "[mischievously] Well, that's what happens.",
+        "[softly] Someone had it coming.",
+        "[warmly] We did warn you."
+      ],
+      "when": "joins in against whoever just got hit, countered or called out",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "sympathy": {
+      "text": [
+        "[gently] Oh, poor dear.",
+        "[softly] There, there.",
+        "[warmly] You'll recover, love.",
+        "[sighs] That was unkind of them."
+      ],
+      "when": "consoles whoever just suffered",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "laugh": {
+      "text": [
+        "[laughs softly] Oh my.",
+        "[laughs softly] Goodness me.",
+        "[chuckles] Oh, you two.",
+        "[laughs softly] Ha! Marvellous."
+      ],
+      "when": "just laughs at what happened or was said",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "last-word": {
+      "text": [
+        "[warmly] Anyway, dears.",
+        "[gently] Shall we play on?",
+        "[softly] Enough of that.",
+        "[chuckles] Right. Where were we?"
+      ],
+      "when": "closes an exchange",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "gg": {
+      "text": [
+        "[warmly] Well played, dear.",
+        "[softly] Congratulations.",
+        "[fondly] A lovely game.",
+        "[warmly] Good game, all."
+      ],
+      "when": "congratulates the winner",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
     }
   },
   "sources": {
-    "elevenlabs-v3-2026-09-10": "seat-bark library 'lily' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10"
+    "elevenlabs-v3-2026-09-10": "seat-bark library 'lily' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
+    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py"
   }
 }

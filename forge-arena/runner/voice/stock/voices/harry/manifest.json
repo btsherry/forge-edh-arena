@@ -258,9 +258,120 @@
       "when": "opener for the seat whose turn just began",
       "category": "bark",
       "source": "elevenlabs-v3-2026-09-10"
+    },
+    "agree": {
+      "text": [
+        "[excited] Exactly! What he said!",
+        "[laughs] Yes! Finally, someone gets it!",
+        "[shouting] Damn right!",
+        "[smug] Told you. Told all of you."
+      ],
+      "when": "agrees with what another seat just said",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "disagree": {
+      "text": [
+        "[scoffs] Yeah, no.",
+        "[angry] You're wrong, and loud about it!",
+        "[laughs] Not a chance.",
+        "[shouting] Nonsense!"
+      ],
+      "when": "disagrees with what another seat just said",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "scoff": {
+      "text": [
+        "[scoffs] Oh, please.",
+        "[laughs] That's it? That's your move?",
+        "[angry] Cute. Real cute.",
+        "[mischievously] Somebody's proud of themselves."
+      ],
+      "when": "brushes off a boast, a counter or a removal aimed at it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "clapback": {
+      "text": [
+        "[angry] Say that to my face!",
+        "[laughs] Big words! Back them up!",
+        "[shouting] Come get some, then!",
+        "[smug] Talk's cheap. Swing."
+      ],
+      "when": "answers a taunt or a call-out aimed at it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "brace": {
+      "text": [
+        "[shouting] Bring it!",
+        "[excited] Finally! A real fight!",
+        "[laughs] Is that all of them?",
+        "[angry] You'll regret this!"
+      ],
+      "when": "faces an attack just declared at it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "pile-on": {
+      "text": [
+        "[laughs] Ha! Get 'em!",
+        "[excited] Oh, that's gotta sting!",
+        "[mischievously] Somebody's having a bad day.",
+        "[shouting] Again! Do it again!"
+      ],
+      "when": "joins in against whoever just got hit, countered or called out",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "sympathy": {
+      "text": [
+        "[scoffs] Rough. Walk it off.",
+        "[laughs] Ouch. Glad it wasn't me.",
+        "[smug] Better you than me.",
+        "[sighs] Yeah, that one hurt to watch."
+      ],
+      "when": "consoles whoever just suffered",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "laugh": {
+      "text": [
+        "[laughs] Ha! Ha ha!",
+        "[laughs] Oh, that's good!",
+        "[laughs] Ha! Brilliant!",
+        "[laughs] I love this table!"
+      ],
+      "when": "just laughs at what happened or was said",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "last-word": {
+      "text": [
+        "[smug] Anyway. Where were we?",
+        "[scoffs] Whatever.",
+        "[laughs] Enough talk!",
+        "[calmly] Moving on."
+      ],
+      "when": "closes an exchange",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "gg": {
+      "text": [
+        "[sighs] Fine. Good game.",
+        "[scoffs] You got lucky. Good game.",
+        "[laughs] Alright, alright. Well played.",
+        "[angry] Next time!"
+      ],
+      "when": "congratulates the winner",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
     }
   },
   "sources": {
-    "elevenlabs-v3-2026-09-10": "seat-bark library 'harry' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10"
+    "elevenlabs-v3-2026-09-10": "seat-bark library 'harry' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
+    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py"
   }
 }

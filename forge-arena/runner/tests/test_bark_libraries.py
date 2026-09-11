@@ -36,7 +36,9 @@ class SharedVocabulary(unittest.TestCase):
             self.assertEqual(m["schema"], "arena.voice-stock/1")
             self.assertEqual(m["library"], lib)
             these = list(m["phrases"])
-            self.assertEqual(len(these), 21, lib)
+            self.assertEqual(len(these), 31, f"{lib}: 21 barks + 10 reply atoms")
+            self.assertEqual(sum(1 for ph in m["phrases"].values() if ph.get("category") == "bark"), 21, lib)
+            self.assertEqual(sum(1 for ph in m["phrases"].values() if ph.get("category") == "reply"), 10, lib)
             if ids is None:
                 ids = these
             self.assertEqual(these, ids, f"{lib} must share the vocabulary, in the same order")
@@ -50,6 +52,21 @@ class SharedVocabulary(unittest.TestCase):
                     self.assertLessEqual(len(t.split("]", 1)[1].split()), 10, f"{lib}/{pid}: keep it under ~2.5 s: {t!r}")
         self.assertIn("my-turn", ids)
         self.assertIn("eliminated", ids)
+        self.assertIn("clapback", ids)
+
+    def test_chain_table_is_consistent_with_the_vocabulary(self):
+        table = json.loads((VOICES / "chains.json").read_text())
+        ids = set(load("harry")["phrases"])
+        roles = {"target", "aggressor", "bystander", "leader", "origin"}
+        for opener, opts in table["invites"].items():
+            self.assertIn(opener, ids, f"chains.json invites from an unknown line {opener!r}")
+            for o in opts:
+                self.assertIn(o["role"], roles, o); self.assertIn(o["reply"], ids, o)
+        joshua = json.loads((RUNNER / "voice" / "stock" / "manifest.json").read_text())["phrases"]
+        for k, v in table["joshua_replies"].items():
+            if k != "note":
+                self.assertIn(v, joshua, f"Joshua's reply {v!r} is not a stock quip")
+        self.assertTrue(0 < table["first_hop_p"] <= 1 and 0 < table["decay"] <= 1 and table["max_hops"] >= 1)
 
     def test_seats_voices_and_render_settings(self):
         seats = set()

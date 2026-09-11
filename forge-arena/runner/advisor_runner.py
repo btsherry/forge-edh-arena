@@ -322,13 +322,13 @@ class AdvisorRunner:
         self._voice_state = base / "seat-0-voice" / "state.json"
         # seat barks: the voices at the table (from the stock libraries) and the knob
         self._barks_mode = os.environ.get("ARENA_BARKS", "some").lower()
-        try:
-            from voice_runner import load_seat_libraries
-            self._seat_voices = load_seat_libraries()
-        except Exception:  # noqa: BLE001 — the voice runner is optional
-            self._seat_voices = {}
         roster = (os.environ.get("ARENA_SEAT_DECKS", "").split() or DEFAULT_TABLE.split())
         self._seat_decks = {i + 1: slug for i, slug in enumerate(table_opponents(deck, roster))}
+        try:
+            from voice_runner import load_seat_libraries
+            self._seat_voices = load_seat_libraries(seat_decks=self._seat_decks)   # by deck (voices/assign.json), same as the voice runner
+        except Exception:  # noqa: BLE001 — the voice runner is optional
+            self._seat_voices = {}
         self._bark_guide_text = bark_guide(self._seat_voices, self._barks_mode, self._seat_decks)   # advice windows
         self._clock = TurnClock(base / "observer-state.json")
         self._voice_live = None

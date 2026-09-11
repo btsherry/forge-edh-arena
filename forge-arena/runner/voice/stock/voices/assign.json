@@ -1,0 +1,9 @@
+{
+  "schema": "arena.voice-assign/1",
+  "note": "Ben, 2026-09-10: which voice a deck gets. A deck not listed takes a free library in seat order; two listed decks wanting the same voice: the lower seat keeps it.",
+  "by_deck": {
+    "purphoros-god-of-the-forge": "harry",
+    "urza-lord-high-artificer": "bill",
+    "giada-font-of-hope": "lily"
+  }
+}

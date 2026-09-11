@@ -1,0 +1,295 @@
+{
+  "schema": "arena.voice-chains/1",
+  "note": "Interaction chains (Ben, 2026-09-10): a spoken line invites replies from ROLES, each reply an atom from the replier's own library. The runner composes: opener -> hop 1 -> hop 2 ..., one line at a time, rolling first_hop_p * decay^(hop-1); a chain dies at max_hops or when the turn changes. Roles: target = the seat(s) the opener addressed (from the event), aggressor = the seat that caused the opener's grief, bystander = another voiced seat, leader = the highest-life other seat, origin = the chain's first speaker (hops >= 2). Nobody replies to themselves; nobody says the same line twice in a turn.",
+  "first_hop_p": 0.6,
+  "decay": 0.5,
+  "max_hops": 3,
+  "gap_s": 3.5,
+  "human_trigger_mult": 0.5,
+  "invites": {
+    "big-swing": [
+      {
+        "role": "target",
+        "reply": "brace"
+      },
+      {
+        "role": "bystander",
+        "reply": "laugh"
+      }
+    ],
+    "landed-hit": [
+      {
+        "role": "target",
+        "reply": "scoff"
+      },
+      {
+        "role": "bystander",
+        "reply": "pile-on"
+      }
+    ],
+    "that-hurt": [
+      {
+        "role": "aggressor",
+        "reply": "laugh"
+      },
+      {
+        "role": "bystander",
+        "reply": "sympathy"
+      },
+      {
+        "role": "bystander",
+        "reply": "pile-on"
+      }
+    ],
+    "counter": [
+      {
+        "role": "target",
+        "reply": "scoff"
+      },
+      {
+        "role": "bystander",
+        "reply": "laugh"
+      }
+    ],
+    "got-countered": [
+      {
+        "role": "aggressor",
+        "reply": "laugh"
+      },
+      {
+        "role": "bystander",
+        "reply": "pile-on"
+      },
+      {
+        "role": "bystander",
+        "reply": "sympathy"
+      }
+    ],
+    "removal": [
+      {
+        "role": "bystander",
+        "reply": "agree"
+      },
+      {
+        "role": "bystander",
+        "reply": "scoff"
+      }
+    ],
+    "sweep": [
+      {
+        "role": "bystander",
+        "reply": "disagree"
+      },
+      {
+        "role": "bystander",
+        "reply": "scoff"
+      }
+    ],
+    "got-swept": [
+      {
+        "role": "bystander",
+        "reply": "sympathy"
+      },
+      {
+        "role": "aggressor",
+        "reply": "laugh"
+      }
+    ],
+    "kill": [
+      {
+        "role": "bystander",
+        "reply": "pile-on"
+      },
+      {
+        "role": "bystander",
+        "reply": "agree"
+      }
+    ],
+    "win": [
+      {
+        "role": "bystander",
+        "reply": "gg"
+      }
+    ],
+    "taunt": [
+      {
+        "role": "leader",
+        "reply": "clapback"
+      },
+      {
+        "role": "bystander",
+        "reply": "agree"
+      }
+    ],
+    "archenemy": [
+      {
+        "role": "leader",
+        "reply": "clapback"
+      },
+      {
+        "role": "bystander",
+        "reply": "agree"
+      }
+    ],
+    "respect": [
+      {
+        "role": "bystander",
+        "reply": "agree"
+      },
+      {
+        "role": "bystander",
+        "reply": "disagree"
+      }
+    ],
+    "engine-online": [
+      {
+        "role": "bystander",
+        "reply": "scoff"
+      },
+      {
+        "role": "bystander",
+        "reply": "disagree"
+      }
+    ],
+    "big-mana": [
+      {
+        "role": "bystander",
+        "reply": "scoff"
+      }
+    ],
+    "commander-cast": [
+      {
+        "role": "bystander",
+        "reply": "scoff"
+      },
+      {
+        "role": "bystander",
+        "reply": "brace"
+      }
+    ],
+    "lost-commander": [
+      {
+        "role": "bystander",
+        "reply": "sympathy"
+      },
+      {
+        "role": "bystander",
+        "reply": "laugh"
+      }
+    ],
+    "low-life": [
+      {
+        "role": "bystander",
+        "reply": "pile-on"
+      },
+      {
+        "role": "bystander",
+        "reply": "sympathy"
+      }
+    ],
+    "eliminated": [
+      {
+        "role": "bystander",
+        "reply": "gg"
+      },
+      {
+        "role": "bystander",
+        "reply": "sympathy"
+      }
+    ],
+    "slow-turn": [
+      {
+        "role": "bystander",
+        "reply": "scoff"
+      }
+    ],
+    "my-turn": [
+      {
+        "role": "bystander",
+        "reply": "scoff"
+      }
+    ],
+    "agree": [
+      {
+        "role": "origin",
+        "reply": "last-word"
+      }
+    ],
+    "disagree": [
+      {
+        "role": "origin",
+        "reply": "clapback"
+      },
+      {
+        "role": "bystander",
+        "reply": "laugh"
+      }
+    ],
+    "scoff": [
+      {
+        "role": "origin",
+        "reply": "last-word"
+      },
+      {
+        "role": "origin",
+        "reply": "laugh"
+      }
+    ],
+    "clapback": [
+      {
+        "role": "origin",
+        "reply": "laugh"
+      },
+      {
+        "role": "origin",
+        "reply": "last-word"
+      }
+    ],
+    "brace": [
+      {
+        "role": "origin",
+        "reply": "laugh"
+      }
+    ],
+    "pile-on": [
+      {
+        "role": "target",
+        "reply": "clapback"
+      },
+      {
+        "role": "origin",
+        "reply": "laugh"
+      }
+    ],
+    "sympathy": [
+      {
+        "role": "origin",
+        "reply": "last-word"
+      }
+    ],
+    "laugh": [
+      {
+        "role": "target",
+        "reply": "clapback"
+      },
+      {
+        "role": "origin",
+        "reply": "last-word"
+      }
+    ],
+    "last-word": [],
+    "gg": [
+      {
+        "role": "origin",
+        "reply": "last-word"
+      }
+    ]
+  },
+  "joshua_replies": {
+    "note": "Joshua is the human's advisor, not a player: he may needle a seat over what it did to the HUMAN (the opener's target is seat 0), with a stock quip; the seats never answer him.",
+    "counter": "rough-counter",
+    "landed-hit": "ouch",
+    "big-swing": "calm-before-engagement",
+    "kill": "harsh-player"
+  }
+}

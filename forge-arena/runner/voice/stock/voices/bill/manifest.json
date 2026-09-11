@@ -258,9 +258,120 @@
       "when": "opener for the seat whose turn just began",
       "category": "bark",
       "source": "elevenlabs-v3-2026-09-10"
+    },
+    "agree": {
+      "text": [
+        "[calmly] Quite right.",
+        "[dryly] Correct, for once.",
+        "[chuckles] I concur.",
+        "[calmly] Precisely my assessment."
+      ],
+      "when": "agrees with what another seat just said",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "disagree": {
+      "text": [
+        "[dryly] I think not.",
+        "[calmly] The evidence says otherwise.",
+        "[sarcastic] A bold theory.",
+        "[dryly] No. Next."
+      ],
+      "when": "disagrees with what another seat just said",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "scoff": {
+      "text": [
+        "[sarcastic] Oh, bravo.",
+        "[dryly] How very brave.",
+        "[chuckles] Adorable.",
+        "[calmly] Noted. Unimpressed."
+      ],
+      "when": "brushes off a boast, a counter or a removal aimed at it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "clapback": {
+      "text": [
+        "[dryly] Bold talk. Let's see the play.",
+        "[calmly] Focus on your own board.",
+        "[sarcastic] Thank you for the attention.",
+        "[chuckles] Envy is a poor strategy."
+      ],
+      "when": "answers a taunt or a call-out aimed at it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "brace": {
+      "text": [
+        "[calmly] Come along, then.",
+        "[dryly] Predictable. Proceed.",
+        "[calmly] I have accounted for this.",
+        "[sighs] Very well."
+      ],
+      "when": "faces an attack just declared at it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "pile-on": {
+      "text": [
+        "[dryly] Deserved, I'd say.",
+        "[chuckles] The table agrees.",
+        "[calmly] A fair correction.",
+        "[sarcastic] My sympathies. Truly."
+      ],
+      "when": "joins in against whoever just got hit, countered or called out",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "sympathy": {
+      "text": [
+        "[calmly] Unfortunate.",
+        "[dryly] My condolences.",
+        "[sighs] That was harsh.",
+        "[calmly] It happens to the best of us."
+      ],
+      "when": "consoles whoever just suffered",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "laugh": {
+      "text": [
+        "[chuckles] Heh.",
+        "[chuckles] Oh, that's rich.",
+        "[chuckles] Ha. Indeed.",
+        "[chuckles] Delightful."
+      ],
+      "when": "just laughs at what happened or was said",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "last-word": {
+      "text": [
+        "[calmly] Anyway.",
+        "[dryly] Shall we continue?",
+        "[calmly] Moving on.",
+        "[sighs] Enough."
+      ],
+      "when": "closes an exchange",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "gg": {
+      "text": [
+        "[calmly] Well played.",
+        "[dryly] Congratulations, I suppose.",
+        "[calmly] A deserved win.",
+        "[chuckles] Good game."
+      ],
+      "when": "congratulates the winner",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-replies"
     }
   },
   "sources": {
-    "elevenlabs-v3-2026-09-10": "seat-bark library 'bill' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10"
+    "elevenlabs-v3-2026-09-10": "seat-bark library 'bill' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
+    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py"
   }
 }

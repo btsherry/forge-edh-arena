@@ -70,6 +70,11 @@ KNOBS = {
         ("ARENA_BARKS_SWING", "6", "total attacking power that earns an instant 'big swing' (or three attackers)"),
         ("ARENA_BARKS_HIT", "8", "damage to a player in one step that earns an instant reaction"),
         ("ARENA_BARKS_COOLDOWN", "10", "seconds before the same seat speaks again (a guard, not a pacing knob)"),
+        ("ARENA_BARKS_CHAIN_P", "0.6", "interaction chains: chance a spoken line gets a reply (the first hop)"),
+        ("ARENA_BARKS_CHAIN_DECAY", "0.5", "each further hop multiplies the chance by this"),
+        ("ARENA_BARKS_CHAIN_MAX", "3", "most hops in one exchange (reply, counter-reply, last word)"),
+        ("ARENA_BARKS_CHAIN_GAP", "3.5", "seconds between the lines of an exchange (the normal gap is ARENA_VOICE_MIN_GAP)"),
+        ("ARENA_BARKS_CHAIN_HUMAN_P", "0.5", "multiplier on a chain the human's own play started (so the table doesn't feel like it gangs up)"),
     ],
     "backends (optional, API-billed)": [
         ("OPENROUTER_API_KEY", "", "needed by or/ seats"),

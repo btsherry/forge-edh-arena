@@ -50,25 +50,41 @@ class Clock:
         return self.t
 
 
-class BarkRuntime(unittest.TestCase):
+REPLIES = ("agree", "disagree", "scoff", "clapback", "brace", "pile-on", "sympathy", "laugh", "last-word", "gg")
+REAL_CHAINS = Path(__file__).resolve().parents[1] / "voice" / "stock" / "voices" / "chains.json"
+
+
+def build_tree(base: Path, chains: bool = False):
+    """A synthetic stock tree: Joshua with four "your move" wordings and the quips
+    the chain table names, two seat libraries (seat 3 has none), optionally the
+    REAL chains.json so the tests exercise the shipped table."""
+    stock = base / "stock"; voices = stock / "voices"
+    (stock / "sfx").mkdir(parents=True)
+    (stock / "manifest.json").write_text(json.dumps({"schema": "arena.voice-stock/1", "phrases": {
+        "your-move": {"text": ["Your move.", "b", "c", "d"]}, "player-eliminated": {"text": "x"}, "startup": {"text": "s"}}, "sfx": []}))
+    for n in ("your-move", "your-move-2", "your-move-3", "your-move-4", "player-eliminated", "startup", "your-move-creep",
+              "rough-counter", "ouch", "calm-before-engagement", "harsh-player"):
+        (stock / f"{n}.wav").write_bytes(silent_wav())
+    for lib, seat, name in (("harry", 1, "Harry - Fierce Warrior"), ("bill", 2, "Bill - Wise, Mature, Balanced")):
+        d = voices / lib; d.mkdir(parents=True)
+        (d / "manifest.json").write_text(json.dumps({"schema": "arena.voice-stock/1", "library": lib, "seat": seat,
+                                                     "voice_name": name, "temperament": f"{lib} temper", "phrases": {}}))
+        for n in LINES + REPLIES + ("big-swing-2", "big-swing-3", "big-swing-4"):
+            (d / f"{n}.wav").write_bytes(silent_wav())
+    if chains:
+        (voices / "chains.json").write_text(REAL_CHAINS.read_text())
+    return stock, voices
+
+
+class _TreeCase(unittest.TestCase):
+    CHAINS = False
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         base = Path(self.tmp.name)
         self.logs, self.mailbox = base / "logs", base / "mailbox"
         self.logs.mkdir(); self.mailbox.mkdir()
-        # a synthetic stock tree: Joshua with four "your move" wordings, two seat libraries (seat 3 has none)
-        stock = base / "stock"; voices = stock / "voices"
-        (stock / "sfx").mkdir(parents=True)
-        (stock / "manifest.json").write_text(json.dumps({"schema": "arena.voice-stock/1", "phrases": {
-            "your-move": {"text": ["Your move.", "b", "c", "d"]}, "player-eliminated": {"text": "x"}, "startup": {"text": "s"}}, "sfx": []}))
-        for n in ("your-move", "your-move-2", "your-move-3", "your-move-4", "player-eliminated", "startup", "your-move-creep"):
-            (stock / f"{n}.wav").write_bytes(silent_wav())
-        for lib, seat, name in (("harry", 1, "Harry - Fierce Warrior"), ("bill", 2, "Bill - Wise, Mature, Balanced")):
-            d = voices / lib; d.mkdir(parents=True)
-            (d / "manifest.json").write_text(json.dumps({"schema": "arena.voice-stock/1", "library": lib, "seat": seat,
-                                                         "voice_name": name, "temperament": f"{lib} temper", "phrases": {}}))
-            for n in LINES + ("big-swing-2", "big-swing-3", "big-swing-4"):
-                (d / f"{n}.wav").write_bytes(silent_wav())
+        stock, voices = build_tree(base, chains=self.CHAINS)
         self._stock, self._voices = vr.STOCK, vr.VOICES_DIR
         vr.STOCK, vr.VOICES_DIR = stock, voices
         self._env = dict(os.environ)
@@ -115,12 +131,46 @@ class BarkRuntime(unittest.TestCase):
     def _queued(self):
         return [(q["kind"], q["stock"], q.get("library") or "", q.get("seat")) for q in self.r.queue]
 
+
+
+class BarkRuntime(_TreeCase):
     # ---- libraries + shuffle bag
     def test_seat_libraries_are_read_from_the_manifests(self):
         self.assertEqual({k: v["library"] for k, v in self.r.seat_libraries.items()}, {1: "harry", 2: "bill"})
         self.assertEqual(self.r.seat_libraries[1]["voice"], "Harry")
         self.assertEqual(self.r.library_for_seat(3), "", "no library, no bark")
         self.assertEqual(vr.load_seat_libraries(Path(self.tmp.name) / "nowhere"), {})
+
+    def test_voices_follow_the_decks_with_seat_order_as_fallback(self):
+        libs = vr.load_libraries()
+        self.assertEqual(sorted(libs), ["bill", "harry"])
+        prefs = {"purphoros-god-of-the-forge": "harry", "urza-lord-high-artificer": "bill", "giada-font-of-hope": "lily"}
+        # Purphoros in seat 2 takes Harry; Urza in seat 1 takes Bill — the seat numbers no longer decide
+        got = vr.assign_voices(libs, {1: "urza-lord-high-artificer", 2: "purphoros-god-of-the-forge", 3: "selvala-heart-of-the-wilds"}, prefs)
+        self.assertEqual({k: v["library"] for k, v in got.items()}, {1: "bill", 2: "harry"}, "Lily has no library here; Selvala gets nothing")
+        # an unlisted deck takes a free library in seat order
+        got = vr.assign_voices(libs, {1: "sheoldreds-sacrifice", 2: "purphoros-god-of-the-forge", 3: "sythis-harvests-hand"}, prefs)
+        self.assertEqual({k: v["library"] for k, v in got.items()}, {2: "harry", 1: "bill"})
+        # no table knowledge: default seats
+        self.assertEqual({k: v["library"] for k, v in vr.assign_voices(libs, None, prefs).items()}, {1: "harry", 2: "bill"})
+        # a clash: two decks wanting Harry — the lower seat keeps it, the other takes what is free
+        got = vr.assign_voices(libs, {1: "purphoros-god-of-the-forge", 2: "purphoros-god-of-the-forge"}, prefs)
+        self.assertEqual({k: v["library"] for k, v in got.items()}, {1: "harry", 2: "bill"})
+        self.assertEqual(vr.assign_voices({}, {1: "x"}, prefs), {})
+
+    def test_the_runner_learns_the_table_from_the_game_log_and_reseats_the_voices(self):
+        (self.logs / "game.jsonl").write_text("\n".join(json.dumps(r) for r in (
+            {"seat": 1, "deck": "giada-font-of-hope", "type": "MULLIGAN"},
+            {"seat": 2, "deck": "purphoros-god-of-the-forge", "type": "MULLIGAN"},
+            {"seat": 3, "deck": "urza-lord-high-artificer", "type": "MULLIGAN"},
+            {"seat": 0, "deck": "selvala-heart-of-the-wilds", "type": "MULLIGAN"})) + "\n")
+        (Path(vr.VOICES_DIR) / "assign.json").write_text(json.dumps({"by_deck": {"purphoros-god-of-the-forge": "harry", "urza-lord-high-artificer": "bill", "giada-font-of-hope": "lily"}}))
+        self.assertEqual({k: v["library"] for k, v in self.r.seat_libraries.items()}, {1: "harry", 2: "bill"}, "before the log: default seats")
+        self.r.learn_table()
+        self.assertEqual(vr.seat_decks_from_game_log(self.logs / "game.jsonl")[2], "purphoros-god-of-the-forge")
+        self.assertEqual({k: v["library"] for k, v in self.r.seat_libraries.items()}, {2: "harry", 3: "bill"},
+                         "Purphoros (seat 2) is Harry, Urza (seat 3) is Bill; Giada would be Lily but this tree has no Lily")
+        self.assertEqual(self.r.library_for_seat(1), "", "Giada's seat has no voice in this tree")
 
     def test_shuffle_bag_plays_every_wording_before_repeating_and_never_twice_running(self):
         picks = [self.r.renderer.stock("your-move").name for _ in range(12)]
@@ -339,6 +389,107 @@ class BarkRuntime(unittest.TestCase):
         os.environ["ARENA_BARKS"] = "bogus"; os.environ["ARENA_VOICE_YOUR_MOVE"] = "bogus"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
         self.assertEqual((r.barks_mode, r.your_move_mode), ("some", "some"))
+
+
+class InteractionChains(_TreeCase):
+    """chains.py + the shipped chains.json: a spoken line invites a reply from a
+    role; hops decay and cap; the conversational gap is shorter; the turn ends
+    an exchange; Joshua comments from outside and is never answered."""
+    CHAINS = True
+
+    def _spoken(self, seat, pid, ctx=None, chain=None):
+        lib = self.r.library_for_seat(seat)
+        item = {"kind": "bark", "stock": pid, "text": "", "seat": seat, "library": lib, "ctx": ctx or {}, "chain": chain}
+        self.r._roll_turn(3)
+        self.r.after_spoken(item)
+
+    def test_table_loaded_and_the_banner_says_so(self):
+        self.assertIsNotNone(self.r.chains)
+        self.assertEqual((self.r.chains.first_hop_p, self.r.chains.decay, self.r.chains.max_hops, self.r.chains.gap_s), (0.6, 0.5, 3, 3.5))
+        # the BarkRuntime tree has no chains.json: chains off, nothing else changes
+        self.assertIsNone(vr.ChainTable.load(Path(self.tmp.name) / "nowhere"))
+
+    def test_attack_then_brace_then_laugh_then_clapback_then_silence(self):
+        self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
+        self.r.rng.random = lambda: 0.01                                    # every roll succeeds
+        self.r.rng.shuffle = lambda x: None                                  # table order: target first
+        self._spoken(1, "big-swing", ctx={"targets": [2], "aggressor": None})
+        self.assertEqual(self._queued(), [("bark", "brace", "bill", 2)], "the defender braces")
+        hop1 = self.r.queue[0]
+        self.assertEqual((hop1["gap"], hop1["chain"]["hop"], hop1["chain"]["origin"]), (3.5, 1, 1))
+        self.r.queue.clear()
+        self._spoken(2, "brace", ctx=hop1["ctx"], chain=hop1["chain"])
+        self.assertEqual(self._queued(), [("bark", "laugh", "harry", 1)], "the attacker laughs it off")
+        hop2 = self.r.queue[0]; self.assertEqual(hop2["chain"]["hop"], 2); self.r.queue.clear()
+        self._spoken(1, "laugh", ctx=hop2["ctx"], chain=hop2["chain"])
+        self.assertEqual(self._queued(), [("bark", "clapback", "bill", 2)], "the target claps back")
+        hop3 = self.r.queue[0]; self.assertEqual(hop3["chain"]["hop"], 3); self.r.queue.clear()
+        self._spoken(2, "clapback", ctx=hop3["ctx"], chain=hop3["chain"])
+        self.assertEqual(self._queued(), [], "max_hops reached: the exchange is over")
+        srcs = [r for r in self._records("queued", "bark") if r.get("source") == "chain"]
+        self.assertEqual([r["hop"] for r in srcs], [1, 2, 3]); self.assertEqual(srcs[0]["parent"], "big-swing")
+
+    def test_dice_and_decay_are_recorded_and_a_new_turn_ends_the_exchange(self):
+        self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
+        self.r.rng.shuffle = lambda x: None
+        self.r.rng.random = lambda: 0.7                                     # >= 0.6: no reply
+        self._spoken(1, "big-swing", ctx={"targets": [2]})
+        self.assertEqual(self._queued(), [])
+        self.assertIn("dice (chain hop 1, p=0.60)", self._records("skipped", "bark")[-1]["why"])
+        self.r.rng.random = lambda: 0.4                                     # < 0.6 but >= 0.3 (hop 2)
+        self._spoken(1, "big-swing", ctx={"targets": [2]})
+        link = self.r.queue[0]["chain"]; self.r.queue.clear()
+        self._spoken(2, "brace", ctx={"targets": [1]}, chain=link)
+        self.assertEqual(self._queued(), []); self.assertIn("p=0.30", self._records("skipped", "bark")[-1]["why"])
+        self.r.rng.random = lambda: 0.01
+        self.r._roll_turn(4)                                                # new turn: 'brace' may be said again
+        self.r.after_spoken({"kind": "bark", "stock": "big-swing", "text": "", "seat": 1, "library": "harry", "ctx": {"targets": [2]}, "chain": None})
+        self.assertIsNotNone(self.r._chain)
+        self.r._roll_turn(5)
+        self.assertIsNone(self.r._chain, "a new turn ends any exchange")
+
+    def test_joshua_comments_from_outside_and_is_never_answered(self):
+        self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
+        self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
+        self._spoken(1, "landed-hit", ctx={"targets": [0], "aggressor": None})   # the seat hit the HUMAN
+        self.assertEqual([(q["kind"], q["stock"], q["gap"]) for q in self.r.queue], [("quip", "ouch", 3.5)], "Joshua's stock quip, at the chain's pace")
+        self.assertIsNone(self.r._chain, "nobody answers Joshua")
+        self.r.queue.clear()
+        self.r.after_spoken({"kind": "quip", "stock": "ouch", "text": "", "seat": None, "library": "", "ctx": {}, "chain": None})
+        self.assertEqual(self.r.queue, [], "the seats ignore Joshua")
+        self.r.rng.random = lambda: 0.01
+        self._spoken(1, "counter", ctx={"targets": [0]})
+        self.assertEqual([(q["kind"], q["stock"]) for q in self.r.queue], [("quip", "rough-counter")])
+
+    def test_human_caused_openers_run_at_half_strength_and_nobody_repeats_or_answers_themselves(self):
+        self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
+        self.r.rng.shuffle = lambda x: None
+        self.r.rng.random = lambda: 0.35                                    # < 0.6 but >= 0.3
+        self._spoken(2, "got-countered", ctx={"targets": [], "aggressor": 0, "human_cause": True})
+        self.assertEqual(self._queued(), [], "the human countered Bill: a pile-on is half as likely")
+        self.assertIn("p=0.30", self._records("skipped", "bark")[-1]["why"])
+        self.r.rng.random = lambda: 0.01
+        self._spoken(2, "got-countered", ctx={"targets": [], "aggressor": 0, "human_cause": True})
+        self.assertEqual(self._queued(), [("bark", "pile-on", "harry", 1)], "the aggressor is the human (no voice): the bystander piles on")
+        self.r.queue.clear()
+        # the reply is now 'said this turn' for Harry: the same exchange cannot recycle it
+        self._spoken(2, "got-countered", ctx={"targets": [], "aggressor": 0})
+        self.assertEqual(self._queued(), [("bark", "sympathy", "harry", 1)], "pile-on was said; the next option is used")
+
+    def test_leader_role_answers_a_taunt(self):
+        seats = [{"seat": i, "name": f"s{i}", "eliminated": False, "life": life} for i, life in enumerate((40, 12, 33, 20))]
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 3, "activeSeat": 1, "seats": seats, "events": []}))
+        self.r.scan_observer(); self.r.queue.clear()
+        self.assertEqual(self.r.leader_of(1), 2, "the highest-life seat other than the speaker and the human")
+        self.assertEqual(self.r.leader_of(2), 3, "leader is factual even when that seat has no voice (then nobody claps back)")
+        self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
+        self._spoken(1, "taunt")
+        self.assertEqual(self._queued(), [("bark", "clapback", "bill", 2)])
+
+    def test_chains_off_with_barks_off(self):
+        self.r.barks_mode = "off"
+        self._spoken(1, "big-swing", ctx={"targets": [2]})
+        self.assertEqual(self.r.queue, [])
 
 
 if __name__ == "__main__":
