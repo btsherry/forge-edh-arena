@@ -105,6 +105,29 @@ class TableLibraries(unittest.TestCase):
         self.assertEqual(vr.who_for_deck(json.loads((REAL_VOICES / "address.json").read_text()), "urza-lord-high-artificer"), "urza")
 
 
+class RenderedTable(unittest.TestCase):
+    """Every table wording of every voice is a baked take in the runner's format (22.05 kHz
+    mono 16-bit, under six seconds), with its dry take kept for re-bakes."""
+
+    def test_every_table_wording_is_a_baked_wav(self):
+        import wave
+        for lib in LIBS:
+            m = real_table(lib)
+            n = 0
+            for pid, ph in m["phrases"].items():
+                for i, text in enumerate(ph["text"], 1):
+                    stem = pid if i == 1 else f"{pid}-{i}"
+                    f = REAL_VOICES / lib / "table" / f"{stem}.wav"
+                    self.assertTrue(f.exists(), f"{lib}/table/{stem}.wav missing for {text!r}")
+                    with wave.open(str(f)) as w:
+                        self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 22050), f"{lib}/table/{stem}")
+                        secs = w.getnframes() / w.getframerate()
+                        self.assertTrue(0.4 <= secs <= 6.0, f"{lib}/table/{stem}: {secs:.1f}s")
+                    self.assertTrue((REAL_VOICES / lib / "table" / "raw" / f"{stem}.wav").exists(), f"{lib}/table/raw/{stem}.wav")
+                    n += 1
+            self.assertEqual(n, 290, lib)
+
+
 class _TableCase(_TreeCase):
     """The synthetic tree plus a table sub-library per voice (the REAL ids, silent
     takes) and the real address table; the table is Giada (human) / Urza (harry) /
