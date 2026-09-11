@@ -943,7 +943,7 @@ class VoiceRunner:
             return                                       # Joshua spoke: the seats ignore him
         turn = self._said_turn
         chain = item.get("chain") if item.get("chain") and item["chain"].get("turn") == turn else None
-        voiced = {int(k): v["library"] for k, v in self.seat_libraries.items()}
+        voiced = {int(k): v["library"] for k, v in self.seat_libraries.items() if int(k) not in self.eliminated}
         plan = plan_reply(self.chains, item, chain, voiced, self.human_seat, self.leader_of, self._said_this_turn, self.rng, turn)
         if plan is None:
             self._chain = None
@@ -994,6 +994,10 @@ class VoiceRunner:
         lib = self.library_for_seat(seat)
         if not lib:
             self.record("skipped", kind="bark", why=f"no voice library for seat {seat}", stock=pid, seat=seat, source=source)
+            return False
+        if int(seat) in self.eliminated:
+            # Ben (2026-09-10): dead players should not talk — the exit line was their last
+            self.record("skipped", kind="bark", why="eliminated", stock=pid, seat=seat, source=source)
             return False
         self._roll_turn(turn)
         if (int(seat), pid) in self._said_this_turn:

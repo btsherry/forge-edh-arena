@@ -380,6 +380,16 @@ class BarkRuntime(_TreeCase):
         self.assertEqual([q["stock"] for q in self.r.queue if q["kind"] == "event"], ["player-eliminated"])
 
     # ---- your move: on | some | off
+    def test_dead_players_do_not_talk(self):
+        self._observer(3, 1); self.r.scan_observer(); self._step()
+        self.r.rng.random = lambda: 0.1
+        self._observer(4, 2, elim=(1,)); self.r.scan_observer()               # Harry's seat falls: its exit line plays…
+        self.assertEqual([(q["kind"], q["stock"], q["library"]) for q in self.r.queue], [("event", "eliminated", "harry")])
+        self._step()
+        self.assertFalse(self.r.maybe_bark(1, "taunt", turn=5, source="recap"), "…and nothing after")
+        self.assertEqual(self._records("skipped", "bark")[-1]["why"], "eliminated")
+        self.assertTrue(self.r.maybe_bark(2, "taunt", turn=5, source="recap"), "the living still speak")
+
     def test_your_move_modes(self):
         self._observer(3, 1); self.r.scan_observer(); self._step()
         self.r.your_move_mode = "some"; self.r.your_move_p = 0.6
@@ -504,6 +514,12 @@ class InteractionChains(_TreeCase):
         self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
         self._spoken(1, "taunt")
         self.assertEqual(self._queued(), [("bark", "clapback", "bill", 2)])
+
+    def test_the_dead_never_join_an_exchange(self):
+        self._observer(3, 1, elim=(2,)); self.r.scan_observer(); self.r.queue.clear()
+        self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
+        self._spoken(1, "big-swing", ctx={"targets": [2]})                     # the target is dead: no brace, and no bystander is left
+        self.assertEqual(self._queued(), [])
 
     def test_chains_off_with_barks_off(self):
         self.r.barks_mode = "off"
