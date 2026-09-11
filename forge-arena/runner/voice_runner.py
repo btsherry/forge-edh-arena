@@ -83,6 +83,11 @@ CHAIN_POLL_S = 0.1          # while an exchange hop is pending: a retort's beat 
 FIRST_SENTENCE_MAX = 220
 ASK_MAX = 300
 PRIORITY = {"game_over": 0, "human_out": 0, "startup": 1, "ask": 2, "advice": 3, "quip": 4, "event": 5, "color": 6, "your_move": 7, "bark": 8}
+# A reply inside an exchange must not be separated from the line it answers: game 44
+# (20:43) Joshua's "your move" cut between Harry's jab and Lily's "shut it", so the
+# retort landed on Joshua. Hops rank just below advice; if advice or a question
+# does interrupt, the pending hop is dropped rather than played orphaned.
+CHAIN_HOP_PRIORITY = 3.5
 # An AI seat's elimination is voiced ONCE: by the dying seat itself (its `eliminated`
 # bark, at once) with this probability, else by Joshua's "A player has been eliminated."
 ELIM_SEAT_P = 0.7
@@ -930,7 +935,8 @@ class VoiceRunner:
     def enqueue(self, kind: str, *, text: str = "", stock: str = "", seq: int | None = None, ttl: float = 25.0,
                 library: str = "", seat: int | None = None, ctx: dict | None = None, gap: float | None = None,
                 chain: dict | None = None) -> None:
-        item = {"kind": kind, "text": text, "stock": stock, "seq": seq, "prio": PRIORITY.get(kind, 9),
+        item = {"kind": kind, "text": text, "stock": stock, "seq": seq,
+                "prio": CHAIN_HOP_PRIORITY if chain else PRIORITY.get(kind, 9),
                 "at": self.clock(), "expires": self.clock() + ttl, "library": library, "seat": seat,
                 "ctx": ctx or {}, "gap": gap, "chain": chain}
         # one pending item per kind for the chatty kinds: newest wins
@@ -954,6 +960,11 @@ class VoiceRunner:
             return None
         live.sort(key=lambda q: (q["prio"], q["at"]))
         item = live[0]
+        if item["kind"] in ("advice", "ask") and any(q.get("chain") for q in live[1:]):
+            for q in [q for q in live[1:] if q.get("chain")]:
+                self.record("dropped", kind=q["kind"], why="exchange interrupted by the advisor", stock=q["stock"], seat=q.get("seat"))
+            live = [q for q in live if not q.get("chain")]
+            self.queue = live
         # the rate limit applies to everything but game start / game over; a chain
         # hop brings its own shorter, conversational gap
         gap = item.get("gap") or self.min_gap

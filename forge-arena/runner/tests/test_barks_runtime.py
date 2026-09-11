@@ -615,6 +615,28 @@ class InteractionChains(_TreeCase):
         self.assertEqual(r.chains.first_hop_p, 1.0)
         self.assertEqual(r.chains.decay, 0.5, "the decay is not chatter")
 
+    def test_a_hop_finishes_the_exchange_before_joshua_speaks_and_advice_drops_it(self):
+        """Game 44, 20:43: 'your move' cut between a jab and its retort, so the retort landed on Joshua."""
+        self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
+        self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
+        self._spoken(1, "big-swing", ctx={"targets": [2]})              # Bill's brace is pending
+        self.r.enqueue("your_move", stock="your-move", ttl=12.0)
+        self.r.enqueue("quip", stock="calculating", ttl=20.0)
+        order = [q["kind"] for q in sorted(self.r.queue, key=lambda q: (q["prio"], q["at"]))]
+        self.assertEqual(order[0], "bark", "the retort plays before Joshua's incidental lines")
+        self.clock.t += 9
+        item = self.r.next_item()
+        self.assertEqual((item["kind"], item["stock"]), ("bark", "brace"))
+        # real advice interrupts: the pending hop is dropped, not played after Joshua
+        self.r.queue.clear()
+        self._spoken(1, "big-swing", ctx={"targets": [2]})
+        self.r.enqueue("advice", text="Block with everything.", ttl=25.0)
+        self.clock.t += 9
+        item = self.r.next_item()
+        self.assertEqual(item["kind"], "advice")
+        self.assertEqual(self.r.queue, [], "the orphaned retort is gone")
+        self.assertIn("exchange interrupted by the advisor", self._records("dropped", "bark")[-1]["why"])
+
     def test_chains_off_with_barks_off(self):
         self.r.barks_mode = "off"
         self._spoken(1, "big-swing", ctx={"targets": [2]})
