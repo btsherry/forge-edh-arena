@@ -1,5 +1,42 @@
 # forge-light-llm — Patch Notes
 
+## v4.2 — unreleased (experimental/voicework2)
+
+The AI seats talk like people at a table. Built in live games 38–46.
+
+- **Three seat voices (Harry, Bill, Lily; ElevenLabs stock voices, eleven_v3
+  with delivery tags), one per AI seat, assigned by deck** (Purphoros fiery,
+  Urza dry, Giada warm). A shared vocabulary of openers, reactions, replies and
+  patter; instant reactions from the snapshot's public event ring (attacks,
+  damage, casts, things leaving, counters, game over); exchanges composed one
+  hop at a time (target, aggressor, bystander, leader, an open defender) at
+  conversational pace; a patter clock that fills silences from the board;
+  dead seats fall silent; nothing after Joshua's sign-off. Joshua stays outside
+  the game. The match screen brings a talking seat's tab forward.
+- **Table talk (round 31):** "land, go", "pass with mana up", "tapped out",
+  casts narrated by type, "in response", "just a poke", "no blocks", "I'll
+  take it", "sure", "hold on"; whole-sentence life and hand numbers, and a
+  question about a seat's state answered with the true number; named
+  addressing for every commander on disk with colour-identity fallback; the
+  table remembers grudges, the third counter, the second wipe, heads-up, the
+  opening and the grind, a lethal board, truces struck and broken.
+- **Card lines:** every game changer in the shipped decks (caster, reaction,
+  relief), every commander (arrival, reaction, death) and every two- or
+  three-card combo in the dossiers, announced when the last piece lands.
+- **The seats react to you:** your big swings, game changers, commander,
+  big spells and spot removal draw a line; `ARENA_BARKS_HUMAN_P`.
+- **One dial, `ARENA_CHATTER`,** now sets a talk budget (speaking fraction of
+  the last minute) the runner spends: filler and banter go quiet as it fills,
+  board-anchored lines keep priority, quieter on your turn; `ARENA_VOICE_DUTY`
+  overrides. Nothing before the deal or at an idle table.
+- **Seats are named for their commander** ("Purphoros, God of the Forge-S3"),
+  the human is "Player One"; the "AI can't play these cards" boxes at launch
+  are gone; each AI seat's process starts at its base effort and the effort
+  buttons restart it; the advisor always advises a window where an opponent
+  targets you.
+- The package grows by about 270 MB of audio; the dry takes and the wording
+  generators are not shipped.
+
 ## v4.1 — 2026-09-10
 
 - **Engine updated to upstream Card-Forge of 2026-09-10** (605 commits: new card

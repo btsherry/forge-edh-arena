@@ -2068,3 +2068,34 @@ Hard-won from two live sessions; read before optimizing anything.
     game from the package root, Giada t16, 166 decisions, 0 punts/refusals/
     tracebacks. Shipped with `packaging/ship-release.sh`: dated + `-latest`,
     both byte-exact. Tag `v4.1` = 7ed30c62210.
+
+103. **The table's voices (2026-09-10 → 09-11, Ben; branch `experimental/voicework2`,
+    games 38–46).** Three ElevenLabs stock voices (Harry / Bill / Lily, eleven_v3
+    with delivery tags at stability 0.0/0.5, pcm_24000 raws baked to 22.05 kHz
+    at one library gain to -24 LUFS) speak for the AI seats, assigned by deck
+    (`voices/assign.json`). Design of record: every turn boundary has one owner;
+    instant reactions from `ObserverSnapshot`'s public event ring (attack /
+    damage / cast / left / countered / gameover + per-seat pool); interaction
+    chains (`runner/chains.py`, roles target / aggressor / bystander / leader /
+    origin / open, 0.25 s gap); a patter clock; a duty-cycle governor
+    (`ARENA_CHATTER` sets the speaking-fraction goal .09/.18/.27/.36, optional
+    lines scale by headroom, anchored lines keep ≥ half, ×0.4 on the human's
+    turn) replacing knob pre-scaling; a bark ladder (reaction 5.5 < colour 6 <
+    your-move 7 < advisor tags 8 < patter 8.5; chain hops 3.5) with eviction by
+    class; game-over lock; dead seats silent; Joshua outside the game. Round 31
+    (after five Game Knights tapes: ~190 wpm of mostly procedural narration;
+    game 45 measured 7.8 lines/min at 31 % duty but 53 % banter, 38 % filler,
+    4 % about the game): three sub-libraries per voice — `table/` (procedural
+    self-narration, whole-sentence numbers, named addressing with the colour
+    chart as fallback, memory/arc lines; `runner/voice/table_lines.py`) and
+    `cards/` (29 game changers ×5, 9 commanders ×5, 37 combo shapes ×2;
+    `card_lines.py`, coverage-checked against every dossier) — 1,750 new takes,
+    ~185 MB baked, raws kept in git like the parents'. The runner swaps the
+    named or card wording in for the generic hook when the library carries it
+    and plans the chain from the generic id. Game 46 (2026-09-11, rowdy): the
+    table jabbed about "empty hands" at turn 0 for five idle hours → no patter
+    before turn one has a phase, none at an idle table (150 s), a restarted
+    runner never replays the opener; after the fixes, turns 8–17: 3–5 lines/min,
+    anchored share 31–39 % (from 4 %), card and named lines firing. Parked:
+    W-19 mulligan lines. Tests: `test_table_budget.py`, `test_table_lines.py`,
+    `test_card_lines.py` (+ pins on every rendered take); runner suite 429.

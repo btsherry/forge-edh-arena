@@ -298,6 +298,76 @@ speakers. Rendered lines are cached under `forge-arena/runner/logs/cache/voice/`
 The voice's own log is `runner/logs/voice-0.log` and its structured twin
 `voice-0.jsonl`.
 
+## The table's voices
+
+The three AI seats talk, each in its own voice, the way people at a kitchen
+table do. Three ElevenLabs stock voices ship pre-rendered: **Harry** (a fiery
+young warrior — loud, cocky, quick to anger and to laugh), **Bill** (a dry
+elder professor) and **Lily** (warm and theatrical, calls the table "dears").
+A voice follows the deck, not the seat: `voices/assign.json` sends Purphoros
+to Harry, Urza to Bill and Giada to Lily; any other deck takes the next free
+voice in seat order. Joshua stays the human's advisor, outside the game: he
+never answers a seat and the seats never answer him. The seats need the
+advisor on and unmuted; the mute icon silences everyone. The match screen
+brings a talking seat's field tab forward for the line and puts yours back
+(`ARENA_VOICE_FOCUS`).
+
+What they say comes from four libraries per voice, all plain WAV files:
+
+- **The shared vocabulary** (`voices/<name>/`): turn openers, big swings,
+  hits taken and landed, counters, removal, sweeps, game changers, the
+  commander, eliminations, the win, taunts, reply atoms for exchanges
+  (agree, scoff, clapback, laugh…) and table patter (who is the threat, who
+  is holding seven cards, "kill that", a truce offer, filler).
+- **The table** (`voices/<name>/table/`): what a real table mostly says —
+  "land, go", "pass", "pass with mana up", "tapped out", "untap, draw",
+  "come on, land", a cast narrated by type ("a creature", "a big one",
+  "in response"), "just a poke", "you take this one", "no blocks", "I'll
+  take it", "sure", "hold on, which one?", plus whole-sentence numbers
+  ("I'm at sixteen.", "Seven cards.") and named addressing: "Everybody hit
+  Urza", "Giada's the threat", "Leave me alone, Purphoros", "Deal,
+  Sheoldred?" for every commander on disk, with the deck's colour identity
+  as the fallback ("mono-red", "Azorius", "Esper", "the Glint deck"). The
+  memory lines live here too: "you again?!" at the third hit from the same
+  seat, "countered again?" at the third counter, "not another wipe", "just
+  the two of us", the opening, the grind, "someone wins next turn", and a
+  truce accepted, refused or broken ("you promised!").
+- **The cards** (`voices/<name>/cards/`): a line of its own for every game
+  changer any shipped deck carries (the caster crows, the table reacts, and
+  someone is glad when it leaves), every commander (arrival, reaction,
+  death) and every two- or three-card combo in the dossiers, grouped by
+  shape ("Hullbreaker and a rock"), announced by the owner the moment the
+  last piece lands and answered by the table.
+- **Joshua's own stock** as before.
+
+The voice runner composes it all with no model calls. Board events come from
+the observer snapshot's public event ring (attacks, damage, casts, things
+leaving the battlefield, counters, game over), the stack, and each seat's
+life, hand and battlefield; a spoken line invites replies from roles (the
+target, the aggressor, a bystander, the leader, a defender with nothing
+untapped), one hop at a time at conversational pace, and a question about a
+seat's state ("what's your life?") is answered with the true number. A line
+with one addressee becomes its named wording half the time, and a generic
+card line becomes the card's own when the library carries it.
+
+**How much they talk** is one dial, `ARENA_CHATTER` (quiet, normal, lively,
+rowdy). It sets a talk budget — the fraction of the last minute somebody may
+be speaking — and the runner spends it: optional lines (patter, banter
+replies) go quiet as the budget fills, lines anchored to a board event keep
+at least half their chance, and the whole table is quieter on your turn.
+Nothing plays before the deal, or while the board has sat unchanged for a
+couple of minutes, or after Joshua's sign-off at game over. The dial also
+shortens the gaps and lowers the reaction thresholds. Every knob sits in the
+table below (the `ARENA_BARKS_*`, `ARENA_TABLE_P`, `ARENA_VOICE_DUTY*` and
+`ARENA_VOICE_PATTER*` rows); after a game `arena-hygiene.py` prints how many
+seat lines played and what share was anchored to the board.
+
+The audio is about 270 MB of the package. The wordings are written, not
+generated: `runner/voice/table_lines.py` and `card_lines.py` hold them (dev
+tools, not shipped) and refuse to write while any game changer, commander or
+combo on disk lacks lines, and `build_stock.py --library <voice>/cards
+--render` renders only what is missing.
+
 ## The AI panel
 
 The match screen's upper-left dock opens on the **AI** tab (Stack, Combat,
@@ -470,7 +540,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_VOICE_MAX_CHARS` | `20000` | live characters per run before the voice goes stock-only |
 | `ARENA_VOICE_GLITCH` | `light` | off | light | heavy — the radio glitch |
 | `ARENA_VOICE_FOCUS` | `on` | on \| off — the match screen brings a talking seat's field tab forward, then puts your tab back |
-| `ARENA_BARKS` | `some` | off \| some \| all — the AI seats speak in their own voices (seat 1 Harry, 2 Bill, 3 Lily): after their own turns, at big attacks, hits and counters; the advisor must be on and unmuted |
+| `ARENA_BARKS` | `some` | off \| some \| all — the AI seats speak in their own voices (Harry, Bill, Lily; by deck via voices/assign.json): openers, reactions, table talk, card lines, exchanges; the advisor must be on and unmuted |
 | `ARENA_BARKS_P` | `0.85` | probability a bark that was called for is spoken when BARKS=some |
 | `ARENA_BARKS_OPENER_P` | `0.35` | probability a seat opens its turn with a line (0 = never) |
 | `ARENA_BARKS_SWING` | `6` | total attacking power that earns an instant 'big swing' (or three attackers) |

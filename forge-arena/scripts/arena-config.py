@@ -70,7 +70,7 @@ KNOBS = {
         ("ARENA_VOICE_FOCUS", "on", "on | off — the match screen brings a talking seat's field tab forward, then puts your tab back"),
     ],
     "seat barks (the AI seats' voices; advisor on + unmuted)": [
-        ("ARENA_BARKS", "some", "off | some | all — the AI seats speak in their own voices (seat 1 Harry, 2 Bill, 3 Lily): after their own turns, at big attacks, hits and counters"),
+        ("ARENA_BARKS", "some", "off | some | all — the AI seats speak in their own voices (Harry, Bill, Lily; by deck via voices/assign.json): openers, reactions, table talk, card lines, exchanges; the advisor must be on and unmuted"),
         ("ARENA_BARKS_P", "0.85", "probability a bark that was called for is spoken when BARKS=some"),
         ("ARENA_BARKS_OPENER_P", "0.35", "probability a seat opens its turn with a line (0 = never)"),
         ("ARENA_BARKS_SWING", "6", "total attacking power that earns an instant 'big swing' (or three attackers)"),
