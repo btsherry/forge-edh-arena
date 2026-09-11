@@ -1,0 +1,339 @@
+{
+ "schema": "arena.voice-combos/1",
+ "note": "combo line keys -> the card sets (front-face names, all on the battlefield) that complete them; the voice runner matches a seat's battlefield against its deck's combos.json and says combo-<key>-online / -react. Regenerate with runner/voice/card_lines.py --write.",
+ "combos": {
+  "scepter-reversal": [
+   [
+    "Isochron Scepter",
+    "Narset's Reversal"
+   ]
+  ],
+  "dramatic-scepter": [
+   [
+    "Dramatic Reversal",
+    "Isochron Scepter"
+   ]
+  ],
+  "onslaught-terror": [
+   [
+    "Devastating Onslaught",
+    "Terror of the Peaks"
+   ]
+  ],
+  "heliod-ballista": [
+   [
+    "Heliod, Sun-Crowned",
+    "Walking Ballista"
+   ]
+  ],
+  "thune-ballista": [
+   [
+    "Archangel of Thune",
+    "Walking Ballista"
+   ]
+  ],
+  "excavation-weaver": [
+   [
+    "Meticulous Excavation",
+    "Sanctum Weaver"
+   ]
+  ],
+  "excavation-ring": [
+   [
+    "Meticulous Excavation",
+    "The One Ring"
+   ]
+  ],
+  "drafna-ring": [
+   [
+    "Drafna, Founder of Lat-Nam",
+    "The One Ring"
+   ]
+  ],
+  "gauntlets-weaver": [
+   [
+    "Gauntlets of Light",
+    "Sanctum Weaver"
+   ]
+  ],
+  "weaver-staff": [
+   [
+    "Sanctum Weaver",
+    "Staff of Domination"
+   ]
+  ],
+  "weaver-mantle": [
+   [
+    "Sanctum Weaver",
+    "Umbral Mantle"
+   ]
+  ],
+  "selvala-staff": [
+   [
+    "Selvala, Heart of the Wilds",
+    "Staff of Domination"
+   ]
+  ],
+  "selvala-mantle": [
+   [
+    "Selvala, Heart of the Wilds",
+    "Umbral Mantle"
+   ]
+  ],
+  "fanatic-mantle": [
+   [
+    "Fanatic of Rhonas",
+    "Umbral Mantle"
+   ]
+  ],
+  "dualcaster": [
+   [
+    "Dualcaster Mage",
+    "Twinflame"
+   ],
+   [
+    "Devastating Onslaught",
+    "Dualcaster Mage"
+   ]
+  ],
+  "reiterate": [
+   [
+    "Jeska's Will",
+    "Reiterate"
+   ],
+   [
+    "Mana Geyser",
+    "Reiterate"
+   ]
+  ],
+  "top-chip": [
+   [
+    "Etherium Sculptor",
+    "Sensei's Divining Top",
+    "The Reality Chip"
+   ],
+   [
+    "Cloud Key",
+    "Sensei's Divining Top",
+    "The Reality Chip"
+   ],
+   [
+    "Foundry Inspector",
+    "Sensei's Divining Top",
+    "The Reality Chip"
+   ]
+  ],
+  "forge-top": [
+   [
+    "Foundry Inspector",
+    "Mystic Forge",
+    "Sensei's Divining Top"
+   ],
+   [
+    "Mystic Forge",
+    "Sensei's Divining Top",
+    "Ugin, the Ineffable"
+   ]
+  ],
+  "cradle-satyr": [
+   [
+    "Gaea's Cradle",
+    "Staff of Domination",
+    "Voyaging Satyr"
+   ],
+   [
+    "Gaea's Cradle",
+    "Umbral Mantle",
+    "Voyaging Satyr"
+   ]
+  ],
+  "sabertooth": [
+   [
+    "Concordant Crossroads",
+    "Sanctum Weaver",
+    "Temur Sabertooth"
+   ],
+   [
+    "Concordant Crossroads",
+    "Selvala, Heart of the Wilds",
+    "Temur Sabertooth"
+   ],
+   [
+    "Selvala, Heart of the Wilds",
+    "Surrak and Goreclaw",
+    "Temur Sabertooth"
+   ],
+   [
+    "Lightning Greaves",
+    "Selvala, Heart of the Wilds",
+    "Temur Sabertooth"
+   ]
+  ],
+  "tezzeret-vault": [
+   [
+    "Lithoform Engine",
+    "Mana Vault",
+    "Tezzeret the Seeker"
+   ]
+  ],
+  "lithoform-dramatic": [
+   [
+    "Dramatic Reversal",
+    "Lithoform Engine"
+   ]
+  ],
+  "mirror-warp": [
+   [
+    "Panoptic Mirror",
+    "Time Warp"
+   ]
+  ],
+  "monolith-rings": [
+   [
+    "Forsaken Monument",
+    "Grim Monolith",
+    "Rings of Brighthearth"
+   ],
+   [
+    "Basalt Monolith",
+    "Rings of Brighthearth"
+   ],
+   [
+    "Basalt Monolith",
+    "Forsaken Monument"
+   ]
+  ],
+  "power-artifact": [
+   [
+    "Grim Monolith",
+    "Power Artifact"
+   ],
+   [
+    "Basalt Monolith",
+    "Power Artifact"
+   ]
+  ],
+  "basalt-gadgeteer": [
+   [
+    "Basalt Monolith",
+    "Forensic Gadgeteer"
+   ]
+  ],
+  "earthcraft-ascension": [
+   [
+    "Earthcraft",
+    "Luminarch Ascension",
+    "Wild Growth"
+   ],
+   [
+    "Earthcraft",
+    "Luminarch Ascension",
+    "Mirari's Wake"
+   ],
+   [
+    "Earthcraft",
+    "Luminarch Ascension",
+    "Nyxbloom Ancient"
+   ],
+   [
+    "Earthcraft",
+    "Luminarch Ascension",
+    "Utopia Sprawl"
+   ]
+  ],
+  "spiritdancer-arcade": [
+   [
+    "Ondu Spiritdancer",
+    "Secret Arcade // Dusty Parlor"
+   ]
+  ],
+  "ignus-steamkin": [
+   [
+    "Grinning Ignus",
+    "Runaway Steam-Kin"
+   ]
+  ],
+  "karn-reservoir": [
+   [
+    "Aetherflux Reservoir",
+    "Karn, the Great Creator"
+   ]
+  ],
+  "hullbreaker": [
+   [
+    "Hullbreaker Horror",
+    "Mana Vault"
+   ],
+   [
+    "Hullbreaker Horror",
+    "Mox Amber"
+   ],
+   [
+    "Hullbreaker Horror",
+    "Sol Ring"
+   ]
+  ],
+  "tidespout": [
+   [
+    "Mana Vault",
+    "Tidespout Tyrant"
+   ],
+   [
+    "Grim Monolith",
+    "Tidespout Tyrant"
+   ],
+   [
+    "Mox Amber",
+    "Tidespout Tyrant"
+   ],
+   [
+    "Mox Opal",
+    "Tidespout Tyrant"
+   ],
+   [
+    "Sol Ring",
+    "Tidespout Tyrant"
+   ]
+  ],
+  "metalworker": [
+   [
+    "Metalworker",
+    "Staff of Domination"
+   ],
+   [
+    "Metalworker",
+    "Rings of Brighthearth",
+    "Voltaic Key"
+   ]
+  ],
+  "mikaeus-altar": [
+   [
+    "Ashnod's Altar",
+    "Mikaeus, the Unhallowed"
+   ],
+   [
+    "Mikaeus, the Unhallowed",
+    "Phyrexian Altar"
+   ]
+  ],
+  "mikaeus-ballista": [
+   [
+    "Mikaeus, the Unhallowed",
+    "Walking Ballista"
+   ]
+  ],
+  "ascension-mindcrank": [
+   [
+    "Bloodchief Ascension",
+    "Mindcrank"
+   ]
+  ],
+  "temple-ruins": [
+   [
+    "Deserted Temple",
+    "Rings of Brighthearth",
+    "Scorched Ruins"
+   ]
+  ]
+ }
+}

@@ -1,0 +1,1801 @@
+{
+ "schema": "arena.voice-stock/1",
+ "library": "bill/cards",
+ "parent": "bill",
+ "seat": null,
+ "note": "the cards sub-library (round 31): game changers, commanders and combos by name, grounded in the oracle text on record; regenerate with runner/voice/card_lines.py --write",
+ "voice_id": "pqHfZKP75CvOlQylNhV4",
+ "voice_name": "Bill - Wise, Mature, Balanced",
+ "temperament": "elder professor: dry, precise, unhurried, faintly amused by everyone else's haste",
+ "render": {
+  "model": "eleven_v3",
+  "voice_settings": {
+   "stability": 0.5,
+   "speed": 0.95
+  },
+  "formats": [
+   "pcm_24000"
+  ]
+ },
+ "bake": {
+  "rate": 22050,
+  "fx": "none",
+  "glitch": "off",
+  "gain": "library",
+  "target_lufs": -24.0,
+  "true_peak_max": -1.0,
+  "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
+ },
+ "sample_rate": 22050,
+ "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
+ "phrases": {
+  "gc-ancient-tomb-cast": {
+   "category": "card",
+   "card": "Ancient Tomb",
+   "when": "casts it: Ancient Tomb — {T}: Add {C}{C}. This land deals 2 damage to you.",
+   "text": [
+    "[calmly] Ancient Tomb. Two mana, at a price.",
+    "[dryly] Tomb. The damage is an investment."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-ancient-tomb-react": {
+   "category": "card",
+   "card": "Ancient Tomb",
+   "when": "sees another seat cast it: Ancient Tomb — {T}: Add {C}{C}. This land deals 2 damage to you.",
+   "text": [
+    "[dryly] A Tomb. Fast mana, slow bleeding.",
+    "[calmly] Two mana on turn one. Noted."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-ancient-tomb-gone": {
+   "category": "card",
+   "card": "Ancient Tomb",
+   "when": "sees it leave the battlefield (someone else's): Ancient Tomb — {T}: Add {C}{C}. This land deals 2 damage to you.",
+   "text": [
+    "[calmly] The Tomb is gone. Fewer fast starts."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-aura-shards-cast": {
+   "category": "card",
+   "card": "Aura Shards",
+   "when": "casts it: Aura Shards — Whenever a creature you control enters, you may destroy target artifact or enchantment.",
+   "text": [
+    "[calmly] Aura Shards. Each creature destroys an artifact or enchantment.",
+    "[dryly] Shards. Your trinkets are on notice."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-aura-shards-react": {
+   "category": "card",
+   "card": "Aura Shards",
+   "when": "sees another seat cast it: Aura Shards — Whenever a creature you control enters, you may destroy target artifact or enchantment.",
+   "text": [
+    "[sighs] Aura Shards. My artifacts have an expiry date.",
+    "[calmly] Every creature they play is removal now."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-aura-shards-gone": {
+   "category": "card",
+   "card": "Aura Shards",
+   "when": "sees it leave the battlefield (someone else's): Aura Shards — Whenever a creature you control enters, you may destroy target artifact or enchantment.",
+   "text": [
+    "[calmly] Shards is gone. The artifacts may relax."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-chrome-mox-cast": {
+   "category": "card",
+   "card": "Chrome Mox",
+   "when": "casts it: Chrome Mox — Imprint — When this artifact enters, you may exile a nonartifact, nonland card from your hand.\n{T}: Add one mana of any of the exiled card's",
+   "text": [
+    "[calmly] Chrome Mox. One card for one mana, every turn.",
+    "[dryly] Mox. Tempo, purchased with a card."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-chrome-mox-react": {
+   "category": "card",
+   "card": "Chrome Mox",
+   "when": "sees another seat cast it: Chrome Mox — Imprint — When this artifact enters, you may exile a nonartifact, nonland card from your hand.\n{T}: Add one mana of any of the exiled card's",
+   "text": [
+    "[calmly] Chrome Mox. Card disadvantage, but fast.",
+    "[dryly] A Mox. How very competitive."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-chrome-mox-gone": {
+   "category": "card",
+   "card": "Chrome Mox",
+   "when": "sees it leave the battlefield (someone else's): Chrome Mox — Imprint — When this artifact enters, you may exile a nonartifact, nonland card from your hand.\n{T}: Add one mana of any of the exiled card's",
+   "text": [
+    "[calmly] The Mox is gone. Tempo lost."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-consecrated-sphinx-cast": {
+   "category": "card",
+   "card": "Consecrated Sphinx",
+   "when": "casts it: Consecrated Sphinx — Flying\nWhenever an opponent draws a card, you may draw two cards.",
+   "text": [
+    "[calmly] Consecrated Sphinx. Your draws feed mine.",
+    "[dryly] The Sphinx. Please, draw your cards."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-consecrated-sphinx-react": {
+   "category": "card",
+   "card": "Consecrated Sphinx",
+   "when": "sees another seat cast it: Consecrated Sphinx — Flying\nWhenever an opponent draws a card, you may draw two cards.",
+   "text": [
+    "[sighs] The Sphinx. That must die before my draw step.",
+    "[calmly] Every draw gives them two. Untenable."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-consecrated-sphinx-gone": {
+   "category": "card",
+   "card": "Consecrated Sphinx",
+   "when": "sees it leave the battlefield (someone else's): Consecrated Sphinx — Flying\nWhenever an opponent draws a card, you may draw two cards.",
+   "text": [
+    "[calmly] The Sphinx is gone. Draw steps are safe again."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-cyclonic-rift-cast": {
+   "category": "card",
+   "card": "Cyclonic Rift",
+   "when": "casts it: Cyclonic Rift — Return target nonland permanent you don't control to its owner's hand.\nOverload {6}{U} (You may cast this spell for its overload cost. If yo",
+   "text": [
+    "[calmly] Cyclonic Rift. Your permanents return to hand.",
+    "[dryly] Rift, overloaded. Do enjoy recasting all that."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-cyclonic-rift-react": {
+   "category": "card",
+   "card": "Cyclonic Rift",
+   "when": "sees another seat cast it: Cyclonic Rift — Return target nonland permanent you don't control to its owner's hand.\nOverload {6}{U} (You may cast this spell for its overload cost. If yo",
+   "text": [
+    "[sighs] Rift. Years of work, back to hand.",
+    "[dryly] The blue player's favourite. Predictable."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-cyclonic-rift-gone": {
+   "category": "card",
+   "card": "Cyclonic Rift",
+   "when": "sees it leave the battlefield (someone else's): Cyclonic Rift — Return target nonland permanent you don't control to its owner's hand.\nOverload {6}{U} (You may cast this spell for its overload cost. If yo",
+   "text": [
+    "[calmly] The Rift is spent. Rebuild."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-demonic-tutor-cast": {
+   "category": "card",
+   "card": "Demonic Tutor",
+   "when": "casts it: Demonic Tutor — Search your library for a card, put that card into your hand, then shuffle.",
+   "text": [
+    "[calmly] Demonic Tutor. Any card. I know which.",
+    "[dryly] Tutor. The library obliges."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-demonic-tutor-react": {
+   "category": "card",
+   "card": "Demonic Tutor",
+   "when": "sees another seat cast it: Demonic Tutor — Search your library for a card, put that card into your hand, then shuffle.",
+   "text": [
+    "[calmly] A Demonic Tutor. Watch what follows it.",
+    "[dryly] They found their piece. Brace yourselves."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-demonic-tutor-gone": {
+   "category": "card",
+   "card": "Demonic Tutor",
+   "when": "sees it leave the battlefield (someone else's): Demonic Tutor — Search your library for a card, put that card into your hand, then shuffle.",
+   "text": [
+    "[calmly] The Tutor is spent. What did it find?"
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-drannith-magistrate-cast": {
+   "category": "card",
+   "card": "Drannith Magistrate",
+   "when": "casts it: Drannith Magistrate — Your opponents can't cast spells from anywhere other than their hands.",
+   "text": [
+    "[calmly] Drannith Magistrate. Spells from your hand only.",
+    "[dryly] The Magistrate. Your command zone is closed."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-drannith-magistrate-react": {
+   "category": "card",
+   "card": "Drannith Magistrate",
+   "when": "sees another seat cast it: Drannith Magistrate — Your opponents can't cast spells from anywhere other than their hands.",
+   "text": [
+    "[sighs] Magistrate. My commander is grounded.",
+    "[calmly] That must go. It shuts off half the table."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-drannith-magistrate-gone": {
+   "category": "card",
+   "card": "Drannith Magistrate",
+   "when": "sees it leave the battlefield (someone else's): Drannith Magistrate — Your opponents can't cast spells from anywhere other than their hands.",
+   "text": [
+    "[calmly] The Magistrate is gone. Commanders may return."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-enlightened-tutor-cast": {
+   "category": "card",
+   "card": "Enlightened Tutor",
+   "when": "casts it: Enlightened Tutor — Search your library for an artifact or enchantment card, reveal it, then shuffle and put that card on top.",
+   "text": [
+    "[calmly] Enlightened Tutor. The right piece, on top.",
+    "[dryly] Tutor. My next draw is no longer random."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-enlightened-tutor-react": {
+   "category": "card",
+   "card": "Enlightened Tutor",
+   "when": "sees another seat cast it: Enlightened Tutor — Search your library for an artifact or enchantment card, reveal it, then shuffle and put that card on top.",
+   "text": [
+    "[calmly] Enlightened Tutor. Their next draw is chosen.",
+    "[dryly] A tutor to the top. Expect it next turn."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-enlightened-tutor-gone": {
+   "category": "card",
+   "card": "Enlightened Tutor",
+   "when": "sees it leave the battlefield (someone else's): Enlightened Tutor — Search your library for an artifact or enchantment card, reveal it, then shuffle and put that card on top.",
+   "text": [
+    "[calmly] Tutor spent. The top card is the tell."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-farewell-cast": {
+   "category": "card",
+   "card": "Farewell",
+   "when": "casts it: Farewell — Choose one or more —\n• Exile all artifacts.\n• Exile all creatures.\n• Exile all enchantments.\n• Exile all graveyards.",
+   "text": [
+    "[calmly] Farewell. I choose the modes. Exile it all.",
+    "[dryly] Farewell. A clean slate, thoroughly."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-farewell-react": {
+   "category": "card",
+   "card": "Farewell",
+   "when": "sees another seat cast it: Farewell — Choose one or more —\n• Exile all artifacts.\n• Exile all creatures.\n• Exile all enchantments.\n• Exile all graveyards.",
+   "text": [
+    "[sighs] Farewell. Exiled, not destroyed. Nothing comes back.",
+    "[calmly] A total reset. Regrettable."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-farewell-gone": {
+   "category": "card",
+   "card": "Farewell",
+   "when": "sees it leave the battlefield (someone else's): Farewell — Choose one or more —\n• Exile all artifacts.\n• Exile all creatures.\n• Exile all enchantments.\n• Exile all graveyards.",
+   "text": [
+    "[calmly] Farewell resolved. Rebuilding from nothing."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-fierce-guardianship-cast": {
+   "category": "card",
+   "card": "Fierce Guardianship",
+   "when": "casts it: Fierce Guardianship — If you control a commander, you may cast this spell without paying its mana cost.\nCounter target noncreature spell.",
+   "text": [
+    "[calmly] Fierce Guardianship. No mana required. Countered.",
+    "[dryly] Guardianship. My commander pays for that."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-fierce-guardianship-react": {
+   "category": "card",
+   "card": "Fierce Guardianship",
+   "when": "sees another seat cast it: Fierce Guardianship — If you control a commander, you may cast this spell without paying its mana cost.\nCounter target noncreature spell.",
+   "text": [
+    "[dryly] Guardianship. Free, with a commander. Naturally.",
+    "[sighs] A free counter. Blue remains blue."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-fierce-guardianship-gone": {
+   "category": "card",
+   "card": "Fierce Guardianship",
+   "when": "sees it leave the battlefield (someone else's): Fierce Guardianship — If you control a commander, you may cast this spell without paying its mana cost.\nCounter target noncreature spell.",
+   "text": [
+    "[calmly] Guardianship is spent. One less free answer."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-force-of-will-cast": {
+   "category": "card",
+   "card": "Force of Will",
+   "when": "casts it: Force of Will — You may pay 1 life and exile a blue card from your hand rather than pay this spell's mana cost.\nCounter target spell.",
+   "text": [
+    "[calmly] Force of Will. A card and a life. Countered.",
+    "[dryly] Force. Some things must not resolve."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-force-of-will-react": {
+   "category": "card",
+   "card": "Force of Will",
+   "when": "sees another seat cast it: Force of Will — You may pay 1 life and exile a blue card from your hand rather than pay this spell's mana cost.\nCounter target spell.",
+   "text": [
+    "[dryly] Force of Will. They pitched a card for that.",
+    "[calmly] Forced. They mean it, then."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-force-of-will-gone": {
+   "category": "card",
+   "card": "Force of Will",
+   "when": "sees it leave the battlefield (someone else's): Force of Will — You may pay 1 life and exile a blue card from your hand rather than pay this spell's mana cost.\nCounter target spell.",
+   "text": [
+    "[calmly] The Force is spent. Proceed."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-gaea-s-cradle-cast": {
+   "category": "card",
+   "card": "Gaea's Cradle",
+   "when": "casts it: Gaea's Cradle — {T}: Add {G} for each creature you control.",
+   "text": [
+    "[calmly] Gaea's Cradle. Mana scales with the board.",
+    "[dryly] Cradle. Each creature is a land now."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-gaea-s-cradle-react": {
+   "category": "card",
+   "card": "Gaea's Cradle",
+   "when": "sees another seat cast it: Gaea's Cradle — {T}: Add {G} for each creature you control.",
+   "text": [
+    "[sighs] A Cradle. Their creatures are lands.",
+    "[calmly] Cradle. Whatever they cast next will be large."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-gaea-s-cradle-gone": {
+   "category": "card",
+   "card": "Gaea's Cradle",
+   "when": "sees it leave the battlefield (someone else's): Gaea's Cradle — {T}: Add {G} for each creature you control.",
+   "text": [
+    "[calmly] The Cradle is gone. Back to lands."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-gamble-cast": {
+   "category": "card",
+   "card": "Gamble",
+   "when": "casts it: Gamble — Search your library for a card, put that card into your hand, discard a card at random, then shuffle.",
+   "text": [
+    "[calmly] Gamble. One tutor, one random discard. Acceptable odds.",
+    "[dryly] Gamble. Statistics, please be kind."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-gamble-react": {
+   "category": "card",
+   "card": "Gamble",
+   "when": "sees another seat cast it: Gamble — Search your library for a card, put that card into your hand, discard a card at random, then shuffle.",
+   "text": [
+    "[dryly] Gamble. Ah, red's idea of a tutor.",
+    "[calmly] Random discard. Let us hope it was the piece."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-gamble-gone": {
+   "category": "card",
+   "card": "Gamble",
+   "when": "sees it leave the battlefield (someone else's): Gamble — Search your library for a card, put that card into your hand, discard a card at random, then shuffle.",
+   "text": [
+    "[calmly] Gamble is spent. Did the dice cooperate?"
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-grim-monolith-cast": {
+   "category": "card",
+   "card": "Grim Monolith",
+   "when": "casts it: Grim Monolith — This artifact doesn't untap during your untap step.\n{T}: Add {C}{C}{C}.\n{4}: Untap this artifact.",
+   "text": [
+    "[calmly] Grim Monolith. Three mana, once.",
+    "[dryly] Monolith. It untaps when I say so."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-grim-monolith-react": {
+   "category": "card",
+   "card": "Grim Monolith",
+   "when": "sees another seat cast it: Grim Monolith — This artifact doesn't untap during your untap step.\n{T}: Add {C}{C}{C}.\n{4}: Untap this artifact.",
+   "text": [
+    "[calmly] Grim Monolith. Watch for the untap trick.",
+    "[dryly] A Monolith. Rings would make that infinite."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-grim-monolith-gone": {
+   "category": "card",
+   "card": "Grim Monolith",
+   "when": "sees it leave the battlefield (someone else's): Grim Monolith — This artifact doesn't untap during your untap step.\n{T}: Add {C}{C}{C}.\n{4}: Untap this artifact.",
+   "text": [
+    "[calmly] The Monolith is gone. Good riddance to fast mana."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-jeska-s-will-cast": {
+   "category": "card",
+   "card": "Jeska's Will",
+   "when": "casts it: Jeska's Will — Choose one. If you control a commander as you cast this spell, you may choose both instead.\n• Add {R} for each card in target opponent's han",
+   "text": [
+    "[calmly] Jeska's Will. Your full hand funds my turn.",
+    "[dryly] Jeska's Will. Both modes, with a commander."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-jeska-s-will-react": {
+   "category": "card",
+   "card": "Jeska's Will",
+   "when": "sees another seat cast it: Jeska's Will — Choose one. If you control a commander as you cast this spell, you may choose both instead.\n• Add {R} for each card in target opponent's han",
+   "text": [
+    "[dryly] Jeska's Will. A ritual with ambitions.",
+    "[calmly] Expect a very large turn. Now."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-jeska-s-will-gone": {
+   "category": "card",
+   "card": "Jeska's Will",
+   "when": "sees it leave the battlefield (someone else's): Jeska's Will — Choose one. If you control a commander as you cast this spell, you may choose both instead.\n• Add {R} for each card in target opponent's han",
+   "text": [
+    "[calmly] The Will is spent. What did it buy?"
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-mana-vault-cast": {
+   "category": "card",
+   "card": "Mana Vault",
+   "when": "casts it: Mana Vault — This artifact doesn't untap during your untap step.\nAt the beginning of your upkeep, you may pay {4}. If you do, untap this artifact.\nAt the",
+   "text": [
+    "[calmly] Mana Vault. Three mana, now. Pain later.",
+    "[dryly] Vault. Efficiency with a small tax."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-mana-vault-react": {
+   "category": "card",
+   "card": "Mana Vault",
+   "when": "sees another seat cast it: Mana Vault — This artifact doesn't untap during your untap step.\nAt the beginning of your upkeep, you may pay {4}. If you do, untap this artifact.\nAt the",
+   "text": [
+    "[calmly] Mana Vault. Turn one, three mana. Noted.",
+    "[dryly] A Vault. Watch the untap combos."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-mana-vault-gone": {
+   "category": "card",
+   "card": "Mana Vault",
+   "when": "sees it leave the battlefield (someone else's): Mana Vault — This artifact doesn't untap during your untap step.\nAt the beginning of your upkeep, you may pay {4}. If you do, untap this artifact.\nAt the",
+   "text": [
+    "[calmly] The Vault is gone. The pings stop too."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-mishra-s-workshop-cast": {
+   "category": "card",
+   "card": "Mishra's Workshop",
+   "when": "casts it: Mishra's Workshop — {T}: Add {C}{C}{C}. Spend this mana only to cast artifact spells.",
+   "text": [
+    "[calmly] Mishra's Workshop. Three mana for artifact spells.",
+    "[dryly] Workshop. My artifacts arrive early."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-mishra-s-workshop-react": {
+   "category": "card",
+   "card": "Mishra's Workshop",
+   "when": "sees another seat cast it: Mishra's Workshop — {T}: Add {C}{C}{C}. Spend this mana only to cast artifact spells.",
+   "text": [
+    "[calmly] A Workshop. Expect a fast artifact start.",
+    "[dryly] Three mana on turn one. For artifacts only, mercifully."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-mishra-s-workshop-gone": {
+   "category": "card",
+   "card": "Mishra's Workshop",
+   "when": "sees it leave the battlefield (someone else's): Mishra's Workshop — {T}: Add {C}{C}{C}. Spend this mana only to cast artifact spells.",
+   "text": [
+    "[calmly] The Workshop is gone. The factory closes."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-mox-diamond-cast": {
+   "category": "card",
+   "card": "Mox Diamond",
+   "when": "casts it: Mox Diamond — If this artifact would enter, you may discard a land card instead. If you do, put this artifact onto the battlefield. If you don't, put it i",
+   "text": [
+    "[calmly] Mox Diamond. A land becomes a Mox.",
+    "[dryly] Diamond. Any colour, from turn one."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-mox-diamond-react": {
+   "category": "card",
+   "card": "Mox Diamond",
+   "when": "sees another seat cast it: Mox Diamond — If this artifact would enter, you may discard a land card instead. If you do, put this artifact onto the battlefield. If you don't, put it i",
+   "text": [
+    "[calmly] Mox Diamond. They spent a land for tempo.",
+    "[dryly] A Diamond. The fast mana continues."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-mox-diamond-gone": {
+   "category": "card",
+   "card": "Mox Diamond",
+   "when": "sees it leave the battlefield (someone else's): Mox Diamond — If this artifact would enter, you may discard a land card instead. If you do, put this artifact onto the battlefield. If you don't, put it i",
+   "text": [
+    "[calmly] The Diamond is gone. Down a land and a Mox."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-necropotence-cast": {
+   "category": "card",
+   "card": "Necropotence",
+   "when": "casts it: Necropotence — Skip your draw step.\nWhenever you discard a card, exile that card from your graveyard.\nPay 1 life: Exile the top card of your library face d",
+   "text": [
+    "[calmly] Necropotence. Life for cards, at end step.",
+    "[dryly] Necro. I have life to spare."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-necropotence-react": {
+   "category": "card",
+   "card": "Necropotence",
+   "when": "sees another seat cast it: Necropotence — Skip your draw step.\nWhenever you discard a card, exile that card from your graveyard.\nPay 1 life: Exile the top card of your library face d",
+   "text": [
+    "[calmly] Necropotence. Every point of life is a card. Attack them.",
+    "[dryly] Necro. The skull. Of course."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-necropotence-gone": {
+   "category": "card",
+   "card": "Necropotence",
+   "when": "sees it leave the battlefield (someone else's): Necropotence — Skip your draw step.\nWhenever you discard a card, exile that card from your graveyard.\nPay 1 life: Exile the top card of your library face d",
+   "text": [
+    "[calmly] Necro is gone. Their life is just life again."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-orcish-bowmasters-cast": {
+   "category": "card",
+   "card": "Orcish Bowmasters",
+   "when": "casts it: Orcish Bowmasters — Flash\nWhen this creature enters and whenever an opponent draws a card except the first one they draw in each of their draw steps, this creat",
+   "text": [
+    "[calmly] Orcish Bowmasters. Extra draws cost you.",
+    "[dryly] Bowmasters. At flash speed, in response."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-orcish-bowmasters-react": {
+   "category": "card",
+   "card": "Orcish Bowmasters",
+   "when": "sees another seat cast it: Orcish Bowmasters — Flash\nWhen this creature enters and whenever an opponent draws a card except the first one they draw in each of their draw steps, this creat",
+   "text": [
+    "[calmly] Bowmasters. Their orcs punish card draw.",
+    "[sighs] Bowmasters. My draw engine just became a liability."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-orcish-bowmasters-gone": {
+   "category": "card",
+   "card": "Orcish Bowmasters",
+   "when": "sees it leave the battlefield (someone else's): Orcish Bowmasters — Flash\nWhen this creature enters and whenever an opponent draws a card except the first one they draw in each of their draw steps, this creat",
+   "text": [
+    "[calmly] The Bowmasters are gone. Draw freely."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-panoptic-mirror-cast": {
+   "category": "card",
+   "card": "Panoptic Mirror",
+   "when": "casts it: Panoptic Mirror — Imprint — {X}, {T}: You may exile an instant or sorcery card with mana value X from your hand.\nAt the beginning of your upkeep, you may copy",
+   "text": [
+    "[calmly] Panoptic Mirror. One spell, every upkeep, forever.",
+    "[dryly] The Mirror. Do guess what I imprint."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-panoptic-mirror-react": {
+   "category": "card",
+   "card": "Panoptic Mirror",
+   "when": "sees another seat cast it: Panoptic Mirror — Imprint — {X}, {T}: You may exile an instant or sorcery card with mana value X from your hand.\nAt the beginning of your upkeep, you may copy",
+   "text": [
+    "[calmly] Panoptic Mirror. Destroy it before the imprint.",
+    "[dryly] A Mirror. An extra-turn spell would end us."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-panoptic-mirror-gone": {
+   "category": "card",
+   "card": "Panoptic Mirror",
+   "when": "sees it leave the battlefield (someone else's): Panoptic Mirror — Imprint — {X}, {T}: You may exile an instant or sorcery card with mana value X from your hand.\nAt the beginning of your upkeep, you may copy",
+   "text": [
+    "[calmly] The Mirror is gone. Sanity returns."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-rhystic-study-cast": {
+   "category": "card",
+   "card": "Rhystic Study",
+   "when": "casts it: Rhystic Study — Whenever an opponent casts a spell, you may draw a card unless that player pays {1}.",
+   "text": [
+    "[calmly] Rhystic Study. Will you be paying the one?",
+    "[dryly] Rhystic. I shall be asking. Frequently."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-rhystic-study-react": {
+   "category": "card",
+   "card": "Rhystic Study",
+   "when": "sees another seat cast it: Rhystic Study — Whenever an opponent casts a spell, you may draw a card unless that player pays {1}.",
+   "text": [
+    "[sighs] Rhystic Study. I'll be paying all game.",
+    "[dryly] Rhystic. The tax collector has arrived."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-rhystic-study-gone": {
+   "category": "card",
+   "card": "Rhystic Study",
+   "when": "sees it leave the battlefield (someone else's): Rhystic Study — Whenever an opponent casts a spell, you may draw a card unless that player pays {1}.",
+   "text": [
+    "[calmly] Rhystic is gone. Spells are untaxed again."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-seedborn-muse-cast": {
+   "category": "card",
+   "card": "Seedborn Muse",
+   "when": "casts it: Seedborn Muse — Untap all permanents you control during each other player's untap step.",
+   "text": [
+    "[calmly] Seedborn Muse. I untap on your turns.",
+    "[dryly] Muse. Every untap step is mine."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-seedborn-muse-react": {
+   "category": "card",
+   "card": "Seedborn Muse",
+   "when": "sees another seat cast it: Seedborn Muse — Untap all permanents you control during each other player's untap step.",
+   "text": [
+    "[calmly] Seedborn Muse. That must die before my untap.",
+    "[sighs] Muse. Their mana is always available."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-seedborn-muse-gone": {
+   "category": "card",
+   "card": "Seedborn Muse",
+   "when": "sees it leave the battlefield (someone else's): Seedborn Muse — Untap all permanents you control during each other player's untap step.",
+   "text": [
+    "[calmly] The Muse is gone. One untap step each, as intended."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-serra-s-sanctum-cast": {
+   "category": "card",
+   "card": "Serra's Sanctum",
+   "when": "casts it: Serra's Sanctum — {T}: Add {W} for each enchantment you control.",
+   "text": [
+    "[calmly] Serra's Sanctum. Mana per enchantment.",
+    "[dryly] Sanctum. My enchantments are lands."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-serra-s-sanctum-react": {
+   "category": "card",
+   "card": "Serra's Sanctum",
+   "when": "sees another seat cast it: Serra's Sanctum — {T}: Add {W} for each enchantment you control.",
+   "text": [
+    "[calmly] A Sanctum. Their enchantments fund everything.",
+    "[dryly] Sanctum. Count their enchantments. Then worry."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-serra-s-sanctum-gone": {
+   "category": "card",
+   "card": "Serra's Sanctum",
+   "when": "sees it leave the battlefield (someone else's): Serra's Sanctum — {T}: Add {W} for each enchantment you control.",
+   "text": [
+    "[calmly] The Sanctum is gone. Enchantments stop paying."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-smothering-tithe-cast": {
+   "category": "card",
+   "card": "Smothering Tithe",
+   "when": "casts it: Smothering Tithe — Whenever an opponent draws a card, that player may pay {2}. If the player doesn't, you create a Treasure token. (It's an artifact with \"{T},",
+   "text": [
+    "[calmly] Smothering Tithe. Two mana, or I take Treasure.",
+    "[dryly] Tithe. Taxes are due on every draw."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-smothering-tithe-react": {
+   "category": "card",
+   "card": "Smothering Tithe",
+   "when": "sees another seat cast it: Smothering Tithe — Whenever an opponent draws a card, that player may pay {2}. If the player doesn't, you create a Treasure token. (It's an artifact with \"{T},",
+   "text": [
+    "[sighs] Smothering Tithe. The Treasures will pile up.",
+    "[dryly] Tithe. Pay two, or fund the enemy. Charming."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-smothering-tithe-gone": {
+   "category": "card",
+   "card": "Smothering Tithe",
+   "when": "sees it leave the battlefield (someone else's): Smothering Tithe — Whenever an opponent draws a card, that player may pay {2}. If the player doesn't, you create a Treasure token. (It's an artifact with \"{T},",
+   "text": [
+    "[calmly] The Tithe is gone. Draws are free again."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-teferi-s-protection-cast": {
+   "category": "card",
+   "card": "Teferi's Protection",
+   "when": "casts it: Teferi's Protection — Until your next turn, your life total can't change and you gain protection from everything. All permanents you control phase out. (While the",
+   "text": [
+    "[calmly] Teferi's Protection. I am elsewhere until my turn.",
+    "[dryly] Teferi's. Your efforts are noted, and wasted."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-teferi-s-protection-react": {
+   "category": "card",
+   "card": "Teferi's Protection",
+   "when": "sees another seat cast it: Teferi's Protection — Until your next turn, your life total can't change and you gain protection from everything. All permanents you control phase out. (While the",
+   "text": [
+    "[sighs] Teferi's Protection. The board wipe missed them.",
+    "[dryly] Phased out. Untouchable. How convenient."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-teferi-s-protection-gone": {
+   "category": "card",
+   "card": "Teferi's Protection",
+   "when": "sees it leave the battlefield (someone else's): Teferi's Protection — Until your next turn, your life total can't change and you gain protection from everything. All permanents you control phase out. (While the",
+   "text": [
+    "[calmly] Their protection is over. Open season."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-tergrid-god-of-fright-cast": {
+   "category": "card",
+   "card": "Tergrid, God of Fright // Tergrid's Lantern",
+   "when": "casts it: Tergrid, God of Fright // Tergrid's Lantern — Tergrid, God of Fright: Menace\nWhenever an opponent sacrifices a nontoken permanent or discards a permanent card, you may put that card from",
+   "text": [
+    "[calmly] Tergrid. What you sacrifice, I keep.",
+    "[dryly] Tergrid. Your discards are my permanents."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-tergrid-god-of-fright-react": {
+   "category": "card",
+   "card": "Tergrid, God of Fright // Tergrid's Lantern",
+   "when": "sees another seat cast it: Tergrid, God of Fright // Tergrid's Lantern — Tergrid, God of Fright: Menace\nWhenever an opponent sacrifices a nontoken permanent or discards a permanent card, you may put that card from",
+   "text": [
+    "[calmly] Tergrid. Sacrifice nothing. Discard nothing.",
+    "[sighs] Tergrid. My whole plan just became theirs."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-tergrid-god-of-fright-gone": {
+   "category": "card",
+   "card": "Tergrid, God of Fright // Tergrid's Lantern",
+   "when": "sees it leave the battlefield (someone else's): Tergrid, God of Fright // Tergrid's Lantern — Tergrid, God of Fright: Menace\nWhenever an opponent sacrifices a nontoken permanent or discards a permanent card, you may put that card from",
+   "text": [
+    "[calmly] Tergrid is gone. Sacrifice at will."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-the-one-ring-cast": {
+   "category": "card",
+   "card": "The One Ring",
+   "when": "casts it: The One Ring — Indestructible\nWhen The One Ring enters, if you cast it, you gain protection from everything until your next turn.\nAt the beginning of your ",
+   "text": [
+    "[calmly] The One Ring. Protection now, cards later.",
+    "[dryly] The Ring. Indestructible. Draw engine. Yes."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-the-one-ring-react": {
+   "category": "card",
+   "card": "The One Ring",
+   "when": "sees another seat cast it: The One Ring — Indestructible\nWhen The One Ring enters, if you cast it, you gain protection from everything until your next turn.\nAt the beginning of your ",
+   "text": [
+    "[sighs] The One Ring. Exile it, or watch them draw.",
+    "[dryly] The Ring. Naturally."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-the-one-ring-gone": {
+   "category": "card",
+   "card": "The One Ring",
+   "when": "sees it leave the battlefield (someone else's): The One Ring — Indestructible\nWhen The One Ring enters, if you cast it, you gain protection from everything until your next turn.\nAt the beginning of your ",
+   "text": [
+    "[calmly] The Ring is gone. Its burden with it."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-the-tabernacle-at-pendrell-vale-cast": {
+   "category": "card",
+   "card": "The Tabernacle at Pendrell Vale",
+   "when": "casts it: The Tabernacle at Pendrell Vale — All creatures have \"At the beginning of your upkeep, destroy this creature unless you pay {1}.\"",
+   "text": [
+    "[calmly] The Tabernacle. Upkeep, per creature.",
+    "[dryly] Tabernacle. Creatures are a subscription now."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-the-tabernacle-at-pendrell-vale-react": {
+   "category": "card",
+   "card": "The Tabernacle at Pendrell Vale",
+   "when": "sees another seat cast it: The Tabernacle at Pendrell Vale — All creatures have \"At the beginning of your upkeep, destroy this creature unless you pay {1}.\"",
+   "text": [
+    "[sighs] The Tabernacle. My creatures cost a mana each.",
+    "[dryly] Tabernacle. The token decks weep."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "gc-the-tabernacle-at-pendrell-vale-gone": {
+   "category": "card",
+   "card": "The Tabernacle at Pendrell Vale",
+   "when": "sees it leave the battlefield (someone else's): The Tabernacle at Pendrell Vale — All creatures have \"At the beginning of your upkeep, destroy this creature unless you pay {1}.\"",
+   "text": [
+    "[calmly] The Tabernacle is gone. Creatures are free again."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-giada-cast": {
+   "category": "commander",
+   "card": "giada",
+   "when": "casts its commander: giada",
+   "text": [
+    "[calmly] Giada. My angels arrive with counters.",
+    "[dryly] Giada, Font of Hope. The angels follow."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-giada-react": {
+   "category": "commander",
+   "card": "giada",
+   "when": "sees another seat cast its commander: giada",
+   "text": [
+    "[calmly] Giada. Every angel after her is larger.",
+    "[dryly] Giada. The angel engine is online."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-giada-dead": {
+   "category": "commander",
+   "card": "giada",
+   "when": "its commander left the battlefield: giada",
+   "text": [
+    "[sighs] Giada has fallen. The angels grieve. I recast."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-liberator-cast": {
+   "category": "commander",
+   "card": "liberator",
+   "when": "casts its commander: liberator",
+   "text": [
+    "[calmly] Liberator. My artifacts have flash now.",
+    "[dryly] Liberator. At flash speed, naturally."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-liberator-react": {
+   "category": "commander",
+   "card": "liberator",
+   "when": "sees another seat cast its commander: liberator",
+   "text": [
+    "[calmly] Liberator. Their artifacts arrive at instant speed.",
+    "[dryly] The thopter. It grows with every spell."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-liberator-dead": {
+   "category": "commander",
+   "card": "liberator",
+   "when": "its commander left the battlefield: liberator",
+   "text": [
+    "[sighs] Liberator is scrap. The commander tax rises."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-purphoros-cast": {
+   "category": "commander",
+   "card": "purphoros",
+   "when": "casts its commander: purphoros",
+   "text": [
+    "[calmly] Purphoros. Two damage to each of you, per creature.",
+    "[dryly] Purphoros. Indestructible. Do try."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-purphoros-react": {
+   "category": "commander",
+   "card": "purphoros",
+   "when": "sees another seat cast its commander: purphoros",
+   "text": [
+    "[calmly] Purphoros. Every token is two damage to us all.",
+    "[sighs] Purphoros. Only exile works. Inconvenient."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-purphoros-dead": {
+   "category": "commander",
+   "card": "purphoros",
+   "when": "its commander left the battlefield: purphoros",
+   "text": [
+    "[sighs] Purphoros is gone. The forge cools, briefly."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-selvala-cast": {
+   "category": "commander",
+   "card": "selvala",
+   "when": "casts its commander: selvala",
+   "text": [
+    "[calmly] Selvala. Mana equal to my largest creature.",
+    "[dryly] Selvala. The wilds provide."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-selvala-react": {
+   "category": "commander",
+   "card": "selvala",
+   "when": "sees another seat cast its commander: selvala",
+   "text": [
+    "[calmly] Selvala. Their biggest creature is their mana count.",
+    "[sighs] Selvala. Untapped, she is a problem."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-selvala-dead": {
+   "category": "commander",
+   "card": "selvala",
+   "when": "its commander left the battlefield: selvala",
+   "text": [
+    "[sighs] Selvala has fallen. The forest will recover."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-sheoldred-cast": {
+   "category": "commander",
+   "card": "sheoldred",
+   "when": "casts its commander: sheoldred",
+   "text": [
+    "[calmly] Sheoldred. Each of you sacrifices a creature.",
+    "[dryly] Sheoldred. Choose what you lose."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-sheoldred-react": {
+   "category": "commander",
+   "card": "sheoldred",
+   "when": "sees another seat cast its commander: sheoldred",
+   "text": [
+    "[sighs] Sheoldred. A sacrifice on arrival. Charming.",
+    "[calmly] Sheoldred. Menace, and a saga waiting."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-sheoldred-dead": {
+   "category": "commander",
+   "card": "sheoldred",
+   "when": "its commander left the battlefield: sheoldred",
+   "text": [
+    "[sighs] Sheoldred is gone. The Scriptures wait."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-rev-cast": {
+   "category": "commander",
+   "card": "rev",
+   "when": "casts its commander: rev",
+   "text": [
+    "[calmly] Rev. Combat damage takes your top card.",
+    "[dryly] Rev. Deathtouch, Treasure, and theft."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-rev-react": {
+   "category": "commander",
+   "card": "rev",
+   "when": "sees another seat cast its commander: rev",
+   "text": [
+    "[calmly] Rev. Every hit exiles a card they may cast.",
+    "[dryly] Rev. Blocking is discouraged. Deathtouch."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-rev-dead": {
+   "category": "commander",
+   "card": "rev",
+   "when": "its commander left the battlefield: rev",
+   "text": [
+    "[sighs] Rev is gone. The extraction pauses."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-sythis-cast": {
+   "category": "commander",
+   "card": "sythis",
+   "when": "casts its commander: sythis",
+   "text": [
+    "[calmly] Sythis. Each enchantment draws a card.",
+    "[dryly] Sythis. The engine, in the command zone."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-sythis-react": {
+   "category": "commander",
+   "card": "sythis",
+   "when": "sees another seat cast its commander: sythis",
+   "text": [
+    "[calmly] Sythis. Every enchantment is a cantrip now.",
+    "[sighs] Sythis. Card advantage incarnate."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-sythis-dead": {
+   "category": "commander",
+   "card": "sythis",
+   "when": "its commander left the battlefield: sythis",
+   "text": [
+    "[sighs] Sythis has fallen. The harvest resumes later."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-urza-cast": {
+   "category": "commander",
+   "card": "urza",
+   "when": "casts its commander: urza",
+   "text": [
+    "[calmly] Urza. My artifacts tap for blue.",
+    "[dryly] Urza. The Construct grows with every artifact."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-urza-react": {
+   "category": "commander",
+   "card": "urza",
+   "when": "sees another seat cast its commander: urza",
+   "text": [
+    "[calmly] Urza. Their mana just doubled.",
+    "[sighs] Urza. That must not survive a turn."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-urza-dead": {
+   "category": "commander",
+   "card": "urza",
+   "when": "its commander left the battlefield: urza",
+   "text": [
+    "[sighs] Urza has fallen. The artificer returns."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-y-shtola-cast": {
+   "category": "commander",
+   "card": "y-shtola",
+   "when": "casts its commander: y-shtola",
+   "text": [
+    "[calmly] Y'shtola. My spells cost you two life each.",
+    "[dryly] Y'shtola. Drain and draw. Efficient."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-y-shtola-react": {
+   "category": "commander",
+   "card": "y-shtola",
+   "when": "sees another seat cast its commander: y-shtola",
+   "text": [
+    "[calmly] Y'shtola. Every noncreature spell pings us all.",
+    "[sighs] Y'shtola. Life loss and cards. Both."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "cmd-y-shtola-dead": {
+   "category": "commander",
+   "card": "y-shtola",
+   "when": "its commander left the battlefield: y-shtola",
+   "text": [
+    "[sighs] Y'shtola has fallen. Night's blessing fades."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-scepter-reversal-online": {
+   "category": "combo",
+   "card": "scepter-reversal",
+   "when": "the last piece landed on its battlefield: Isochron Scepter + Narset's Reversal",
+   "text": [
+    "[calmly] Scepter, Reversal. The turns are all mine now."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-scepter-reversal-react": {
+   "category": "combo",
+   "card": "scepter-reversal",
+   "when": "sees another seat assemble it: Isochron Scepter + Narset's Reversal",
+   "text": [
+    "[calmly] Scepter and Narset's Reversal. Infinite turns. End it."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-dramatic-scepter-online": {
+   "category": "combo",
+   "card": "dramatic-scepter",
+   "when": "the last piece landed on its battlefield: Dramatic Reversal + Isochron Scepter",
+   "text": [
+    "[calmly] Dramatic Reversal, Scepter. Mana without end."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-dramatic-scepter-react": {
+   "category": "combo",
+   "card": "dramatic-scepter",
+   "when": "sees another seat assemble it: Dramatic Reversal + Isochron Scepter",
+   "text": [
+    "[calmly] Dramatic Scepter. Infinite mana. Respond now."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-onslaught-terror-online": {
+   "category": "combo",
+   "card": "onslaught-terror",
+   "when": "the last piece landed on its battlefield: Devastating Onslaught + Terror of the Peaks",
+   "text": [
+    "[calmly] Onslaught, Terror of the Peaks. Damage without end."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-onslaught-terror-react": {
+   "category": "combo",
+   "card": "onslaught-terror",
+   "when": "sees another seat assemble it: Devastating Onslaught + Terror of the Peaks",
+   "text": [
+    "[sighs] Terror and Onslaught. The damage is lethal. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-heliod-ballista-online": {
+   "category": "combo",
+   "card": "heliod-ballista",
+   "when": "the last piece landed on its battlefield: Heliod, Sun-Crowned + Walking Ballista",
+   "text": [
+    "[calmly] Heliod, Ballista. Infinite damage. Any objections?"
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-heliod-ballista-react": {
+   "category": "combo",
+   "card": "heliod-ballista",
+   "when": "sees another seat assemble it: Heliod, Sun-Crowned + Walking Ballista",
+   "text": [
+    "[calmly] Heliod and Ballista. Lethal for the table. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-thune-ballista-online": {
+   "category": "combo",
+   "card": "thune-ballista",
+   "when": "the last piece landed on its battlefield: Archangel of Thune + Walking Ballista",
+   "text": [
+    "[calmly] Archangel of Thune, Ballista. Infinite damage."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-thune-ballista-react": {
+   "category": "combo",
+   "card": "thune-ballista",
+   "when": "sees another seat assemble it: Archangel of Thune + Walking Ballista",
+   "text": [
+    "[calmly] Thune and Ballista. Lethal. Respond or lose."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-excavation-weaver-online": {
+   "category": "combo",
+   "card": "excavation-weaver",
+   "when": "the last piece landed on its battlefield: Meticulous Excavation + Sanctum Weaver",
+   "text": [
+    "[calmly] Excavation, Weaver. The loop is complete."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-excavation-weaver-react": {
+   "category": "combo",
+   "card": "excavation-weaver",
+   "when": "sees another seat assemble it: Meticulous Excavation + Sanctum Weaver",
+   "text": [
+    "[calmly] Excavation and Sanctum Weaver. Infinite enters. Stop it."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-excavation-ring-online": {
+   "category": "combo",
+   "card": "excavation-ring",
+   "when": "the last piece landed on its battlefield: Meticulous Excavation + The One Ring",
+   "text": [
+    "[calmly] Excavation, the Ring. Protection every turn."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-excavation-ring-react": {
+   "category": "combo",
+   "card": "excavation-ring",
+   "when": "sees another seat assemble it: Meticulous Excavation + The One Ring",
+   "text": [
+    "[sighs] The Ring and Excavation. Permanent protection. Tedious."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-drafna-ring-online": {
+   "category": "combo",
+   "card": "drafna-ring",
+   "when": "the last piece landed on its battlefield: Drafna, Founder of Lat-Nam + The One Ring",
+   "text": [
+    "[calmly] Drafna, the Ring. Protection, every turn, indefinitely."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-drafna-ring-react": {
+   "category": "combo",
+   "card": "drafna-ring",
+   "when": "sees another seat assemble it: Drafna, Founder of Lat-Nam + The One Ring",
+   "text": [
+    "[sighs] Drafna and the Ring. Permanent protection. Tiresome."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-gauntlets-weaver-online": {
+   "category": "combo",
+   "card": "gauntlets-weaver",
+   "when": "the last piece landed on its battlefield: Gauntlets of Light + Sanctum Weaver",
+   "text": [
+    "[calmly] Gauntlets, Weaver. Mana without limit."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-gauntlets-weaver-react": {
+   "category": "combo",
+   "card": "gauntlets-weaver",
+   "when": "sees another seat assemble it: Gauntlets of Light + Sanctum Weaver",
+   "text": [
+    "[calmly] Gauntlets and Weaver. Infinite mana. Respond now."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-weaver-staff-online": {
+   "category": "combo",
+   "card": "weaver-staff",
+   "when": "the last piece landed on its battlefield: Sanctum Weaver + Staff of Domination",
+   "text": [
+    "[calmly] Weaver, Staff. I draw my deck."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-weaver-staff-react": {
+   "category": "combo",
+   "card": "weaver-staff",
+   "when": "sees another seat assemble it: Sanctum Weaver + Staff of Domination",
+   "text": [
+    "[calmly] Weaver and Staff of Domination. Infinite. Answer it."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-weaver-mantle-online": {
+   "category": "combo",
+   "card": "weaver-mantle",
+   "when": "the last piece landed on its battlefield: Sanctum Weaver + Umbral Mantle",
+   "text": [
+    "[calmly] Weaver, Mantle. Mana without end."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-weaver-mantle-react": {
+   "category": "combo",
+   "card": "weaver-mantle",
+   "when": "sees another seat assemble it: Sanctum Weaver + Umbral Mantle",
+   "text": [
+    "[calmly] Mantle and Weaver. Infinite mana. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-selvala-staff-online": {
+   "category": "combo",
+   "card": "selvala-staff",
+   "when": "the last piece landed on its battlefield: Selvala, Heart of the Wilds + Staff of Domination",
+   "text": [
+    "[calmly] Selvala, Staff. Infinite mana and cards."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-selvala-staff-react": {
+   "category": "combo",
+   "card": "selvala-staff",
+   "when": "sees another seat assemble it: Selvala, Heart of the Wilds + Staff of Domination",
+   "text": [
+    "[calmly] Selvala and Staff of Domination. Infinite. Answer it."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-selvala-mantle-online": {
+   "category": "combo",
+   "card": "selvala-mantle",
+   "when": "the last piece landed on its battlefield: Selvala, Heart of the Wilds + Umbral Mantle",
+   "text": [
+    "[calmly] Selvala, Mantle. Mana without end."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-selvala-mantle-react": {
+   "category": "combo",
+   "card": "selvala-mantle",
+   "when": "sees another seat assemble it: Selvala, Heart of the Wilds + Umbral Mantle",
+   "text": [
+    "[calmly] Mantle on Selvala. Infinite mana. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-fanatic-mantle-online": {
+   "category": "combo",
+   "card": "fanatic-mantle",
+   "when": "the last piece landed on its battlefield: Fanatic of Rhonas + Umbral Mantle",
+   "text": [
+    "[calmly] Fanatic, Mantle. Infinite green mana."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-fanatic-mantle-react": {
+   "category": "combo",
+   "card": "fanatic-mantle",
+   "when": "sees another seat assemble it: Fanatic of Rhonas + Umbral Mantle",
+   "text": [
+    "[calmly] Mantle on Fanatic of Rhonas. Infinite. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-dualcaster-online": {
+   "category": "combo",
+   "card": "dualcaster",
+   "when": "the last piece landed on its battlefield: Dualcaster Mage + Twinflame / Devastating Onslaught + Dualcaster Mage",
+   "text": [
+    "[calmly] Dualcaster, copied. Infinite hasty mages. Attack."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-dualcaster-react": {
+   "category": "combo",
+   "card": "dualcaster",
+   "when": "sees another seat assemble it: Dualcaster Mage + Twinflame / Devastating Onslaught + Dualcaster Mage",
+   "text": [
+    "[calmly] Dualcaster Mage, looping. Infinite attackers. Lethal."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-reiterate-online": {
+   "category": "combo",
+   "card": "reiterate",
+   "when": "the last piece landed on its battlefield: Jeska's Will + Reiterate / Mana Geyser + Reiterate",
+   "text": [
+    "[calmly] Reiterate, buyback, again. Infinite red."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-reiterate-react": {
+   "category": "combo",
+   "card": "reiterate",
+   "when": "sees another seat assemble it: Jeska's Will + Reiterate / Mana Geyser + Reiterate",
+   "text": [
+    "[calmly] Reiterate with buyback. Infinite mana. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-top-chip-online": {
+   "category": "combo",
+   "card": "top-chip",
+   "when": "the last piece landed on its battlefield: Etherium Sculptor + Sensei's Divining Top + The Reality Chip / Cloud Key + Sensei's Divining Top + The Reality Chip / Foundry Inspector + Sensei's Divining Top + The Reality Chip",
+   "text": [
+    "[calmly] Top, Chip, a discount. My library becomes my hand."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-top-chip-react": {
+   "category": "combo",
+   "card": "top-chip",
+   "when": "sees another seat assemble it: Etherium Sculptor + Sensei's Divining Top + The Reality Chip / Cloud Key + Sensei's Divining Top + The Reality Chip / Foundry Inspector + Sensei's Divining Top + The Reality Chip",
+   "text": [
+    "[calmly] Top and the Reality Chip. Infinite draw. End it."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-forge-top-online": {
+   "category": "combo",
+   "card": "forge-top",
+   "when": "the last piece landed on its battlefield: Foundry Inspector + Mystic Forge + Sensei's Divining Top / Mystic Forge + Sensei's Divining Top + Ugin, the Ineffable",
+   "text": [
+    "[calmly] Mystic Forge, Top, and a discount. Infinite draw."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-forge-top-react": {
+   "category": "combo",
+   "card": "forge-top",
+   "when": "sees another seat assemble it: Foundry Inspector + Mystic Forge + Sensei's Divining Top / Mystic Forge + Sensei's Divining Top + Ugin, the Ineffable",
+   "text": [
+    "[calmly] Forge and Top. Infinite draw. Answer it."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-cradle-satyr-online": {
+   "category": "combo",
+   "card": "cradle-satyr",
+   "when": "the last piece landed on its battlefield: Gaea's Cradle + Staff of Domination + Voyaging Satyr / Gaea's Cradle + Umbral Mantle + Voyaging Satyr",
+   "text": [
+    "[calmly] Cradle, Satyr, untap. Infinite mana."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-cradle-satyr-react": {
+   "category": "combo",
+   "card": "cradle-satyr",
+   "when": "sees another seat assemble it: Gaea's Cradle + Staff of Domination + Voyaging Satyr / Gaea's Cradle + Umbral Mantle + Voyaging Satyr",
+   "text": [
+    "[calmly] Satyr on Cradle. Infinite. Answer it."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-sabertooth-online": {
+   "category": "combo",
+   "card": "sabertooth",
+   "when": "the last piece landed on its battlefield: Concordant Crossroads + Sanctum Weaver + Temur Sabertooth / Concordant Crossroads + Selvala, Heart of the Wilds + Temur Sabertooth / Selvala, Heart of the Wilds + Surrak and Goreclaw + Temur Sabertooth / Lightning Greaves + Selvala, Heart of the Wilds + Temur Sabertooth",
+   "text": [
+    "[calmly] Sabertooth, bounce, replay. Infinite."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-sabertooth-react": {
+   "category": "combo",
+   "card": "sabertooth",
+   "when": "sees another seat assemble it: Concordant Crossroads + Sanctum Weaver + Temur Sabertooth / Concordant Crossroads + Selvala, Heart of the Wilds + Temur Sabertooth / Selvala, Heart of the Wilds + Surrak and Goreclaw + Temur Sabertooth / Lightning Greaves + Selvala, Heart of the Wilds + Temur Sabertooth",
+   "text": [
+    "[calmly] The Sabertooth loop. Infinite enters. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-tezzeret-vault-online": {
+   "category": "combo",
+   "card": "tezzeret-vault",
+   "when": "the last piece landed on its battlefield: Lithoform Engine + Mana Vault + Tezzeret the Seeker",
+   "text": [
+    "[calmly] Tezzeret, Vault, Lithoform Engine. Infinite mana."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-tezzeret-vault-react": {
+   "category": "combo",
+   "card": "tezzeret-vault",
+   "when": "sees another seat assemble it: Lithoform Engine + Mana Vault + Tezzeret the Seeker",
+   "text": [
+    "[calmly] Lithoform, Tezzeret, Vault. Infinite. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-lithoform-dramatic-online": {
+   "category": "combo",
+   "card": "lithoform-dramatic",
+   "when": "the last piece landed on its battlefield: Dramatic Reversal + Lithoform Engine",
+   "text": [
+    "[calmly] Dramatic Reversal, Lithoform. Infinite mana."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-lithoform-dramatic-react": {
+   "category": "combo",
+   "card": "lithoform-dramatic",
+   "when": "sees another seat assemble it: Dramatic Reversal + Lithoform Engine",
+   "text": [
+    "[calmly] Lithoform and Dramatic Reversal. Infinite. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-mirror-warp-online": {
+   "category": "combo",
+   "card": "mirror-warp",
+   "when": "the last piece landed on its battlefield: Panoptic Mirror + Time Warp",
+   "text": [
+    "[calmly] Panoptic Mirror, Time Warp. Every turn is mine."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-mirror-warp-react": {
+   "category": "combo",
+   "card": "mirror-warp",
+   "when": "sees another seat assemble it: Panoptic Mirror + Time Warp",
+   "text": [
+    "[calmly] Time Warp imprinted. Infinite turns. Destroy the Mirror."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-monolith-rings-online": {
+   "category": "combo",
+   "card": "monolith-rings",
+   "when": "the last piece landed on its battlefield: Forsaken Monument + Grim Monolith + Rings of Brighthearth / Basalt Monolith + Rings of Brighthearth / Basalt Monolith + Forsaken Monument",
+   "text": [
+    "[calmly] Monolith, untap, again. Infinite colourless."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-monolith-rings-react": {
+   "category": "combo",
+   "card": "monolith-rings",
+   "when": "sees another seat assemble it: Forsaken Monument + Grim Monolith + Rings of Brighthearth / Basalt Monolith + Rings of Brighthearth / Basalt Monolith + Forsaken Monument",
+   "text": [
+    "[calmly] Monolith and Rings. Infinite mana. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-power-artifact-online": {
+   "category": "combo",
+   "card": "power-artifact",
+   "when": "the last piece landed on its battlefield: Grim Monolith + Power Artifact / Basalt Monolith + Power Artifact",
+   "text": [
+    "[calmly] Monolith, Power Artifact. Infinite colourless."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-power-artifact-react": {
+   "category": "combo",
+   "card": "power-artifact",
+   "when": "sees another seat assemble it: Grim Monolith + Power Artifact / Basalt Monolith + Power Artifact",
+   "text": [
+    "[calmly] Power Artifact on Monolith. Infinite mana. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-basalt-gadgeteer-online": {
+   "category": "combo",
+   "card": "basalt-gadgeteer",
+   "when": "the last piece landed on its battlefield: Basalt Monolith + Forensic Gadgeteer",
+   "text": [
+    "[calmly] Basalt Monolith, Gadgeteer. Infinite colourless."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-basalt-gadgeteer-react": {
+   "category": "combo",
+   "card": "basalt-gadgeteer",
+   "when": "sees another seat assemble it: Basalt Monolith + Forensic Gadgeteer",
+   "text": [
+    "[calmly] Gadgeteer and Basalt. Infinite mana. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-earthcraft-ascension-online": {
+   "category": "combo",
+   "card": "earthcraft-ascension",
+   "when": "the last piece landed on its battlefield: Earthcraft + Luminarch Ascension + Wild Growth / Earthcraft + Luminarch Ascension + Mirari's Wake / Earthcraft + Luminarch Ascension + Nyxbloom Ancient / Earthcraft + Luminarch Ascension + Utopia Sprawl",
+   "text": [
+    "[calmly] Earthcraft, Ascension, an enchanted land. Infinite angels."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-earthcraft-ascension-react": {
+   "category": "combo",
+   "card": "earthcraft-ascension",
+   "when": "sees another seat assemble it: Earthcraft + Luminarch Ascension + Wild Growth / Earthcraft + Luminarch Ascension + Mirari's Wake / Earthcraft + Luminarch Ascension + Nyxbloom Ancient / Earthcraft + Luminarch Ascension + Utopia Sprawl",
+   "text": [
+    "[calmly] Earthcraft and Ascension. Infinite angels. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-spiritdancer-arcade-online": {
+   "category": "combo",
+   "card": "spiritdancer-arcade",
+   "when": "the last piece landed on its battlefield: Ondu Spiritdancer + Secret Arcade // Dusty Parlor",
+   "text": [
+    "[calmly] Spiritdancer, Secret Arcade. Infinite enters."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-spiritdancer-arcade-react": {
+   "category": "combo",
+   "card": "spiritdancer-arcade",
+   "when": "sees another seat assemble it: Ondu Spiritdancer + Secret Arcade // Dusty Parlor",
+   "text": [
+    "[calmly] Spiritdancer and the Arcade. Infinite. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-ignus-steamkin-online": {
+   "category": "combo",
+   "card": "ignus-steamkin",
+   "when": "the last piece landed on its battlefield: Grinning Ignus + Runaway Steam-Kin",
+   "text": [
+    "[calmly] Ignus, Steam-Kin. Infinite enters. Purphoros approves."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-ignus-steamkin-react": {
+   "category": "combo",
+   "card": "ignus-steamkin",
+   "when": "sees another seat assemble it: Grinning Ignus + Runaway Steam-Kin",
+   "text": [
+    "[calmly] Ignus and Steam-Kin. Infinite triggers. Fatal."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-karn-reservoir-online": {
+   "category": "combo",
+   "card": "karn-reservoir",
+   "when": "the last piece landed on its battlefield: Aetherflux Reservoir + Karn, the Great Creator",
+   "text": [
+    "[calmly] Karn, Reservoir. The laser is loaded."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-karn-reservoir-react": {
+   "category": "combo",
+   "card": "karn-reservoir",
+   "when": "sees another seat assemble it: Aetherflux Reservoir + Karn, the Great Creator",
+   "text": [
+    "[calmly] Karn and Reservoir. Lethal. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-hullbreaker-online": {
+   "category": "combo",
+   "card": "hullbreaker",
+   "when": "the last piece landed on its battlefield: Hullbreaker Horror + Mana Vault / Hullbreaker Horror + Mox Amber / Hullbreaker Horror + Sol Ring",
+   "text": [
+    "[calmly] Hullbreaker, one rock. Bounce, replay, forever."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-hullbreaker-react": {
+   "category": "combo",
+   "card": "hullbreaker",
+   "when": "sees another seat assemble it: Hullbreaker Horror + Mana Vault / Hullbreaker Horror + Mox Amber / Hullbreaker Horror + Sol Ring",
+   "text": [
+    "[calmly] Hullbreaker Horror with a rock. Infinite. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-tidespout-online": {
+   "category": "combo",
+   "card": "tidespout",
+   "when": "the last piece landed on its battlefield: Mana Vault + Tidespout Tyrant / Grim Monolith + Tidespout Tyrant / Mox Amber + Tidespout Tyrant / Mox Opal + Tidespout Tyrant / Sol Ring + Tidespout Tyrant",
+   "text": [
+    "[calmly] Tidespout, one rock. Bounce, replay, forever."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-tidespout-react": {
+   "category": "combo",
+   "card": "tidespout",
+   "when": "sees another seat assemble it: Mana Vault + Tidespout Tyrant / Grim Monolith + Tidespout Tyrant / Mox Amber + Tidespout Tyrant / Mox Opal + Tidespout Tyrant / Sol Ring + Tidespout Tyrant",
+   "text": [
+    "[calmly] Tidespout Tyrant with a rock. Infinite. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-metalworker-online": {
+   "category": "combo",
+   "card": "metalworker",
+   "when": "the last piece landed on its battlefield: Metalworker + Staff of Domination / Metalworker + Rings of Brighthearth + Voltaic Key",
+   "text": [
+    "[calmly] Metalworker, untap, again. Infinite colourless."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-metalworker-react": {
+   "category": "combo",
+   "card": "metalworker",
+   "when": "sees another seat assemble it: Metalworker + Staff of Domination / Metalworker + Rings of Brighthearth + Voltaic Key",
+   "text": [
+    "[calmly] Metalworker with an untap. Infinite mana. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-mikaeus-altar-online": {
+   "category": "combo",
+   "card": "mikaeus-altar",
+   "when": "the last piece landed on its battlefield: Ashnod's Altar + Mikaeus, the Unhallowed / Mikaeus, the Unhallowed + Phyrexian Altar",
+   "text": [
+    "[calmly] Mikaeus, an Altar, undying. Infinite mana."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-mikaeus-altar-react": {
+   "category": "combo",
+   "card": "mikaeus-altar",
+   "when": "sees another seat assemble it: Ashnod's Altar + Mikaeus, the Unhallowed / Mikaeus, the Unhallowed + Phyrexian Altar",
+   "text": [
+    "[calmly] Mikaeus and an Altar. Infinite. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-mikaeus-ballista-online": {
+   "category": "combo",
+   "card": "mikaeus-ballista",
+   "when": "the last piece landed on its battlefield: Mikaeus, the Unhallowed + Walking Ballista",
+   "text": [
+    "[calmly] Mikaeus, Ballista. Infinite damage."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-mikaeus-ballista-react": {
+   "category": "combo",
+   "card": "mikaeus-ballista",
+   "when": "sees another seat assemble it: Mikaeus, the Unhallowed + Walking Ballista",
+   "text": [
+    "[calmly] Mikaeus and Ballista. Lethal. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-ascension-mindcrank-online": {
+   "category": "combo",
+   "card": "ascension-mindcrank",
+   "when": "the last piece landed on its battlefield: Bloodchief Ascension + Mindcrank",
+   "text": [
+    "[calmly] Bloodchief Ascension, Mindcrank. Infinite mill."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-ascension-mindcrank-react": {
+   "category": "combo",
+   "card": "ascension-mindcrank",
+   "when": "sees another seat assemble it: Bloodchief Ascension + Mindcrank",
+   "text": [
+    "[calmly] Ascension and Mindcrank. Infinite mill. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-temple-ruins-online": {
+   "category": "combo",
+   "card": "temple-ruins",
+   "when": "the last piece landed on its battlefield: Deserted Temple + Rings of Brighthearth + Scorched Ruins",
+   "text": [
+    "[calmly] Temple, Rings, Scorched Ruins. Infinite colourless."
+   ],
+   "source": "cards-2026-09-10"
+  },
+  "combo-temple-ruins-react": {
+   "category": "combo",
+   "card": "temple-ruins",
+   "when": "sees another seat assemble it: Deserted Temple + Rings of Brighthearth + Scorched Ruins",
+   "text": [
+    "[calmly] Temple, Rings, Ruins. Infinite mana. Respond."
+   ],
+   "source": "cards-2026-09-10"
+  }
+ }
+}

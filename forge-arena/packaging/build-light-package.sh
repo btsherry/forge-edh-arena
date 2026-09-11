@@ -159,7 +159,7 @@ rsync -a --exclude '.DS_Store' --exclude '__pycache__/' --exclude '/tests/' --ex
   --exclude '/replay.py' \
   --exclude '/voice/stock/raw/' --exclude '/voice/stock/sfx/legacy/' \
   --exclude '/voice/stock/voices/*/raw/' \
-  --exclude '/voice/stock/voices/*/*/raw/' --exclude '/voice/table_lines.py' \
+  --exclude '/voice/stock/voices/*/*/raw/' --exclude '/voice/table_lines.py' --exclude '/voice/card_lines.py' \
   --exclude '/voice/build_stock.py' --exclude '.DS_Store' \
   --exclude '/ratings.json' --exclude '/ratings-history.jsonl' \
   --exclude '/ratings.lock' --exclude '/results/' \
