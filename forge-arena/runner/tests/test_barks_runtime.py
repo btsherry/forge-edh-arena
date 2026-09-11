@@ -117,7 +117,7 @@ class _TreeCase(unittest.TestCase):
     def _observer(self, turn, active, game_over=False, elim=(), events=()):
         seats = [{"seat": i, "name": f"s{i}", "eliminated": i in elim, "life": 40} for i in range(4)]
         (self.mailbox / "observer-state.json").write_text(json.dumps(
-            {"turn": turn, "activeSeat": active, "gameOver": game_over, "seats": seats, "events": list(events)}))
+            {"turn": turn, "phase": "MAIN1", "activeSeat": active, "gameOver": game_over, "seats": seats, "events": list(events)}))
 
     def _records(self, event=None, kind=None):
         out = []
@@ -731,12 +731,12 @@ class PatterClock(_TreeCase):
         self.r.rng.random = lambda: 0.0                     # dice always pass; weighted pick takes the first candidate
         self.r.rng.uniform = lambda a, b: a
 
-    def _board(self, lives=(40, 40, 40, 40), hands=(3, 3, 3, 3), active=1, boards=None, elim=(), turn=5):
+    def _board(self, lives=(40, 40, 40, 40), hands=(3, 3, 3, 3), active=1, boards=None, elim=(), turn=5, phase="MAIN1"):
         seats = []
         for i in range(4):
             bf = [{"name": f"c{i}{k}", "power": p} for k, p in enumerate((boards or {}).get(i, []))]
             seats.append({"seat": i, "name": f"s{i}", "eliminated": i in elim, "life": lives[i], "handSize": hands[i], "battlefield": bf})
-        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": turn, "activeSeat": active, "gameOver": False, "seats": seats, "events": []}))
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": turn, "phase": phase, "activeSeat": active, "gameOver": False, "seats": seats, "events": []}))
         self.r.scan_observer(); self.r.queue.clear(); self.r.last_spoken_at = self.clock.t
 
     def _tick(self, dt):
@@ -799,6 +799,29 @@ class PatterClock(_TreeCase):
         self.r.enqueue("advice", text="Do the thing.")
         self._tick(6)
         self.assertEqual([q["kind"] for q in self.r.queue], ["advice"], "a pending line: no patter")
+
+    def test_no_patter_before_the_deal_and_none_at_an_idle_table(self):
+        """Game 46 (2026-09-11 02:14): seventeen lines about 'empty hands' at turn 0 while the
+        human had not yet kept a hand, then on into an empty room."""
+        self._board(turn=0, phase="", hands=(0, 0, 0, 0))
+        self._tick(6); self._tick(6)
+        self.assertEqual(self.r.queue, [], "turn 0, no phase: the game has not begun")
+        self._board(turn=1, phase="", hands=(7, 7, 7, 7)); self._tick(6)
+        self.assertEqual(self.r.queue, [], "no phase yet: still the deal")
+        self._board(turn=2, active=1); self._tick(6)
+        self.assertEqual(len(self.r.queue), 1, "the game is on: patter"); self.r.queue.clear()
+        self.r.scan_observer()                                              # the same board, unchanged...
+        self.clock.t += vr.IDLE_S + 1; self.r.scan_observer(); self.r.patter()
+        self.assertEqual(self.r.queue, [], "...for two and a half minutes: an idle table, the clock waits")
+        self.assertIn("idle table", self._records("skipped", "bark")[-1]["why"])
+        self._board(turn=3, active=2); self._tick(6)
+        self.assertEqual(len(self.r.queue), 1, "the board moved: patter resumes")
+
+    def test_a_restarted_runner_does_not_replay_the_startup_line(self):
+        (self.logs / "voice-0.jsonl").write_text(json.dumps({"ts": 1.0, "event": "spoke", "kind": "startup", "stock": "startup"}) + "\n")
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.assertTrue(r.started_said)
+        self.assertFalse(self.r.started_said, "a fresh log: the opener plays")
 
     def test_the_dead_do_not_patter_and_a_patter_line_can_start_an_exchange(self):
         self._board(elim=(1,), active=2); self.r.eliminated.add(1)

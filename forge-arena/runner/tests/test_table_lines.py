@@ -158,7 +158,7 @@ class _TableCase(_TreeCase):
     def _snap(self, turn, active, seats=None, events=(), stack=()):
         seats = seats or [self._seat(i) for i in range(4)]
         (self.mailbox / "observer-state.json").write_text(json.dumps(
-            {"turn": turn, "activeSeat": active, "gameOver": False, "seats": seats, "events": list(events), "stackDetail": list(stack)}))
+            {"turn": turn, "phase": "MAIN1", "activeSeat": active, "gameOver": False, "seats": seats, "events": list(events), "stackDetail": list(stack)}))
         self.r.scan_observer()
 
     def _barks(self):

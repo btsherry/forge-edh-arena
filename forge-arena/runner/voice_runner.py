@@ -122,6 +122,7 @@ GRUDGE_EVERY = 3          # the third hit from the same seat (and every third af
 DEAL_TURNS = 8            # a truce is remembered for two rounds
 LONG_GAME_TURN = 14
 LETHAL_POWER = 15
+IDLE_S = 150.0            # the board unchanged this long (a human away from the keyboard): the patter clock waits
 # The cards sub-library (round 31, runner/voice/card_lines.py): game changers, commanders
 # and combos by name. The generic hooks stay; when the ctx names the card ("card" +
 # "card_kind" gc | cmd | combo) and the seat's cards library carries the wording, the
@@ -999,6 +1000,9 @@ class VoiceRunner:
         self._sweeps = 0
         self._deals: dict[tuple[int, int], object] = {}       # (a, b) -> the turn the truce was struck (both directions)
         self._heads_up_said = False
+        self._board_fp = None                                  # what the table sees; unchanged for IDLE_S = an idle table
+        self._board_changed_at = self.clock()
+        self._idle_noted = False
         self._said_this_turn: set[tuple[int, str]] = set()
         self._said_turn = None
         # Recency (game 44: "cards in hand" ten times in sixteen minutes, "good hand"
@@ -1075,7 +1079,7 @@ class VoiceRunner:
         self.seen_active = None
         self.eliminated: set[int] = set()
         self.game_over_said = False
-        self.started_said = False
+        self.started_said = self._startup_already_spoken()   # a restart never replays "would you like to play a game?"
         self._state_published = None
         self._live_published = None
 
@@ -1095,6 +1099,13 @@ class VoiceRunner:
             self.barks_cooldown = max(3.0, self.barks_cooldown / k)   # game 44: the 10 s guard silenced 15 barks at rowdy
         if k >= 1.5 and self.chains is not None:
             self.chains.max_hops += 1           # a livelier table talks back one more time
+
+    def _startup_already_spoken(self) -> bool:
+        try:
+            with self._jsonl.open("rb") as f:
+                return any(b'"event": "spoke"' in line and b'"stock": "startup"' in line for line in f)
+        except OSError:
+            return False
 
     def _table_who(self) -> dict[int, str]:
         out = {k: who_for_deck(self.address, v) for k, v in self._seat_decks.items()}
@@ -1677,6 +1688,13 @@ class VoiceRunner:
             return
         now = self.clock()
         snap = self._last_snapshot
+        if (snap.get("turn") or 0) < 1 or not snap.get("phase"):
+            return                                                # game 46: the table jabbed about "empty hands" at turn 0, before the deal
+        if now - self._board_changed_at > IDLE_S:
+            if not self._idle_noted:
+                self._idle_noted = True
+                self.record("skipped", kind="bark", why=f"idle table ({IDLE_S:.0f}s without a change) — the patter clock waits", source="patter")
+            return
         human_turn = snap.get("activeSeat") == self.human_seat
         if self._patter_anchor != self.last_spoken_at:          # a line just played: rearm from its end
             self._patter_anchor = self.last_spoken_at
@@ -2129,6 +2147,10 @@ class VoiceRunner:
         turn, active = d.get("turn"), d.get("activeSeat")
         self._prev_snapshot = self._last_snapshot
         self._last_snapshot = d
+        fp = (turn, d.get("phase"), active, len(d.get("events") or []), tuple(d.get("stack") or []),
+              tuple((x.get("seat"), x.get("life"), x.get("handSize"), len(x.get("battlefield") or [])) for x in d.get("seats") or [] if isinstance(x, dict)))
+        if fp != self._board_fp:
+            self._board_fp, self._board_changed_at, self._idle_noted = fp, self.clock(), False
         self.scan_events(d)
         if self.barks_mode != "off" and not self.final_locked and not d.get("gameOver"):
             self.scan_stack(d)

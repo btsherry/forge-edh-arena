@@ -74,7 +74,7 @@ class TalkBudget(_TreeCase):
         self.assertEqual([q["kind"] for q in r.queue if q["kind"] == "color"], ["color"], "0.9 × 0.5 = 0.45 > 0.2")
         # and the patter clock
         r.patter_on = True; r.patter_gap = (1.0, 1.0); r.rng.uniform = lambda a, b: a
-        r._last_snapshot = {"turn": 3, "activeSeat": 1, "seats": [{"seat": i, "life": 40, "handSize": 3, "battlefield": []} for i in range(4)]}
+        r._last_snapshot = {"turn": 3, "phase": "MAIN1", "activeSeat": 1, "seats": [{"seat": i, "life": 40, "handSize": 3, "battlefield": []} for i in range(4)]}
         r.queue.clear(); r.last_spoken_at = self.clock.t; r._patter_anchor = None
         self.clock.t += 2; r.patter()
         self.assertEqual(r.queue, [])
