@@ -77,6 +77,11 @@ KNOBS = {
         ("ARENA_BARKS_CHAIN_MAX", "3", "most hops in one exchange (reply, counter-reply, last word)"),
         ("ARENA_BARKS_CHAIN_GAP", "0.25", "seconds between the lines of an exchange, a retort's beat (the normal gap is ARENA_VOICE_MIN_GAP)"),
         ("ARENA_BARKS_CHAIN_HUMAN_P", "0.5", "multiplier on a chain the human's own play started (so the table doesn't feel like it gangs up)"),
+        ("ARENA_VOICE_PATTER", "on", "on | off — the patter clock: when nothing has played for a while a seat says something about the board, or filler"),
+        ("ARENA_VOICE_PATTER_GAP", "5-7", "seconds of silence (a range, drawn each time) before the table fills it"),
+        ("ARENA_VOICE_PATTER_HUMAN", "0.33", "patter rate during the human's turn (0.33 = a third as often; reactions to the human's plays are unaffected)"),
+        ("ARENA_VOICE_PATTER_AFTER_ADVICE", "6", "seconds of patter silence after an advisor line, so advice is never talked over"),
+        ("ARENA_BARKS_SLOW", "20", "a seat with a decision pending this many seconds gets told to play faster"),
     ],
     "backends (optional, API-billed)": [
         ("OPENROUTER_API_KEY", "", "needed by or/ seats"),

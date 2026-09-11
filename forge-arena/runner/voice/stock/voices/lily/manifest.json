@@ -368,10 +368,276 @@
       "when": "congratulates the winner",
       "category": "reply",
       "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "nice-play": {
+      "text": [
+        "[warmly] Oh, that's lovely.",
+        "[chuckles] Someone's been practising."
+      ],
+      "when": "another seat made a good play",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "thats-mean": {
+      "text": [
+        "[gasps] Oh, that's just mean.",
+        "[softly] Was that necessary, dear?"
+      ],
+      "when": "a removal or attack on a third party",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "oh-no": {
+      "text": [
+        "[gasps] Oh, no.",
+        "[softly] Well, that's not good."
+      ],
+      "when": "a threat lands",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "wow": {
+      "text": [
+        "[laughs softly] Goodness."
+      ],
+      "when": "anything big",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "why-me": {
+      "text": [
+        "[gently] Me? What did I do?"
+      ],
+      "when": "it is being attacked",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "attack-them": {
+      "text": [
+        "[mischievously] Wouldn't you rather hit them, love?"
+      ],
+      "when": "deflecting an attack onto someone else",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "not-sorry": {
+      "text": [
+        "[chuckles] Sorry, dear. Truly. Mostly."
+      ],
+      "when": "after hurting someone",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "read-that": {
+      "text": [
+        "[gently] What does that one do, dear?"
+      ],
+      "when": "an unfamiliar spell",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "whats-your-life": {
+      "text": [
+        "[gently] What are you at, dear?",
+        "[softly] Life, love?"
+      ],
+      "when": "asked of the leader or a low seat",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "cards-in-hand": {
+      "text": [
+        "[mischievously] Someone's full of secrets."
+      ],
+      "when": "a seat holding six or more cards",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "youre-the-threat": {
+      "text": [
+        "[gently] You do know you're the threat, dear.",
+        "[warmly] All eyes on you, love."
+      ],
+      "when": "naming the table leader",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "im-not-the-threat": {
+      "text": [
+        "[chuckles] Little old me? Hardly."
+      ],
+      "when": "the leader denying it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "board-envy": {
+      "text": [
+        "[softly] I don't care for your creatures, dear."
+      ],
+      "when": "at the biggest board",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "empty-hand": {
+      "text": [
+        "[gently] Running on empty, love?"
+      ],
+      "when": "a seat with nothing in hand",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "low-life-jab": {
+      "text": [
+        "[softly] Careful, dear. You're on fumes."
+      ],
+      "when": "a seat at ten or less",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "kill-that": {
+      "text": [
+        "[gently] Would someone deal with that?"
+      ],
+      "when": "a big creature on another board",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "deal": {
+      "text": [
+        "[warmly] Leave me be and I'll leave you, hmm?"
+      ],
+      "when": "politics",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "promise": {
+      "text": [
+        "[mischievously] Cross my heart, dear."
+      ],
+      "when": "after a deal",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "play-faster": {
+      "text": [
+        "[gently] Tick tock, dear.",
+        "[chuckles] Are we waiting on you, love?"
+      ],
+      "when": "a seat has been thinking for twenty seconds",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "thinking-hard": {
+      "text": [
+        "[softly] Someone's scheming."
+      ],
+      "when": "same, from a bystander",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "play-slower": {
+      "text": [
+        "[gently] Slow down, love. Let us see."
+      ],
+      "when": "a seat firing off plays",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "you-suck": {
+      "text": [
+        "[chuckles] Oh, you're terrible, dear.",
+        "[softly] Bless you, no."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "you-wish": {
+      "text": [
+        "[mischievously] You wish, love.",
+        "[chuckles] Keep dreaming, dear."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "you-cheat": {
+      "text": [
+        "[gasps] Cheater!"
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "nerd": {
+      "text": [
+        "[chuckles] Such a nerd."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "shut-it": {
+      "text": [
+        "[gently] Hush, dear."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "bite-me": {
+      "text": [
+        "[mischievously] Make me."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "nothing-happening": {
+      "text": [
+        "[gently] Quiet table.",
+        "[chuckles] Everyone's being so polite."
+      ],
+      "when": "nothing is happening",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "pass-already": {
+      "text": [
+        "[softly] Pass, dears."
+      ],
+      "when": "the active seat is dawdling",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "what-turn": {
+      "text": [
+        "[gently] What turn are we on, love?"
+      ],
+      "when": "filler",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "this-is-fine": {
+      "text": [
+        "[warmly] It's all going swimmingly."
+      ],
+      "when": "filler",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "good-hand": {
+      "text": [
+        "[mischievously] I've got a nice little hand here."
+      ],
+      "when": "filler, a bluff",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
     }
   },
   "sources": {
     "elevenlabs-v3-2026-09-10": "seat-bark library 'lily' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
-    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py"
+    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py",
+    "elevenlabs-v3-2026-09-10-patter": "table patter (board-state, pace, name-calling, filler) after five Game Knights episodes were measured: ~190 words/min, a silence over 4 s only every ~78 s"
   }
 }

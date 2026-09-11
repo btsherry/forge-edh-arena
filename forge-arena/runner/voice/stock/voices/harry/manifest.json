@@ -368,10 +368,275 @@
       "when": "congratulates the winner",
       "category": "reply",
       "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "nice-play": {
+      "text": [
+        "[laughs] Okay, that's a real card.",
+        "[excited] Oh, that's nasty. I like it."
+      ],
+      "when": "another seat made a good play",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "thats-mean": {
+      "text": [
+        "[laughs] That's mean! I love it!",
+        "[shouting] Brutal!"
+      ],
+      "when": "a removal or attack on a third party",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "oh-no": {
+      "text": [
+        "[angry] Oh no. Oh no no no."
+      ],
+      "when": "a threat lands",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "wow": {
+      "text": [
+        "[excited] Wow. Okay. Wow."
+      ],
+      "when": "anything big",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "why-me": {
+      "text": [
+        "[angry] Why me?! Hit them!"
+      ],
+      "when": "it is being attacked",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "attack-them": {
+      "text": [
+        "[shouting] Not me! Them! Look at their board!"
+      ],
+      "when": "deflecting an attack onto someone else",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "not-sorry": {
+      "text": [
+        "[laughs] Sorry. Not sorry."
+      ],
+      "when": "after hurting someone",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "read-that": {
+      "text": [
+        "[scoffs] Wait. Read that again."
+      ],
+      "when": "an unfamiliar spell",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "whats-your-life": {
+      "text": [
+        "[shouting] What are you at?!",
+        "[smug] Life total. Now."
+      ],
+      "when": "asked of the leader or a low seat",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "cards-in-hand": {
+      "text": [
+        "[angry] How many cards is that?!"
+      ],
+      "when": "a seat holding six or more cards",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "youre-the-threat": {
+      "text": [
+        "[shouting] You're the threat! Everybody hear me?",
+        "[laughs] Look at them. That's the problem."
+      ],
+      "when": "naming the table leader",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "im-not-the-threat": {
+      "text": [
+        "[scoffs] Me?! Look at their board!"
+      ],
+      "when": "the leader denying it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "board-envy": {
+      "text": [
+        "[angry] I hate your creatures."
+      ],
+      "when": "at the biggest board",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "empty-hand": {
+      "text": [
+        "[laughs] Playing off the top? Cute."
+      ],
+      "when": "a seat with nothing in hand",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "low-life-jab": {
+      "text": [
+        "[smug] Low life. Bold strategy."
+      ],
+      "when": "a seat at ten or less",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "kill-that": {
+      "text": [
+        "[shouting] Somebody kill that thing!"
+      ],
+      "when": "a big creature on another board",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "deal": {
+      "text": [
+        "[laughs] Don't hit me, I don't hit you. Deal?"
+      ],
+      "when": "politics",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "promise": {
+      "text": [
+        "[smug] I promise. I promise nothing."
+      ],
+      "when": "after a deal",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "play-faster": {
+      "text": [
+        "[shouting] Any day now!",
+        "[angry] Play faster!"
+      ],
+      "when": "a seat has been thinking for twenty seconds",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "thinking-hard": {
+      "text": [
+        "[laughs] They're thinking. That's never good."
+      ],
+      "when": "same, from a bystander",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "play-slower": {
+      "text": [
+        "[angry] Slow down! I can't read that fast!"
+      ],
+      "when": "a seat firing off plays",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "you-suck": {
+      "text": [
+        "[shouting] You suck!",
+        "[laughs] You. Suck."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "you-wish": {
+      "text": [
+        "[laughs] You wish!",
+        "[scoffs] In your dreams."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "you-cheat": {
+      "text": [
+        "[shouting] You cheat! I saw that!"
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "nerd": {
+      "text": [
+        "[laughs] Nerd."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "shut-it": {
+      "text": [
+        "[angry] Oh, shut it."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "bite-me": {
+      "text": [
+        "[scoffs] Bite me."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "nothing-happening": {
+      "text": [
+        "[angry] Nothing's happening! Somebody do something!",
+        "[scoffs] Boring."
+      ],
+      "when": "nothing is happening",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "pass-already": {
+      "text": [
+        "[shouting] Pass already!"
+      ],
+      "when": "the active seat is dawdling",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "what-turn": {
+      "text": [
+        "[scoffs] What turn is it even?"
+      ],
+      "when": "filler",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "this-is-fine": {
+      "text": [
+        "[laughs] This is fine. Everything's fine."
+      ],
+      "when": "filler",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "good-hand": {
+      "text": [
+        "[smug] I like my hand."
+      ],
+      "when": "filler, a bluff",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
     }
   },
   "sources": {
     "elevenlabs-v3-2026-09-10": "seat-bark library 'harry' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
-    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py"
+    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py",
+    "elevenlabs-v3-2026-09-10-patter": "table patter (board-state, pace, name-calling, filler) after five Game Knights episodes were measured: ~190 words/min, a silence over 4 s only every ~78 s"
   }
 }

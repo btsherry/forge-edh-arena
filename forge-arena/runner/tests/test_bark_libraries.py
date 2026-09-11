@@ -7,6 +7,7 @@ by name; wording N>1 lands in <id>-N.wav. These tests pin the contract the voice
 runner and the advisor will rely on; the audio itself is checked by
 StockLibrary-style tests once the takes exist.
 """
+import collections
 import json
 import re
 import sys
@@ -36,16 +37,17 @@ class SharedVocabulary(unittest.TestCase):
             self.assertEqual(m["schema"], "arena.voice-stock/1")
             self.assertEqual(m["library"], lib)
             these = list(m["phrases"])
-            self.assertEqual(len(these), 31, f"{lib}: 21 barks + 10 reply atoms")
-            self.assertEqual(sum(1 for ph in m["phrases"].values() if ph.get("category") == "bark"), 21, lib)
-            self.assertEqual(sum(1 for ph in m["phrases"].values() if ph.get("category") == "reply"), 10, lib)
+            cats = collections.Counter(ph.get("category") for ph in m["phrases"].values())
+            self.assertEqual(len(these), 63, f"{lib}: 21 barks + 8 reactions + 19 replies + 15 patter lines")
+            self.assertEqual((cats["bark"], cats["reaction"], cats["reply"], cats["patter"]), (21, 8, 19, 15), f"{lib}: {dict(cats)}")
             if ids is None:
                 ids = these
             self.assertEqual(these, ids, f"{lib} must share the vocabulary, in the same order")
             for pid, ph in m["phrases"].items():
                 self.assertIsInstance(ph["text"], list, f"{lib}/{pid}: wordings are a list")
-                self.assertEqual(len(ph["text"]), 4, f"{lib}/{pid}: exactly four wordings")
-                self.assertEqual(len(set(ph["text"])), 4, f"{lib}/{pid}: wordings must differ")
+                if ph.get("category") == "bark" or ph.get("source") == "elevenlabs-v3-2026-09-10-replies":
+                    self.assertEqual(len(ph["text"]), 4, f"{lib}/{pid}: the barks and the first ten replies carry four wordings")
+                self.assertEqual(len(set(ph["text"])), len(ph["text"]), f"{lib}/{pid}: wordings must differ")
                 self.assertTrue(ph.get("when"), f"{lib}/{pid}: 'when' guides the advisor")
                 for t in ph["text"]:
                     self.assertRegex(t, TAG_RE, f"{lib}/{pid}: every wording opens with a v3 delivery tag: {t!r}")

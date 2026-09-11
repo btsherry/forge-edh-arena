@@ -368,10 +368,276 @@
       "when": "congratulates the winner",
       "category": "reply",
       "source": "elevenlabs-v3-2026-09-10-replies"
+    },
+    "nice-play": {
+      "text": [
+        "[chuckles] Well now. That's the good stuff.",
+        "[calmly] Credit where due."
+      ],
+      "when": "another seat made a good play",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "thats-mean": {
+      "text": [
+        "[dryly] That was unkind. Effective, but unkind.",
+        "[sighs] Rather cruel."
+      ],
+      "when": "a removal or attack on a third party",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "oh-no": {
+      "text": [
+        "[calmly] Ah. That's a problem.",
+        "[sighs] Oh dear."
+      ],
+      "when": "a threat lands",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "wow": {
+      "text": [
+        "[dryly] Remarkable."
+      ],
+      "when": "anything big",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "why-me": {
+      "text": [
+        "[calmly] Curious choice of target."
+      ],
+      "when": "it is being attacked",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "attack-them": {
+      "text": [
+        "[dryly] Might I suggest a different target."
+      ],
+      "when": "deflecting an attack onto someone else",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "not-sorry": {
+      "text": [
+        "[calmly] My apologies. Sincerely insincere."
+      ],
+      "when": "after hurting someone",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "read-that": {
+      "text": [
+        "[curious] Read that card, would you."
+      ],
+      "when": "an unfamiliar spell",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "whats-your-life": {
+      "text": [
+        "[calmly] Life total, please.",
+        "[dryly] Remind me. Your life."
+      ],
+      "when": "asked of the leader or a low seat",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "cards-in-hand": {
+      "text": [
+        "[dryly] Quite the hand you're hoarding."
+      ],
+      "when": "a seat holding six or more cards",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "youre-the-threat": {
+      "text": [
+        "[calmly] For the record, you are the threat.",
+        "[dryly] The table's problem sits right there."
+      ],
+      "when": "naming the table leader",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "im-not-the-threat": {
+      "text": [
+        "[calmly] I'm no threat. Look elsewhere."
+      ],
+      "when": "the leader denying it",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "board-envy": {
+      "text": [
+        "[dryly] I dislike every one of those."
+      ],
+      "when": "at the biggest board",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "empty-hand": {
+      "text": [
+        "[dryly] Living on draws, I see."
+      ],
+      "when": "a seat with nothing in hand",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "low-life-jab": {
+      "text": [
+        "[calmly] Your margin is thin."
+      ],
+      "when": "a seat at ten or less",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "kill-that": {
+      "text": [
+        "[dryly] That needs to die. Anyone?"
+      ],
+      "when": "a big creature on another board",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "deal": {
+      "text": [
+        "[calmly] A truce. Just this turn."
+      ],
+      "when": "politics",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "promise": {
+      "text": [
+        "[dryly] My word is my bond. Loosely."
+      ],
+      "when": "after a deal",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "play-faster": {
+      "text": [
+        "[dryly] We're all getting older.",
+        "[calmly] Take your time. Please don't."
+      ],
+      "when": "a seat has been thinking for twenty seconds",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "thinking-hard": {
+      "text": [
+        "[dryly] Ominous silence."
+      ],
+      "when": "same, from a bystander",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "play-slower": {
+      "text": [
+        "[dryly] One thing at a time."
+      ],
+      "when": "a seat firing off plays",
+      "category": "reaction",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "you-suck": {
+      "text": [
+        "[dryly] You are, in a word, bad at this.",
+        "[calmly] Substandard."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "you-wish": {
+      "text": [
+        "[dryly] Wishful thinking.",
+        "[calmly] Unlikely."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "you-cheat": {
+      "text": [
+        "[dryly] That was almost legal."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "nerd": {
+      "text": [
+        "[dryly] Says the nerd."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "shut-it": {
+      "text": [
+        "[calmly] Do be quiet."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "bite-me": {
+      "text": [
+        "[dryly] Noted, and ignored."
+      ],
+      "when": "light name-calling",
+      "category": "reply",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "nothing-happening": {
+      "text": [
+        "[dryly] Riveting.",
+        "[sighs] A lull."
+      ],
+      "when": "nothing is happening",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "pass-already": {
+      "text": [
+        "[calmly] Pass, pass, pass."
+      ],
+      "when": "the active seat is dawdling",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "what-turn": {
+      "text": [
+        "[curious] Turn what, now?"
+      ],
+      "when": "filler",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "this-is-fine": {
+      "text": [
+        "[dryly] All according to plan. Someone's plan."
+      ],
+      "when": "filler",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
+    },
+    "good-hand": {
+      "text": [
+        "[calmly] My hand is adequate."
+      ],
+      "when": "filler, a bluff",
+      "category": "patter",
+      "source": "elevenlabs-v3-2026-09-10-patter"
     }
   },
   "sources": {
     "elevenlabs-v3-2026-09-10": "seat-bark library 'bill' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
-    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py"
+    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py",
+    "elevenlabs-v3-2026-09-10-patter": "table patter (board-state, pace, name-calling, filler) after five Game Knights episodes were measured: ~190 words/min, a silence over 4 s only every ~78 s"
   }
 }

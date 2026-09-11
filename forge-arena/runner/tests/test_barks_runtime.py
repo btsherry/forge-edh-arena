@@ -16,6 +16,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 import wave
 from pathlib import Path
@@ -23,7 +24,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import voice_runner as vr  # noqa: E402
 
-LINES = ("big-swing", "eliminated", "my-turn", "that-hurt", "landed-hit", "counter", "got-countered", "slow-turn", "respect")
+LINES = ("big-swing", "eliminated", "my-turn", "that-hurt", "landed-hit", "counter", "got-countered", "slow-turn", "respect",
+         "play-faster", "thinking-hard", "youre-the-threat", "whats-your-life", "low-life-jab", "cards-in-hand", "empty-hand",
+         "kill-that", "board-envy", "nothing-happening", "this-is-fine", "good-hand", "what-turn", "deal", "pass-already")
 
 
 def silent_wav(seconds: float = 0.2) -> bytes:
@@ -91,7 +94,7 @@ class _TreeCase(unittest.TestCase):
         os.environ.pop("ELEVENLABS_API_KEY", None)
         for k, v in {"ARENA_VOICE_MIN_GAP": "8", "ARENA_VOICE_SFX": "off", "ARENA_VOICE_FX": "off",
                      "ARENA_BARKS": "all", "ARENA_BARKS_COOLDOWN": "10", "ARENA_VOICE_YOUR_MOVE": "on",
-                     "ARENA_BARKS_OPENER_P": "0"}.items():
+                     "ARENA_BARKS_OPENER_P": "0", "ARENA_VOICE_PATTER": "off"}.items():
             os.environ[k] = v
         self.clock = Clock()
         self.player = FakePlayer()
@@ -560,6 +563,96 @@ class InteractionChains(_TreeCase):
         self.r.barks_mode = "off"
         self._spoken(1, "big-swing", ctx={"targets": [2]})
         self.assertEqual(self.r.queue, [])
+
+
+class PatterClock(_TreeCase):
+    """The table fills silences from what the board says; quieter on the human's turn; never over the advisor."""
+    CHAINS = True
+
+    def setUp(self):
+        super().setUp()
+        os.environ["ARENA_VOICE_PATTER"] = "on"; os.environ["ARENA_VOICE_PATTER_GAP"] = "5-5"
+        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        self.r.rng.random = lambda: 0.0                     # dice always pass; weighted pick takes the first candidate
+        self.r.rng.uniform = lambda a, b: a
+
+    def _board(self, lives=(40, 40, 40, 40), hands=(3, 3, 3, 3), active=1, boards=None, elim=(), turn=5):
+        seats = []
+        for i in range(4):
+            bf = [{"name": f"c{i}{k}", "power": p} for k, p in enumerate((boards or {}).get(i, []))]
+            seats.append({"seat": i, "name": f"s{i}", "eliminated": i in elim, "life": lives[i], "handSize": hands[i], "battlefield": bf})
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": turn, "activeSeat": active, "gameOver": False, "seats": seats, "events": []}))
+        self.r.scan_observer(); self.r.queue.clear(); self.r.last_spoken_at = self.clock.t
+
+    def _tick(self, dt):
+        self.clock.t += dt; self.r.patter()
+
+    def test_defaults_and_the_dial(self):
+        for k in ("ARENA_VOICE_PATTER", "ARENA_VOICE_PATTER_GAP", "ARENA_VOICE_PATTER_HUMAN", "ARENA_VOICE_PATTER_AFTER_ADVICE", "ARENA_BARKS_SLOW"):
+            os.environ.pop(k, None)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.assertEqual((r.patter_on, r.patter_gap, r.patter_human, r.patter_after_advice, r.barks_slow), (True, (5.0, 7.0), 0.33, 6.0, 20.0))
+        os.environ["ARENA_CHATTER"] = "rowdy"
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.assertEqual(r.patter_gap, (2.5, 3.5)); self.assertEqual(r.chains.max_hops, 4, "a livelier table talks back one more time")
+
+    def test_a_slow_seat_is_told_to_play_faster_by_someone_else(self):
+        self._board(active=2)
+        inbox = self.mailbox / "seat-2" / "inbox"; inbox.mkdir(parents=True)
+        f = inbox / "req-7.json"; f.write_text("{}")
+        os.utime(f, (time.time() - 30, time.time() - 30))
+        self.assertEqual(self.r.slow_seats(), [2])
+        self._tick(6)
+        q = [x for x in self._queued() if x[0] == "bark"]
+        self.assertEqual(q, [("bark", "play-faster", "harry", 1)], "seat 1 tells seat 2 to hurry — the top-weighted candidate")
+        self.assertEqual(self.r.queue[0]["ctx"]["targets"], [2])
+        self.assertEqual(self._records("queued", "bark")[-1]["source"], "patter")
+
+    def test_board_lines_name_the_leader_the_low_seat_the_big_hand_and_the_big_board(self):
+        self._board(lives=(40, 8, 40, 45), hands=(3, 7, 0, 3), boards={2: [7, 2, 2]}, active=3)
+        cands = self.r.patter_candidates(self.r._last_snapshot, [1, 2])
+        ids = {(pid, tgt) for _, pid, tgt, _ in cands}
+        self.assertIn(("youre-the-threat", 3), ids, "the human-side seat 3 at 45 is the leader; the human can be a target")
+        self.assertIn(("low-life-jab", 1), ids); self.assertIn(("cards-in-hand", 1), ids)
+        self.assertIn(("empty-hand", 2), ids); self.assertIn(("kill-that", 2), ids); self.assertIn(("board-envy", 2), ids)
+        self.assertTrue(all(sp != tgt for sp, _, tgt, _ in cands), "nobody addresses themselves")
+        self.assertTrue(all(sp in (1, 2) for sp, *_ in cands), "only living voiced seats speak")
+
+    def test_filler_when_the_board_says_nothing_and_silence_is_respected(self):
+        self._board()
+        self._tick(4)
+        self.assertEqual(self.r.queue, [], "not yet: the gap is five seconds from the last line")
+        self._tick(2)
+        self.assertEqual(len([x for x in self._queued() if x[0] == "bark"]), 1)
+        pid = self.r.queue[0]["stock"]
+        self.assertIn(pid, ("nothing-happening", "this-is-fine", "good-hand", "what-turn", "deal", "pass-already", "youre-the-threat", "whats-your-life"))
+
+    def test_quiet_on_the_humans_turn_and_never_over_the_advisor(self):
+        self._board(active=0)
+        self._tick(6)
+        self.assertEqual(self.r.queue, [], "the human's turn: the gap is three times longer")
+        self._tick(10)
+        self.assertEqual(len(self.r.queue), 1)
+        self.r.queue.clear(); self._board(active=1, turn=6)          # a new turn: the no-repeat set is fresh
+        self.r._advisor_spoke_at = self.clock.t
+        self._tick(5)
+        self.assertEqual(self.r.queue, [], "silence after advice — six seconds")
+        self._tick(2)
+        self.assertEqual(len(self.r.queue), 1)
+        self.r.queue.clear(); self._board(active=1, turn=7)
+        self.r.enqueue("advice", text="Do the thing.")
+        self._tick(6)
+        self.assertEqual([q["kind"] for q in self.r.queue], ["advice"], "a pending line: no patter")
+
+    def test_the_dead_do_not_patter_and_a_patter_line_can_start_an_exchange(self):
+        self._board(elim=(1,), active=2); self.r.eliminated.add(1)
+        self._tick(6)
+        q = [x for x in self._queued() if x[0] == "bark"]
+        self.assertTrue(all(x[3] == 2 for x in q), q)
+        self.r.queue.clear()
+        self.r.rng.shuffle = lambda x: None
+        self.r.after_spoken({"kind": "bark", "stock": "youre-the-threat", "text": "", "seat": 2, "library": "bill", "ctx": {"targets": [1]}, "chain": None})
+        self.assertEqual(self.r.queue, [], "the target is dead: no answer")
 
 
 if __name__ == "__main__":

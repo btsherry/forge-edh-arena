@@ -1,6 +1,6 @@
 {
   "schema": "arena.voice-chains/1",
-  "note": "Interaction chains (Ben, 2026-09-10): a spoken line invites replies from ROLES, each reply an atom from the replier's own library. The runner composes: opener -> hop 1 -> hop 2 ..., one line at a time, rolling first_hop_p * decay^(hop-1); a chain dies at max_hops or when the turn changes. Roles: target = the seat(s) the opener addressed (from the event), aggressor = the seat that caused the opener's grief, bystander = another voiced seat, leader = the highest-life other seat, origin = the chain's first speaker (hops >= 2). Nobody replies to themselves; nobody says the same line twice in a turn. Tuned after game 39: no single reply type may dominate — the bystander scoff was five openers' default and became a tic. Ben (game 41): responses and counter-responses must be tight in wall-clock — gap_s 0.25 from the end of the previous line, and the runner polls every 0.1 s while an exchange is pending — a retort lands in 0.25–0.35 s (Ben, game 42).",
+  "note": "Interaction chains (Ben, 2026-09-10): a spoken line invites replies from ROLES, each reply an atom from the replier's own library. The runner composes: opener -> hop 1 -> hop 2 ..., one line at a time, rolling first_hop_p * decay^(hop-1); a chain dies at max_hops or when the turn changes. Roles: target = the seat(s) the opener addressed (from the event), aggressor = the seat that caused the opener's grief, bystander = another voiced seat, leader = the highest-life other seat, origin = the chain's first speaker (hops >= 2). Nobody replies to themselves; nobody says the same line twice in a turn. Tuned after game 39: no single reply type may dominate — the bystander scoff was five openers' default and became a tic. Ben (game 41): responses and counter-responses must be tight in wall-clock — gap_s 0.25 from the end of the previous line, and the runner polls every 0.1 s while an exchange is pending — a retort lands in 0.25–0.35 s (Ben, game 42). Patter (2026-09-10): board-state, pace and filler lines are addressed to a target the runner picked, so the same table answers them.",
   "first_hop_p": 0.6,
   "decay": 0.5,
   "max_hops": 3,
@@ -11,6 +11,14 @@
       {
         "role": "target",
         "reply": "brace"
+      },
+      {
+        "role": "target",
+        "reply": "why-me"
+      },
+      {
+        "role": "target",
+        "reply": "attack-them"
       },
       {
         "role": "bystander",
@@ -115,6 +123,10 @@
       {
         "role": "leader",
         "reply": "clapback"
+      },
+      {
+        "role": "leader",
+        "reply": "you-wish"
       },
       {
         "role": "bystander",
@@ -298,6 +310,315 @@
       {
         "role": "origin",
         "reply": "last-word"
+      }
+    ],
+    "nice-play": [
+      {
+        "role": "target",
+        "reply": "laugh"
+      },
+      {
+        "role": "bystander",
+        "reply": "agree"
+      }
+    ],
+    "thats-mean": [
+      {
+        "role": "target",
+        "reply": "not-sorry"
+      },
+      {
+        "role": "bystander",
+        "reply": "laugh"
+      }
+    ],
+    "oh-no": [
+      {
+        "role": "bystander",
+        "reply": "laugh"
+      },
+      {
+        "role": "bystander",
+        "reply": "pile-on"
+      }
+    ],
+    "wow": [],
+    "why-me": [
+      {
+        "role": "aggressor",
+        "reply": "not-sorry"
+      },
+      {
+        "role": "bystander",
+        "reply": "laugh"
+      }
+    ],
+    "attack-them": [
+      {
+        "role": "target",
+        "reply": "you-wish"
+      },
+      {
+        "role": "target",
+        "reply": "clapback"
+      }
+    ],
+    "not-sorry": [
+      {
+        "role": "target",
+        "reply": "you-suck"
+      },
+      {
+        "role": "target",
+        "reply": "bite-me"
+      }
+    ],
+    "read-that": [],
+    "whats-your-life": [
+      {
+        "role": "target",
+        "reply": "bite-me"
+      },
+      {
+        "role": "target",
+        "reply": "im-not-the-threat"
+      }
+    ],
+    "cards-in-hand": [
+      {
+        "role": "target",
+        "reply": "you-wish"
+      },
+      {
+        "role": "target",
+        "reply": "shut-it"
+      },
+      {
+        "role": "target",
+        "reply": "good-hand"
+      }
+    ],
+    "youre-the-threat": [
+      {
+        "role": "target",
+        "reply": "im-not-the-threat"
+      },
+      {
+        "role": "bystander",
+        "reply": "agree"
+      }
+    ],
+    "im-not-the-threat": [
+      {
+        "role": "origin",
+        "reply": "you-wish"
+      },
+      {
+        "role": "bystander",
+        "reply": "disagree"
+      },
+      {
+        "role": "origin",
+        "reply": "laugh"
+      }
+    ],
+    "board-envy": [
+      {
+        "role": "target",
+        "reply": "laugh"
+      },
+      {
+        "role": "target",
+        "reply": "you-wish"
+      }
+    ],
+    "empty-hand": [
+      {
+        "role": "target",
+        "reply": "bite-me"
+      },
+      {
+        "role": "target",
+        "reply": "shut-it"
+      }
+    ],
+    "low-life-jab": [
+      {
+        "role": "target",
+        "reply": "clapback"
+      },
+      {
+        "role": "target",
+        "reply": "bite-me"
+      },
+      {
+        "role": "bystander",
+        "reply": "pile-on"
+      }
+    ],
+    "kill-that": [
+      {
+        "role": "target",
+        "reply": "you-wish"
+      },
+      {
+        "role": "target",
+        "reply": "clapback"
+      },
+      {
+        "role": "bystander",
+        "reply": "agree"
+      }
+    ],
+    "deal": [
+      {
+        "role": "target",
+        "reply": "promise"
+      },
+      {
+        "role": "target",
+        "reply": "you-wish"
+      }
+    ],
+    "promise": [
+      {
+        "role": "origin",
+        "reply": "you-cheat"
+      },
+      {
+        "role": "origin",
+        "reply": "laugh"
+      }
+    ],
+    "play-faster": [
+      {
+        "role": "target",
+        "reply": "shut-it"
+      },
+      {
+        "role": "target",
+        "reply": "bite-me"
+      },
+      {
+        "role": "bystander",
+        "reply": "thinking-hard"
+      }
+    ],
+    "thinking-hard": [
+      {
+        "role": "target",
+        "reply": "shut-it"
+      }
+    ],
+    "play-slower": [
+      {
+        "role": "target",
+        "reply": "laugh"
+      },
+      {
+        "role": "target",
+        "reply": "you-suck"
+      }
+    ],
+    "you-suck": [
+      {
+        "role": "target",
+        "reply": "you-wish"
+      },
+      {
+        "role": "target",
+        "reply": "bite-me"
+      },
+      {
+        "role": "bystander",
+        "reply": "laugh"
+      }
+    ],
+    "you-wish": [
+      {
+        "role": "origin",
+        "reply": "you-suck"
+      },
+      {
+        "role": "origin",
+        "reply": "laugh"
+      }
+    ],
+    "you-cheat": [
+      {
+        "role": "target",
+        "reply": "you-wish"
+      },
+      {
+        "role": "target",
+        "reply": "scoff"
+      }
+    ],
+    "nerd": [
+      {
+        "role": "target",
+        "reply": "nerd"
+      },
+      {
+        "role": "target",
+        "reply": "shut-it"
+      }
+    ],
+    "shut-it": [
+      {
+        "role": "origin",
+        "reply": "you-suck"
+      },
+      {
+        "role": "origin",
+        "reply": "laugh"
+      }
+    ],
+    "bite-me": [
+      {
+        "role": "origin",
+        "reply": "laugh"
+      },
+      {
+        "role": "origin",
+        "reply": "nerd"
+      }
+    ],
+    "nothing-happening": [
+      {
+        "role": "bystander",
+        "reply": "agree"
+      },
+      {
+        "role": "bystander",
+        "reply": "pass-already"
+      }
+    ],
+    "pass-already": [
+      {
+        "role": "target",
+        "reply": "shut-it"
+      }
+    ],
+    "what-turn": [],
+    "this-is-fine": [
+      {
+        "role": "bystander",
+        "reply": "laugh"
+      },
+      {
+        "role": "bystander",
+        "reply": "disagree"
+      }
+    ],
+    "good-hand": [
+      {
+        "role": "bystander",
+        "reply": "you-wish"
+      },
+      {
+        "role": "bystander",
+        "reply": "you-cheat"
       }
     ]
   },

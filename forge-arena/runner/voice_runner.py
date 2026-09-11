@@ -800,6 +800,24 @@ class VoiceRunner:
         self._said_this_turn: set[tuple[int, str]] = set()
         self._said_turn = None
         self._event_seq = None      # last snapshot event seq consumed; None until the first read
+        # The patter clock (Ben, 2026-09-10: "someone should say something every 5-7
+        # seconds"): when the queue is empty and nothing has played for a randomized
+        # gap, the runner itself picks a speaker and a line from what the board says
+        # (a slow seat, the leader, a low seat, a big hand, a big board) or filler.
+        # Five Game Knights episodes measured ~190 words/min with a silence over 4 s
+        # only every ~78 s. Quieter on the human's turn; never over the advisor.
+        self.patter_on = os.environ.get("ARENA_VOICE_PATTER", "on").lower() != "off"
+        lo, _, hi = os.environ.get("ARENA_VOICE_PATTER_GAP", "5-7").partition("-")
+        try:
+            self.patter_gap = (float(lo), float(hi or lo))
+        except ValueError:
+            self.patter_gap = (5.0, 7.0)
+        self.patter_human = float(os.environ.get("ARENA_VOICE_PATTER_HUMAN", "0.33"))     # rate on the human's turn
+        self.patter_after_advice = float(os.environ.get("ARENA_VOICE_PATTER_AFTER_ADVICE", "6"))
+        self.barks_slow = float(os.environ.get("ARENA_BARKS_SLOW", "20"))                  # a seat thinking this long gets told
+        self._patter_anchor = None
+        self._patter_due = 0.0
+        self._advisor_spoke_at = -1e9
         # interaction chains (Ben, 2026-09-10): a spoken line invites replies; see chains.py
         self.chains = ChainTable.load(VOICES_DIR)
         self._chain: dict | None = None      # {"origin": seat, "hop": n, "turn": t} while an exchange is running
@@ -854,6 +872,9 @@ class VoiceRunner:
             self.min_gap = max(3.0, self.min_gap / k)
             self.barks_swing = max(3, round(self.barks_swing / k))
             self.barks_hit = max(4, round(self.barks_hit / k))
+            self.patter_gap = (max(2.0, self.patter_gap[0] / k), max(2.5, self.patter_gap[1] / k))
+        if k >= 1.5 and self.chains is not None:
+            self.chains.max_hops += 1           # a livelier table talks back one more time
 
     # -- output
     def say(self, msg: str) -> None:
@@ -963,6 +984,8 @@ class VoiceRunner:
         self._play(path)
         self.publish_speaking(None, 0.0)
         self.last_spoken_at = self.clock()
+        if item["kind"] in ("advice", "ask"):
+            self._advisor_spoke_at = self.clock()
         if item.get("seat") is not None and item.get("library"):
             self._bark_spoken_at[int(item["seat"])] = self.clock()
         self.record("spoke", kind=item["kind"], text=item["text"][:200], stock=item["stock"], seconds=round(wav_seconds(path), 2),
@@ -1090,6 +1113,103 @@ class VoiceRunner:
             self.enqueue("color", text=first_sentence(r["text"]), ttl=40.0)
         else:
             self.record("skipped", kind="color", why="dice (ARENA_VOICE_COLOR=some)", text=r["text"][:80])
+
+    # -- the patter clock
+    def _patter_gap_s(self, human_turn: bool) -> float:
+        g = self.rng.uniform(*self.patter_gap)
+        return g / self.patter_human if human_turn and self.patter_human > 0 else g
+
+    def slow_seats(self) -> list[int]:
+        """AI seats with a decision pending in their mailbox longer than ARENA_BARKS_SLOW."""
+        out = []
+        now = time.time()
+        for seat in self.seat_libraries:
+            if int(seat) in self.eliminated:
+                continue
+            try:
+                inbox = self.mailbox / f"seat-{seat}" / "inbox"
+                ages = [now - f.stat().st_mtime for f in inbox.glob("req-*.json")]
+            except OSError:
+                ages = []
+            if ages and max(ages) >= self.barks_slow:
+                out.append(int(seat))
+        return out
+
+    def patter_candidates(self, snap: dict, living: list[int]) -> list[tuple[int, str, int | None, float]]:
+        """(speaker, line, target, weight) — what the board gives the table to talk
+        about. Board lines are addressed to a target (the human included, as a
+        target only); filler is always available at low weight."""
+        seats = [x for x in (snap.get("seats") or []) if isinstance(x, dict) and not x.get("eliminated")]
+        by_id = {int(x["seat"]): x for x in seats if x.get("seat") is not None}
+        active = snap.get("activeSeat")
+        out: list[tuple[int, str, int | None, float]] = []
+
+        def others(target):
+            return [sp for sp in living if sp != target]
+
+        def add(pid, target, w, speakers=None):
+            for sp in (speakers if speakers is not None else others(target)):
+                out.append((sp, pid, target, w / max(1, len(speakers if speakers is not None else others(target)))))
+
+        for slow in self.slow_seats():
+            add("play-faster", slow, 3.0); add("thinking-hard", slow, 1.0)
+        if len(by_id) >= 2:
+            lead = max(by_id.values(), key=lambda x: x.get("life") or 0)
+            if [x for x in by_id.values() if (x.get("life") or 0) == (lead.get("life") or 0)] == [lead]:
+                add("youre-the-threat", int(lead["seat"]), 2.0); add("whats-your-life", int(lead["seat"]), 1.0)
+        for sid, x in by_id.items():
+            life, hand = x.get("life") or 0, x.get("handSize") or 0
+            if 0 < life <= 10:
+                add("low-life-jab", sid, 2.0); add("whats-your-life", sid, 1.0)
+            if hand >= 6:
+                add("cards-in-hand", sid, 2.0)
+            if hand <= 1 and sid != active:
+                add("empty-hand", sid, 1.0)
+            creatures = [c for c in (x.get("battlefield") or []) if isinstance(c, dict) and c.get("power") is not None]
+            if any((c.get("power") or 0) >= 6 for c in creatures):
+                add("kill-that", sid, 2.0)
+        boards = {sid: sum(1 for c in (x.get("battlefield") or []) if isinstance(c, dict) and c.get("power") is not None) for sid, x in by_id.items()}
+        if boards:
+            big = max(boards, key=boards.get)
+            if boards[big] >= 3 and list(boards.values()).count(boards[big]) == 1:
+                add("board-envy", big, 1.0)
+        # filler, always
+        for sp in living:
+            out.append((sp, "nothing-happening", None, 1.0 / len(living)))
+            out.append((sp, "this-is-fine", None, 1.0 / len(living)))
+            out.append((sp, "good-hand", None, 0.7 / len(living)))
+            out.append((sp, "what-turn", None, 0.4 / len(living)))
+            tgt = [t for t in living if t != sp]
+            if tgt:
+                out.append((sp, "deal", self.rng.choice(tgt), 0.8 / len(living)))
+        if active is not None and int(active) in living:
+            add("pass-already", int(active), 0.8)
+        return out
+
+    def patter(self) -> None:
+        if not self.patter_on or self.barks_mode == "off" or self.queue:
+            return
+        now = self.clock()
+        snap = self._last_snapshot
+        human_turn = snap.get("activeSeat") == self.human_seat
+        if self._patter_anchor != self.last_spoken_at:          # a line just played: rearm from its end
+            self._patter_anchor = self.last_spoken_at
+            self._patter_due = self.last_spoken_at + self._patter_gap_s(human_turn)
+        if now < self._patter_due or now - self._advisor_spoke_at < self.patter_after_advice:
+            return
+        living = [int(x) for x in self.seat_libraries if int(x) not in self.eliminated]
+        cands = self.patter_candidates(snap, living) if living and snap.get("seats") else []
+        self._patter_due = now + self._patter_gap_s(human_turn)   # whatever happens, wait another gap
+        if not cands:
+            return
+        total = sum(w for *_, w in cands)
+        pick = self.rng.random() * total
+        for speaker, pid, target, w in cands:
+            pick -= w
+            if pick <= 0:
+                break
+        self.maybe_bark(speaker, pid, turn=snap.get("turn"), source="patter",
+                        ctx={"targets": [target] if target is not None else []})
 
     # -- instant reactions from the snapshot's public event ring
     def scan_events(self, d: dict) -> None:
@@ -1287,6 +1407,7 @@ class VoiceRunner:
         self.learn_table()
         self.scan_advisor()
         self.scan_observer()
+        self.patter()
         item = self.next_item()
         if item is not None:
             self.speak(item)
@@ -1295,7 +1416,7 @@ class VoiceRunner:
         self.say(f"[voice] up — chatter={self.chatter:g}, stock {len(self.renderer.manifest.get('phrases', {}))} phrases, "
                  f"live={'on' if self.renderer.live else 'off (no ELEVENLABS_API_KEY)'}, min_gap={self.min_gap}s, "
                  f"fx={self.renderer.fx_mode}, format={self.renderer.format}, glitch={self.renderer.glitch}, sfx={'on' if self.sfx_on else 'off'}, color={self.color_mode}, "
-                 f"your_move={self.your_move_mode}, barks={self.barks_mode}" + (f", chains p={self.chains.first_hop_p}/decay {self.chains.decay}/max {self.chains.max_hops}/gap {self.chains.gap_s}s" if self.chains else ", chains=off (no chains.json)")
+                 f"your_move={self.your_move_mode}, barks={self.barks_mode}, patter={'off' if not self.patter_on else f'{self.patter_gap[0]:g}-{self.patter_gap[1]:g}s'}" + (f", chains p={self.chains.first_hop_p}/decay {self.chains.decay}/max {self.chains.max_hops}/gap {self.chains.gap_s}s" if self.chains else ", chains=off (no chains.json)")
                  + (f" (p={self.barks_p}, opener_p={self.barks_opener_p}, swing>={self.barks_swing}, hit>={self.barks_hit}, guard={self.barks_cooldown:.0f}s; " + ", ".join(f"seat {k} {v['voice']}" for k, v in sorted(self.seat_libraries.items())) + ")"
                     if self.barks_mode != "off" and self.seat_libraries else (" (no seat voice libraries found)" if self.barks_mode != "off" else "")))
         hb = self.mailbox / "seat-0-voice" / "heartbeat"

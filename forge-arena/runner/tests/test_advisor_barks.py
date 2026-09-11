@@ -70,11 +70,11 @@ class BarkTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1] / "voice" / "stock" / "voices"
         for lib in ("harry", "bill", "lily"):
             m = json.loads((root / lib / "manifest.json").read_text())
-            barks = tuple(pid for pid, ph in m["phrases"].items() if ph.get("category") == "bark")
+            barks = tuple(pid for pid, ph in m["phrases"].items() if ph.get("category") in ("bark", "reaction"))
             self.assertEqual(barks, ar.BARKS, lib)
-            replies = [pid for pid, ph in m["phrases"].items() if ph.get("category") == "reply"]
-            self.assertEqual(len(replies), 10, f"{lib}: the reply atoms are the chains' vocabulary, never the advisor's")
-        self.assertEqual(len(ar.BARKS), 21)
+            others = [pid for pid, ph in m["phrases"].items() if ph.get("category") in ("reply", "patter")]
+            self.assertEqual(len(others), 34, f"{lib}: replies and patter are the runner's vocabulary, never the advisor's")
+        self.assertEqual(len(ar.BARKS), 29)
 
     def test_split_bark_strips_known_tags_and_drops_bad_ones(self):
         self.assertEqual(ar.split_bark("Big turn. [bark:2:big-swing]"), ("Big turn.", (2, "big-swing")))

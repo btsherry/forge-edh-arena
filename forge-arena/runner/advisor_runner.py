@@ -108,6 +108,15 @@ BARK_WHEN = {
     "archenemy": "calls out the table leader",
     "slow-turn": "its own turn passes with nothing done",
     "my-turn": "opens the turn that is just beginning (the recap arrives as the next seat's turn starts)",
+    # reactions (2026-09-10): a bystander's editorial on someone else's play — tag the seat that would say it
+    "nice-play": "admires another player's good play",
+    "thats-mean": "winces at a removal or an attack on a third party",
+    "oh-no": "sees a threat land",
+    "wow": "is impressed by anything big",
+    "why-me": "is being attacked and objects",
+    "attack-them": "deflects an attack onto someone else",
+    "read-that": "wants an unfamiliar card read again",
+    "play-slower": "is overwhelmed by a flurry of plays",
 }
 BARKS = tuple(BARK_WHEN)
 BARK_RE = re.compile(r"\s*\[bark:\s*(\d)\s*:\s*([a-z0-9-]+)\s*\]\s*")
