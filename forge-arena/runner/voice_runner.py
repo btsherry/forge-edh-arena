@@ -1015,6 +1015,8 @@ class VoiceRunner:
         self.last_spoken_at = self.clock()
         if item["kind"] in ("advice", "ask"):
             self._advisor_spoke_at = self.clock()
+        if self.final_locked and not self.queue:
+            self.publish_final()                      # the sign-off just played: the watcher may tear down
         if item.get("seat") is not None and item.get("library"):
             self._bark_spoken_at[int(item["seat"])] = self.clock()
             self._said_at[item["stock"]] = self.clock()
