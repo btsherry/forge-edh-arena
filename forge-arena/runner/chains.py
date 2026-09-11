@@ -16,6 +16,7 @@ Roles, resolved from what the runner already knows:
   bystander  another voiced AI seat, not the speaker, not a target
   leader     the highest-life other voiced seat (for taunt / archenemy)
   origin     the chain's first speaker (hops >= 2 only)
+  open       a defender with no untapped creature (the runner reads the board) — "no blocks"
 Joshua sits OUTSIDE the game (Ben): he may needle a seat over what it did to
 the human (joshua_replies, a stock quip), and the seats never answer him.
 Nobody replies to themselves; nobody says the same line twice in a turn.
@@ -32,6 +33,8 @@ from pathlib import Path
 class ChainTable:
     def __init__(self, data: dict):
         self.invites: dict[str, list[dict]] = data.get("invites") or {}
+        # families (round 31): "hit-" -> the invites of kill-that apply to hit-urza, hit-mono-red, ...
+        self.families: dict[str, str] = {k: v for k, v in (data.get("families") or {}).items() if k != "note"}
         self.joshua: dict[str, str] = {k: v for k, v in (data.get("joshua_replies") or {}).items() if k != "note" and v}
         env = os.environ.get
         self.first_hop_p = float(env("ARENA_BARKS_CHAIN_P", data.get("first_hop_p", 0.6)))
@@ -46,6 +49,14 @@ class ChainTable:
             return cls(json.loads((voices_dir / "chains.json").read_text()))
         except (OSError, ValueError, TypeError):
             return None
+
+    def invites_for(self, opener: str) -> list[dict]:
+        if opener in self.invites:
+            return list(self.invites[opener])
+        for prefix, generic in self.families.items():
+            if opener.startswith(prefix):
+                return list(self.invites.get(generic, []))
+        return []
 
     def hop_p(self, hop: int, human_cause: bool = False) -> float:
         """Chance of the reply that would become hop `hop` (1 = the first reply)."""
@@ -65,6 +76,10 @@ def resolve_role(role: str, speaker: int, ctx: dict, chain: dict | None, voiced:
     if role == "aggressor":
         a = ctx.get("aggressor")
         return int(a) if a is not None and int(a) != speaker and int(a) in voiced else None
+    if role == "open":
+        # a defender with nothing untapped to block (the runner reads the board): "no blocks"
+        cands = [int(t) for t in (ctx.get("open") or []) if int(t) != speaker and int(t) in voiced]
+        return rng.choice(cands) if cands else None
     if role == "bystander":
         cands = [s for s in voiced if s != speaker and s not in targets]
         return rng.choice(cands) if cands else None
@@ -93,7 +108,7 @@ def plan_reply(table: ChainTable, spoken: dict, chain: dict | None, voiced: dict
         return None
     origin = int((chain or {}).get("origin", speaker))
     ctx = spoken.get("ctx") or {}
-    options = list(table.invites.get(opener, []))
+    options = table.invites_for(opener)
     rng.shuffle(options)
     # a reply the answering seat used recently goes to the back of the line (soft; the per-turn rule is hard)
     recent = recent or set()

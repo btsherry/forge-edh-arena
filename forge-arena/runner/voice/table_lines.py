@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+"""table_lines.py — the "table" sub-library of every seat voice (round 31, 2026-09-10).
+
+Five Game Knights tapes: the talk at a real table is mostly PROCEDURAL — "land,
+go", "pass", "I'll take five, going to sixteen", "no blocks", "in response",
+"sure" — plus reactions and a little politics addressed by NAME. Game 45 had
+none of that. This script holds the wordings and writes, for each voice,
+    voice/stock/voices/<lib>/table/manifest.json
+(schema arena.voice-stock/1, rendered/baked by build_stock.py with
+--library <lib>/table). Three kinds of line:
+
+  procedural  self-narration and acks the runner fires from board events
+  number      "I'm at twelve." (1-40, 45, 50, 60, 80, 100) and "Six cards." (0-10)
+              as whole sentences — a stitched number never sounds like a person
+  address     four families with the target's name baked in: hit-<who>,
+              threat-<who>, leave-me-<who>, deal-<who>, <who> = a commander
+              (decks/<slug>/dossier/deck-cards.json) or, as the fallback for a
+              deck without a rendered name, its colour identity (Ben's chart:
+              mono, the ten guilds, the ten shards/wedges, Glint/Dune/Ink/Witch/
+              Yore, five-colour, colourless) — voices/address.json
+
+Dev-only (excluded from the package like build_stock.py). Rules as everywhere:
+one eleven_v3 delivery tag leads each wording, about ten words at most, no
+hidden information, the register of the voice (Harry fiery, Bill dry professor,
+Lily warm and theatrical).
+
+    python3 runner/voice/table_lines.py            # print a summary
+    python3 runner/voice/table_lines.py --write    # (re)write the three manifests + address.json
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+VOICES = HERE / "stock" / "voices"
+DECKS = HERE.parent.parent / "decks"
+LIBS = ("harry", "bill", "lily")
+
+# ---- number words ---------------------------------------------------------------
+ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+        "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+TENS = {20: "twenty", 30: "thirty", 40: "forty", 50: "fifty", 60: "sixty", 70: "seventy", 80: "eighty", 90: "ninety"}
+
+
+def words(n: int) -> str:
+    if n < 20:
+        return ONES[n]
+    if n == 100:
+        return "a hundred"
+    t, o = (n // 10) * 10, n % 10
+    return TENS[t] + ("" if o == 0 else "-" + ONES[o])
+
+
+LIFE_NUMBERS = list(range(1, 41)) + [45, 50, 60, 80, 100]
+HAND_NUMBERS = list(range(0, 11))
+
+# ---- colour identities (Ben's chart, 2026-09-10) ---------------------------------
+# key = the identity's letters in WUBRG order; say = as a subject, voc = when addressed
+COLORS = {
+    "W": ("mono-white", "mono-white", "mono-white"), "U": ("mono-blue", "mono-blue", "mono-blue"),
+    "B": ("mono-black", "mono-black", "mono-black"), "R": ("mono-red", "mono-red", "mono-red"),
+    "G": ("mono-green", "mono-green", "mono-green"), "C": ("colorless", "the artifact deck", "artifacts"),
+    "WU": ("azorius", "Azorius", "Azorius"), "WR": ("boros", "Boros", "Boros"), "UB": ("dimir", "Dimir", "Dimir"),
+    "BG": ("golgari", "Golgari", "Golgari"), "RG": ("gruul", "Gruul", "Gruul"), "UR": ("izzet", "Izzet", "Izzet"),
+    "WB": ("orzhov", "Orzhov", "Orzhov"), "BR": ("rakdos", "Rakdos", "Rakdos"), "WG": ("selesnya", "Selesnya", "Selesnya"),
+    "UG": ("simic", "Simic", "Simic"),
+    "WBG": ("abzan", "Abzan", "Abzan"), "WUG": ("bant", "Bant", "Bant"), "WUB": ("esper", "Esper", "Esper"),
+    "UBR": ("grixis", "Grixis", "Grixis"), "WUR": ("jeskai", "Jeskai", "Jeskai"), "BRG": ("jund", "Jund", "Jund"),
+    "WBR": ("mardu", "Mardu", "Mardu"), "WRG": ("naya", "Naya", "Naya"), "UBG": ("sultai", "Sultai", "Sultai"),
+    "URG": ("temur", "Temur", "Temur"),
+    "UBRG": ("glint", "the Glint deck", "Glint"), "WBRG": ("dune", "the Dune deck", "Dune"), "WURG": ("ink", "the Ink deck", "Ink"),
+    "WUBG": ("witch", "the Witch deck", "Witch"), "WUBR": ("yore", "the Yore deck", "Yore"),
+    "WUBRG": ("five-color", "five-colour", "five-colour"),
+}
+ORDER = "WUBRG"
+
+
+def color_key(identity) -> str:
+    letters = set(identity if isinstance(identity, str) else "".join(identity or []))
+    letters &= set(ORDER)
+    return "".join(c for c in ORDER if c in letters) or "C"
+
+
+def commanders() -> dict[str, dict]:
+    """deck slug -> {"name", "say", "slug", "colors"} from every dossier's commander card."""
+    out: dict[str, dict] = {}
+    for d in sorted(DECKS.iterdir()) if DECKS.exists() else []:
+        f = d / "dossier" / "deck-cards.json"
+        if not f.exists():
+            continue
+        try:
+            cards = json.loads(f.read_text()).get("cards") or []
+        except (OSError, ValueError):
+            continue
+        cmd = next((c for c in cards if isinstance(c, dict) and c.get("zone") == "commander"), None)
+        if not cmd:
+            continue
+        name = str(cmd["name"])
+        first = name.split(" // ")[0].split(",")[0].strip()          # "Sheoldred // The True Scriptures" -> "Sheoldred"
+        slug = "".join(ch if ch.isalnum() else "-" for ch in first.lower()).strip("-")
+        slug = "-".join(p for p in slug.split("-") if p)
+        out[d.name] = {"name": name, "say": first, "slug": slug, "colors": color_key(cmd.get("color_identity") or "C")}
+    return out
+
+
+# ---- the wordings -----------------------------------------------------------------
+# procedural: id -> (when, {lib: [wordings]})
+PROCEDURAL: dict[str, tuple[str, dict[str, list[str]]]] = {
+    "land-go": ("its own turn was a land and nothing else", {
+        "harry": ["[scoffs] Land. Go.", "[frustrated] Land, pass. Don't laugh.", "[exhales] Just a land. Next.", "[angry] Land. Pass. Not a word."],
+        "bill": ["[calmly] A land. Pass.", "[dryly] Land, go. Riveting.", "[calmly] Nothing further. Pass.", "[sighs] A land, and that is all."],
+        "lily": ["[gently] A land, and I'll pass, dears.", "[softly] Just a land. Go on.", "[chuckles] Land, pass. Nothing to see.", "[warmly] Only a land today, loves."]}),
+    "pass": ("ends its own turn after doing something", {
+        "harry": ["[excited] Done! Your go!", "[shouting] Pass! Beat that!", "[smug] That's my turn. Go.", "[laughs] Over to you. Good luck."],
+        "bill": ["[calmly] That concludes my turn.", "[calmly] Pass.", "[dryly] I'm done. Proceed.", "[calmly] Your turn. Do try."],
+        "lily": ["[warmly] And that's me. Go on, dear.", "[gently] Pass, love.", "[softly] Over to you.", "[warmly] I'll pass. Be kind."]}),
+    "mana-up": ("ends its own turn with mana untapped and cards in hand", {
+        "harry": ["[smug] Passing. Mana up. Try me.", "[laughs] Pass. I've got mana. Guess why.", "[mischievously] Pass. Don't mind the open mana."],
+        "bill": ["[calmly] Pass, with mana available.", "[dryly] I'll pass. Mana open. Draw your conclusions.", "[calmly] Passing. Note the untapped lands."],
+        "lily": ["[gently] I'll pass, with mana up, dears.", "[mischievously] Passing. Mana open. Hmm.", "[softly] Pass, love. I'm keeping this mana."]}),
+    "tapped-out": ("ends its own turn tapped out with cards in hand", {
+        "harry": ["[exhales] Tapped out. Go nuts.", "[frustrated] Tapped out. Don't get ideas.", "[laughs] All in. Nothing left. Pass."],
+        "bill": ["[calmly] Tapped out. Regrettably.", "[dryly] No mana. Proceed freely.", "[sighs] Fully committed. Pass."],
+        "lily": ["[softly] I'm tapped out, dears.", "[gently] All tapped. Be gentle.", "[chuckles] Not a drop left. Pass."]}),
+    "untap-draw": ("its own turn begins (an alternative to my-turn)", {
+        "harry": ["[excited] Untap, draw, go time!", "[shouting] Untap! Draw! Let's go!", "[smug] Untap. Draw. Here we go."],
+        "bill": ["[calmly] Untap. Upkeep. Draw.", "[calmly] Untap, draw. Proceeding.", "[dryly] Untap, upkeep, draw. The ritual."],
+        "lily": ["[gently] Untap, upkeep, draw, dears.", "[softly] Untap, draw. Let's see.", "[warmly] Untap and draw. Lovely."]}),
+    "come-on-land": ("its own turn begins short on lands", {
+        "harry": ["[angry] Come on, land!", "[groans] Land! Just one land!", "[frustrated] Draw a land. Please. Anything."],
+        "bill": ["[sighs] A land would be appreciated.", "[calmly] Statistically, a land is due.", "[dryly] Mana screw. Delightful."],
+        "lily": ["[softly] Come on, a land, please.", "[sighs] Just one little land, dears.", "[gently] Any day now, land."]}),
+    "thinking": ("its own decision has been pending a while", {
+        "harry": ["[exhales] Okay. Options.", "[mischievously] Let me think. Yeah.", "[groans] Hang on. Thinking."],
+        "bill": ["[calmly] Let me think.", "[calmly] Considering.", "[whispers] One moment. Calculating."],
+        "lily": ["[softly] Hmm. Let me see.", "[gently] Thinking, dears.", "[softly] One moment, loves."]}),
+    "cast-creature": ("casts a creature (not its commander, not a game changer)", {
+        "harry": ["[excited] Creature! Come on out!", "[shouting] Here's a body!", "[smug] Another one for the army."],
+        "bill": ["[calmly] A creature. Nothing special.", "[dryly] Casting this. Try to contain yourselves.", "[calmly] A body for the board."],
+        "lily": ["[warmly] A little friend for me.", "[gently] Casting a creature, dears.", "[softly] Another for the board."]}),
+    "cast-artifact": ("casts an artifact", {
+        "harry": ["[scoffs] Another rock. Sue me.", "[excited] Artifact. Ramp, ramp, ramp!", "[smug] More toys."],
+        "bill": ["[calmly] An artifact. Efficiency.", "[dryly] Another trinket.", "[calmly] Mana. One needs mana."],
+        "lily": ["[gently] A little trinket.", "[warmly] An artifact, dears.", "[chuckles] Just a rock. Nothing scary."]}),
+    "cast-enchantment": ("casts an enchantment", {
+        "harry": ["[excited] Enchantment! Read it later!", "[smug] This stays. Get used to it.", "[laughs] Sticky. Good luck removing it."],
+        "bill": ["[calmly] An enchantment. It stays.", "[dryly] Permanent value. Observe.", "[calmly] This will matter later."],
+        "lily": ["[warmly] An enchantment, love. It'll linger.", "[gently] Something that stays.", "[mischievously] This one's for later."]}),
+    "cast-instant": ("casts an instant on its own turn", {
+        "harry": ["[shouting] Instant! Boom!", "[excited] Quick one!", "[laughs] Zap. Instant."],
+        "bill": ["[calmly] An instant. At instant speed.", "[dryly] Efficiently, then.", "[calmly] A small instant."],
+        "lily": ["[softly] Just a little instant.", "[gently] A quick one.", "[warmly] Something quick, dears."]}),
+    "cast-sorcery": ("casts a sorcery", {
+        "harry": ["[excited] Sorcery! Big effect!", "[shouting] Watch this one!", "[smug] Main phase. My phase."],
+        "bill": ["[calmly] A sorcery. Let it resolve.", "[dryly] Main phase business.", "[calmly] Sorcery speed. Patience."],
+        "lily": ["[gently] A sorcery, dears.", "[warmly] Something dramatic.", "[softly] Casting this, love."]}),
+    "cast-planeswalker": ("casts a planeswalker", {
+        "harry": ["[shouting] Walker! Come on down!", "[excited] Planeswalker! Protect the walker!", "[smug] A walker. Deal with it."],
+        "bill": ["[calmly] A planeswalker. Do be gentle.", "[dryly] A walker. It will not last.", "[calmly] Loyalty. We shall see."],
+        "lily": ["[warmly] A planeswalker, love. Be nice to her.", "[gently] A walker for me.", "[softly] Someone new joins us."]}),
+    "cast-big": ("casts a six-plus mana spell that is not a game changer or its commander", {
+        "harry": ["[shouting] Big one! Here it comes!", "[excited] Six mana! Worth it!", "[laughs] All in on this!"],
+        "bill": ["[calmly] A large investment. Observe.", "[dryly] Expensive. Justified.", "[calmly] This one costs. It also wins."],
+        "lily": ["[warmly] Something big, dears.", "[gasps] Here she comes.", "[gently] I've saved up for this."]}),
+    "in-response": ("casts an instant on someone else's turn", {
+        "harry": ["[shouting] Hold on! In response!", "[angry] Not so fast!", "[excited] Wait wait wait! Response!", "[laughs] Before that resolves..."],
+        "bill": ["[calmly] In response.", "[dryly] Before that resolves, a word.", "[calmly] Hold on. I have something.", "[whispers] Not yet. In response."],
+        "lily": ["[gently] Oh, one moment, dear. In response.", "[softly] Before that resolves, love.", "[mischievously] Hold that thought.", "[warmly] Sorry, dears. In response."]}),
+    "poke": ("declares a small attack", {
+        "harry": ["[laughs] Just a poke. Take it.", "[smug] Little swing. Don't cry.", "[mischievously] Chip damage. Adds up."],
+        "bill": ["[calmly] A modest attack.", "[dryly] Chip damage. It accumulates.", "[calmly] A small swing. Nothing personal."],
+        "lily": ["[gently] Just a little poke, dear.", "[softly] A small swing. Sorry, love.", "[chuckles] Chip, chip."]}),
+    "attack-you": ("declares a medium attack at one player", {
+        "harry": ["[shouting] Swinging at you!", "[excited] You! Attack!", "[laughs] Coming for you!"],
+        "bill": ["[calmly] Attacking you.", "[dryly] You, I'm afraid.", "[calmly] You take this one."],
+        "lily": ["[gently] I'm coming at you, love.", "[softly] You, dear. Sorry.", "[warmly] This one's for you."]}),
+    "no-blocks": ("it is attacked with nothing untapped to block", {
+        "harry": ["[angry] No blocks. Take it.", "[groans] Nothing to block with.", "[frustrated] Fine. No blocks."],
+        "bill": ["[calmly] No blocks.", "[dryly] I have no blockers. Proceed.", "[calmly] Unblocked. Noted."],
+        "lily": ["[sighs] No blocks, dear.", "[softly] I can't block that.", "[gently] Through it goes."]}),
+    "take-it": ("takes small combat damage", {
+        "harry": ["[scoffs] I'll take it.", "[laughs] That's all? Fine.", "[exhales] Take it. Whatever."],
+        "bill": ["[calmly] I'll take that.", "[dryly] Acceptable losses.", "[calmly] Taken."],
+        "lily": ["[gently] I'll take it, love.", "[softly] Fine. I'll take that.", "[chuckles] Just a scratch."]}),
+    "sure": ("lets another player's spell resolve", {
+        "harry": ["[scoffs] Sure.", "[exhales] Fine. Resolves.", "[laughs] Yeah, okay.", "[angry] Whatever. Resolves."],
+        "bill": ["[calmly] Resolves.", "[calmly] Fine.", "[dryly] Very well.", "[calmly] No response."],
+        "lily": ["[gently] Go on, dear.", "[softly] That's fine.", "[warmly] Resolves, love.", "[gently] No objection."]}),
+    "hold-on": ("something on the stack targets its permanent or itself", {
+        "harry": ["[angry] Wait. Which one?!", "[shouting] Hold on! Targeting what?!", "[frustrated] Hey! That's mine!"],
+        "bill": ["[calmly] One moment. Which target?", "[dryly] Excuse me. That is mine.", "[calmly] Hold on. Let me read that."],
+        "lily": ["[gasps] Wait, dear. Mine?", "[gently] One moment, love. Which one?", "[softly] Oh. That's mine."]}),
+    "holding-mana": ("sees another seat pass with mana untapped", {
+        "harry": ["[scoffs] Passing with mana up? Suspicious.", "[angry] They're holding something!", "[laughs] Mana open. Cute."],
+        "bill": ["[dryly] Untapped mana. Interesting.", "[calmly] Someone is holding a card.", "[whispers] Mana up. Take note."],
+        "lily": ["[mischievously] Someone's holding something, dears.", "[gently] All that mana untapped, love?", "[softly] Hmm. Mana open."]}),
+}
+
+# number lines: (family, template per lib) — {n} = the number in words, {N} capitalised
+NUMBER_TAGS = {
+    "harry": lambda n: "[angry]" if n <= 10 else "[exhales]" if n <= 20 else "[smug]",
+    "bill": lambda n: "[calmly]",
+    "lily": lambda n: "[softly]" if n <= 10 else "[gently]",
+}
+
+
+def life_line(lib: str, n: int) -> str:
+    return f"{NUMBER_TAGS[lib](n)} I'm at {words(n)}."
+
+
+def hand_line(lib: str, n: int) -> str:
+    tag = {"harry": "[scoffs]", "bill": "[calmly]", "lily": "[gently]"}[lib]
+    if n == 0:
+        return f"{tag} " + {"harry": "No cards. Happy?", "bill": "No cards in hand.", "lily": "Not a card, dear."}[lib]
+    if n == 1:
+        return f"{tag} " + {"harry": "One card.", "bill": "One card.", "lily": "Just the one, love."}[lib]
+    return f"{tag} {words(n).capitalize()} cards."
+
+
+# address families: template per lib; {say} as a subject, {voc} when addressed
+ADDRESS = {
+    "hit": ("tells the table to attack a named player", {
+        "harry": "[shouting] Everybody hit {say}!", "bill": "[dryly] Might I suggest we all hit {say}.", "lily": "[gently] Dears, {say} needs attention."}),
+    "threat": ("names a player as the threat", {
+        "harry": "[shouting] {Say}'s the threat! Wake up!", "bill": "[calmly] For the record, {say} is the threat.", "lily": "[warmly] {Say} is the problem, loves."}),
+    "leave-me": ("asks a named player to leave it alone", {
+        "harry": "[angry] Leave me alone, {voc}!", "bill": "[dryly] Do leave me be, {voc}.", "lily": "[gently] Leave me be, {voc} dear."}),
+    "deal": ("offers a named player a truce", {
+        "harry": "[laughs] Deal, {voc}? Don't hit me, I don't hit you.", "bill": "[calmly] {Voc}. A truce, this turn?", "lily": "[warmly] Peace for a turn, {voc}?"}),
+}
+
+
+def address_targets() -> dict[str, dict]:
+    """who-slug -> {"say", "voc", "kind"} for every commander on disk and every colour identity."""
+    out: dict[str, dict] = {}
+    for deck, c in commanders().items():
+        out.setdefault(c["slug"], {"say": c["say"], "voc": c["say"], "kind": "commander", "decks": []})["decks"].append(deck)
+    for key, (slug, say, voc) in COLORS.items():
+        out[slug] = {"say": say, "voc": voc, "kind": "color", "colors": key}
+    return out
+
+
+def render_block(lib: str) -> dict:
+    parent = json.loads((VOICES / lib / "manifest.json").read_text())
+    return {k: parent[k] for k in ("voice_id", "voice_name", "temperament", "render", "bake", "sample_rate", "tags_note") if k in parent}
+
+
+def build_manifest(lib: str) -> dict:
+    m = {"schema": "arena.voice-stock/1", "library": f"{lib}/table", "parent": lib, "seat": None,
+         "note": ("the table sub-library (round 31): procedural self-narration, whole-sentence numbers and "
+                  "named addressing, fired by the voice runner from board events; regenerate with runner/voice/table_lines.py --write"),
+         **render_block(lib), "phrases": {}}
+    ph = m["phrases"]
+    for pid, (when, by) in PROCEDURAL.items():
+        ph[pid] = {"category": "procedural", "when": when, "text": list(by[lib]), "source": "table-2026-09-10"}
+    for n in LIFE_NUMBERS:
+        ph[f"life-{n}"] = {"category": "number", "when": f"announces or answers its life total: {n}", "text": [life_line(lib, n)], "source": "table-2026-09-10"}
+    for n in HAND_NUMBERS:
+        ph[f"hand-{n}"] = {"category": "number", "when": f"announces or answers its hand size: {n}", "text": [hand_line(lib, n)], "source": "table-2026-09-10"}
+    for who, info in address_targets().items():
+        fill = {"say": info["say"], "voc": info["voc"], "Say": info["say"][0].upper() + info["say"][1:], "Voc": info["voc"][0].upper() + info["voc"][1:]}
+        for fam, (when, by) in ADDRESS.items():
+            ph[f"{fam}-{who}"] = {"category": "address", "when": f"{when} ({info['kind']}: {info['say']})",
+                                  "text": [by[lib].format(**fill)], "source": "table-2026-09-10"}
+    return m
+
+
+def write_all() -> None:
+    for lib in LIBS:
+        d = VOICES / lib / "table"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "manifest.json").write_text(json.dumps(build_manifest(lib), indent=1, ensure_ascii=False) + "\n")
+    addr = {"schema": "arena.voice-address/1",
+            "note": ("who a seat may address by name (round 31): a deck's commander slug when the table lines carry it, "
+                     "else the deck's colour identity (Ben's chart). The voice runner maps seat -> deck -> who; a missing "
+                     "wav falls back to the generic line. Regenerate with runner/voice/table_lines.py --write."),
+            "commanders": {deck: {"who": c["slug"], "say": c["say"], "name": c["name"], "colors": c["colors"]} for deck, c in commanders().items()},
+            "colors": {key: slug for key, (slug, _, _) in COLORS.items()},
+            "families": {fam: when for fam, (when, _) in ADDRESS.items()}}
+    (VOICES / "address.json").write_text(json.dumps(addr, indent=1, ensure_ascii=False) + "\n")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--write", action="store_true")
+    a = ap.parse_args()
+    m = build_manifest("harry")
+    cats: dict[str, int] = {}
+    chars = 0
+    for lib in LIBS:
+        for ph in build_manifest(lib)["phrases"].values():
+            cats[ph["category"]] = cats.get(ph["category"], 0) + len(ph["text"])
+            chars += sum(len(t) for t in ph["text"])
+    print(f"{len(m['phrases'])} ids per voice; wordings across three voices: {cats} = {sum(cats.values())} lines, {chars} characters")
+    print("commanders:", {d: c['slug'] for d, c in commanders().items()})
+    if a.write:
+        write_all()
+        print("written:", ", ".join(str(VOICES / lib / "table" / "manifest.json") for lib in LIBS), "and", VOICES / "address.json")
+
+
+if __name__ == "__main__":
+    main()

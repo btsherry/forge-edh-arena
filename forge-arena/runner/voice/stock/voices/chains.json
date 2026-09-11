@@ -1,6 +1,6 @@
 {
  "schema": "arena.voice-chains/1",
- "note": "Interaction chains (Ben, 2026-09-10): a spoken line invites replies from ROLES, each reply an atom from the replier's own library. The runner composes: opener -> hop 1 -> hop 2 ..., one line at a time, rolling first_hop_p * decay^(hop-1); a chain dies at max_hops or when the turn changes. Roles: target = the seat(s) the opener addressed (from the event), aggressor = the seat that caused the opener's grief, bystander = another voiced seat, leader = the highest-life other seat, origin = the chain's first speaker (hops >= 2). Nobody replies to themselves; nobody says the same line twice in a turn. Tuned after game 39: no single reply type may dominate — the bystander scoff was five openers' default and became a tic. Ben (game 41): responses and counter-responses must be tight in wall-clock — gap_s 0.25 from the end of the previous line, and the runner polls every 0.1 s while an exchange is pending — a retort lands in 0.25–0.35 s (Ben, game 42). Patter (2026-09-10): board-state, pace and filler lines are addressed to a target the runner picked, so the same table answers them. Round 31 (game 45 measured: 53 % of lines were banter replies, 4 % were about the game): the reply-to-reply and filler invites are pruned to one or two each so an exchange is short unless a board event started it; 140 invites -> 90.",
+ "note": "Interaction chains (Ben, 2026-09-10): a spoken line invites replies from ROLES, each reply an atom from the replier's own library. The runner composes: opener -> hop 1 -> hop 2 ..., one line at a time, rolling first_hop_p * decay^(hop-1); a chain dies at max_hops or when the turn changes. Roles: target = the seat(s) the opener addressed (from the event), aggressor = the seat that caused the opener's grief, bystander = another voiced seat, leader = the highest-life other seat, origin = the chain's first speaker (hops >= 2). Nobody replies to themselves; nobody says the same line twice in a turn. Tuned after game 39: no single reply type may dominate — the bystander scoff was five openers' default and became a tic. Ben (game 41): responses and counter-responses must be tight in wall-clock — gap_s 0.25 from the end of the previous line, and the runner polls every 0.1 s while an exchange is pending — a retort lands in 0.25–0.35 s (Ben, game 42). Patter (2026-09-10): board-state, pace and filler lines are addressed to a target the runner picked, so the same table answers them. Round 31 (game 45 measured: 53 % of lines were banter replies, 4 % were about the game): the reply-to-reply and filler invites are pruned to one or two each so an exchange is short unless a board event started it; 140 invites -> 90. Round 31 table lines: procedural openers (poke, attack-you, in-response, cast-*, land-go, mana-up, ...) invite short acks and the new 'open' role (a defender with no untapped creature says no-blocks); 'families' maps the named address lines to their generic invites.",
  "first_hop_p": 0.6,
  "decay": 0.5,
  "max_hops": 3,
@@ -8,6 +8,10 @@
  "human_trigger_mult": 0.5,
  "invites": {
   "big-swing": [
+   {
+    "role": "open",
+    "reply": "no-blocks"
+   },
    {
     "role": "target",
     "reply": "brace"
@@ -488,6 +492,199 @@
     "role": "target",
     "reply": "you-suck"
    }
+  ],
+  "cast-big": [
+   {
+    "role": "bystander",
+    "reply": "wow"
+   },
+   {
+    "role": "bystander",
+    "reply": "oh-no"
+   },
+   {
+    "role": "bystander",
+    "reply": "read-that"
+   },
+   {
+    "role": "bystander",
+    "reply": "sure"
+   }
+  ],
+  "cast-creature": [
+   {
+    "role": "bystander",
+    "reply": "sure"
+   }
+  ],
+  "cast-artifact": [
+   {
+    "role": "bystander",
+    "reply": "sure"
+   },
+   {
+    "role": "bystander",
+    "reply": "scoff"
+   }
+  ],
+  "cast-enchantment": [
+   {
+    "role": "bystander",
+    "reply": "sure"
+   },
+   {
+    "role": "bystander",
+    "reply": "read-that"
+   }
+  ],
+  "cast-instant": [
+   {
+    "role": "bystander",
+    "reply": "sure"
+   }
+  ],
+  "cast-sorcery": [
+   {
+    "role": "bystander",
+    "reply": "sure"
+   }
+  ],
+  "cast-planeswalker": [
+   {
+    "role": "bystander",
+    "reply": "kill-that"
+   },
+   {
+    "role": "bystander",
+    "reply": "sure"
+   }
+  ],
+  "in-response": [
+   {
+    "role": "target",
+    "reply": "scoff"
+   },
+   {
+    "role": "target",
+    "reply": "oh-no"
+   },
+   {
+    "role": "bystander",
+    "reply": "laugh"
+   }
+  ],
+  "poke": [
+   {
+    "role": "open",
+    "reply": "no-blocks"
+   },
+   {
+    "role": "target",
+    "reply": "scoff"
+   },
+   {
+    "role": "bystander",
+    "reply": "laugh"
+   }
+  ],
+  "attack-you": [
+   {
+    "role": "open",
+    "reply": "no-blocks"
+   },
+   {
+    "role": "target",
+    "reply": "brace"
+   },
+   {
+    "role": "target",
+    "reply": "why-me"
+   }
+  ],
+  "land-go": [
+   {
+    "role": "bystander",
+    "reply": "laugh"
+   },
+   {
+    "role": "bystander",
+    "reply": "sympathy"
+   }
+  ],
+  "pass": [],
+  "untap-draw": [],
+  "sure": [],
+  "mana-up": [
+   {
+    "role": "bystander",
+    "reply": "holding-mana"
+   },
+   {
+    "role": "bystander",
+    "reply": "scoff"
+   }
+  ],
+  "tapped-out": [
+   {
+    "role": "bystander",
+    "reply": "laugh"
+   },
+   {
+    "role": "bystander",
+    "reply": "pile-on"
+   }
+  ],
+  "come-on-land": [
+   {
+    "role": "bystander",
+    "reply": "laugh"
+   },
+   {
+    "role": "bystander",
+    "reply": "sympathy"
+   }
+  ],
+  "thinking": [
+   {
+    "role": "bystander",
+    "reply": "play-faster"
+   }
+  ],
+  "no-blocks": [
+   {
+    "role": "aggressor",
+    "reply": "laugh"
+   },
+   {
+    "role": "aggressor",
+    "reply": "not-sorry"
+   }
+  ],
+  "take-it": [
+   {
+    "role": "aggressor",
+    "reply": "laugh"
+   }
+  ],
+  "hold-on": [
+   {
+    "role": "aggressor",
+    "reply": "not-sorry"
+   },
+   {
+    "role": "aggressor",
+    "reply": "laugh"
+   }
+  ],
+  "holding-mana": [
+   {
+    "role": "target",
+    "reply": "you-wish"
+   },
+   {
+    "role": "target",
+    "reply": "shut-it"
+   }
   ]
  },
  "joshua_replies": {
@@ -496,5 +693,12 @@
   "landed-hit": "ouch",
   "big-swing": "calm-before-engagement",
   "kill": "harsh-player"
+ },
+ "families": {
+  "note": "a named address line (hit-urza, threat-mono-red, ...) invites what its generic line invites",
+  "hit-": "kill-that",
+  "threat-": "youre-the-threat",
+  "leave-me-": "why-me",
+  "deal-": "deal"
  }
 }

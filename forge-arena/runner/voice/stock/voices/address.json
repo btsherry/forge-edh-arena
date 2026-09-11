@@ -1,0 +1,106 @@
+{
+ "schema": "arena.voice-address/1",
+ "note": "who a seat may address by name (round 31): a deck's commander slug when the table lines carry it, else the deck's colour identity (Ben's chart). The voice runner maps seat -> deck -> who; a missing wav falls back to the generic line. Regenerate with runner/voice/table_lines.py --write.",
+ "commanders": {
+  "giada-font-of-hope": {
+   "who": "giada",
+   "say": "Giada",
+   "name": "Giada, Font of Hope",
+   "colors": "W"
+  },
+  "liberator-urzas-battlethopter": {
+   "who": "liberator",
+   "say": "Liberator",
+   "name": "Liberator, Urza's Battlethopter",
+   "colors": "C"
+  },
+  "purphoros-god-of-the-forge": {
+   "who": "purphoros",
+   "say": "Purphoros",
+   "name": "Purphoros, God of the Forge",
+   "colors": "R"
+  },
+  "selvala-heart-of-the-wilds": {
+   "who": "selvala",
+   "say": "Selvala",
+   "name": "Selvala, Heart of the Wilds",
+   "colors": "G"
+  },
+  "sheoldreds-sacrifice": {
+   "who": "sheoldred",
+   "say": "Sheoldred",
+   "name": "Sheoldred // The True Scriptures",
+   "colors": "B"
+  },
+  "swords-plunder": {
+   "who": "rev",
+   "say": "Rev",
+   "name": "Rev, Tithe Extractor",
+   "colors": "B"
+  },
+  "swords-plunder-gc": {
+   "who": "rev",
+   "say": "Rev",
+   "name": "Rev, Tithe Extractor",
+   "colors": "B"
+  },
+  "sythis-harvests-hand": {
+   "who": "sythis",
+   "say": "Sythis",
+   "name": "Sythis, Harvest's Hand",
+   "colors": "WG"
+  },
+  "urza-lord-high-artificer": {
+   "who": "urza",
+   "say": "Urza",
+   "name": "Urza, Lord High Artificer",
+   "colors": "U"
+  },
+  "y-shtola-night-s-blessed": {
+   "who": "y-shtola",
+   "say": "Y'shtola",
+   "name": "Y'shtola, Night's Blessed",
+   "colors": "WUB"
+  }
+ },
+ "colors": {
+  "W": "mono-white",
+  "U": "mono-blue",
+  "B": "mono-black",
+  "R": "mono-red",
+  "G": "mono-green",
+  "C": "colorless",
+  "WU": "azorius",
+  "WR": "boros",
+  "UB": "dimir",
+  "BG": "golgari",
+  "RG": "gruul",
+  "UR": "izzet",
+  "WB": "orzhov",
+  "BR": "rakdos",
+  "WG": "selesnya",
+  "UG": "simic",
+  "WBG": "abzan",
+  "WUG": "bant",
+  "WUB": "esper",
+  "UBR": "grixis",
+  "WUR": "jeskai",
+  "BRG": "jund",
+  "WBR": "mardu",
+  "WRG": "naya",
+  "UBG": "sultai",
+  "URG": "temur",
+  "UBRG": "glint",
+  "WBRG": "dune",
+  "WURG": "ink",
+  "WUBG": "witch",
+  "WUBR": "yore",
+  "WUBRG": "five-color"
+ },
+ "families": {
+  "hit": "tells the table to attack a named player",
+  "threat": "names a player as the threat",
+  "leave-me": "asks a named player to leave it alone",
+  "deal": "offers a named player a truce"
+ }
+}

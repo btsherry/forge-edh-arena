@@ -423,6 +423,8 @@ class PackagerShipsWhatTheScriptsCall(unittest.TestCase):
         self.assertEqual(needed - shipped, set(), "called by shipped code but not in the packager's script list")
         self.assertIn("--exclude '/voice/stock/raw/'", pk, "raw takes (4 MB) must not ship")
         self.assertIn("--exclude '/voice/stock/voices/*/raw/'", pk, "the seat voices' dry takes (~30 MB) must not ship either")
+        self.assertIn("--exclude '/voice/stock/voices/*/*/raw/'", pk, "nor the table/cards sub-libraries' dry takes (round 31)")
+        self.assertIn("--exclude '/voice/table_lines.py'", pk, "the wording generator is a dev tool like build_stock.py")
         self.assertIn("--exclude '/voice/build_stock.py'", pk, "the ElevenLabs render tool is dev-only")
         for name in ("packaging/build-light-package.sh", "scripts/run-pilot-match.sh"):
             text = (ROOT / name).read_text()

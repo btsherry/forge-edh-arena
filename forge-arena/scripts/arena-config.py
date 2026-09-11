@@ -52,6 +52,7 @@ KNOBS = {
         ("ARENA_CHATTER", "normal", "quiet | normal | lively | rowdy (or a number) — one dial for how much the table talks: sets the talk budget (speaking fraction of the last minute: .09 / .18 / .27 / .36) the governor spends, shortens the gap, lowers the reaction thresholds; advice frequency is untouched"),
         ("ARENA_VOICE_DUTY", "", "talk budget override: the fraction of the last minute somebody may be speaking (e.g. 0.25); empty = derived from ARENA_CHATTER"),
         ("ARENA_VOICE_DUTY_HUMAN", "0.4", "the talk budget on the human's turn, as a multiple of the budget (0.4 = well under half)"),
+        ("ARENA_TABLE_P", "1.0", "multiplier on the table lines' odds — self-narration (land-go, pass, cast types, pokes, no blocks, in response), whole-sentence life/hand numbers and named addressing (hit Urza / Giada's the threat / leave me alone, mono-red)"),
         ("ARENA_BARKS_HUMAN_P", "0.7", "chance a seat reacts to the HUMAN's play — a big attack, a game changer, the commander, a big spell, spot removal"),
         ("ELEVENLABS_API_KEY", "", "live spoken advice needs it; stock phrases play without it"),
         ("ARENA_VOICE_FORMAT", "pcm_24000", "ElevenLabs output; PCM needs no decoder"),

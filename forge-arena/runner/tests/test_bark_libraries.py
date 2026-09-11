@@ -58,12 +58,16 @@ class SharedVocabulary(unittest.TestCase):
 
     def test_chain_table_is_consistent_with_the_vocabulary(self):
         table = json.loads((VOICES / "chains.json").read_text())
-        ids = set(load("harry")["phrases"])
-        roles = {"target", "aggressor", "bystander", "leader", "origin"}
+        ids = set(load("harry")["phrases"]) | set(json.loads((VOICES / "harry" / "table" / "manifest.json").read_text())["phrases"])
+        roles = {"target", "aggressor", "bystander", "leader", "origin", "open"}
         for opener, opts in table["invites"].items():
             self.assertIn(opener, ids, f"chains.json invites from an unknown line {opener!r}")
             for o in opts:
                 self.assertIn(o["role"], roles, o); self.assertIn(o["reply"], ids, o)
+        for prefix, generic in table["families"].items():
+            if prefix != "note":
+                self.assertIn(generic, table["invites"], f"family {prefix!r} points at an opener without invites")
+                self.assertTrue(any(k.startswith(prefix) for k in ids), f"family {prefix!r} matches no table line")
         joshua = json.loads((RUNNER / "voice" / "stock" / "manifest.json").read_text())["phrases"]
         for k, v in table["joshua_replies"].items():
             if k != "note":

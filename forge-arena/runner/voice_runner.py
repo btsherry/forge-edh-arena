@@ -103,6 +103,20 @@ DUTY_WINDOW_S = 60.0
 DUTY_HUMAN_MULT = 0.4     # on the human's turn the table aims far lower (Ben: "patter being minimal during my turn")
 OPTIONAL_FLOOR = 0.15     # patter and banter at the goal: nearly silent; an anchored line never drops below half
 OPTIONAL_SOURCES = ("patter", "chain")
+# The table sub-library (round 31, runner/voice/table_lines.py): procedural self-narration,
+# whole-sentence numbers and named addressing live in voices/<lib>/table/. Per-line odds
+# below are multiplied by ARENA_TABLE_P; the governor treats them as anchored.
+TABLE_LIB = "table"
+TABLE_P = {"land-go": 0.6, "pass": 0.4, "mana-up": 0.5, "tapped-out": 0.4, "untap-draw": 0.5, "come-on-land": 0.5, "thinking": 0.3,
+           "cast": 0.3, "cast-big": 0.5, "in-response": 0.6, "poke": 0.35, "attack-you": 0.35, "no-blocks": 0.4, "take-it": 0.3,
+           "sure": 0.15, "hold-on": 0.4, "life": 0.5, "address": 0.5}
+LIFE_FOLLOWUP = {"that-hurt": 0.6, "take-it": 0.5, "low-life": 0.5}          # the speaker announces its total right after
+STATE_ANSWERS = {"whats-your-life": "life", "low-life-jab": "life", "cards-in-hand": "hand", "empty-hand": "hand"}
+ADDRESS_SWAP = {"kill-that": ("hit", "target"), "archenemy": ("hit", "target"), "youre-the-threat": ("threat", "target"),
+                "deal": ("deal", "target"), "why-me": ("leave-me", "aggressor")}
+LIFE_STEPS = (45, 50, 60, 80, 100)
+THINK_S = 8.0
+NARRATIONS_PER_TURN = 2
 # An AI seat's elimination is voiced ONCE: by the dying seat itself (its `eliminated`
 # bark, at once) with this probability, else by Joshua's "A player has been eliminated."
 ELIM_SEAT_P = 0.7
@@ -228,6 +242,76 @@ def game_changers_of(deck_slug: str, decks_dir: Path | None = None) -> set[str]:
         if isinstance(c, dict) and c.get("game_changer") and c.get("name"):
             out.add(str(c["name"])); out.add(str(c["name"]).split(" // ")[0])
     return out
+
+
+def deck_cards_of(deck_slug: str, decks_dir: Path | None = None) -> dict[str, dict]:
+    """name -> card record from the deck's dossier (front-face names too); empty when missing."""
+    try:
+        d = json.loads(((decks_dir or (ARENA / "decks")) / deck_slug / "dossier" / "deck-cards.json").read_text())
+    except (OSError, ValueError, TypeError):
+        return {}
+    out: dict[str, dict] = {}
+    for c in d.get("cards") or []:
+        if isinstance(c, dict) and c.get("name"):
+            out[str(c["name"])] = c
+            out.setdefault(str(c["name"]).split(" // ")[0], c)
+    return out
+
+
+def card_kind(rec: dict | None) -> str:
+    """creature | planeswalker | instant | sorcery | artifact | enchantment | land | "" from the type line."""
+    t = str((rec or {}).get("type_line") or "").split(" // ")[0].lower()
+    for k in ("creature", "planeswalker", "instant", "sorcery", "artifact", "enchantment", "land"):
+        if k in t:
+            return k
+    return ""
+
+
+def load_address(voices_dir: Path | None = None) -> dict:
+    """voices/address.json — who a seat may be addressed as (commander slug, else colour identity)."""
+    try:
+        return json.loads(((voices_dir or VOICES_DIR) / "address.json").read_text())
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def who_for_deck(address: dict, deck_slug: str, decks_dir: Path | None = None) -> str:
+    """The address slug for a deck: its commander when the table lines carry it, else the
+    colour identity of its commander card (Ben's chart), else ""."""
+    if not address or not deck_slug:
+        return ""
+    c = (address.get("commanders") or {}).get(deck_slug)
+    if c and c.get("who"):
+        return str(c["who"])
+    cards = deck_cards_of(deck_slug, decks_dir)
+    cmd = next((r for r in cards.values() if r.get("zone") == "commander"), None)
+    if not cmd:
+        return ""
+    ident = cmd.get("color_identity") or ""
+    letters = set(ident if isinstance(ident, str) else "".join(ident))
+    key = "".join(ch for ch in "WUBRG" if ch in letters) or "C"
+    return str((address.get("colors") or {}).get(key, ""))
+
+
+def life_pid(life) -> str:
+    """The whole-sentence life line for a total: exact to forty, then the nearest step; none above a hundred or at zero."""
+    try:
+        n = int(life)
+    except (TypeError, ValueError):
+        return ""
+    if n <= 0 or n > 100:
+        return ""
+    if n <= 40:
+        return f"life-{n}"
+    return f"life-{min(LIFE_STEPS, key=lambda s: (abs(s - n), s))}"
+
+
+def hand_pid(hand) -> str:
+    try:
+        n = int(hand)
+    except (TypeError, ValueError):
+        return ""
+    return f"hand-{n}" if 0 <= n <= 10 else ""
 
 
 def seat_decks_from_game_log(game_log: Path) -> dict[int, str]:
@@ -843,6 +927,12 @@ class VoiceRunner:
             self.duty_target = min(0.45, DUTY_BASE * self.chatter)
         self.duty_human = float(os.environ.get("ARENA_VOICE_DUTY_HUMAN", str(DUTY_HUMAN_MULT)))
         self._spoken_log: list[tuple[float, float]] = []       # (start, seconds) of every line played
+        self.table_mult = float(os.environ.get("ARENA_TABLE_P", "1.0"))
+        self._turn_start: dict[int, dict] = {}                 # seat -> {"lands", "casts", "narrations"} for the turn it is playing
+        self._prev_snapshot: dict = {}
+        self._stack_seen: set[tuple] = set()
+        self._thought: set[str] = set()                        # decision requests already muttered about
+        self._cards: dict[int, dict[str, dict]] = {}           # seat -> name -> card record (lazy)
         self._said_this_turn: set[tuple[int, str]] = set()
         self._said_turn = None
         # Recency (game 44: "cards in hand" ten times in sixteen minutes, "good hand"
@@ -886,6 +976,9 @@ class VoiceRunner:
         self._seat_decks: dict[int, str] = seat_decks_from_roster(self._human_deck, os.environ.get("ARENA_SEAT_DECKS", ""))
         self.seat_libraries = load_seat_libraries(seat_decks=self._seat_decks or None)
         self.game_changers: dict[int, set[str]] = self._table_game_changers()
+        self.address = load_address()
+        self._who: dict[int, str] = self._table_who()
+        self.table_ids: set[str] = self._load_table_ids()
         self._bark_spoken_at: dict[int, float] = {}
         # Colour commentary (Ben, 2026-09-07: "it could say a thing during
         # opponents' turns some of the time"): the advisor's per-turn recap
@@ -933,6 +1026,38 @@ class VoiceRunner:
             self.barks_cooldown = max(3.0, self.barks_cooldown / k)   # game 44: the 10 s guard silenced 15 barks at rowdy
         if k >= 1.5 and self.chains is not None:
             self.chains.max_hops += 1           # a livelier table talks back one more time
+
+    def _table_who(self) -> dict[int, str]:
+        out = {k: who_for_deck(self.address, v) for k, v in self._seat_decks.items()}
+        if self._human_deck:
+            out[self.human_seat] = who_for_deck(self.address, self._human_deck)
+        return {k: v for k, v in out.items() if v}
+
+    def _load_table_ids(self) -> set[str]:
+        ids: set[str] = set()
+        for info in self.seat_libraries.values():
+            try:
+                ids |= set(json.loads((VOICES_DIR / info["library"] / TABLE_LIB / "manifest.json").read_text()).get("phrases") or {})
+            except (OSError, ValueError, TypeError, KeyError):
+                continue
+        return ids
+
+    def lib_for(self, seat: int, pid: str) -> str:
+        """The library a seat says a line from: its own, or its table sub-library for a table id."""
+        lib = self.library_for_seat(seat)
+        if not lib:
+            return ""
+        return f"{lib}/{TABLE_LIB}" if pid in self.table_ids else lib
+
+    def cards_of(self, seat: int) -> dict[str, dict]:
+        seat = int(seat)
+        if seat not in self._cards:
+            slug = self._human_deck if seat == self.human_seat else self._seat_decks.get(seat, "")
+            self._cards[seat] = deck_cards_of(slug) if slug else {}
+        return self._cards[seat]
+
+    def table_p(self, key: str) -> float:
+        return min(1.0, TABLE_P.get(key, 0.3) * self.table_mult)
 
     def _table_game_changers(self) -> dict[int, set[str]]:
         out = {k: game_changers_of(v) for k, v in self._seat_decks.items()}
@@ -1017,7 +1142,7 @@ class VoiceRunner:
     # -- queue
     def enqueue(self, kind: str, *, text: str = "", stock: str = "", seq: int | None = None, ttl: float = 25.0,
                 library: str = "", seat: int | None = None, ctx: dict | None = None, gap: float | None = None,
-                chain: dict | None = None, prio: float | None = None) -> None:
+                chain: dict | None = None, prio: float | None = None, evict: bool = True) -> None:
         if self.final_locked:
             self.record("dropped", kind=kind, why="game over — nothing after the sign-off", stock=stock, text=text[:60])
             return
@@ -1025,7 +1150,9 @@ class VoiceRunner:
                 "prio": prio if prio is not None else (CHAIN_HOP_PRIORITY if chain else PRIORITY.get(kind, 9)),
                 "at": self.clock(), "expires": self.clock() + ttl, "library": library, "seat": seat,
                 "ctx": ctx or {}, "gap": gap, "chain": chain}
-        if kind == "bark":
+        if kind == "bark" and not evict:
+            pass                                                            # a follow-on: it queues behind what is already pending
+        elif kind == "bark":
             # one pending bark, newest wins — by class (round 31): a reaction to a board
             # event clears everything pending; a retort clears other retorts and filler,
             # never a reaction; the advisor's afterthoughts and patter clear only their peers
@@ -1155,6 +1282,41 @@ class VoiceRunner:
         chain = item.get("chain") if item.get("chain") and item["chain"].get("turn") == turn else None
         voiced = {int(k): v["library"] for k, v in self.seat_libraries.items() if int(k) not in self.eliminated}
         now = self.clock()
+        speaker = int(item["seat"])
+        # a hit is followed by the total ("Take five. I'm at sixteen." — every table does it)
+        p_follow = LIFE_FOLLOWUP.get(item.get("stock", ""), 0.0) * self.table_mult
+        if p_follow and not (chain and chain.get("followup")):
+            pid = life_pid(self._seat_field(speaker, "life"))
+            if pid and pid in self.table_ids and (speaker, pid) not in self._said_this_turn and self.rng.random() < min(1.0, p_follow * self.governor(optional=False)):
+                self._said_this_turn.add((speaker, pid))
+                link = {"origin": speaker, "hop": 0, "turn": turn, "parent": item.get("stock"), "followup": True}
+                self.enqueue("bark", stock=pid, library=self.lib_for(speaker, pid), seat=speaker, ttl=15.0, gap=0.3, ctx=dict(item.get("ctx") or {}), chain=link)
+                self.record("queued", kind="bark", stock=pid, seat=speaker, source="chain", hop=0, parent=item.get("stock"))
+                self._chain = link
+                return                                       # the table answers the hit after the number
+        if chain and chain.get("followup"):
+            # the number was the speaker's own follow-up: the table replies to the line before it
+            item = dict(item, stock=chain.get("parent") or item["stock"])
+            chain = None
+        # a question about a seat's state gets the true number back (whole-sentence lines)
+        kind = STATE_ANSWERS.get(item.get("stock", ""))
+        if kind:
+            tg = [int(t) for t in ((item.get("ctx") or {}).get("targets") or []) if int(t) != speaker and int(t) in voiced]
+            if tg:
+                who = tg[0]
+                pid = life_pid(self._seat_field(who, "life")) if kind == "life" else hand_pid(self._seat_field(who, "handSize"))
+                hop = int((chain or {}).get("hop", 0)) + 1
+                if pid and pid in self.table_ids and (who, pid) not in self._said_this_turn and hop <= self.chains.max_hops:
+                    p = min(1.0, self.chains.hop_p(hop) * self.governor(optional=True))
+                    if self.rng.random() < p:
+                        self._said_this_turn.add((who, pid))
+                        link = {"origin": int((chain or {}).get("origin", speaker)), "hop": hop, "turn": turn, "parent": item.get("stock")}
+                        self.enqueue("bark", stock=pid, library=self.lib_for(who, pid), seat=who, ttl=15.0, gap=self.chains.gap_s,
+                                     ctx={"targets": [speaker], "aggressor": speaker}, chain=link)
+                        self.record("queued", kind="bark", stock=pid, seat=who, source="chain", hop=hop, parent=item.get("stock"))
+                        self._chain = link
+                        return
+                    self.record("skipped", kind="bark", why=f"dice (chain hop {hop}, p={p:.2f})", stock=pid, seat=who, source="chain")
         recent = {k for k, t in self._seat_said_at.items() if now - t < RECENT_S}
         plan = plan_reply(self.chains, item, chain, voiced, self.human_seat, self.leader_of, self._said_this_turn, self.rng, turn, recent)
         if plan is None:
@@ -1174,7 +1336,7 @@ class VoiceRunner:
             return
         seat = int(plan["seat"])
         self._said_this_turn.add((seat, plan["id"]))
-        self.enqueue("bark", stock=plan["id"], library=voiced[seat], seat=seat, ttl=15.0, gap=self.chains.gap_s,
+        self.enqueue("bark", stock=plan["id"], library=self.lib_for(seat, plan["id"]), seat=seat, ttl=15.0, gap=self.chains.gap_s,
                      ctx={"targets": [int(item["seat"])], "aggressor": int(item["seat"])}, chain=link)
         self.record("queued", kind="bark", stock=plan["id"], seat=seat, source="chain", hop=plan["hop"], parent=item.get("stock"))
         self._chain = link
@@ -1194,13 +1356,17 @@ class VoiceRunner:
                 self.seat_libraries = load_seat_libraries(seat_decks=ai)
             self._human_deck = decks.get(self.human_seat) or self._human_deck
             self.game_changers = self._table_game_changers()
+            self._who = self._table_who()
+            self.table_ids = self._load_table_ids()
+            self._cards.clear()
             self.say("[voice] table: " + ", ".join(f"seat {k} {ai.get(k, '?')} -> {v['voice']}" for k, v in sorted(self.seat_libraries.items())))
 
     def library_for_seat(self, seat: int) -> str:
         info = self.seat_libraries.get(int(seat))
         return info["library"] if info else ""
 
-    def maybe_bark(self, seat: int, pid: str, turn=None, source: str = "advice", p: float | None = None, ctx: dict | None = None) -> bool:
+    def maybe_bark(self, seat: int, pid: str, turn=None, source: str = "advice", p: float | None = None, ctx: dict | None = None,
+                   gap: float | None = None, evict: bool = True) -> bool:
         """A bark for an AI seat — from the advisor's recap ("recap"), an advice
         window ("advice"), a snapshot event ("event") or a turn start ("opener") —
         subject to the knob, the per-turn no-repeat rule, the short per-seat
@@ -1235,9 +1401,37 @@ class VoiceRunner:
             self.record("skipped", kind="bark", why=f"dice ({source}, p={chance:.2f}, governor {g:.2f})", stock=pid, seat=seat, source=source)
             return False
         self._said_this_turn.add((int(seat), pid))
-        self.enqueue("bark", stock=pid, library=lib, seat=int(seat), ttl=20.0, ctx=ctx, prio=BARK_PRIORITY.get(source, BARK_PRIORITY["patter"]))
+        named = self.address_swap(int(seat), pid, ctx)
+        if named:
+            self._said_this_turn.add((int(seat), named))
+            pid = named
+        self.enqueue("bark", stock=pid, library=self.lib_for(int(seat), pid), seat=int(seat), ttl=20.0, ctx=ctx,
+                     prio=BARK_PRIORITY.get(source, BARK_PRIORITY["patter"]), gap=gap, evict=evict)
         self.record("queued", kind="bark", stock=pid, seat=seat, source=source)
         return True
+
+    def address_swap(self, seat: int, pid: str, ctx: dict | None) -> str:
+        """A generic line with one addressee becomes its named wording (hit-urza,
+        threat-mono-red, ...) half the time, when the table library carries it."""
+        fam_role = ADDRESS_SWAP.get(pid)
+        if not fam_role or not ctx:
+            return ""
+        fam, role = fam_role
+        if role == "target":
+            tg = [int(t) for t in (ctx.get("targets") or [])]
+            who_seat = tg[0] if len(tg) == 1 else None
+        else:
+            who_seat = ctx.get("aggressor")
+        if who_seat is None or int(who_seat) == seat:
+            return ""
+        who = self._who.get(int(who_seat), "")
+        if not who or self.rng.random() >= self.table_p("address"):
+            return ""
+        named = f"{fam}-{who}"
+        lib = self.library_for_seat(seat)
+        if named not in self.table_ids or not lib or not self.renderer.variants(named, f"{lib}/{TABLE_LIB}"):
+            return ""
+        return named
 
     def _roll_turn(self, turn) -> None:
         """The no-repeat set is per game turn."""
@@ -1363,6 +1557,159 @@ class VoiceRunner:
         self.maybe_bark(speaker, pid, turn=snap.get("turn"), source="patter",
                         ctx={"targets": [target] if target is not None else []})
 
+    # -- the board, as the table sees it
+    def _seat_field(self, seat: int, key: str, snap: dict | None = None):
+        for x in (snap or self._last_snapshot).get("seats") or []:
+            if x.get("seat") == seat:
+                return x.get(key)
+        return None
+
+    @staticmethod
+    def _lands(seat_rec: dict | None) -> tuple[int, int]:
+        """(lands, untapped lands) on a seat's battlefield."""
+        n = up = 0
+        for c in (seat_rec or {}).get("battlefield") or []:
+            if isinstance(c, dict) and "land" in str(c.get("types") or "").lower():
+                n += 1
+                up += 0 if c.get("tapped") else 1
+        return n, up
+
+    @staticmethod
+    def _open_to_attack(seat_rec: dict | None) -> bool:
+        """No untapped creature: an attack on this seat goes unblocked."""
+        return not any(isinstance(c, dict) and c.get("power") is not None and not c.get("tapped") for c in (seat_rec or {}).get("battlefield") or [])
+
+    def _seat_rec(self, seat, snap: dict | None = None) -> dict | None:
+        return next((x for x in (snap or self._last_snapshot).get("seats") or [] if x.get("seat") == seat), None)
+
+    def narrate_cast(self, seat: int, spell: str, cmc: int, turn) -> bool:
+        """The caster says what kind of thing it just cast (a type, "a big one", "in
+        response") — at most NARRATIONS_PER_TURN a turn. Game changers and the
+        commander have their own lines and never come here."""
+        st = self._turn_start.get(int(seat)) or {"narrations": 0}
+        if st["narrations"] >= NARRATIONS_PER_TURN or not self.table_ids:
+            return False
+        kind = card_kind(self.cards_of(seat).get(spell))
+        active = self._last_snapshot.get("activeSeat")
+        if cmc >= 6:
+            pid, p, ctx = "cast-big", self.table_p("cast-big"), {"targets": []}
+        elif kind == "instant" and active is not None and int(active) != int(seat):
+            tg = [int(active)] if int(active) != self.human_seat and self.library_for_seat(int(active)) else []
+            pid, p, ctx = "in-response", self.table_p("in-response"), {"targets": tg}
+        elif kind in ("creature", "artifact", "enchantment", "instant", "sorcery", "planeswalker"):
+            pid, p, ctx = f"cast-{kind}", self.table_p("cast"), {"targets": []}
+        else:
+            return False
+        if self.maybe_bark(int(seat), pid, turn=turn, source="procedural", p=p, ctx=ctx):
+            st["narrations"] += 1
+            return True
+        return False
+
+    def turn_boundary(self, d: dict, turn, active) -> bool:
+        """The seat whose turn just ended sums it up ("land, go" / "pass" / "pass with
+        mana up" / "tapped out"). Returns whether a line was queued, so the next
+        seat's opener can follow it instead of evicting it ("Land, go." "My turn.")."""
+        queued = False
+        ended = self.seen_active
+        prev = self._prev_snapshot or {}
+        if ended is not None and ended != self.human_seat and self.library_for_seat(int(ended)) and int(ended) not in self.eliminated and self.table_ids:
+            st = self._turn_start.get(int(ended))
+            rec = self._seat_rec(ended, prev)
+            lands, up = self._lands(rec)
+            hand = int((rec or {}).get("handSize") or 0)
+            nxt = [int(active)] if active is not None and active != self.human_seat and self.library_for_seat(int(active)) else []
+            if st is not None:
+                if st["casts"] == 0 and lands > st["lands"]:
+                    queued = self.maybe_bark(int(ended), "land-go", turn=self.seen_turn, source="procedural", p=self.table_p("land-go"), ctx={"targets": nxt})
+                elif st["casts"] > 0:
+                    if up >= 3 and hand >= 2:
+                        pid = "mana-up"
+                    elif up == 0 and hand >= 1:
+                        pid = "tapped-out"
+                    else:
+                        pid = "pass"
+                    queued = self.maybe_bark(int(ended), pid, turn=self.seen_turn, source="procedural", p=self.table_p(pid), ctx={"targets": nxt})
+            self._turn_start.pop(int(ended), None)
+        if active is not None and active != self.human_seat and self.library_for_seat(int(active)):
+            lands, _ = self._lands(self._seat_rec(active, d))
+            self._turn_start[int(active)] = {"lands": lands, "casts": 0, "narrations": 0}
+        return queued
+
+    def opener(self, d: dict, turn, active, follow: bool = False) -> None:
+        """Option A (2026-09-10): an opener at a seat's turn start — my-turn or its
+        table twin untap-draw, or a mutter for lands when the seat is short of them.
+        `follow`: the previous seat just summed its turn up — queue behind it, close."""
+        gap, evict = (0.4, False) if follow else (None, True)
+        lands, _ = self._lands(self._seat_rec(active, d))
+        own_turn = max(1, (int(turn) + 3) // 4)
+        if self.table_ids and "come-on-land" in self.table_ids and lands < min(4, own_turn):
+            if self.maybe_bark(int(active), "come-on-land", turn=turn, source="opener", p=self.table_p("come-on-land"), gap=gap, evict=evict):
+                return
+        pid = "untap-draw" if self.table_ids and "untap-draw" in self.table_ids and self.rng.random() < self.table_p("untap-draw") else "my-turn"
+        self.maybe_bark(int(active), pid, turn=turn, source="opener", p=self.barks_opener_p, gap=gap, evict=evict)
+
+    def scan_stack(self, d: dict) -> None:
+        """Something new on the stack that targets a voiced seat's permanent (or the
+        seat itself): "hold on, which one?" — once per turn per seat."""
+        detail = d.get("stackDetail") or []
+        if not detail:
+            self._stack_seen.clear()
+            return
+        if not self.table_ids or "hold-on" not in self.table_ids:
+            return
+        turn = d.get("turn")
+        for si in detail:
+            if not isinstance(si, dict):
+                continue
+            targets = [str(t) for t in (si.get("targets") or [])]
+            key = (si.get("name"), si.get("owner"), tuple(targets))
+            if key in self._stack_seen or not targets:
+                continue
+            self._stack_seen.add(key)
+            owner = si.get("owner")
+            for t in targets:
+                victim = None
+                if t.startswith("seat "):
+                    try:
+                        victim = int(t[5:])
+                    except ValueError:
+                        victim = None
+                else:
+                    name = t.replace(" (on the stack)", "")
+                    for x in d.get("seats") or []:
+                        if any(isinstance(c, dict) and c.get("name") == name for c in x.get("battlefield") or []):
+                            victim = x.get("seat")
+                            break
+                if victim is None or victim == owner or victim == self.human_seat or not self.library_for_seat(int(victim)):
+                    continue
+                self.maybe_bark(int(victim), "hold-on", turn=turn, source="procedural", p=self.table_p("hold-on"),
+                                ctx={"targets": [], "aggressor": owner, "human_cause": owner == self.human_seat})
+                break
+
+    def mutter(self) -> None:
+        """A seat whose own decision has been pending THINK_S thinks aloud, once per request."""
+        if not self.table_ids or "thinking" not in self.table_ids or self.barks_mode == "off" or self.final_locked:
+            return
+        now = time.time()
+        for seat in self.seat_libraries:
+            if int(seat) in self.eliminated:
+                continue
+            try:
+                files = list((self.mailbox / f"seat-{seat}" / "inbox").glob("req-*.json"))
+            except OSError:
+                files = []
+            for f in files:
+                key = f"{seat}/{f.name}"
+                try:
+                    age = now - f.stat().st_mtime
+                except OSError:
+                    continue
+                if age >= THINK_S and key not in self._thought:
+                    self._thought.add(key)
+                    self.maybe_bark(int(seat), "thinking", turn=self._last_snapshot.get("turn"), source="procedural", p=self.table_p("thinking"))
+        if len(self._thought) > 500:
+            self._thought = set(list(self._thought)[-100:])
+
     # -- instant reactions from the snapshot's public event ring
     def scan_events(self, d: dict) -> None:
         events = d.get("events") or []
@@ -1385,21 +1732,35 @@ class VoiceRunner:
                 if kind == "attack":
                     seat = int(e.get("seat"))
                     big = int(e.get("power", 0)) >= self.barks_swing or int(e.get("attackers", 0)) >= 3
+                    defenders = [int(x) for x in (e.get("defenders") or [])]
+                    open_ = [x for x in defenders if x != self.human_seat and self.library_for_seat(x) and self._open_to_attack(self._seat_rec(x, d))]
+                    power = int(e.get("power", 0))
                     if seat != self.human_seat and big:
                         self.maybe_bark(seat, "big-swing", turn=turn, source="event",
-                                        ctx={"targets": [int(x) for x in (e.get("defenders") or [])], "aggressor": None})
-                    elif seat == self.human_seat and big:
-                        # the human swings big: a defender braces or complains (round 31)
-                        defenders = [int(x) for x in (e.get("defenders") or []) if self.library_for_seat(int(x)) and int(x) not in self.eliminated]
-                        if defenders:
-                            self.maybe_bark(int(self.rng.choice(defenders)), self.rng.choice(["brace", "why-me"]), turn=turn, source="event",
-                                            p=self.barks_human_p, ctx={"targets": [], "aggressor": seat, "human_cause": True})
+                                        ctx={"targets": defenders, "aggressor": None, "open": open_})
+                    elif seat != self.human_seat and self.library_for_seat(seat) and power > 0:
+                        # a smaller attack: "just a poke" / "you take this one" (the defender may answer "no blocks")
+                        pid = "attack-you" if power * 2 >= self.barks_swing and len(defenders) == 1 else "poke"
+                        self.maybe_bark(seat, pid, turn=turn, source="procedural", p=self.table_p(pid),
+                                        ctx={"targets": defenders, "aggressor": None, "open": open_})
+                    elif seat == self.human_seat:
+                        # the human swings: a defender braces, complains, or admits it has no blocks (round 31)
+                        voiced_def = [x for x in defenders if x != self.human_seat and self.library_for_seat(x) and x not in self.eliminated]
+                        if voiced_def and (big or open_):
+                            who = int(self.rng.choice(open_ or voiced_def))
+                            line = "no-blocks" if who in open_ and "no-blocks" in self.table_ids else self.rng.choice(["brace", "why-me"])
+                            self.maybe_bark(who, line, turn=turn, source="event", p=self.barks_human_p,
+                                            ctx={"targets": [], "aggressor": seat, "human_cause": True})
                 elif kind == "damage":
                     victim = int(e.get("seat"))
                     froms = [int(x) for x in (e.get("from") or [])]
                     if froms:
                         self._last_hit_by[victim] = (froms, turn)
-                    if int(e.get("amount", 0)) < self.barks_hit:
+                    amount = int(e.get("amount", 0))
+                    if amount < self.barks_hit:
+                        if e.get("combat") and amount > 0 and victim != self.human_seat and self.library_for_seat(victim) and "take-it" in self.table_ids:
+                            self.maybe_bark(victim, "take-it", turn=turn, source="procedural", p=self.table_p("take-it"),
+                                            ctx={"targets": [], "aggressor": froms[0] if froms else None, "human_cause": self.human_seat in froms})
                         continue
                     if victim != self.human_seat:
                         self.maybe_bark(victim, "that-hurt", turn=turn, source="event",
@@ -1426,19 +1787,25 @@ class VoiceRunner:
                             line = "wow"
                         elif cmc >= 5:
                             line = self.rng.choice(["nice-play", "read-that", "oh-no"])
+                        elif cmc >= 3 and "sure" in self.table_ids:
+                            line = "sure"                            # "resolves." — the table acknowledges the play
                         else:
                             line = ""
                         if by and line:
-                            self.maybe_bark(int(self.rng.choice(by)), line, turn=turn, source="event", p=self.barks_human_p,
+                            self.maybe_bark(int(self.rng.choice(by)), line, turn=turn, source="event",
+                                            p=self.table_p("sure") if line == "sure" else self.barks_human_p,
                                             ctx={"targets": [seat], "aggressor": seat, "human_cause": True})
                     elif self.library_for_seat(seat):
+                        if seat in self._turn_start:
+                            self._turn_start[seat]["casts"] += 1        # the turn summary: not a "land, go" turn
                         if spell in self.game_changers.get(seat, set()):
                             # one of the bracket's game changers: the caster crows, the table reacts (chain)
                             self.maybe_bark(seat, "game-changer", turn=turn, source="event", ctx={"targets": []})
                         elif e.get("commander"):
                             self.maybe_bark(seat, "commander-cast", turn=turn, source="event", ctx={"targets": []})
-                        elif int(e.get("cmc", 0)) >= 5:
-                            # a big spell draws a bystander's reaction: wow at seven-plus, else admiration / read that / oh no
+                        elif not self.narrate_cast(seat, spell, int(e.get("cmc", 0)), turn) and int(e.get("cmc", 0)) >= 5:
+                            # no narration: a big spell still draws a bystander's reaction — wow at seven-plus, else admiration / read that / oh no
+                            # (when the caster narrates, the reaction comes as the chain's reply to that line)
                             by = [x for x in self.seat_libraries if int(x) != seat and int(x) not in self.eliminated]
                             if by:
                                 line = "wow" if int(e.get("cmc", 0)) >= 7 else self.rng.choice(["nice-play", "read-that", "oh-no"])
@@ -1550,8 +1917,11 @@ class VoiceRunner:
                 self.enqueue("startup", stock="startup", ttl=30.0)
             # a restart mid-game (supervisor, code reload) says nothing until the next event
         turn, active = d.get("turn"), d.get("activeSeat")
+        self._prev_snapshot = self._last_snapshot
         self._last_snapshot = d
         self.scan_events(d)
+        if self.barks_mode != "off" and not self.final_locked and not d.get("gameOver"):
+            self.scan_stack(d)
         seats = d.get("seats") or []
         for s in seats:
             if s.get("eliminated") and s.get("seat") not in self.eliminated:
@@ -1592,10 +1962,13 @@ class VoiceRunner:
                     self.enqueue("your_move", stock="your-move", ttl=12.0)   # not while the advisor plays the seat
                 else:
                     self.record("skipped", kind="your_move", why="dice (ARENA_VOICE_YOUR_MOVE=some)", stock="your-move")
-            elif (active is not None and active != self.human_seat and self.seen_turn is not None
-                  and self.barks_opener_p > 0 and self.barks_mode != "off"):
+            follow = False
+            if self.seen_turn is not None and self.barks_mode != "off" and not d.get("gameOver"):
+                follow = self.turn_boundary(d, turn, active)
+            if (active is not None and active != self.human_seat and self.seen_turn is not None
+                    and self.barks_opener_p > 0 and self.barks_mode != "off" and self.library_for_seat(int(active))):
                 # option A: an opener at a seat's turn start — rare, like a person who sometimes says "right, me"
-                self.maybe_bark(int(active), "my-turn", turn=turn, source="opener", p=self.barks_opener_p)
+                self.opener(d, turn, active, follow=follow)
             self.seen_turn, self.seen_active = turn, active
         if d.get("gameOver") and not self.game_over_said:
             self.game_over_said = True
@@ -1689,6 +2062,7 @@ class VoiceRunner:
         self.learn_table()
         self.scan_advisor()
         self.scan_observer()
+        self.mutter()
         self.patter()
         item = self.next_item()
         if item is not None:

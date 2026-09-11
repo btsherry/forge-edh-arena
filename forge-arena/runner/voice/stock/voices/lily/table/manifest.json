@@ -1,0 +1,2017 @@
+{
+ "schema": "arena.voice-stock/1",
+ "library": "lily/table",
+ "parent": "lily",
+ "seat": null,
+ "note": "the table sub-library (round 31): procedural self-narration, whole-sentence numbers and named addressing, fired by the voice runner from board events; regenerate with runner/voice/table_lines.py --write",
+ "voice_id": "pFZP5JQG7iQjIQuC4Bku",
+ "voice_name": "Lily - Velvety Actress",
+ "temperament": "warm and wise, a little theatrical; gentle even when winning; calls the table 'dears'",
+ "render": {
+  "model": "eleven_v3",
+  "voice_settings": {
+   "stability": 0.5,
+   "speed": 0.95
+  },
+  "formats": [
+   "pcm_24000"
+  ]
+ },
+ "bake": {
+  "rate": 22050,
+  "fx": "none",
+  "glitch": "off",
+  "gain": "library",
+  "target_lufs": -24.0,
+  "true_peak_max": -1.0,
+  "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
+ },
+ "sample_rate": 22050,
+ "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
+ "phrases": {
+  "land-go": {
+   "category": "procedural",
+   "when": "its own turn was a land and nothing else",
+   "text": [
+    "[gently] A land, and I'll pass, dears.",
+    "[softly] Just a land. Go on.",
+    "[chuckles] Land, pass. Nothing to see.",
+    "[warmly] Only a land today, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "pass": {
+   "category": "procedural",
+   "when": "ends its own turn after doing something",
+   "text": [
+    "[warmly] And that's me. Go on, dear.",
+    "[gently] Pass, love.",
+    "[softly] Over to you.",
+    "[warmly] I'll pass. Be kind."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "mana-up": {
+   "category": "procedural",
+   "when": "ends its own turn with mana untapped and cards in hand",
+   "text": [
+    "[gently] I'll pass, with mana up, dears.",
+    "[mischievously] Passing. Mana open. Hmm.",
+    "[softly] Pass, love. I'm keeping this mana."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "tapped-out": {
+   "category": "procedural",
+   "when": "ends its own turn tapped out with cards in hand",
+   "text": [
+    "[softly] I'm tapped out, dears.",
+    "[gently] All tapped. Be gentle.",
+    "[chuckles] Not a drop left. Pass."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "untap-draw": {
+   "category": "procedural",
+   "when": "its own turn begins (an alternative to my-turn)",
+   "text": [
+    "[gently] Untap, upkeep, draw, dears.",
+    "[softly] Untap, draw. Let's see.",
+    "[warmly] Untap and draw. Lovely."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "come-on-land": {
+   "category": "procedural",
+   "when": "its own turn begins short on lands",
+   "text": [
+    "[softly] Come on, a land, please.",
+    "[sighs] Just one little land, dears.",
+    "[gently] Any day now, land."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "thinking": {
+   "category": "procedural",
+   "when": "its own decision has been pending a while",
+   "text": [
+    "[softly] Hmm. Let me see.",
+    "[gently] Thinking, dears.",
+    "[softly] One moment, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-creature": {
+   "category": "procedural",
+   "when": "casts a creature (not its commander, not a game changer)",
+   "text": [
+    "[warmly] A little friend for me.",
+    "[gently] Casting a creature, dears.",
+    "[softly] Another for the board."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-artifact": {
+   "category": "procedural",
+   "when": "casts an artifact",
+   "text": [
+    "[gently] A little trinket.",
+    "[warmly] An artifact, dears.",
+    "[chuckles] Just a rock. Nothing scary."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-enchantment": {
+   "category": "procedural",
+   "when": "casts an enchantment",
+   "text": [
+    "[warmly] An enchantment, love. It'll linger.",
+    "[gently] Something that stays.",
+    "[mischievously] This one's for later."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-instant": {
+   "category": "procedural",
+   "when": "casts an instant on its own turn",
+   "text": [
+    "[softly] Just a little instant.",
+    "[gently] A quick one.",
+    "[warmly] Something quick, dears."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-sorcery": {
+   "category": "procedural",
+   "when": "casts a sorcery",
+   "text": [
+    "[gently] A sorcery, dears.",
+    "[warmly] Something dramatic.",
+    "[softly] Casting this, love."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-planeswalker": {
+   "category": "procedural",
+   "when": "casts a planeswalker",
+   "text": [
+    "[warmly] A planeswalker, love. Be nice to her.",
+    "[gently] A walker for me.",
+    "[softly] Someone new joins us."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-big": {
+   "category": "procedural",
+   "when": "casts a six-plus mana spell that is not a game changer or its commander",
+   "text": [
+    "[warmly] Something big, dears.",
+    "[gasps] Here she comes.",
+    "[gently] I've saved up for this."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "in-response": {
+   "category": "procedural",
+   "when": "casts an instant on someone else's turn",
+   "text": [
+    "[gently] Oh, one moment, dear. In response.",
+    "[softly] Before that resolves, love.",
+    "[mischievously] Hold that thought.",
+    "[warmly] Sorry, dears. In response."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "poke": {
+   "category": "procedural",
+   "when": "declares a small attack",
+   "text": [
+    "[gently] Just a little poke, dear.",
+    "[softly] A small swing. Sorry, love.",
+    "[chuckles] Chip, chip."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "attack-you": {
+   "category": "procedural",
+   "when": "declares a medium attack at one player",
+   "text": [
+    "[gently] I'm coming at you, love.",
+    "[softly] You, dear. Sorry.",
+    "[warmly] This one's for you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "no-blocks": {
+   "category": "procedural",
+   "when": "it is attacked with nothing untapped to block",
+   "text": [
+    "[sighs] No blocks, dear.",
+    "[softly] I can't block that.",
+    "[gently] Through it goes."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "take-it": {
+   "category": "procedural",
+   "when": "takes small combat damage",
+   "text": [
+    "[gently] I'll take it, love.",
+    "[softly] Fine. I'll take that.",
+    "[chuckles] Just a scratch."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "sure": {
+   "category": "procedural",
+   "when": "lets another player's spell resolve",
+   "text": [
+    "[gently] Go on, dear.",
+    "[softly] That's fine.",
+    "[warmly] Resolves, love.",
+    "[gently] No objection."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hold-on": {
+   "category": "procedural",
+   "when": "something on the stack targets its permanent or itself",
+   "text": [
+    "[gasps] Wait, dear. Mine?",
+    "[gently] One moment, love. Which one?",
+    "[softly] Oh. That's mine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "holding-mana": {
+   "category": "procedural",
+   "when": "sees another seat pass with mana untapped",
+   "text": [
+    "[mischievously] Someone's holding something, dears.",
+    "[gently] All that mana untapped, love?",
+    "[softly] Hmm. Mana open."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-1": {
+   "category": "number",
+   "when": "announces or answers its life total: 1",
+   "text": [
+    "[softly] I'm at one."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-2": {
+   "category": "number",
+   "when": "announces or answers its life total: 2",
+   "text": [
+    "[softly] I'm at two."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-3": {
+   "category": "number",
+   "when": "announces or answers its life total: 3",
+   "text": [
+    "[softly] I'm at three."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-4": {
+   "category": "number",
+   "when": "announces or answers its life total: 4",
+   "text": [
+    "[softly] I'm at four."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-5": {
+   "category": "number",
+   "when": "announces or answers its life total: 5",
+   "text": [
+    "[softly] I'm at five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-6": {
+   "category": "number",
+   "when": "announces or answers its life total: 6",
+   "text": [
+    "[softly] I'm at six."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-7": {
+   "category": "number",
+   "when": "announces or answers its life total: 7",
+   "text": [
+    "[softly] I'm at seven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-8": {
+   "category": "number",
+   "when": "announces or answers its life total: 8",
+   "text": [
+    "[softly] I'm at eight."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-9": {
+   "category": "number",
+   "when": "announces or answers its life total: 9",
+   "text": [
+    "[softly] I'm at nine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-10": {
+   "category": "number",
+   "when": "announces or answers its life total: 10",
+   "text": [
+    "[softly] I'm at ten."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-11": {
+   "category": "number",
+   "when": "announces or answers its life total: 11",
+   "text": [
+    "[gently] I'm at eleven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-12": {
+   "category": "number",
+   "when": "announces or answers its life total: 12",
+   "text": [
+    "[gently] I'm at twelve."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-13": {
+   "category": "number",
+   "when": "announces or answers its life total: 13",
+   "text": [
+    "[gently] I'm at thirteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-14": {
+   "category": "number",
+   "when": "announces or answers its life total: 14",
+   "text": [
+    "[gently] I'm at fourteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-15": {
+   "category": "number",
+   "when": "announces or answers its life total: 15",
+   "text": [
+    "[gently] I'm at fifteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-16": {
+   "category": "number",
+   "when": "announces or answers its life total: 16",
+   "text": [
+    "[gently] I'm at sixteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-17": {
+   "category": "number",
+   "when": "announces or answers its life total: 17",
+   "text": [
+    "[gently] I'm at seventeen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-18": {
+   "category": "number",
+   "when": "announces or answers its life total: 18",
+   "text": [
+    "[gently] I'm at eighteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-19": {
+   "category": "number",
+   "when": "announces or answers its life total: 19",
+   "text": [
+    "[gently] I'm at nineteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-20": {
+   "category": "number",
+   "when": "announces or answers its life total: 20",
+   "text": [
+    "[gently] I'm at twenty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-21": {
+   "category": "number",
+   "when": "announces or answers its life total: 21",
+   "text": [
+    "[gently] I'm at twenty-one."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-22": {
+   "category": "number",
+   "when": "announces or answers its life total: 22",
+   "text": [
+    "[gently] I'm at twenty-two."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-23": {
+   "category": "number",
+   "when": "announces or answers its life total: 23",
+   "text": [
+    "[gently] I'm at twenty-three."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-24": {
+   "category": "number",
+   "when": "announces or answers its life total: 24",
+   "text": [
+    "[gently] I'm at twenty-four."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-25": {
+   "category": "number",
+   "when": "announces or answers its life total: 25",
+   "text": [
+    "[gently] I'm at twenty-five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-26": {
+   "category": "number",
+   "when": "announces or answers its life total: 26",
+   "text": [
+    "[gently] I'm at twenty-six."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-27": {
+   "category": "number",
+   "when": "announces or answers its life total: 27",
+   "text": [
+    "[gently] I'm at twenty-seven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-28": {
+   "category": "number",
+   "when": "announces or answers its life total: 28",
+   "text": [
+    "[gently] I'm at twenty-eight."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-29": {
+   "category": "number",
+   "when": "announces or answers its life total: 29",
+   "text": [
+    "[gently] I'm at twenty-nine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-30": {
+   "category": "number",
+   "when": "announces or answers its life total: 30",
+   "text": [
+    "[gently] I'm at thirty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-31": {
+   "category": "number",
+   "when": "announces or answers its life total: 31",
+   "text": [
+    "[gently] I'm at thirty-one."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-32": {
+   "category": "number",
+   "when": "announces or answers its life total: 32",
+   "text": [
+    "[gently] I'm at thirty-two."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-33": {
+   "category": "number",
+   "when": "announces or answers its life total: 33",
+   "text": [
+    "[gently] I'm at thirty-three."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-34": {
+   "category": "number",
+   "when": "announces or answers its life total: 34",
+   "text": [
+    "[gently] I'm at thirty-four."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-35": {
+   "category": "number",
+   "when": "announces or answers its life total: 35",
+   "text": [
+    "[gently] I'm at thirty-five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-36": {
+   "category": "number",
+   "when": "announces or answers its life total: 36",
+   "text": [
+    "[gently] I'm at thirty-six."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-37": {
+   "category": "number",
+   "when": "announces or answers its life total: 37",
+   "text": [
+    "[gently] I'm at thirty-seven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-38": {
+   "category": "number",
+   "when": "announces or answers its life total: 38",
+   "text": [
+    "[gently] I'm at thirty-eight."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-39": {
+   "category": "number",
+   "when": "announces or answers its life total: 39",
+   "text": [
+    "[gently] I'm at thirty-nine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-40": {
+   "category": "number",
+   "when": "announces or answers its life total: 40",
+   "text": [
+    "[gently] I'm at forty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-45": {
+   "category": "number",
+   "when": "announces or answers its life total: 45",
+   "text": [
+    "[gently] I'm at forty-five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-50": {
+   "category": "number",
+   "when": "announces or answers its life total: 50",
+   "text": [
+    "[gently] I'm at fifty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-60": {
+   "category": "number",
+   "when": "announces or answers its life total: 60",
+   "text": [
+    "[gently] I'm at sixty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-80": {
+   "category": "number",
+   "when": "announces or answers its life total: 80",
+   "text": [
+    "[gently] I'm at eighty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-100": {
+   "category": "number",
+   "when": "announces or answers its life total: 100",
+   "text": [
+    "[gently] I'm at a hundred."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-0": {
+   "category": "number",
+   "when": "announces or answers its hand size: 0",
+   "text": [
+    "[gently] Not a card, dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-1": {
+   "category": "number",
+   "when": "announces or answers its hand size: 1",
+   "text": [
+    "[gently] Just the one, love."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-2": {
+   "category": "number",
+   "when": "announces or answers its hand size: 2",
+   "text": [
+    "[gently] Two cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-3": {
+   "category": "number",
+   "when": "announces or answers its hand size: 3",
+   "text": [
+    "[gently] Three cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-4": {
+   "category": "number",
+   "when": "announces or answers its hand size: 4",
+   "text": [
+    "[gently] Four cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-5": {
+   "category": "number",
+   "when": "announces or answers its hand size: 5",
+   "text": [
+    "[gently] Five cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-6": {
+   "category": "number",
+   "when": "announces or answers its hand size: 6",
+   "text": [
+    "[gently] Six cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-7": {
+   "category": "number",
+   "when": "announces or answers its hand size: 7",
+   "text": [
+    "[gently] Seven cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-8": {
+   "category": "number",
+   "when": "announces or answers its hand size: 8",
+   "text": [
+    "[gently] Eight cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-9": {
+   "category": "number",
+   "when": "announces or answers its hand size: 9",
+   "text": [
+    "[gently] Nine cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-10": {
+   "category": "number",
+   "when": "announces or answers its hand size: 10",
+   "text": [
+    "[gently] Ten cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-giada": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Giada)",
+   "text": [
+    "[gently] Dears, Giada needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-giada": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Giada)",
+   "text": [
+    "[warmly] Giada is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-giada": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Giada)",
+   "text": [
+    "[gently] Leave me be, Giada dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-giada": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Giada)",
+   "text": [
+    "[warmly] Peace for a turn, Giada?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-liberator": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Liberator)",
+   "text": [
+    "[gently] Dears, Liberator needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-liberator": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Liberator)",
+   "text": [
+    "[warmly] Liberator is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-liberator": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Liberator)",
+   "text": [
+    "[gently] Leave me be, Liberator dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-liberator": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Liberator)",
+   "text": [
+    "[warmly] Peace for a turn, Liberator?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-purphoros": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Purphoros)",
+   "text": [
+    "[gently] Dears, Purphoros needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-purphoros": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Purphoros)",
+   "text": [
+    "[warmly] Purphoros is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-purphoros": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Purphoros)",
+   "text": [
+    "[gently] Leave me be, Purphoros dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-purphoros": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Purphoros)",
+   "text": [
+    "[warmly] Peace for a turn, Purphoros?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-selvala": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Selvala)",
+   "text": [
+    "[gently] Dears, Selvala needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-selvala": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Selvala)",
+   "text": [
+    "[warmly] Selvala is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-selvala": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Selvala)",
+   "text": [
+    "[gently] Leave me be, Selvala dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-selvala": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Selvala)",
+   "text": [
+    "[warmly] Peace for a turn, Selvala?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-sheoldred": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Sheoldred)",
+   "text": [
+    "[gently] Dears, Sheoldred needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-sheoldred": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Sheoldred)",
+   "text": [
+    "[warmly] Sheoldred is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-sheoldred": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Sheoldred)",
+   "text": [
+    "[gently] Leave me be, Sheoldred dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-sheoldred": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Sheoldred)",
+   "text": [
+    "[warmly] Peace for a turn, Sheoldred?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-rev": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Rev)",
+   "text": [
+    "[gently] Dears, Rev needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-rev": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Rev)",
+   "text": [
+    "[warmly] Rev is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-rev": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Rev)",
+   "text": [
+    "[gently] Leave me be, Rev dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-rev": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Rev)",
+   "text": [
+    "[warmly] Peace for a turn, Rev?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-sythis": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Sythis)",
+   "text": [
+    "[gently] Dears, Sythis needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-sythis": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Sythis)",
+   "text": [
+    "[warmly] Sythis is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-sythis": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Sythis)",
+   "text": [
+    "[gently] Leave me be, Sythis dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-sythis": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Sythis)",
+   "text": [
+    "[warmly] Peace for a turn, Sythis?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-urza": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Urza)",
+   "text": [
+    "[gently] Dears, Urza needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-urza": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Urza)",
+   "text": [
+    "[warmly] Urza is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-urza": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Urza)",
+   "text": [
+    "[gently] Leave me be, Urza dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-urza": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Urza)",
+   "text": [
+    "[warmly] Peace for a turn, Urza?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-y-shtola": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Y'shtola)",
+   "text": [
+    "[gently] Dears, Y'shtola needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-y-shtola": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Y'shtola)",
+   "text": [
+    "[warmly] Y'shtola is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-y-shtola": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Y'shtola)",
+   "text": [
+    "[gently] Leave me be, Y'shtola dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-y-shtola": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Y'shtola)",
+   "text": [
+    "[warmly] Peace for a turn, Y'shtola?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-white": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-white)",
+   "text": [
+    "[gently] Dears, mono-white needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-white": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-white)",
+   "text": [
+    "[warmly] Mono-white is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-white": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-white)",
+   "text": [
+    "[gently] Leave me be, mono-white dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-white": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-white)",
+   "text": [
+    "[warmly] Peace for a turn, mono-white?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-blue": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-blue)",
+   "text": [
+    "[gently] Dears, mono-blue needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-blue": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-blue)",
+   "text": [
+    "[warmly] Mono-blue is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-blue": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-blue)",
+   "text": [
+    "[gently] Leave me be, mono-blue dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-blue": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-blue)",
+   "text": [
+    "[warmly] Peace for a turn, mono-blue?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-black": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-black)",
+   "text": [
+    "[gently] Dears, mono-black needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-black": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-black)",
+   "text": [
+    "[warmly] Mono-black is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-black": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-black)",
+   "text": [
+    "[gently] Leave me be, mono-black dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-black": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-black)",
+   "text": [
+    "[warmly] Peace for a turn, mono-black?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-red": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-red)",
+   "text": [
+    "[gently] Dears, mono-red needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-red": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-red)",
+   "text": [
+    "[warmly] Mono-red is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-red": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-red)",
+   "text": [
+    "[gently] Leave me be, mono-red dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-red": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-red)",
+   "text": [
+    "[warmly] Peace for a turn, mono-red?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-green": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-green)",
+   "text": [
+    "[gently] Dears, mono-green needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-green": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-green)",
+   "text": [
+    "[warmly] Mono-green is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-green": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-green)",
+   "text": [
+    "[gently] Leave me be, mono-green dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-green": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-green)",
+   "text": [
+    "[warmly] Peace for a turn, mono-green?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-colorless": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the artifact deck)",
+   "text": [
+    "[gently] Dears, the artifact deck needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-colorless": {
+   "category": "address",
+   "when": "names a player as the threat (color: the artifact deck)",
+   "text": [
+    "[warmly] The artifact deck is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-colorless": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the artifact deck)",
+   "text": [
+    "[gently] Leave me be, artifacts dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-colorless": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the artifact deck)",
+   "text": [
+    "[warmly] Peace for a turn, artifacts?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-azorius": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Azorius)",
+   "text": [
+    "[gently] Dears, Azorius needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-azorius": {
+   "category": "address",
+   "when": "names a player as the threat (color: Azorius)",
+   "text": [
+    "[warmly] Azorius is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-azorius": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Azorius)",
+   "text": [
+    "[gently] Leave me be, Azorius dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-azorius": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Azorius)",
+   "text": [
+    "[warmly] Peace for a turn, Azorius?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-boros": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Boros)",
+   "text": [
+    "[gently] Dears, Boros needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-boros": {
+   "category": "address",
+   "when": "names a player as the threat (color: Boros)",
+   "text": [
+    "[warmly] Boros is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-boros": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Boros)",
+   "text": [
+    "[gently] Leave me be, Boros dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-boros": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Boros)",
+   "text": [
+    "[warmly] Peace for a turn, Boros?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-dimir": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Dimir)",
+   "text": [
+    "[gently] Dears, Dimir needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-dimir": {
+   "category": "address",
+   "when": "names a player as the threat (color: Dimir)",
+   "text": [
+    "[warmly] Dimir is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-dimir": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Dimir)",
+   "text": [
+    "[gently] Leave me be, Dimir dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-dimir": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Dimir)",
+   "text": [
+    "[warmly] Peace for a turn, Dimir?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-golgari": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Golgari)",
+   "text": [
+    "[gently] Dears, Golgari needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-golgari": {
+   "category": "address",
+   "when": "names a player as the threat (color: Golgari)",
+   "text": [
+    "[warmly] Golgari is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-golgari": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Golgari)",
+   "text": [
+    "[gently] Leave me be, Golgari dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-golgari": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Golgari)",
+   "text": [
+    "[warmly] Peace for a turn, Golgari?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-gruul": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Gruul)",
+   "text": [
+    "[gently] Dears, Gruul needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-gruul": {
+   "category": "address",
+   "when": "names a player as the threat (color: Gruul)",
+   "text": [
+    "[warmly] Gruul is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-gruul": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Gruul)",
+   "text": [
+    "[gently] Leave me be, Gruul dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-gruul": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Gruul)",
+   "text": [
+    "[warmly] Peace for a turn, Gruul?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-izzet": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Izzet)",
+   "text": [
+    "[gently] Dears, Izzet needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-izzet": {
+   "category": "address",
+   "when": "names a player as the threat (color: Izzet)",
+   "text": [
+    "[warmly] Izzet is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-izzet": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Izzet)",
+   "text": [
+    "[gently] Leave me be, Izzet dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-izzet": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Izzet)",
+   "text": [
+    "[warmly] Peace for a turn, Izzet?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-orzhov": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Orzhov)",
+   "text": [
+    "[gently] Dears, Orzhov needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-orzhov": {
+   "category": "address",
+   "when": "names a player as the threat (color: Orzhov)",
+   "text": [
+    "[warmly] Orzhov is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-orzhov": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Orzhov)",
+   "text": [
+    "[gently] Leave me be, Orzhov dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-orzhov": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Orzhov)",
+   "text": [
+    "[warmly] Peace for a turn, Orzhov?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-rakdos": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Rakdos)",
+   "text": [
+    "[gently] Dears, Rakdos needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-rakdos": {
+   "category": "address",
+   "when": "names a player as the threat (color: Rakdos)",
+   "text": [
+    "[warmly] Rakdos is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-rakdos": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Rakdos)",
+   "text": [
+    "[gently] Leave me be, Rakdos dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-rakdos": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Rakdos)",
+   "text": [
+    "[warmly] Peace for a turn, Rakdos?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-selesnya": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Selesnya)",
+   "text": [
+    "[gently] Dears, Selesnya needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-selesnya": {
+   "category": "address",
+   "when": "names a player as the threat (color: Selesnya)",
+   "text": [
+    "[warmly] Selesnya is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-selesnya": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Selesnya)",
+   "text": [
+    "[gently] Leave me be, Selesnya dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-selesnya": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Selesnya)",
+   "text": [
+    "[warmly] Peace for a turn, Selesnya?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-simic": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Simic)",
+   "text": [
+    "[gently] Dears, Simic needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-simic": {
+   "category": "address",
+   "when": "names a player as the threat (color: Simic)",
+   "text": [
+    "[warmly] Simic is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-simic": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Simic)",
+   "text": [
+    "[gently] Leave me be, Simic dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-simic": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Simic)",
+   "text": [
+    "[warmly] Peace for a turn, Simic?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-abzan": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Abzan)",
+   "text": [
+    "[gently] Dears, Abzan needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-abzan": {
+   "category": "address",
+   "when": "names a player as the threat (color: Abzan)",
+   "text": [
+    "[warmly] Abzan is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-abzan": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Abzan)",
+   "text": [
+    "[gently] Leave me be, Abzan dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-abzan": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Abzan)",
+   "text": [
+    "[warmly] Peace for a turn, Abzan?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-bant": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Bant)",
+   "text": [
+    "[gently] Dears, Bant needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-bant": {
+   "category": "address",
+   "when": "names a player as the threat (color: Bant)",
+   "text": [
+    "[warmly] Bant is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-bant": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Bant)",
+   "text": [
+    "[gently] Leave me be, Bant dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-bant": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Bant)",
+   "text": [
+    "[warmly] Peace for a turn, Bant?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-esper": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Esper)",
+   "text": [
+    "[gently] Dears, Esper needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-esper": {
+   "category": "address",
+   "when": "names a player as the threat (color: Esper)",
+   "text": [
+    "[warmly] Esper is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-esper": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Esper)",
+   "text": [
+    "[gently] Leave me be, Esper dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-esper": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Esper)",
+   "text": [
+    "[warmly] Peace for a turn, Esper?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-grixis": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Grixis)",
+   "text": [
+    "[gently] Dears, Grixis needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-grixis": {
+   "category": "address",
+   "when": "names a player as the threat (color: Grixis)",
+   "text": [
+    "[warmly] Grixis is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-grixis": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Grixis)",
+   "text": [
+    "[gently] Leave me be, Grixis dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-grixis": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Grixis)",
+   "text": [
+    "[warmly] Peace for a turn, Grixis?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-jeskai": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Jeskai)",
+   "text": [
+    "[gently] Dears, Jeskai needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-jeskai": {
+   "category": "address",
+   "when": "names a player as the threat (color: Jeskai)",
+   "text": [
+    "[warmly] Jeskai is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-jeskai": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Jeskai)",
+   "text": [
+    "[gently] Leave me be, Jeskai dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-jeskai": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Jeskai)",
+   "text": [
+    "[warmly] Peace for a turn, Jeskai?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-jund": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Jund)",
+   "text": [
+    "[gently] Dears, Jund needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-jund": {
+   "category": "address",
+   "when": "names a player as the threat (color: Jund)",
+   "text": [
+    "[warmly] Jund is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-jund": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Jund)",
+   "text": [
+    "[gently] Leave me be, Jund dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-jund": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Jund)",
+   "text": [
+    "[warmly] Peace for a turn, Jund?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mardu": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Mardu)",
+   "text": [
+    "[gently] Dears, Mardu needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mardu": {
+   "category": "address",
+   "when": "names a player as the threat (color: Mardu)",
+   "text": [
+    "[warmly] Mardu is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mardu": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Mardu)",
+   "text": [
+    "[gently] Leave me be, Mardu dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mardu": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Mardu)",
+   "text": [
+    "[warmly] Peace for a turn, Mardu?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-naya": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Naya)",
+   "text": [
+    "[gently] Dears, Naya needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-naya": {
+   "category": "address",
+   "when": "names a player as the threat (color: Naya)",
+   "text": [
+    "[warmly] Naya is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-naya": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Naya)",
+   "text": [
+    "[gently] Leave me be, Naya dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-naya": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Naya)",
+   "text": [
+    "[warmly] Peace for a turn, Naya?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-sultai": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Sultai)",
+   "text": [
+    "[gently] Dears, Sultai needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-sultai": {
+   "category": "address",
+   "when": "names a player as the threat (color: Sultai)",
+   "text": [
+    "[warmly] Sultai is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-sultai": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Sultai)",
+   "text": [
+    "[gently] Leave me be, Sultai dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-sultai": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Sultai)",
+   "text": [
+    "[warmly] Peace for a turn, Sultai?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-temur": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Temur)",
+   "text": [
+    "[gently] Dears, Temur needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-temur": {
+   "category": "address",
+   "when": "names a player as the threat (color: Temur)",
+   "text": [
+    "[warmly] Temur is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-temur": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Temur)",
+   "text": [
+    "[gently] Leave me be, Temur dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-temur": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Temur)",
+   "text": [
+    "[warmly] Peace for a turn, Temur?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-glint": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Glint deck)",
+   "text": [
+    "[gently] Dears, the Glint deck needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-glint": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Glint deck)",
+   "text": [
+    "[warmly] The Glint deck is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-glint": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Glint deck)",
+   "text": [
+    "[gently] Leave me be, Glint dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-glint": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Glint deck)",
+   "text": [
+    "[warmly] Peace for a turn, Glint?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-dune": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Dune deck)",
+   "text": [
+    "[gently] Dears, the Dune deck needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-dune": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Dune deck)",
+   "text": [
+    "[warmly] The Dune deck is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-dune": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Dune deck)",
+   "text": [
+    "[gently] Leave me be, Dune dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-dune": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Dune deck)",
+   "text": [
+    "[warmly] Peace for a turn, Dune?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-ink": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Ink deck)",
+   "text": [
+    "[gently] Dears, the Ink deck needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-ink": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Ink deck)",
+   "text": [
+    "[warmly] The Ink deck is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-ink": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Ink deck)",
+   "text": [
+    "[gently] Leave me be, Ink dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-ink": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Ink deck)",
+   "text": [
+    "[warmly] Peace for a turn, Ink?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-witch": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Witch deck)",
+   "text": [
+    "[gently] Dears, the Witch deck needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-witch": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Witch deck)",
+   "text": [
+    "[warmly] The Witch deck is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-witch": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Witch deck)",
+   "text": [
+    "[gently] Leave me be, Witch dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-witch": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Witch deck)",
+   "text": [
+    "[warmly] Peace for a turn, Witch?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-yore": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Yore deck)",
+   "text": [
+    "[gently] Dears, the Yore deck needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-yore": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Yore deck)",
+   "text": [
+    "[warmly] The Yore deck is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-yore": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Yore deck)",
+   "text": [
+    "[gently] Leave me be, Yore dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-yore": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Yore deck)",
+   "text": [
+    "[warmly] Peace for a turn, Yore?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-five-color": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: five-colour)",
+   "text": [
+    "[gently] Dears, five-colour needs attention."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-five-color": {
+   "category": "address",
+   "when": "names a player as the threat (color: five-colour)",
+   "text": [
+    "[warmly] Five-colour is the problem, loves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-five-color": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: five-colour)",
+   "text": [
+    "[gently] Leave me be, five-colour dear."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-five-color": {
+   "category": "address",
+   "when": "offers a named player a truce (color: five-colour)",
+   "text": [
+    "[warmly] Peace for a turn, five-colour?"
+   ],
+   "source": "table-2026-09-10"
+  }
+ }
+}

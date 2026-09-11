@@ -1,0 +1,2017 @@
+{
+ "schema": "arena.voice-stock/1",
+ "library": "harry/table",
+ "parent": "harry",
+ "seat": null,
+ "note": "the table sub-library (round 31): procedural self-narration, whole-sentence numbers and named addressing, fired by the voice runner from board events; regenerate with runner/voice/table_lines.py --write",
+ "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+ "voice_name": "Harry - Fierce Warrior",
+ "temperament": "fiery young warrior: loud, cocky, quick to anger and quick to laugh; never sulks for long",
+ "render": {
+  "model": "eleven_v3",
+  "voice_settings": {
+   "stability": 0.0,
+   "speed": 1.05
+  },
+  "formats": [
+   "pcm_24000"
+  ]
+ },
+ "bake": {
+  "rate": 22050,
+  "fx": "none",
+  "glitch": "off",
+  "gain": "library",
+  "target_lufs": -24.0,
+  "true_peak_max": -1.0,
+  "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
+ },
+ "sample_rate": 22050,
+ "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
+ "phrases": {
+  "land-go": {
+   "category": "procedural",
+   "when": "its own turn was a land and nothing else",
+   "text": [
+    "[scoffs] Land. Go.",
+    "[frustrated] Land, pass. Don't laugh.",
+    "[exhales] Just a land. Next.",
+    "[angry] Land. Pass. Not a word."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "pass": {
+   "category": "procedural",
+   "when": "ends its own turn after doing something",
+   "text": [
+    "[excited] Done! Your go!",
+    "[shouting] Pass! Beat that!",
+    "[smug] That's my turn. Go.",
+    "[laughs] Over to you. Good luck."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "mana-up": {
+   "category": "procedural",
+   "when": "ends its own turn with mana untapped and cards in hand",
+   "text": [
+    "[smug] Passing. Mana up. Try me.",
+    "[laughs] Pass. I've got mana. Guess why.",
+    "[mischievously] Pass. Don't mind the open mana."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "tapped-out": {
+   "category": "procedural",
+   "when": "ends its own turn tapped out with cards in hand",
+   "text": [
+    "[exhales] Tapped out. Go nuts.",
+    "[frustrated] Tapped out. Don't get ideas.",
+    "[laughs] All in. Nothing left. Pass."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "untap-draw": {
+   "category": "procedural",
+   "when": "its own turn begins (an alternative to my-turn)",
+   "text": [
+    "[excited] Untap, draw, go time!",
+    "[shouting] Untap! Draw! Let's go!",
+    "[smug] Untap. Draw. Here we go."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "come-on-land": {
+   "category": "procedural",
+   "when": "its own turn begins short on lands",
+   "text": [
+    "[angry] Come on, land!",
+    "[groans] Land! Just one land!",
+    "[frustrated] Draw a land. Please. Anything."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "thinking": {
+   "category": "procedural",
+   "when": "its own decision has been pending a while",
+   "text": [
+    "[exhales] Okay. Options.",
+    "[mischievously] Let me think. Yeah.",
+    "[groans] Hang on. Thinking."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-creature": {
+   "category": "procedural",
+   "when": "casts a creature (not its commander, not a game changer)",
+   "text": [
+    "[excited] Creature! Come on out!",
+    "[shouting] Here's a body!",
+    "[smug] Another one for the army."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-artifact": {
+   "category": "procedural",
+   "when": "casts an artifact",
+   "text": [
+    "[scoffs] Another rock. Sue me.",
+    "[excited] Artifact. Ramp, ramp, ramp!",
+    "[smug] More toys."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-enchantment": {
+   "category": "procedural",
+   "when": "casts an enchantment",
+   "text": [
+    "[excited] Enchantment! Read it later!",
+    "[smug] This stays. Get used to it.",
+    "[laughs] Sticky. Good luck removing it."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-instant": {
+   "category": "procedural",
+   "when": "casts an instant on its own turn",
+   "text": [
+    "[shouting] Instant! Boom!",
+    "[excited] Quick one!",
+    "[laughs] Zap. Instant."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-sorcery": {
+   "category": "procedural",
+   "when": "casts a sorcery",
+   "text": [
+    "[excited] Sorcery! Big effect!",
+    "[shouting] Watch this one!",
+    "[smug] Main phase. My phase."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-planeswalker": {
+   "category": "procedural",
+   "when": "casts a planeswalker",
+   "text": [
+    "[shouting] Walker! Come on down!",
+    "[excited] Planeswalker! Protect the walker!",
+    "[smug] A walker. Deal with it."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-big": {
+   "category": "procedural",
+   "when": "casts a six-plus mana spell that is not a game changer or its commander",
+   "text": [
+    "[shouting] Big one! Here it comes!",
+    "[excited] Six mana! Worth it!",
+    "[laughs] All in on this!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "in-response": {
+   "category": "procedural",
+   "when": "casts an instant on someone else's turn",
+   "text": [
+    "[shouting] Hold on! In response!",
+    "[angry] Not so fast!",
+    "[excited] Wait wait wait! Response!",
+    "[laughs] Before that resolves..."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "poke": {
+   "category": "procedural",
+   "when": "declares a small attack",
+   "text": [
+    "[laughs] Just a poke. Take it.",
+    "[smug] Little swing. Don't cry.",
+    "[mischievously] Chip damage. Adds up."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "attack-you": {
+   "category": "procedural",
+   "when": "declares a medium attack at one player",
+   "text": [
+    "[shouting] Swinging at you!",
+    "[excited] You! Attack!",
+    "[laughs] Coming for you!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "no-blocks": {
+   "category": "procedural",
+   "when": "it is attacked with nothing untapped to block",
+   "text": [
+    "[angry] No blocks. Take it.",
+    "[groans] Nothing to block with.",
+    "[frustrated] Fine. No blocks."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "take-it": {
+   "category": "procedural",
+   "when": "takes small combat damage",
+   "text": [
+    "[scoffs] I'll take it.",
+    "[laughs] That's all? Fine.",
+    "[exhales] Take it. Whatever."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "sure": {
+   "category": "procedural",
+   "when": "lets another player's spell resolve",
+   "text": [
+    "[scoffs] Sure.",
+    "[exhales] Fine. Resolves.",
+    "[laughs] Yeah, okay.",
+    "[angry] Whatever. Resolves."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hold-on": {
+   "category": "procedural",
+   "when": "something on the stack targets its permanent or itself",
+   "text": [
+    "[angry] Wait. Which one?!",
+    "[shouting] Hold on! Targeting what?!",
+    "[frustrated] Hey! That's mine!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "holding-mana": {
+   "category": "procedural",
+   "when": "sees another seat pass with mana untapped",
+   "text": [
+    "[scoffs] Passing with mana up? Suspicious.",
+    "[angry] They're holding something!",
+    "[laughs] Mana open. Cute."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-1": {
+   "category": "number",
+   "when": "announces or answers its life total: 1",
+   "text": [
+    "[angry] I'm at one."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-2": {
+   "category": "number",
+   "when": "announces or answers its life total: 2",
+   "text": [
+    "[angry] I'm at two."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-3": {
+   "category": "number",
+   "when": "announces or answers its life total: 3",
+   "text": [
+    "[angry] I'm at three."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-4": {
+   "category": "number",
+   "when": "announces or answers its life total: 4",
+   "text": [
+    "[angry] I'm at four."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-5": {
+   "category": "number",
+   "when": "announces or answers its life total: 5",
+   "text": [
+    "[angry] I'm at five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-6": {
+   "category": "number",
+   "when": "announces or answers its life total: 6",
+   "text": [
+    "[angry] I'm at six."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-7": {
+   "category": "number",
+   "when": "announces or answers its life total: 7",
+   "text": [
+    "[angry] I'm at seven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-8": {
+   "category": "number",
+   "when": "announces or answers its life total: 8",
+   "text": [
+    "[angry] I'm at eight."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-9": {
+   "category": "number",
+   "when": "announces or answers its life total: 9",
+   "text": [
+    "[angry] I'm at nine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-10": {
+   "category": "number",
+   "when": "announces or answers its life total: 10",
+   "text": [
+    "[angry] I'm at ten."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-11": {
+   "category": "number",
+   "when": "announces or answers its life total: 11",
+   "text": [
+    "[exhales] I'm at eleven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-12": {
+   "category": "number",
+   "when": "announces or answers its life total: 12",
+   "text": [
+    "[exhales] I'm at twelve."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-13": {
+   "category": "number",
+   "when": "announces or answers its life total: 13",
+   "text": [
+    "[exhales] I'm at thirteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-14": {
+   "category": "number",
+   "when": "announces or answers its life total: 14",
+   "text": [
+    "[exhales] I'm at fourteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-15": {
+   "category": "number",
+   "when": "announces or answers its life total: 15",
+   "text": [
+    "[exhales] I'm at fifteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-16": {
+   "category": "number",
+   "when": "announces or answers its life total: 16",
+   "text": [
+    "[exhales] I'm at sixteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-17": {
+   "category": "number",
+   "when": "announces or answers its life total: 17",
+   "text": [
+    "[exhales] I'm at seventeen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-18": {
+   "category": "number",
+   "when": "announces or answers its life total: 18",
+   "text": [
+    "[exhales] I'm at eighteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-19": {
+   "category": "number",
+   "when": "announces or answers its life total: 19",
+   "text": [
+    "[exhales] I'm at nineteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-20": {
+   "category": "number",
+   "when": "announces or answers its life total: 20",
+   "text": [
+    "[exhales] I'm at twenty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-21": {
+   "category": "number",
+   "when": "announces or answers its life total: 21",
+   "text": [
+    "[smug] I'm at twenty-one."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-22": {
+   "category": "number",
+   "when": "announces or answers its life total: 22",
+   "text": [
+    "[smug] I'm at twenty-two."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-23": {
+   "category": "number",
+   "when": "announces or answers its life total: 23",
+   "text": [
+    "[smug] I'm at twenty-three."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-24": {
+   "category": "number",
+   "when": "announces or answers its life total: 24",
+   "text": [
+    "[smug] I'm at twenty-four."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-25": {
+   "category": "number",
+   "when": "announces or answers its life total: 25",
+   "text": [
+    "[smug] I'm at twenty-five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-26": {
+   "category": "number",
+   "when": "announces or answers its life total: 26",
+   "text": [
+    "[smug] I'm at twenty-six."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-27": {
+   "category": "number",
+   "when": "announces or answers its life total: 27",
+   "text": [
+    "[smug] I'm at twenty-seven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-28": {
+   "category": "number",
+   "when": "announces or answers its life total: 28",
+   "text": [
+    "[smug] I'm at twenty-eight."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-29": {
+   "category": "number",
+   "when": "announces or answers its life total: 29",
+   "text": [
+    "[smug] I'm at twenty-nine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-30": {
+   "category": "number",
+   "when": "announces or answers its life total: 30",
+   "text": [
+    "[smug] I'm at thirty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-31": {
+   "category": "number",
+   "when": "announces or answers its life total: 31",
+   "text": [
+    "[smug] I'm at thirty-one."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-32": {
+   "category": "number",
+   "when": "announces or answers its life total: 32",
+   "text": [
+    "[smug] I'm at thirty-two."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-33": {
+   "category": "number",
+   "when": "announces or answers its life total: 33",
+   "text": [
+    "[smug] I'm at thirty-three."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-34": {
+   "category": "number",
+   "when": "announces or answers its life total: 34",
+   "text": [
+    "[smug] I'm at thirty-four."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-35": {
+   "category": "number",
+   "when": "announces or answers its life total: 35",
+   "text": [
+    "[smug] I'm at thirty-five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-36": {
+   "category": "number",
+   "when": "announces or answers its life total: 36",
+   "text": [
+    "[smug] I'm at thirty-six."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-37": {
+   "category": "number",
+   "when": "announces or answers its life total: 37",
+   "text": [
+    "[smug] I'm at thirty-seven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-38": {
+   "category": "number",
+   "when": "announces or answers its life total: 38",
+   "text": [
+    "[smug] I'm at thirty-eight."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-39": {
+   "category": "number",
+   "when": "announces or answers its life total: 39",
+   "text": [
+    "[smug] I'm at thirty-nine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-40": {
+   "category": "number",
+   "when": "announces or answers its life total: 40",
+   "text": [
+    "[smug] I'm at forty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-45": {
+   "category": "number",
+   "when": "announces or answers its life total: 45",
+   "text": [
+    "[smug] I'm at forty-five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-50": {
+   "category": "number",
+   "when": "announces or answers its life total: 50",
+   "text": [
+    "[smug] I'm at fifty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-60": {
+   "category": "number",
+   "when": "announces or answers its life total: 60",
+   "text": [
+    "[smug] I'm at sixty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-80": {
+   "category": "number",
+   "when": "announces or answers its life total: 80",
+   "text": [
+    "[smug] I'm at eighty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-100": {
+   "category": "number",
+   "when": "announces or answers its life total: 100",
+   "text": [
+    "[smug] I'm at a hundred."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-0": {
+   "category": "number",
+   "when": "announces or answers its hand size: 0",
+   "text": [
+    "[scoffs] No cards. Happy?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-1": {
+   "category": "number",
+   "when": "announces or answers its hand size: 1",
+   "text": [
+    "[scoffs] One card."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-2": {
+   "category": "number",
+   "when": "announces or answers its hand size: 2",
+   "text": [
+    "[scoffs] Two cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-3": {
+   "category": "number",
+   "when": "announces or answers its hand size: 3",
+   "text": [
+    "[scoffs] Three cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-4": {
+   "category": "number",
+   "when": "announces or answers its hand size: 4",
+   "text": [
+    "[scoffs] Four cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-5": {
+   "category": "number",
+   "when": "announces or answers its hand size: 5",
+   "text": [
+    "[scoffs] Five cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-6": {
+   "category": "number",
+   "when": "announces or answers its hand size: 6",
+   "text": [
+    "[scoffs] Six cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-7": {
+   "category": "number",
+   "when": "announces or answers its hand size: 7",
+   "text": [
+    "[scoffs] Seven cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-8": {
+   "category": "number",
+   "when": "announces or answers its hand size: 8",
+   "text": [
+    "[scoffs] Eight cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-9": {
+   "category": "number",
+   "when": "announces or answers its hand size: 9",
+   "text": [
+    "[scoffs] Nine cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-10": {
+   "category": "number",
+   "when": "announces or answers its hand size: 10",
+   "text": [
+    "[scoffs] Ten cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-giada": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Giada)",
+   "text": [
+    "[shouting] Everybody hit Giada!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-giada": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Giada)",
+   "text": [
+    "[shouting] Giada's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-giada": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Giada)",
+   "text": [
+    "[angry] Leave me alone, Giada!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-giada": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Giada)",
+   "text": [
+    "[laughs] Deal, Giada? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-liberator": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Liberator)",
+   "text": [
+    "[shouting] Everybody hit Liberator!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-liberator": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Liberator)",
+   "text": [
+    "[shouting] Liberator's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-liberator": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Liberator)",
+   "text": [
+    "[angry] Leave me alone, Liberator!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-liberator": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Liberator)",
+   "text": [
+    "[laughs] Deal, Liberator? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-purphoros": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Purphoros)",
+   "text": [
+    "[shouting] Everybody hit Purphoros!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-purphoros": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Purphoros)",
+   "text": [
+    "[shouting] Purphoros's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-purphoros": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Purphoros)",
+   "text": [
+    "[angry] Leave me alone, Purphoros!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-purphoros": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Purphoros)",
+   "text": [
+    "[laughs] Deal, Purphoros? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-selvala": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Selvala)",
+   "text": [
+    "[shouting] Everybody hit Selvala!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-selvala": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Selvala)",
+   "text": [
+    "[shouting] Selvala's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-selvala": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Selvala)",
+   "text": [
+    "[angry] Leave me alone, Selvala!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-selvala": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Selvala)",
+   "text": [
+    "[laughs] Deal, Selvala? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-sheoldred": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Sheoldred)",
+   "text": [
+    "[shouting] Everybody hit Sheoldred!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-sheoldred": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Sheoldred)",
+   "text": [
+    "[shouting] Sheoldred's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-sheoldred": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Sheoldred)",
+   "text": [
+    "[angry] Leave me alone, Sheoldred!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-sheoldred": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Sheoldred)",
+   "text": [
+    "[laughs] Deal, Sheoldred? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-rev": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Rev)",
+   "text": [
+    "[shouting] Everybody hit Rev!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-rev": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Rev)",
+   "text": [
+    "[shouting] Rev's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-rev": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Rev)",
+   "text": [
+    "[angry] Leave me alone, Rev!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-rev": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Rev)",
+   "text": [
+    "[laughs] Deal, Rev? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-sythis": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Sythis)",
+   "text": [
+    "[shouting] Everybody hit Sythis!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-sythis": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Sythis)",
+   "text": [
+    "[shouting] Sythis's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-sythis": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Sythis)",
+   "text": [
+    "[angry] Leave me alone, Sythis!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-sythis": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Sythis)",
+   "text": [
+    "[laughs] Deal, Sythis? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-urza": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Urza)",
+   "text": [
+    "[shouting] Everybody hit Urza!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-urza": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Urza)",
+   "text": [
+    "[shouting] Urza's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-urza": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Urza)",
+   "text": [
+    "[angry] Leave me alone, Urza!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-urza": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Urza)",
+   "text": [
+    "[laughs] Deal, Urza? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-y-shtola": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Y'shtola)",
+   "text": [
+    "[shouting] Everybody hit Y'shtola!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-y-shtola": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Y'shtola)",
+   "text": [
+    "[shouting] Y'shtola's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-y-shtola": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Y'shtola)",
+   "text": [
+    "[angry] Leave me alone, Y'shtola!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-y-shtola": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Y'shtola)",
+   "text": [
+    "[laughs] Deal, Y'shtola? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-white": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-white)",
+   "text": [
+    "[shouting] Everybody hit mono-white!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-white": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-white)",
+   "text": [
+    "[shouting] Mono-white's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-white": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-white)",
+   "text": [
+    "[angry] Leave me alone, mono-white!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-white": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-white)",
+   "text": [
+    "[laughs] Deal, mono-white? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-blue": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-blue)",
+   "text": [
+    "[shouting] Everybody hit mono-blue!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-blue": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-blue)",
+   "text": [
+    "[shouting] Mono-blue's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-blue": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-blue)",
+   "text": [
+    "[angry] Leave me alone, mono-blue!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-blue": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-blue)",
+   "text": [
+    "[laughs] Deal, mono-blue? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-black": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-black)",
+   "text": [
+    "[shouting] Everybody hit mono-black!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-black": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-black)",
+   "text": [
+    "[shouting] Mono-black's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-black": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-black)",
+   "text": [
+    "[angry] Leave me alone, mono-black!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-black": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-black)",
+   "text": [
+    "[laughs] Deal, mono-black? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-red": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-red)",
+   "text": [
+    "[shouting] Everybody hit mono-red!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-red": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-red)",
+   "text": [
+    "[shouting] Mono-red's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-red": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-red)",
+   "text": [
+    "[angry] Leave me alone, mono-red!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-red": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-red)",
+   "text": [
+    "[laughs] Deal, mono-red? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-green": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-green)",
+   "text": [
+    "[shouting] Everybody hit mono-green!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-green": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-green)",
+   "text": [
+    "[shouting] Mono-green's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-green": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-green)",
+   "text": [
+    "[angry] Leave me alone, mono-green!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-green": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-green)",
+   "text": [
+    "[laughs] Deal, mono-green? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-colorless": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the artifact deck)",
+   "text": [
+    "[shouting] Everybody hit the artifact deck!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-colorless": {
+   "category": "address",
+   "when": "names a player as the threat (color: the artifact deck)",
+   "text": [
+    "[shouting] The artifact deck's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-colorless": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the artifact deck)",
+   "text": [
+    "[angry] Leave me alone, artifacts!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-colorless": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the artifact deck)",
+   "text": [
+    "[laughs] Deal, artifacts? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-azorius": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Azorius)",
+   "text": [
+    "[shouting] Everybody hit Azorius!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-azorius": {
+   "category": "address",
+   "when": "names a player as the threat (color: Azorius)",
+   "text": [
+    "[shouting] Azorius's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-azorius": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Azorius)",
+   "text": [
+    "[angry] Leave me alone, Azorius!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-azorius": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Azorius)",
+   "text": [
+    "[laughs] Deal, Azorius? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-boros": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Boros)",
+   "text": [
+    "[shouting] Everybody hit Boros!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-boros": {
+   "category": "address",
+   "when": "names a player as the threat (color: Boros)",
+   "text": [
+    "[shouting] Boros's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-boros": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Boros)",
+   "text": [
+    "[angry] Leave me alone, Boros!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-boros": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Boros)",
+   "text": [
+    "[laughs] Deal, Boros? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-dimir": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Dimir)",
+   "text": [
+    "[shouting] Everybody hit Dimir!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-dimir": {
+   "category": "address",
+   "when": "names a player as the threat (color: Dimir)",
+   "text": [
+    "[shouting] Dimir's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-dimir": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Dimir)",
+   "text": [
+    "[angry] Leave me alone, Dimir!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-dimir": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Dimir)",
+   "text": [
+    "[laughs] Deal, Dimir? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-golgari": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Golgari)",
+   "text": [
+    "[shouting] Everybody hit Golgari!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-golgari": {
+   "category": "address",
+   "when": "names a player as the threat (color: Golgari)",
+   "text": [
+    "[shouting] Golgari's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-golgari": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Golgari)",
+   "text": [
+    "[angry] Leave me alone, Golgari!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-golgari": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Golgari)",
+   "text": [
+    "[laughs] Deal, Golgari? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-gruul": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Gruul)",
+   "text": [
+    "[shouting] Everybody hit Gruul!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-gruul": {
+   "category": "address",
+   "when": "names a player as the threat (color: Gruul)",
+   "text": [
+    "[shouting] Gruul's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-gruul": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Gruul)",
+   "text": [
+    "[angry] Leave me alone, Gruul!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-gruul": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Gruul)",
+   "text": [
+    "[laughs] Deal, Gruul? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-izzet": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Izzet)",
+   "text": [
+    "[shouting] Everybody hit Izzet!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-izzet": {
+   "category": "address",
+   "when": "names a player as the threat (color: Izzet)",
+   "text": [
+    "[shouting] Izzet's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-izzet": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Izzet)",
+   "text": [
+    "[angry] Leave me alone, Izzet!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-izzet": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Izzet)",
+   "text": [
+    "[laughs] Deal, Izzet? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-orzhov": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Orzhov)",
+   "text": [
+    "[shouting] Everybody hit Orzhov!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-orzhov": {
+   "category": "address",
+   "when": "names a player as the threat (color: Orzhov)",
+   "text": [
+    "[shouting] Orzhov's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-orzhov": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Orzhov)",
+   "text": [
+    "[angry] Leave me alone, Orzhov!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-orzhov": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Orzhov)",
+   "text": [
+    "[laughs] Deal, Orzhov? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-rakdos": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Rakdos)",
+   "text": [
+    "[shouting] Everybody hit Rakdos!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-rakdos": {
+   "category": "address",
+   "when": "names a player as the threat (color: Rakdos)",
+   "text": [
+    "[shouting] Rakdos's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-rakdos": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Rakdos)",
+   "text": [
+    "[angry] Leave me alone, Rakdos!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-rakdos": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Rakdos)",
+   "text": [
+    "[laughs] Deal, Rakdos? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-selesnya": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Selesnya)",
+   "text": [
+    "[shouting] Everybody hit Selesnya!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-selesnya": {
+   "category": "address",
+   "when": "names a player as the threat (color: Selesnya)",
+   "text": [
+    "[shouting] Selesnya's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-selesnya": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Selesnya)",
+   "text": [
+    "[angry] Leave me alone, Selesnya!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-selesnya": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Selesnya)",
+   "text": [
+    "[laughs] Deal, Selesnya? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-simic": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Simic)",
+   "text": [
+    "[shouting] Everybody hit Simic!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-simic": {
+   "category": "address",
+   "when": "names a player as the threat (color: Simic)",
+   "text": [
+    "[shouting] Simic's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-simic": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Simic)",
+   "text": [
+    "[angry] Leave me alone, Simic!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-simic": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Simic)",
+   "text": [
+    "[laughs] Deal, Simic? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-abzan": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Abzan)",
+   "text": [
+    "[shouting] Everybody hit Abzan!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-abzan": {
+   "category": "address",
+   "when": "names a player as the threat (color: Abzan)",
+   "text": [
+    "[shouting] Abzan's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-abzan": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Abzan)",
+   "text": [
+    "[angry] Leave me alone, Abzan!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-abzan": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Abzan)",
+   "text": [
+    "[laughs] Deal, Abzan? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-bant": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Bant)",
+   "text": [
+    "[shouting] Everybody hit Bant!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-bant": {
+   "category": "address",
+   "when": "names a player as the threat (color: Bant)",
+   "text": [
+    "[shouting] Bant's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-bant": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Bant)",
+   "text": [
+    "[angry] Leave me alone, Bant!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-bant": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Bant)",
+   "text": [
+    "[laughs] Deal, Bant? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-esper": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Esper)",
+   "text": [
+    "[shouting] Everybody hit Esper!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-esper": {
+   "category": "address",
+   "when": "names a player as the threat (color: Esper)",
+   "text": [
+    "[shouting] Esper's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-esper": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Esper)",
+   "text": [
+    "[angry] Leave me alone, Esper!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-esper": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Esper)",
+   "text": [
+    "[laughs] Deal, Esper? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-grixis": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Grixis)",
+   "text": [
+    "[shouting] Everybody hit Grixis!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-grixis": {
+   "category": "address",
+   "when": "names a player as the threat (color: Grixis)",
+   "text": [
+    "[shouting] Grixis's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-grixis": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Grixis)",
+   "text": [
+    "[angry] Leave me alone, Grixis!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-grixis": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Grixis)",
+   "text": [
+    "[laughs] Deal, Grixis? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-jeskai": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Jeskai)",
+   "text": [
+    "[shouting] Everybody hit Jeskai!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-jeskai": {
+   "category": "address",
+   "when": "names a player as the threat (color: Jeskai)",
+   "text": [
+    "[shouting] Jeskai's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-jeskai": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Jeskai)",
+   "text": [
+    "[angry] Leave me alone, Jeskai!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-jeskai": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Jeskai)",
+   "text": [
+    "[laughs] Deal, Jeskai? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-jund": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Jund)",
+   "text": [
+    "[shouting] Everybody hit Jund!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-jund": {
+   "category": "address",
+   "when": "names a player as the threat (color: Jund)",
+   "text": [
+    "[shouting] Jund's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-jund": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Jund)",
+   "text": [
+    "[angry] Leave me alone, Jund!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-jund": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Jund)",
+   "text": [
+    "[laughs] Deal, Jund? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mardu": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Mardu)",
+   "text": [
+    "[shouting] Everybody hit Mardu!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mardu": {
+   "category": "address",
+   "when": "names a player as the threat (color: Mardu)",
+   "text": [
+    "[shouting] Mardu's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mardu": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Mardu)",
+   "text": [
+    "[angry] Leave me alone, Mardu!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mardu": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Mardu)",
+   "text": [
+    "[laughs] Deal, Mardu? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-naya": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Naya)",
+   "text": [
+    "[shouting] Everybody hit Naya!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-naya": {
+   "category": "address",
+   "when": "names a player as the threat (color: Naya)",
+   "text": [
+    "[shouting] Naya's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-naya": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Naya)",
+   "text": [
+    "[angry] Leave me alone, Naya!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-naya": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Naya)",
+   "text": [
+    "[laughs] Deal, Naya? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-sultai": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Sultai)",
+   "text": [
+    "[shouting] Everybody hit Sultai!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-sultai": {
+   "category": "address",
+   "when": "names a player as the threat (color: Sultai)",
+   "text": [
+    "[shouting] Sultai's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-sultai": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Sultai)",
+   "text": [
+    "[angry] Leave me alone, Sultai!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-sultai": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Sultai)",
+   "text": [
+    "[laughs] Deal, Sultai? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-temur": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Temur)",
+   "text": [
+    "[shouting] Everybody hit Temur!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-temur": {
+   "category": "address",
+   "when": "names a player as the threat (color: Temur)",
+   "text": [
+    "[shouting] Temur's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-temur": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Temur)",
+   "text": [
+    "[angry] Leave me alone, Temur!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-temur": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Temur)",
+   "text": [
+    "[laughs] Deal, Temur? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-glint": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Glint deck)",
+   "text": [
+    "[shouting] Everybody hit the Glint deck!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-glint": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Glint deck)",
+   "text": [
+    "[shouting] The Glint deck's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-glint": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Glint deck)",
+   "text": [
+    "[angry] Leave me alone, Glint!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-glint": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Glint deck)",
+   "text": [
+    "[laughs] Deal, Glint? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-dune": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Dune deck)",
+   "text": [
+    "[shouting] Everybody hit the Dune deck!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-dune": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Dune deck)",
+   "text": [
+    "[shouting] The Dune deck's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-dune": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Dune deck)",
+   "text": [
+    "[angry] Leave me alone, Dune!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-dune": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Dune deck)",
+   "text": [
+    "[laughs] Deal, Dune? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-ink": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Ink deck)",
+   "text": [
+    "[shouting] Everybody hit the Ink deck!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-ink": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Ink deck)",
+   "text": [
+    "[shouting] The Ink deck's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-ink": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Ink deck)",
+   "text": [
+    "[angry] Leave me alone, Ink!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-ink": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Ink deck)",
+   "text": [
+    "[laughs] Deal, Ink? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-witch": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Witch deck)",
+   "text": [
+    "[shouting] Everybody hit the Witch deck!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-witch": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Witch deck)",
+   "text": [
+    "[shouting] The Witch deck's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-witch": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Witch deck)",
+   "text": [
+    "[angry] Leave me alone, Witch!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-witch": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Witch deck)",
+   "text": [
+    "[laughs] Deal, Witch? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-yore": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Yore deck)",
+   "text": [
+    "[shouting] Everybody hit the Yore deck!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-yore": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Yore deck)",
+   "text": [
+    "[shouting] The Yore deck's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-yore": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Yore deck)",
+   "text": [
+    "[angry] Leave me alone, Yore!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-yore": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Yore deck)",
+   "text": [
+    "[laughs] Deal, Yore? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-five-color": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: five-colour)",
+   "text": [
+    "[shouting] Everybody hit five-colour!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-five-color": {
+   "category": "address",
+   "when": "names a player as the threat (color: five-colour)",
+   "text": [
+    "[shouting] Five-colour's the threat! Wake up!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-five-color": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: five-colour)",
+   "text": [
+    "[angry] Leave me alone, five-colour!"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-five-color": {
+   "category": "address",
+   "when": "offers a named player a truce (color: five-colour)",
+   "text": [
+    "[laughs] Deal, five-colour? Don't hit me, I don't hit you."
+   ],
+   "source": "table-2026-09-10"
+  }
+ }
+}
