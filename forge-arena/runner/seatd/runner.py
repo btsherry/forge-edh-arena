@@ -220,6 +220,11 @@ class SeatRunner:
         if isinstance(effort, str) and effort and effort != self.brain.effort:
             changes.append(f"effort {self.brain.effort}->{effort}")
             self.brain.effort = effort
+            # a control change is the user's intent: the long-lived process answers at
+            # the effort it was started with, so restart it (same session, transcript kept)
+            if not startup and hasattr(self.brain, "stop_persistent"):
+                self.brain.stop_persistent()
+                changes.append("(seat process restarts at the new effort)")
         if changes:
             self._say(f"[seat {self.seat}] CONTROL applied: " + ", ".join(changes)
                       + (" (startup)" if startup else ""))
@@ -1421,7 +1426,9 @@ class SeatRunner:
             out, meta = self.brain.decide(prompt, deadline=deadline,
                                           effort=fast_eff)
             if isinstance(meta, dict):
-                meta["effort"] = fast_eff or self.brain.effort   # the effort actually used (game 26 visibility gap)
+                # the effort actually used (game 26 visibility gap; game 43: a live process
+                # answers at the effort it was started with, whatever this call asked)
+                meta["effort"] = getattr(self.brain, "last_effort_used", None) or fast_eff or self.brain.effort
             clean = rules.validate(req, out) if out is not None else None
             if isinstance(out, dict) and isinstance(out.get("why"), str):
                 why = out["why"][:200]

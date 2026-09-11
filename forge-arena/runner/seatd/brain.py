@@ -291,6 +291,7 @@ class SeatBrain:
         self.persistent_calls = 0
         self.persistent_fallbacks = 0
         self.effort_pinned = 0   # calls answered at the process's effort, not the asked one
+        self.last_effort_used: str | None = None   # the effort the LAST answer was actually produced at
         root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[3]
         self.root = root  # session storage is cwd-scoped: keep every call here
         here = Path(__file__).parent
@@ -389,6 +390,7 @@ class SeatBrain:
         # auto-discovery is NOT affected by this flag; see the README note.)
         cmd = ["claude", "-p", "-", "--output-format", "json",
                "--model", self.model, "--effort", eff]
+        self.last_effort_used = eff            # a spawn answers at the asked effort; a persistent call overrides below
         if self.allowed_tools:
             # print mode denies every tool not on the allowlist without asking
             for pattern in self.allowed_tools:
@@ -460,20 +462,30 @@ class SeatBrain:
         if p is not None and p.alive() and self._persistent_key[0] != self.model:
             self.stop_persistent()   # in-memory transcript: never let disk drift past it
             p = None
-        if p is not None and p.alive() and self._persistent_key[1] != eff:
+        if p is None or not p.alive():
+            # The process is started at the seat's BASE effort (the control/launch
+            # value), never at a per-window low: game 43 (2026-09-10) saw two seats
+            # restart inside a low-effort reaction window and then answer every
+            # main-phase decision at low while the panel said high.
+            start_cmd = list(cmd_base)
+            try:
+                start_cmd[start_cmd.index("--effort") + 1] = self.effort
+            except (ValueError, IndexError):
+                pass
+            err_path = str(self.root / "forge-arena" / "runner" / "logs" / f"claude-persistent-seat-{self.seat}.err")
+            p = PersistentClaude(start_cmd, self.session_id, str(self.root), self.log, stderr_path=err_path)
+            if not p.start():
+                self.persistent_fallbacks += 1
+                return None
+            self._persistent, self._persistent_key = p, (self.model, self.effort)
+            self.log(f"[seat {self.seat}] persistent claude process up for session "
+                     f"{self.session_id[:8]} ({self.model}/{self.effort})")
+        if self._persistent_key[1] != eff:
+            # the live process answers at the effort it was started with; the flip is logged and counted
             self.effort_pinned += 1
             if self.effort_pinned in (1, 10, 100):
                 self.log(f"[seat {self.seat}] persistent process answers at effort "
                          f"{self._persistent_key[1]} (asked {eff}); pinned {self.effort_pinned}x so far")
-        if p is None or not p.alive():
-            err_path = str(self.root / "forge-arena" / "runner" / "logs" / f"claude-persistent-seat-{self.seat}.err")
-            p = PersistentClaude(cmd_base, self.session_id, str(self.root), self.log, stderr_path=err_path)
-            if not p.start():
-                self.persistent_fallbacks += 1
-                return None
-            self._persistent, self._persistent_key = p, (self.model, eff)
-            self.log(f"[seat {self.seat}] persistent claude process up for session "
-                     f"{self.session_id[:8]} ({self.model}/{eff})")
         self._child = p.proc
         env = p.call(prompt, timeout_s)
         self._child = None
@@ -490,6 +502,7 @@ class SeatBrain:
                      f"{env['session_id'][:8]} (had {self.session_id[:8]}) — adopting it")
             self.session_id = env["session_id"]
         self.persistent_calls += 1
+        self.last_effort_used = self._persistent_key[1]   # what the answer was really produced at
         return env
 
     def stop_persistent(self) -> None:

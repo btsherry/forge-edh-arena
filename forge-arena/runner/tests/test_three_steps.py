@@ -155,6 +155,38 @@ class BrainTransportTests(unittest.TestCase):
         finally:
             brain_mod.PersistentClaude, brain_mod._run = orig_cls, orig_run
 
+    def test_process_starts_at_the_base_effort_and_a_control_change_restarts_it(self):
+        """Game 43 (2026-09-10): seats restarted inside a low-effort reaction window and
+        then played every decision at low while the AI panel said high."""
+        b = self._brain()
+        started = []
+
+        class P:
+            def __init__(self, cmd, sid, cwd, log, **kw): started.append(list(cmd)); self.ok = True
+            def alive(self): return self.ok
+            def start(self): return True
+            def call(self, prompt, timeout_s):
+                return {"result": "{}", "session_id": "s-live", "usage": {"input_tokens": 1, "output_tokens": 1,
+                        "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}}
+            def kill(self): self.ok = False
+            proc = None
+        orig_cls, orig_run = brain_mod.PersistentClaude, brain_mod._run
+        brain_mod.PersistentClaude = P
+        brain_mod._run = lambda cmd, **kw: (_ for _ in ()).throw(OSError("no spawn expected"))
+        try:
+            b._call("react", 10.0, resume=True, effort="low")           # the FIRST call asks low…
+            self.assertEqual(started[0][started[0].index("--effort") + 1], "medium", "…but the process starts at the seat's base effort")
+            self.assertEqual(b._persistent_key, ("opus", "medium"))
+            self.assertEqual(b.last_effort_used, "medium", "and the record says what was really used")
+            self.assertEqual(b.effort_pinned, 1)
+            # the AI panel's effort button: the runner restarts the process at the new effort
+            b.effort = "high"; b.stop_persistent()
+            b._call("main", 10.0, resume=True)
+            self.assertEqual(len(started), 2); self.assertEqual(started[1][started[1].index("--effort") + 1], "high")
+            self.assertEqual(b.last_effort_used, "high")
+        finally:
+            brain_mod.PersistentClaude, brain_mod._run = orig_cls, orig_run
+
     def test_spawn_mode_never_touches_the_persistent_class(self):
         b = self._brain(persistent=False)   # ARENA_BRAIN_TRANSPORT=spawn (persistent is the default now)
         touched = []
