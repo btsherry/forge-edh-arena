@@ -815,6 +815,10 @@ class VoiceRunner:
         self.patter_human = float(os.environ.get("ARENA_VOICE_PATTER_HUMAN", "0.33"))     # rate on the human's turn
         self.patter_after_advice = float(os.environ.get("ARENA_VOICE_PATTER_AFTER_ADVICE", "6"))
         self.barks_slow = float(os.environ.get("ARENA_BARKS_SLOW", "20"))                  # a seat thinking this long gets told
+        self.barks_mana = int(os.environ.get("ARENA_BARKS_MANA", "8"))                       # floating this much is "big mana"
+        self._last_hit_by: dict[int, tuple[list[int], object]] = {}   # seat -> (hitters, turn) from the ring: kill attribution
+        self._casts: dict[int, list[float]] = {}                      # seat -> recent cast times (a flurry earns "play slower")
+        self._pool_high: set[int] = set()                             # seats currently over the big-mana line
         self._patter_anchor = None
         self._patter_due = 0.0
         self._advisor_spoke_at = -1e9
@@ -1235,9 +1239,13 @@ class VoiceRunner:
                     if seat != self.human_seat and (int(e.get("power", 0)) >= self.barks_swing or int(e.get("attackers", 0)) >= 3):
                         self.maybe_bark(seat, "big-swing", turn=turn, source="event",
                                         ctx={"targets": [int(x) for x in (e.get("defenders") or [])], "aggressor": None})
-                elif kind == "damage" and int(e.get("amount", 0)) >= self.barks_hit:
+                elif kind == "damage":
                     victim = int(e.get("seat"))
                     froms = [int(x) for x in (e.get("from") or [])]
+                    if froms:
+                        self._last_hit_by[victim] = (froms, turn)
+                    if int(e.get("amount", 0)) < self.barks_hit:
+                        continue
                     if victim != self.human_seat:
                         self.maybe_bark(victim, "that-hurt", turn=turn, source="event",
                                         ctx={"targets": [], "aggressor": froms[0] if froms else None, "human_cause": self.human_seat in froms})
@@ -1246,6 +1254,47 @@ class VoiceRunner:
                         if hitters:
                             self.maybe_bark(hitters[0], "landed-hit", turn=turn, source="event",
                                             ctx={"targets": [self.human_seat], "aggressor": None})
+                elif kind == "cast":
+                    seat = int(e.get("seat"))
+                    if seat != self.human_seat and self.library_for_seat(seat):
+                        if e.get("commander"):
+                            self.maybe_bark(seat, "commander-cast", turn=turn, source="event", ctx={"targets": []})
+                        elif int(e.get("cmc", 0)) >= 7:
+                            by = [x for x in self.seat_libraries if int(x) != seat and int(x) not in self.eliminated]
+                            if by:
+                                self.maybe_bark(int(self.rng.choice(by)), "wow", turn=turn, source="event", ctx={"targets": [seat]})
+                    # a flurry — three spells inside thirty seconds — earns "slow down" from someone else
+                    now_t = time.time()
+                    recent = [t for t in self._casts.get(seat, []) if now_t - t < 30] + [now_t]
+                    self._casts[seat] = recent
+                    if len(recent) >= 3 and seat != self.human_seat:
+                        by = [x for x in self.seat_libraries if int(x) != seat and int(x) not in self.eliminated]
+                        if by:
+                            self.maybe_bark(int(self.rng.choice(by)), "play-slower", turn=turn, source="event", ctx={"targets": [seat]})
+                elif kind == "left":
+                    by = e.get("by"); owners = [int(x) for x in (e.get("seats") or [])]
+                    n, tokens = int(e.get("n", 0)), int(e.get("tokens", 0))
+                    commanders = e.get("commanders") or []
+                    ai_owners = [o for o in owners if o != self.human_seat and self.library_for_seat(o)]
+                    if n >= 3 and len(set(owners)) >= 2:
+                        if by is not None and int(by) != self.human_seat and self.library_for_seat(int(by)):
+                            self.maybe_bark(int(by), "sweep", turn=turn, source="event", ctx={"targets": [o for o in owners if o != int(by)]})
+                        for o in ai_owners:
+                            if by is None or o != int(by):
+                                self.maybe_bark(o, "got-swept", turn=turn, source="event",
+                                                ctx={"aggressor": int(by) if by is not None else None, "human_cause": by is not None and int(by) == self.human_seat})
+                    elif commanders:
+                        for o in ai_owners:
+                            self.maybe_bark(o, "lost-commander", turn=turn, source="event",
+                                            ctx={"aggressor": int(by) if by is not None and int(by) != o else None,
+                                                 "human_cause": by is not None and int(by) == self.human_seat})
+                    elif by is not None and n > tokens and all(int(by) != o for o in owners):
+                        if int(by) != self.human_seat and self.library_for_seat(int(by)):
+                            self.maybe_bark(int(by), "removal", turn=turn, source="event", ctx={"targets": owners})
+                elif kind == "gameover":
+                    w = e.get("winner")
+                    if w is not None and int(w) != self.human_seat and self.library_for_seat(int(w)):
+                        self.maybe_bark(int(w), "win", turn=turn, source="event", ctx={"targets": []})
                 elif kind == "countered":
                     by, victim = e.get("by"), e.get("seat")
                     if by is not None and int(by) != self.human_seat and self.library_for_seat(int(by)):
@@ -1333,6 +1382,22 @@ class VoiceRunner:
                         self.enqueue("event", stock="eliminated", library=lib, seat=int(s.get("seat")), ttl=20.0, ctx={"targets": []})
                     else:
                         self.enqueue("event", stock="player-eliminated", ttl=20.0)
+                    # who finished them? the last seat to hit them this turn gets the kill line
+                    hit = self._last_hit_by.get(int(s.get("seat")))
+                    if hit and hit[1] == turn:
+                        killers = [h for h in hit[0] if h != self.human_seat and self.library_for_seat(h) and h not in self.eliminated]
+                        if killers:
+                            self.maybe_bark(killers[-1], "kill", turn=turn, source="event", ctx={"targets": []})
+        for s in seats:
+            sid, pool = s.get("seat"), s.get("pool") or 0
+            if sid is None or sid == self.human_seat:
+                continue
+            if pool >= self.barks_mana and sid not in self._pool_high:
+                self._pool_high.add(sid)
+                if self.library_for_seat(sid):
+                    self.maybe_bark(int(sid), "big-mana", turn=turn, source="event", ctx={"targets": []})
+            elif pool < self.barks_mana:
+                self._pool_high.discard(sid)
         if turn is not None and (turn, active) != (self.seen_turn, self.seen_active):
             if active == self.human_seat and self.your_move_mode != "off" and self.seen_turn is not None and not self.executive_on():
                 if self.your_move_mode == "on" or self.rng.random() < self.your_move_p:

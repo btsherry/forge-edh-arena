@@ -20,7 +20,12 @@ import forge.game.GameOutcome;
 import forge.game.card.Card;
 import forge.game.card.CounterType;
 import forge.game.event.GameEvent;
+import forge.game.event.EventValueChangeType;
 import forge.game.event.GameEventAttackersDeclared;
+import forge.game.event.GameEventGameOutcome;
+import forge.game.event.GameEventSpellAbilityCast;
+import forge.game.event.GameEventZone;
+import forge.game.spellability.StackItemView;
 import forge.game.event.GameEventPlayerDamaged;
 import forge.game.event.GameEventSpellRemovedFromStack;
 import forge.game.event.GameEventSpellResolved;
@@ -70,10 +75,14 @@ import forge.game.zone.ZoneType;
  * snapshot carries a short ring of PUBLIC notable events — {@code attack}
  * (attackers declared: seat, count, total power, defenders), {@code damage}
  * (a player damaged; combat damage from several sources in one step is
- * coalesced), and {@code countered} (a spell removed from the stack without
+ * coalesced), {@code countered} (a spell removed from the stack without
  * having resolved: the victim's seat and, when the counterspell is on top of
- * the stack, who countered it). The voice runner turns these into the seats'
- * instant reactions. Every field is public information a spectator sees.
+ * the stack, who countered it), and since the same evening {@code cast} (a
+ * spell cast: caster, name, commander flag, mana value), {@code left}
+ * (permanents leaving the battlefield in one resolution, coalesced: owners,
+ * names, commanders, and the seat whose effect was resolving) and
+ * {@code gameover} (the winning seat). The voice runner turns these into the
+ * seats' instant reactions. Every field is public information a spectator sees.
  */
 public final class ObserverSnapshot {
 
@@ -180,6 +189,12 @@ public final class ObserverSnapshot {
                 noteDamage(d);
             } else if (ev instanceof GameEventSpellRemovedFromStack rm) {
                 noteRemoved(rm);
+            } else if (ev instanceof GameEventSpellAbilityCast c) {
+                noteCast(c);
+            } else if (ev instanceof GameEventZone z) {
+                noteLeft(z);
+            } else if (ev instanceof GameEventGameOutcome o) {
+                noteGameOver(o);
             }
         } catch (RuntimeException ignored) {
             // an event we could not read is not worth a snapshot failure
@@ -271,6 +286,102 @@ public final class ObserverSnapshot {
         push(e);
     }
 
+    /** Whose effect is resolving right now: the activator on top of the stack, or null. */
+    private Integer resolvingSeat() {
+        try {
+            if (!game.getStack().isEmpty()) {
+                SpellAbilityStackInstance top = game.getStack().peek();
+                Player p = top != null ? top.getActivatingPlayer() : null;
+                return p != null ? p.getId() : null;
+            }
+        } catch (RuntimeException ignored) {
+            // no stack access: unknown
+        }
+        return null;
+    }
+
+    private void noteCast(GameEventSpellAbilityCast c) {
+        StackItemView si = c.si();
+        if (si == null || si.isAbility() || si.getActivatingPlayer() == null) {
+            return;   // spells only; abilities are noise at this level
+        }
+        CardView host = si.getSourceCard();
+        Map<String, Object> e = newEvent("cast");
+        e.put("seat", si.getActivatingPlayer().getId());
+        e.put("spell", host != null ? host.getName() : String.valueOf(si));
+        e.put("commander", host != null && host.isCommander());
+        int cmc = 0;
+        try {
+            if (host != null && host.getCurrentState() != null && host.getCurrentState().getManaCost() != null) {
+                cmc = host.getCurrentState().getManaCost().getCMC();
+            }
+        } catch (RuntimeException ignored) {
+            cmc = 0;
+        }
+        e.put("cmc", cmc);
+        push(e);
+    }
+
+    private void noteLeft(GameEventZone z) {
+        if (z.zoneType() != ZoneType.Battlefield || z.mode() != EventValueChangeType.Removed || z.card() == null || z.player() == null) {
+            return;
+        }
+        CardView card = z.card();
+        int owner = z.player().getId();
+        Integer by = resolvingSeat();
+        PhaseHandler ph = game.getPhaseHandler();
+        int turn = ph != null ? ph.getTurn() : 0;
+        String phase = ph != null && ph.getPhase() != null ? ph.getPhase().name() : "";
+        Map<String, Object> last = events.peekLast();
+        // one resolution (or one state-based sweep) takes several permanents: fold them
+        if (last != null && "left".equals(last.get("kind")) && Integer.valueOf(turn).equals(last.get("turn"))
+                && phase.equals(last.get("phase")) && java.util.Objects.equals(by, last.get("by"))) {
+            @SuppressWarnings("unchecked") List<String> cards = (List<String>) last.get("cards");
+            @SuppressWarnings("unchecked") List<Integer> seats = (List<Integer>) last.get("seats");
+            @SuppressWarnings("unchecked") List<String> commanders = (List<String>) last.get("commanders");
+            cards.add(card.getName());
+            if (!seats.contains(owner)) {
+                seats.add(owner);
+            }
+            if (card.isCommander()) {
+                commanders.add(card.getName());
+            }
+            last.put("n", cards.size());
+            last.put("tokens", ((Integer) last.get("tokens")) + (card.isToken() ? 1 : 0));
+            return;
+        }
+        Map<String, Object> e = newEvent("left");
+        e.put("by", by);
+        List<String> cards = new ArrayList<>(); cards.add(card.getName());
+        List<Integer> seats = new ArrayList<>(); seats.add(owner);
+        List<String> commanders = new ArrayList<>();
+        if (card.isCommander()) {
+            commanders.add(card.getName());
+        }
+        e.put("cards", cards);
+        e.put("seats", seats);
+        e.put("commanders", commanders);
+        e.put("n", 1);
+        e.put("tokens", card.isToken() ? 1 : 0);
+        push(e);
+    }
+
+    private void noteGameOver(GameEventGameOutcome o) {
+        Map<String, Object> e = newEvent("gameover");
+        Integer winner = null;
+        String name = o.winningPlayerName();
+        if (name != null) {
+            for (Player p : game.getPlayers()) {
+                if (name.equals(p.getName())) {
+                    winner = p.getId();
+                }
+            }
+        }
+        e.put("winner", winner);
+        e.put("winnerName", name);
+        push(e);
+    }
+
     private void noteRemoved(GameEventSpellRemovedFromStack rm) {
         SpellAbilityView sa = rm.sa();
         if (sa == null || !sa.isSpell() || sa.getId() == lastResolvedId) {
@@ -280,18 +391,7 @@ public final class ObserverSnapshot {
         CardView host = sa.getHostCard();
         e.put("spell", host != null ? host.getName() : sa.getDescription());
         e.put("seat", host != null && host.getController() != null ? host.getController().getId() : null);
-        Integer by = null;
-        try {
-            // the counterspell is resolving right now, so it is still on top of the stack
-            if (!game.getStack().isEmpty()) {
-                SpellAbilityStackInstance top = game.getStack().peek();
-                Player p = top != null ? top.getActivatingPlayer() : null;
-                by = p != null ? p.getId() : null;
-            }
-        } catch (RuntimeException ignored) {
-            by = null;
-        }
-        e.put("by", by);
+        e.put("by", resolvingSeat());   // the counterspell is resolving right now: it is on top of the stack
         push(e);
     }
 
@@ -348,6 +448,11 @@ public final class ObserverSnapshot {
             s.put("poison", p.getPoisonCounters());
             s.put("handSize", p.getCardsIn(ZoneType.Hand).size());
             s.put("librarySize", p.getCardsIn(ZoneType.Library).size());
+            try {
+                s.put("pool", p.getManaPool() != null ? p.getManaPool().totalMana() : 0);   // floating mana is public
+            } catch (RuntimeException ignored) {
+                s.put("pool", 0);
+            }
             // item 12: liveness of this seat's brain from its heartbeat file
             // (true fresh / false stale / null no runner) — a dead seat reads
             // as dead on the dashboard instead of as a slow game

@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import voice_runner as vr  # noqa: E402
 
 LINES = ("big-swing", "eliminated", "my-turn", "that-hurt", "landed-hit", "counter", "got-countered", "slow-turn", "respect",
+         "commander-cast", "wow", "play-slower", "sweep", "got-swept", "lost-commander", "removal", "win", "kill", "big-mana",
          "play-faster", "thinking-hard", "youre-the-threat", "whats-your-life", "low-life-jab", "cards-in-hand", "empty-hand",
          "kill-that", "board-envy", "nothing-happening", "this-is-fine", "good-hand", "what-turn", "deal", "pass-already")
 
@@ -362,6 +363,61 @@ class BarkRuntime(_TreeCase):
         ev.append({"seq": 5, "kind": "countered", "turn": 3, "seat": 1, "by": 0, "spell": "Sol Ring"})
         self._observer(3, 1, events=ev); self.r.scan_observer()
         self.assertEqual(self._queued(), [], "seat 1 already grumbled this turn — no repeat")
+
+    def test_cast_events_commander_big_spell_and_a_flurry(self):
+        self._prime()
+        ev = [{"seq": 2, "kind": "cast", "turn": 3, "seat": 1, "spell": "Urza, Lord High Artificer", "commander": True, "cmc": 4}]
+        self._observer(3, 1, events=ev); self.r.scan_observer()
+        self.assertEqual(self._queued(), [("bark", "commander-cast", "harry", 1)])
+        self.r.queue.clear()
+        ev.append({"seq": 3, "kind": "cast", "turn": 3, "seat": 1, "spell": "Big Thing", "commander": False, "cmc": 8})
+        self._observer(3, 1, events=ev); self.r.scan_observer()
+        self.assertEqual(self._queued(), [("bark", "wow", "bill", 2)], "a seven-plus spell impresses a bystander")
+        self.r.queue.clear()
+        ev.append({"seq": 4, "kind": "cast", "turn": 3, "seat": 1, "spell": "Third", "commander": False, "cmc": 1})
+        self._observer(3, 1, events=ev); self.r.scan_observer()
+        self.assertEqual(self._queued(), [("bark", "play-slower", "bill", 2)], "three spells in thirty seconds: slow down")
+
+    def test_left_events_removal_sweep_and_lost_commander_with_the_right_speaker(self):
+        self._prime()
+        ev = [{"seq": 2, "kind": "left", "turn": 3, "by": 2, "cards": ["Sol Ring"], "seats": [1], "commanders": [], "n": 1, "tokens": 0}]
+        self._observer(3, 2, events=ev); self.r.scan_observer()
+        self.assertEqual(self._queued(), [("bark", "removal", "bill", 2)], "Bill removed Harry's thing")
+        self.r.queue.clear()
+        ev.append({"seq": 3, "kind": "left", "turn": 3, "by": 1, "cards": ["Token"], "seats": [1], "commanders": [], "n": 1, "tokens": 1})
+        self._observer(3, 2, events=ev); self.r.scan_observer()
+        self.assertEqual(self._queued(), [], "your own token dying to your own effect is not removal")
+        ev.append({"seq": 4, "kind": "left", "turn": 3, "by": 0, "cards": ["Urza, Lord High Artificer"], "seats": [1], "commanders": ["Urza, Lord High Artificer"], "n": 1, "tokens": 0})
+        self._observer(3, 2, events=ev); self.r.scan_observer()
+        self.assertEqual(self._queued(), [("bark", "lost-commander", "harry", 1)], "the human killed Harry's commander: Harry mourns")
+        self.assertTrue(self.r.queue[0]["ctx"]["human_cause"])
+        self.r.queue.clear(); self.r._roll_turn(4)
+        ev.append({"seq": 5, "kind": "left", "turn": 4, "by": 2, "cards": ["a", "b", "c", "d"], "seats": [0, 1], "commanders": [], "n": 4, "tokens": 0})
+        self._observer(4, 2, events=ev); self.r.scan_observer()
+        got = self._queued()
+        self.assertEqual(got, [("bark", "got-swept", "harry", 1)], "one pending bark: the sweep line was queued, then Harry's reaction replaced it (newest wins)")
+        self.assertEqual([r["stock"] for r in self._records("queued", "bark")][-2:], ["sweep", "got-swept"])
+
+    def test_gameover_kill_and_big_mana(self):
+        self._prime()
+        ev = [{"seq": 2, "kind": "damage", "turn": 3, "seat": 2, "amount": 3, "combat": True, "from": [1]}]
+        self._observer(3, 1, events=ev); self.r.scan_observer()
+        self.assertEqual(self._queued(), [], "three damage is not a big hit, but the hitter is remembered")
+        self.r.rng.random = lambda: 0.9                          # Joshua announces the elimination…
+        self._observer(3, 1, events=ev, elim=(2,)); self.r.scan_observer()
+        self.assertEqual([(q["kind"], q["stock"], q.get("seat")) for q in self.r.queue], [("event", "player-eliminated", None), ("bark", "kill", 1)],
+                         "…and Harry, who hit Bill last this turn, takes the kill")
+        self.r.queue.clear()
+        ev.append({"seq": 3, "kind": "gameover", "turn": 3, "winner": 1})
+        self._observer(3, 1, events=ev, elim=(2,)); self.r.scan_observer()
+        self.assertIn(("bark", "win", "harry", 1), self._queued())
+        self.r.queue.clear(); self.r.eliminated.clear()
+        seats = [{"seat": i, "name": f"s{i}", "eliminated": False, "life": 40, "pool": 9 if i == 1 else 0} for i in range(4)]
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 4, "activeSeat": 1, "seats": seats, "events": ev}))
+        self.r.scan_observer()
+        self.assertIn(("bark", "big-mana", "harry", 1), self._queued())
+        self.r.queue.clear(); self.r.scan_observer()
+        self.assertEqual([q for q in self._queued() if q[1] == "big-mana"], [], "still floating: said once")
 
     def test_opener_fires_at_a_seats_turn_start_at_its_own_probability(self):
         self.r.barks_opener_p = 0.35

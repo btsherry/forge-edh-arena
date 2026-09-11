@@ -111,4 +111,51 @@ public class ObserverSnapshotWriteTest {
             Assert.assertEquals(body.split("\"kind\":\"countered\"", -1).length - 1, 1, "still exactly one counter: " + body);
         }
     }
+
+    /** Later the same evening: casts (commander flag, mana value), permanents leaving
+     *  the battlefield coalesced per resolution, the winner at game over, and each
+     *  seat's floating mana. */
+    @Test(timeOut = 120_000)
+    public void castLeftGameOverAndPoolAreRecorded() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            Path snap = k.base.resolve("observer-state.json");
+            forge.game.card.Card bw = MailboxTestKit.put("Beast Within", k.opp, forge.game.zone.ZoneType.Hand);
+            forge.game.spellability.SpellAbility sa = bw.getFirstSpellAbility();
+            sa.setActivatingPlayer(k.opp);   // a cast spell has a caster; the view reads it off the instance
+            forge.game.spellability.SpellAbilityStackInstance si = new forge.game.spellability.SpellAbilityStackInstance(sa);
+            k.game.fireEvent(new forge.game.event.GameEventSpellAbilityCast(
+                    forge.game.spellability.SpellAbilityView.get(sa), forge.game.spellability.StackItemView.get(si), 0, null));
+            String body = Files.readString(snap);
+            Assert.assertTrue(body.contains("\"kind\":\"cast\""), body);
+            Assert.assertTrue(body.contains("\"seat\":" + k.opp.getId() + ",\"spell\""), body);
+            Assert.assertTrue(body.contains("\"spell\":\"Beast Within\""), body);
+            Assert.assertTrue(body.contains("\"commander\":false"), body);
+            Assert.assertTrue(body.contains("\"cmc\":3"), "Beast Within costs three: " + body);
+            // two permanents leave the battlefield in one step: one coalesced event
+            forge.game.card.Card bear = MailboxTestKit.put("Grizzly Bears", k.seat, forge.game.zone.ZoneType.Battlefield);
+            forge.game.card.Card hoof = MailboxTestKit.put("Craterhoof Behemoth", k.opp, forge.game.zone.ZoneType.Battlefield);
+            k.game.fireEvent(new forge.game.event.GameEventZone(forge.game.zone.ZoneType.Battlefield, k.seat,
+                    forge.game.event.EventValueChangeType.Removed, bear));
+            k.game.fireEvent(new forge.game.event.GameEventZone(forge.game.zone.ZoneType.Battlefield, k.opp,
+                    forge.game.event.EventValueChangeType.Removed, hoof));
+            body = Files.readString(snap);
+            Assert.assertEquals(body.split("\"kind\":\"left\"", -1).length - 1, 1, "one coalesced 'left' event: " + body);
+            Assert.assertTrue(body.contains("\"cards\":[\"Grizzly Bears\",\"Craterhoof Behemoth\"]"), body);
+            Assert.assertTrue(body.contains("\"seats\":[" + k.seat.getId() + "," + k.opp.getId() + "]"), body);
+            Assert.assertTrue(body.contains("\"n\":2"), body);
+            // a card ADDED to the battlefield, or leaving a graveyard, is not a 'left'
+            k.game.fireEvent(new forge.game.event.GameEventZone(forge.game.zone.ZoneType.Battlefield, k.seat,
+                    forge.game.event.EventValueChangeType.Added, bear));
+            k.game.fireEvent(new forge.game.event.GameEventZone(forge.game.zone.ZoneType.Graveyard, k.seat,
+                    forge.game.event.EventValueChangeType.Removed, bear));
+            Assert.assertEquals(Files.readString(snap).split("\"kind\":\"left\"", -1).length - 1, 1);
+            // floating mana is in every seat row
+            Assert.assertTrue(Files.readString(snap).contains("\"pool\":0"), body);
+            // game over names the winning seat
+            k.game.fireEvent(new forge.game.event.GameEventGameOutcome(1, java.util.List.of(), k.opp.getName(), ""));
+            body = Files.readString(snap);
+            Assert.assertTrue(body.contains("\"kind\":\"gameover\",\"turn\""), body);
+            Assert.assertTrue(body.contains("\"winner\":" + k.opp.getId()), body);
+        }
+    }
 }

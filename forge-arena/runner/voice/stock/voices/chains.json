@@ -75,22 +75,34 @@
     ],
     "removal": [
       {
-        "role": "bystander",
-        "reply": "agree"
+        "role": "target",
+        "reply": "oh-no"
+      },
+      {
+        "role": "target",
+        "reply": "scoff"
+      },
+      {
+        "role": "target",
+        "reply": "you-suck"
       },
       {
         "role": "bystander",
-        "reply": "sympathy"
+        "reply": "thats-mean"
       }
     ],
     "sweep": [
       {
-        "role": "bystander",
-        "reply": "disagree"
+        "role": "target",
+        "reply": "oh-no"
       },
       {
         "role": "bystander",
-        "reply": "scoff"
+        "reply": "thats-mean"
+      },
+      {
+        "role": "target",
+        "reply": "you-suck"
       }
     ],
     "got-swept": [
@@ -106,7 +118,11 @@
     "kill": [
       {
         "role": "bystander",
-        "reply": "pile-on"
+        "reply": "not-sorry"
+      },
+      {
+        "role": "bystander",
+        "reply": "thats-mean"
       },
       {
         "role": "bystander",
@@ -117,6 +133,10 @@
       {
         "role": "bystander",
         "reply": "gg"
+      },
+      {
+        "role": "bystander",
+        "reply": "you-cheat"
       }
     ],
     "taunt": [
@@ -170,27 +190,39 @@
     "big-mana": [
       {
         "role": "bystander",
-        "reply": "disagree"
+        "reply": "wow"
       },
       {
         "role": "bystander",
-        "reply": "sympathy"
+        "reply": "you-cheat"
+      },
+      {
+        "role": "bystander",
+        "reply": "disagree"
       }
     ],
     "commander-cast": [
+      {
+        "role": "bystander",
+        "reply": "oh-no"
+      },
       {
         "role": "bystander",
         "reply": "brace"
       },
       {
         "role": "bystander",
-        "reply": "laugh"
+        "reply": "read-that"
       }
     ],
     "lost-commander": [
       {
         "role": "bystander",
         "reply": "sympathy"
+      },
+      {
+        "role": "aggressor",
+        "reply": "not-sorry"
       },
       {
         "role": "bystander",

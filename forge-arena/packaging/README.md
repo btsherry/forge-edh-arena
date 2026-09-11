@@ -482,6 +482,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_VOICE_PATTER_HUMAN` | `0.33` | patter rate during the human's turn (a third as often; reactions to the human's plays are unaffected) |
 | `ARENA_VOICE_PATTER_AFTER_ADVICE` | `6` | seconds of patter silence after an advisor line, so advice is never talked over |
 | `ARENA_BARKS_SLOW` | `20` | a seat with a decision pending this many seconds gets told to play faster |
+| `ARENA_BARKS_MANA` | `8` | floating this much mana earns an instant 'big mana' line |
 
 **Backends (optional, API-billed)**
 
