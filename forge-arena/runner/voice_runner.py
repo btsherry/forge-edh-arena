@@ -834,6 +834,9 @@ class VoiceRunner:
         self._patter_anchor = None
         self._patter_due = 0.0
         self._advisor_spoke_at = -1e9
+        # Game over (Ben, game 44: "they kept talking after the game was over"): the
+        # winner's line, then Joshua's pair, then NOTHING — the runner locks.
+        self.final_locked = False
         # interaction chains (Ben, 2026-09-10): a spoken line invites replies; see chains.py
         self.chains = ChainTable.load(VOICES_DIR)
         self._chain: dict | None = None      # {"origin": seat, "hop": n, "turn": t} while an exchange is running
@@ -943,6 +946,9 @@ class VoiceRunner:
     def enqueue(self, kind: str, *, text: str = "", stock: str = "", seq: int | None = None, ttl: float = 25.0,
                 library: str = "", seat: int | None = None, ctx: dict | None = None, gap: float | None = None,
                 chain: dict | None = None) -> None:
+        if self.final_locked:
+            self.record("dropped", kind=kind, why="game over — nothing after the sign-off", stock=stock, text=text[:60])
+            return
         item = {"kind": kind, "text": text, "stock": stock, "seq": seq,
                 "prio": CHAIN_HOP_PRIORITY if chain else PRIORITY.get(kind, 9),
                 "at": self.clock(), "expires": self.clock() + ttl, "library": library, "seat": seat,
@@ -1022,6 +1028,17 @@ class VoiceRunner:
         self.after_spoken(item)
         return True
 
+    def _winner_seat(self, d: dict, seats: list):
+        for e in reversed(d.get("events") or []):
+            if e.get("kind") == "gameover" and e.get("winner") is not None:
+                return int(e["winner"])
+        name = d.get("winner")
+        for s in seats:
+            if name and s.get("name") == name:
+                return int(s["seat"])
+        alive = [s for s in seats if not s.get("eliminated")]
+        return int(alive[0]["seat"]) if len(alive) == 1 else None
+
     # -- interaction chains
     def leader_of(self, speaker: int):
         """The highest-life seat still in the game, other than the speaker and the human."""
@@ -1037,7 +1054,7 @@ class VoiceRunner:
     def after_spoken(self, item: dict) -> None:
         """A seat's line may invite a reply (chains.py). One reply at most, rolled
         here so the outcome is recorded; a chain dies when the turn changes."""
-        if self.chains is None or self.barks_mode == "off":
+        if self.chains is None or self.barks_mode == "off" or self.final_locked:
             return
         if item.get("seat") is None or not item.get("library"):
             return                                       # Joshua spoke: the seats ignore him
@@ -1094,6 +1111,9 @@ class VoiceRunner:
         guard and one roll of the dice. Records why when it does not play."""
         if self.barks_mode == "off":
             self.record("skipped", kind="bark", why="barks off (ARENA_BARKS=off)", stock=pid, seat=seat, source=source)
+            return False
+        if self.final_locked:
+            self.record("skipped", kind="bark", why="game over", stock=pid, seat=seat, source=source)
             return False
         lib = self.library_for_seat(seat)
         if not lib:
@@ -1216,7 +1236,7 @@ class VoiceRunner:
                 for sp, pid, tgt, w in out]
 
     def patter(self) -> None:
-        if not self.patter_on or self.barks_mode == "off" or self.queue:
+        if not self.patter_on or self.barks_mode == "off" or self.queue or self.final_locked:
             return
         now = self.clock()
         snap = self._last_snapshot
@@ -1255,7 +1275,7 @@ class VoiceRunner:
             if seq <= self._event_seq:
                 continue
             self._event_seq = seq
-            if self.barks_mode == "off":
+            if self.barks_mode == "off" or self.final_locked:
                 continue
             kind, turn = e.get("kind"), e.get("turn")
             try:
@@ -1319,9 +1339,7 @@ class VoiceRunner:
                         if int(by) != self.human_seat and self.library_for_seat(int(by)):
                             self.maybe_bark(int(by), "removal", turn=turn, source="event", ctx={"targets": owners})
                 elif kind == "gameover":
-                    w = e.get("winner")
-                    if w is not None and int(w) != self.human_seat and self.library_for_seat(int(w)):
-                        self.maybe_bark(int(w), "win", turn=turn, source="event", ctx={"targets": []})
+                    pass   # the final sequence in scan_observer plays the winner's line, then Joshua, then locks
                 elif kind == "countered":
                     by, victim = e.get("by"), e.get("seat")
                     if by is not None and int(by) != self.human_seat and self.library_for_seat(int(by)):
@@ -1440,10 +1458,25 @@ class VoiceRunner:
             self.game_over_said = True
             human = next((s for s in seats if s.get("seat") == self.human_seat), None)
             won = human is not None and not human.get("eliminated")
-            self.enqueue("game_over", stock="you-win" if won else "strange-game", ttl=120.0)
-            # the sign-off follows as its own item so both play in order
+            # everything pending is moot now; the final sequence is: the winning seat's
+            # own line (if a voiced AI won), Joshua's verdict, Joshua's sign-off — then silence
+            for q in self.queue:
+                self.record("dropped", kind=q["kind"], why="game over", stock=q["stock"])
+            self.queue = []
+            winner = self._winner_seat(d, seats)
+            t = self.clock()
+            if winner is not None and winner != self.human_seat and self.library_for_seat(winner) and self.barks_mode != "off":
+                self.queue.append({"kind": "game_over", "text": "", "stock": "win", "seq": None, "prio": PRIORITY["game_over"],
+                                   "at": t, "expires": t + 120.0, "library": self.library_for_seat(winner), "seat": winner,
+                                   "ctx": {}, "gap": None, "chain": None})
+            self.queue.append({"kind": "game_over", "text": "", "stock": "you-win" if won else "strange-game", "seq": None,
+                               "prio": PRIORITY["game_over"], "at": t + 0.001, "expires": t + 120.0,
+                               "library": "", "seat": None, "ctx": {}, "gap": None, "chain": None})
             self.queue.append({"kind": "game_over", "text": "", "stock": "game-over-gg", "seq": None,
-                               "prio": PRIORITY["game_over"], "at": self.clock() + 0.001, "expires": self.clock() + 120.0})
+                               "prio": PRIORITY["game_over"], "at": t + 0.002, "expires": t + 120.0,
+                               "library": "", "seat": None, "ctx": {}, "gap": None, "chain": None})
+            self.final_locked = True
+            self.say("[voice] game over — final sequence queued, everything else is silenced")
 
     def publish_speaking(self, item: dict | None, seconds: float) -> None:
         """logs/voice-speaking.json — {"seat": N, "until": epoch_ms} while one of
