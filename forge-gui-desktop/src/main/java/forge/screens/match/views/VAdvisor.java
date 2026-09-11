@@ -19,6 +19,9 @@ import javax.swing.JTextArea;
 import javax.swing.Timer;
 
 import forge.arena.interactive.AdvisorLogTail;
+import forge.arena.interactive.VoiceFocus;
+import forge.gui.framework.ICDoc;
+import forge.gui.framework.SDisplayUtil;
 import forge.gui.framework.DragCell;
 import forge.gui.framework.DragTab;
 import forge.gui.framework.EDocID;
@@ -45,6 +48,13 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     private final JLabel status = new JLabel("● Advisor offline — launch with arena-play.sh --advisor");
     private final JTextArea text = new JTextArea();
     private final Timer refresh;
+    // The tabs follow the voices (VoiceFocus): 250 ms poll of logs/voice-speaking.json.
+    private final Timer focusTimer;
+    private static final boolean FOCUS_ON = VoiceFocus.enabled(System.getenv("ARENA_VOICE_FOCUS"));
+    private IVDoc<? extends ICDoc> focusRestore;   // the tab the player had in front before we moved it
+    private DragCell focusCell;
+    private int focusSeat = -1;
+    private long focusQuietSince;
 
     public VAdvisor(final CAdvisor controller) {
         this.controller = controller;
@@ -150,6 +160,8 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         body.add(toggleRow, "growx, gaptop 2");
         refresh = new Timer(1000, e -> poll());
         refresh.setRepeats(true);
+        focusTimer = new Timer(250, e -> followVoice());
+        focusTimer.setRepeats(true);
     }
 
     private final javax.swing.JButton toggle =
@@ -268,6 +280,79 @@ public class VAdvisor implements IVDoc<CAdvisor> {
                      : "Voice muted — click to unmute");
     }
 
+    /** Bring the speaking seat's field tab forward for the line, and put the old
+     *  tab back once the table has been quiet for a moment — unless the player
+     *  clicked another tab in the meantime. Never touches keyboard focus. */
+    private void followVoice() {
+        long[] speaking = new long[] {-1, 0};
+        try {
+            final java.io.File f = new java.io.File(forge.arena.interactive.AiControlFile.logsDir(), "voice-speaking.json");
+            if (f.isFile()) {
+                speaking = VoiceFocus.parseSpeaking(java.nio.file.Files.readString(f.toPath()));
+            }
+        } catch (final java.io.IOException | RuntimeException e) {
+            speaking = new long[] {-1, 0};
+        }
+        final long now = System.currentTimeMillis();
+        if (VoiceFocus.speakingNow(speaking, now)) {
+            final int seat = (int) speaking[0];
+            final VField target = fieldForSeat(seat);
+            final DragCell cell = target != null ? target.getParentCell() : null;
+            if (cell == null) {
+                return;
+            }
+            focusQuietSince = 0;
+            final IVDoc<? extends ICDoc> current = cell.getSelected();
+            if (current == target) {
+                focusSeat = seat;
+                return;                                    // already in front
+            }
+            if (focusRestore == null || focusCell != cell) {
+                focusRestore = current;                    // remember where the player was looking
+                focusCell = cell;
+            }
+            focusSeat = seat;
+            SDisplayUtil.showTab(target);
+            return;
+        }
+        if (focusRestore == null) {
+            return;
+        }
+        if (focusQuietSince == 0) {
+            focusQuietSince = now;
+            return;
+        }
+        if (now - focusQuietSince < VoiceFocus.QUIET_MS) {
+            return;                                        // the exchange may not be over
+        }
+        try {
+            final VField last = fieldForSeat(focusSeat);
+            if (focusCell != null && focusCell.getSelected() == last && focusRestore.getParentCell() == focusCell) {
+                SDisplayUtil.showTab(focusRestore);        // only if nobody clicked elsewhere meanwhile
+            }
+        } catch (final RuntimeException ignored) {
+            // a tab that moved cells or a closed match: nothing to restore
+        }
+        focusRestore = null;
+        focusCell = null;
+        focusSeat = -1;
+        focusQuietSince = 0;
+    }
+
+    /** The field whose tab title names this mailbox seat, or null. */
+    private VField fieldForSeat(final int seat) {
+        try {
+            for (final VField f : controller.getMatchUI().getFieldViews()) {
+                if (f.getTabLabel() != null && VoiceFocus.seatOfTab(f.getTabLabel().getText()) == seat) {
+                    return f;
+                }
+            }
+        } catch (final RuntimeException ignored) {
+            // no match yet
+        }
+        return null;
+    }
+
     private void poll() {
         syncToggle();
         syncExecutive();
@@ -303,6 +388,9 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         parentCell.getBody().add(body, "grow");
         poll();
         refresh.start();
+        if (FOCUS_ON) {
+            focusTimer.start();
+        }
     }
 
     @Override

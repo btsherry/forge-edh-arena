@@ -464,6 +464,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_VOICE_MIN_GAP` | `8` | seconds between spoken lines |
 | `ARENA_VOICE_MAX_CHARS` | `20000` | live characters per run before the voice goes stock-only |
 | `ARENA_VOICE_GLITCH` | `light` | off | light | heavy — the radio glitch |
+| `ARENA_VOICE_FOCUS` | `on` | on \| off — the match screen brings a talking seat's field tab forward, then puts your tab back |
 | `ARENA_BARKS` | `some` | off \| some \| all — the AI seats speak in their own voices (seat 1 Harry, 2 Bill, 3 Lily): after their own turns, at big attacks, hits and counters; the advisor must be on and unmuted |
 | `ARENA_BARKS_P` | `0.85` | probability a bark that was called for is spoken when BARKS=some |
 | `ARENA_BARKS_OPENER_P` | `0.35` | probability a seat opens its turn with a line (0 = never) |

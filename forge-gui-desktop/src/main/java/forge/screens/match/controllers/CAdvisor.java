@@ -13,7 +13,6 @@ import forge.screens.match.views.VAdvisor;
  */
 public class CAdvisor implements ICDoc {
 
-    @SuppressWarnings("unused")
     private final CMatchUI matchUI;
     private final VAdvisor view;
 
@@ -24,6 +23,11 @@ public class CAdvisor implements ICDoc {
 
     public VAdvisor getView() {
         return view;
+    }
+
+    /** The match this panel belongs to — the field tabs it follows live there. */
+    public CMatchUI getMatchUI() {
+        return matchUI;
     }
 
     @Override

@@ -62,6 +62,7 @@ KNOBS = {
         ("ARENA_VOICE_MIN_GAP", "8", "seconds between spoken lines"),
         ("ARENA_VOICE_MAX_CHARS", "20000", "live characters per run before the voice goes stock-only"),
         ("ARENA_VOICE_GLITCH", "light", "off | light | heavy — the radio glitch"),
+        ("ARENA_VOICE_FOCUS", "on", "on | off — the match screen brings a talking seat's field tab forward, then puts your tab back"),
     ],
     "seat barks (the AI seats' voices; advisor on + unmuted)": [
         ("ARENA_BARKS", "some", "off | some | all — the AI seats speak in their own voices (seat 1 Harry, 2 Bill, 3 Lily): after their own turns, at big attacks, hits and counters"),
