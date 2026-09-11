@@ -1552,8 +1552,8 @@ class VoiceRunner:
         item = self.next_item()
         if item is not None:
             self.speak(item)
-        elif self.final_locked and not self.queue:
-            self.publish_final()
+        if self.final_locked and not self.queue:
+            self.publish_final()                      # spoken or skipped, the sequence has drained
 
     def run(self) -> None:
         self.say(f"[voice] up — chatter={self.chatter:g}, stock {len(self.renderer.manifest.get('phrases', {}))} phrases, "
