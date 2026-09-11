@@ -69,6 +69,16 @@ public class GuiPilotMatchRosterTest {
 
     // ---- buildRoster ----------------------------------------------------------
 
+    /** 2026-09-10 (Ben: "kill it with fire"): one game per launch, and never
+     *  Forge's per-deck "AI can't play these cards well" boxes at start-up. */
+    @Test(groups = "extended", timeOut = 30_000)
+    public void arenaRulesAreOneCommanderGameWithoutTheAICardWarnings() {
+        forge.game.GameRules r = GuiPilotMatch.arenaRules();
+        Assert.assertEquals(r.getGameType(), forge.game.GameType.Commander);
+        Assert.assertEquals(r.getGamesPerMatch(), 1);
+        Assert.assertFalse(r.warnAboutAICards(), "the stock AI's complaints mean nothing for mailbox seats");
+    }
+
     @Test(groups = "extended", timeOut = 30_000)
     public void rosterConstantsAreTheDefaultTable() {
         Assert.assertEquals(Arrays.asList(GuiPilotMatch.DECKS), List.of(URZA, GIADA, PURPHOROS, SELVALA));

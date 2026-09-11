@@ -308,9 +308,24 @@ public final class GuiPilotMatch {
         // multi-game — but the arena wants a single game per launch, so build
         // explicit rules with gamesPerMatch=1 and use the rules overload. Pure
         // arena-side change; no Forge patch.
+        hm.startMatch(arenaRules(), EnumSet.of(GameType.Commander), players, guis, null);
+    }
+
+    /**
+     * The arena's game rules: one Commander game per launch, and NO "AI can't
+     * play these cards well" boxes. Forge's match start asks every controller
+     * to complain about cards its stock AI plays badly (AI:RemoveDeck hints)
+     * and, when the rules say to warn, shows every player one OK box per AI
+     * deck (Match.startGame -> GameAction.revealUnplayableByAI). Our seats are
+     * not that AI, so the list means nothing here and only delays the start
+     * (Ben, 2026-09-10: "kill it with fire"). Pure arena-side: GameRules has
+     * the switch; no Forge patch.
+     */
+    static GameRules arenaRules() {
         GameRules rules = new GameRules(GameType.Commander);
         rules.setGamesPerMatch(1);
-        hm.startMatch(rules, EnumSet.of(GameType.Commander), players, guis, null);
+        rules.setWarnAboutAICards(false);
+        return rules;
     }
 
     /** {@code <mailbox>/launch-status.json}: {@code {"ok":bool,"detail":…,"ts":…}}
