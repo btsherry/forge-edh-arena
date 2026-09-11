@@ -79,6 +79,7 @@ STOCK = HERE / "voice" / "stock"
 VOICES_DIR = STOCK / "voices"               # seat-bark libraries: voices/<name>/manifest.json + <id>[-N].wav
 DEFAULT_VOICE_ID = ""                        # resolved from stock/manifest.json ("voice_id") unless ARENA_VOICE_ID is set
 POLL_S = 0.5
+CHAIN_POLL_S = 0.1          # while an exchange hop is pending: a retort's beat is ~0.5 s, so poll fast
 FIRST_SENTENCE_MAX = 220
 ASK_MAX = 300
 PRIORITY = {"game_over": 0, "human_out": 0, "startup": 1, "ask": 2, "advice": 3, "quip": 4, "event": 5, "color": 6, "your_move": 7, "bark": 8}
@@ -906,7 +907,9 @@ class VoiceRunner:
             bleep = self.renderer.sfx()
             if bleep is not None:
                 self._play(bleep)
+        self.publish_speaking(item, wav_seconds(path))
         self._play(path)
+        self.publish_speaking(None, 0.0)
         self.last_spoken_at = self.clock()
         if item.get("seat") is not None and item.get("library"):
             self._bark_spoken_at[int(item["seat"])] = self.clock()
@@ -1172,6 +1175,24 @@ class VoiceRunner:
             self.queue.append({"kind": "game_over", "text": "", "stock": "game-over-gg", "seq": None,
                                "prio": PRIORITY["game_over"], "at": self.clock() + 0.001, "expires": self.clock() + 120.0})
 
+    def publish_speaking(self, item: dict | None, seconds: float) -> None:
+        """logs/voice-speaking.json — {"seat": N, "until": epoch_ms} while one of
+        the SEATS is talking, {} otherwise. The match screen (VAdvisor) brings
+        that seat's field tab forward for the line and puts the old tab back
+        (Ben, 2026-09-10). Joshua and the human never move the tabs."""
+        try:
+            f = self.logs / "voice-speaking.json"
+            if item is not None and item.get("seat") is not None and item.get("library"):
+                body = {"seat": int(item["seat"]), "library": item["library"], "stock": item.get("stock", ""),
+                        "until": int((time.time() + seconds) * 1000)}
+            else:
+                body = {}
+            tmp = f.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(body))
+            tmp.replace(f)
+        except OSError:
+            pass
+
     # -- loop
     def publish_state(self) -> None:
         """mailbox/seat-0-voice/state.json {"live": bool, "reason": str,
@@ -1235,7 +1256,7 @@ class VoiceRunner:
                 self.step()
             except Exception as e:  # noqa: BLE001 — bookkeeping never ends the voice
                 self.say(f"[voice] step error: {str(e)[:160]}")
-            time.sleep(POLL_S)
+            time.sleep(CHAIN_POLL_S if any(q.get("chain") for q in self.queue) else POLL_S)
 
 
 def main() -> None:

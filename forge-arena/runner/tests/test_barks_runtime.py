@@ -265,6 +265,22 @@ class BarkRuntime(_TreeCase):
         self.assertEqual(self.player.played[1], "typing-01.wav", "Joshua's lines keep their bleep")
         self.assertTrue(self.player.played[2].startswith("your-move"))
 
+    def test_speaking_file_names_the_seat_while_its_line_plays_and_clears_after(self):
+        seen = []
+        real_play = self.player.play
+        def spy(path, should_stop=None):
+            seen.append(json.loads((self.logs / "voice-speaking.json").read_text()))
+            real_play(path, should_stop)
+        self.player.play = spy
+        self._advisor(kind="bark", seat=1, id="big-swing", turn=4)
+        self._step()
+        self.assertEqual((seen[0]["seat"], seen[0]["library"], seen[0]["stock"]), (1, "harry", "big-swing"))
+        self.assertGreater(seen[0]["until"], 0)
+        self.assertEqual(json.loads((self.logs / "voice-speaking.json").read_text()), {}, "cleared when the line ends")
+        seen.clear()
+        self._observer(5, 0); self.r.seen_turn, self.r.seen_active = 4, 3; self.r.scan_observer(); self._step()
+        self.assertEqual(seen[-1], {}, "Joshua's 'your move' never moves the tabs")
+
     def test_mute_or_advisor_pause_drops_a_queued_bark(self):
         self._advisor(kind="bark", seat=1, id="big-swing", turn=4)
         self.r.scan_advisor()
@@ -408,7 +424,7 @@ class InteractionChains(_TreeCase):
 
     def test_table_loaded_and_the_banner_says_so(self):
         self.assertIsNotNone(self.r.chains)
-        self.assertEqual((self.r.chains.first_hop_p, self.r.chains.decay, self.r.chains.max_hops, self.r.chains.gap_s), (0.6, 0.5, 3, 1.5))
+        self.assertEqual((self.r.chains.first_hop_p, self.r.chains.decay, self.r.chains.max_hops, self.r.chains.gap_s), (0.6, 0.5, 3, 0.5))
         # the BarkRuntime tree has no chains.json: chains off, nothing else changes
         self.assertIsNone(vr.ChainTable.load(Path(self.tmp.name) / "nowhere"))
 
@@ -419,7 +435,7 @@ class InteractionChains(_TreeCase):
         self._spoken(1, "big-swing", ctx={"targets": [2], "aggressor": None})
         self.assertEqual(self._queued(), [("bark", "brace", "bill", 2)], "the defender braces")
         hop1 = self.r.queue[0]
-        self.assertEqual((hop1["gap"], hop1["chain"]["hop"], hop1["chain"]["origin"]), (1.5, 1, 1))
+        self.assertEqual((hop1["gap"], hop1["chain"]["hop"], hop1["chain"]["origin"]), (0.5, 1, 1))
         self.r.queue.clear()
         self._spoken(2, "brace", ctx=hop1["ctx"], chain=hop1["chain"])
         self.assertEqual(self._queued(), [("bark", "laugh", "harry", 1)], "the attacker laughs it off")
@@ -455,7 +471,7 @@ class InteractionChains(_TreeCase):
         self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
         self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
         self._spoken(1, "landed-hit", ctx={"targets": [0], "aggressor": None})   # the seat hit the HUMAN
-        self.assertEqual([(q["kind"], q["stock"], q["gap"]) for q in self.r.queue], [("quip", "ouch", 1.5)], "Joshua's stock quip, at the chain's pace")
+        self.assertEqual([(q["kind"], q["stock"], q["gap"]) for q in self.r.queue], [("quip", "ouch", 0.5)], "Joshua's stock quip, at the chain's pace")
         self.assertIsNone(self.r._chain, "nobody answers Joshua")
         self.r.queue.clear()
         self.r.after_spoken({"kind": "quip", "stock": "ouch", "text": "", "seat": None, "library": "", "ctx": {}, "chain": None})
