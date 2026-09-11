@@ -87,9 +87,9 @@ class BarkTests(unittest.TestCase):
 
     def test_guide_names_decks_and_moments_never_the_voices(self):
         decks = {1: "urza-lord-high-artificer", 2: "giada-font-of-hope", 3: "purphoros-god-of-the-forge"}
-        g = ar.bark_guide(VOICES, "some", decks)
-        for frag in ("seat 1 (urza-lord-high-artificer): fiery young warrior", "seat 3 (purphoros-god-of-the-forge): warm and wise",
-                     "[bark:<seat>:that-hurt] when it takes a big hit", "[bark:<seat>:my-turn]", "Never seat 0", "a quip OR a bark",
+        g = ar.bark_guide(VOICES, "some", decks)                      # an advice window: optional, sparse
+        for frag in ("optional, sparse", "seat 1 (urza-lord-high-artificer): fiery young warrior", "seat 3 (purphoros-god-of-the-forge): warm and wise",
+                     "that-hurt when it takes a big hit", "my-turn when it", "Never seat 0", "A quip and a bark never share",
                      "always call a player by their COMMANDER"):
             self.assertIn(frag, g)
         for name in ("Harry", "Bill", "Lily"):
@@ -97,13 +97,28 @@ class BarkTests(unittest.TestCase):
         self.assertEqual(ar.bark_guide(VOICES, "off"), "")
         self.assertEqual(ar.bark_guide({}, "some"), "", "no voice libraries, no offer")
 
+    def test_recap_guide_is_shaped_by_whose_turn_it_was(self):
+        decks = {1: "urza-lord-high-artificer", 2: "giada-font-of-hope", 3: "purphoros-god-of-the-forge"}
+        own = ar.bark_guide(VOICES, "some", decks, owner=2)
+        self.assertIn("this recap is seat 2's own turn (giada-font-of-hope)", own)
+        self.assertIn("End with exactly ONE tag for seat 2", own)
+        self.assertIn("slow-turn if nothing happened", own)
+        self.assertNotIn("optional", own.split("Tag form")[0], "the seat's own turn: a tag is expected, not optional")
+        human = ar.bark_guide(VOICES, "some", decks, owner=0)
+        self.assertIn("this recap is the human's turn", human)
+        self.assertIn("(optional)", human); self.assertIn("otherwise no tag", human)
+        self.assertEqual(ar.bark_guide(VOICES, "some", decks, owner=None), ar.bark_guide(VOICES, "some", decks))
+        self.assertIn("optional, sparse", ar.bark_guide(VOICES, "some", decks, owner=7), "an owner without a voice: the generic offer")
+
     # ---- through the runner
     def test_colour_reply_bark_becomes_a_record_and_leaves_the_panel_text(self):
+        self.r._clock.active_of[6] = 3                                   # the clock saw seat 3 take turn 6
         (self.r.inbox / "digest-9.json").write_text(json.dumps({"gameId": "g1", "seq": 9, "turn": 6, "digest": ["a", "b"]}))
         self.r._process(self.r._scan())
-        self.assertIn("SEAT BARK", self.r.brain.last_prompt)
+        self.assertIn("this recap is seat 3's own turn", self.r.brain.last_prompt)
         self.assertIn("seat 2 (", self.r.brain.last_prompt); self.assertNotIn("Bill", self.r.brain.last_prompt)
         self.assertEqual(self._records("color")[0]["text"], "Purphoros swung fourteen into Urza.")
+        self.assertEqual(self._records("color")[0]["owner"], 3, "the voice runner reads the owner off the colour record")
         self.assertNotIn("[bark", self.r._stream.read_text())
         b = self._records("bark")
         self.assertEqual((b[0]["seat"], b[0]["id"], b[0]["turn"], b[0]["with"], b[0]["seq"]), (1, "that-hurt", 6, "color", 9))

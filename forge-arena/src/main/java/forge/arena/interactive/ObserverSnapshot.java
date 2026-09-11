@@ -20,6 +20,13 @@ import forge.game.GameOutcome;
 import forge.game.card.Card;
 import forge.game.card.CounterType;
 import forge.game.event.GameEvent;
+import forge.game.event.GameEventAttackersDeclared;
+import forge.game.event.GameEventPlayerDamaged;
+import forge.game.event.GameEventSpellRemovedFromStack;
+import forge.game.event.GameEventSpellResolved;
+import forge.game.card.CardView;
+import forge.game.player.PlayerView;
+import forge.game.spellability.SpellAbilityView;
 import forge.game.phase.PhaseHandler;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
@@ -58,8 +65,20 @@ import forge.game.zone.ZoneType;
  * write happens only when the state (timestamp aside) differs from the last
  * write, so the last event of a burst is never lost and an event that changes
  * nothing visible costs no I/O. The game-outcome event always forces a write.
+ *
+ * <p><b>Recent events (2026-09-10, seat barks):</b> besides the state, the
+ * snapshot carries a short ring of PUBLIC notable events — {@code attack}
+ * (attackers declared: seat, count, total power, defenders), {@code damage}
+ * (a player damaged; combat damage from several sources in one step is
+ * coalesced), and {@code countered} (a spell removed from the stack without
+ * having resolved: the victim's seat and, when the counterspell is on top of
+ * the stack, who countered it). The voice runner turns these into the seats'
+ * instant reactions. Every field is public information a spectator sees.
  */
 public final class ObserverSnapshot {
+
+    /** Ring size for {@code events}; the voice runner reads by {@code seq}. */
+    static final int EVENT_RING = 30;
 
     /** BL-07 (2026-09-04): no debounce timer. Every event serializes the
      *  snapshot and writes it only when the state (timestamp aside) differs
@@ -81,6 +100,9 @@ public final class ObserverSnapshot {
     private final Game game;
     private final Path outputFile;
     private byte[] lastKey;  // last written snapshot, timestamp removed
+    private final java.util.ArrayDeque<Map<String, Object>> events = new java.util.ArrayDeque<>();
+    private long eventSeq;
+    private int lastResolvedId = -1;   // TrackableObject id of the last SpellAbilityView that RESOLVED
 
     private ObserverSnapshot(Game game, Path outputFile) {
         this.game = game;
@@ -135,10 +157,142 @@ public final class ObserverSnapshot {
             // final board is always captured.
             boolean force = ev != null
                     && ev.getClass().getSimpleName().contains("GameOutcome");
-            write(force);
+            synchronized (this) {
+                noteEvent(ev);
+                write(force);
+            }
         } catch (Throwable t) {
             // absolutely never let a snapshot failure escape into the game loop
         }
+    }
+
+    // ---- recent notable events (PUBLIC) ------------------------------------
+
+    /** Append the events the seats react to; everything else is ignored.
+     *  Caller holds the monitor. Never throws to the caller. */
+    private void noteEvent(GameEvent ev) {
+        try {
+            if (ev instanceof GameEventSpellResolved r) {
+                lastResolvedId = r.spell() != null ? r.spell().getId() : -1;
+            } else if (ev instanceof GameEventAttackersDeclared a) {
+                noteAttack(a);
+            } else if (ev instanceof GameEventPlayerDamaged d) {
+                noteDamage(d);
+            } else if (ev instanceof GameEventSpellRemovedFromStack rm) {
+                noteRemoved(rm);
+            }
+        } catch (RuntimeException ignored) {
+            // an event we could not read is not worth a snapshot failure
+        }
+    }
+
+    private Map<String, Object> newEvent(String kind) {
+        Map<String, Object> e = new LinkedHashMap<>();
+        e.put("seq", ++eventSeq);
+        e.put("kind", kind);
+        PhaseHandler ph = game.getPhaseHandler();
+        e.put("turn", ph != null ? ph.getTurn() : 0);
+        e.put("phase", ph != null && ph.getPhase() != null ? ph.getPhase().name() : "");
+        return e;
+    }
+
+    private void push(Map<String, Object> e) {
+        events.addLast(e);
+        while (events.size() > EVENT_RING) {
+            events.removeFirst();
+        }
+    }
+
+    private void noteAttack(GameEventAttackersDeclared a) {
+        if (a.player() == null || a.attackersMap() == null || a.attackersMap().isEmpty()) {
+            return;
+        }
+        Map<String, Object> e = newEvent("attack");
+        e.put("seat", a.player().getId());
+        int power = 0;
+        List<String> names = new ArrayList<>();
+        java.util.LinkedHashSet<Integer> defenders = new java.util.LinkedHashSet<>();
+        for (Map.Entry<forge.game.GameEntityView, CardView> en : a.attackersMap().entries()) {
+            CardView cv = en.getValue();
+            if (cv != null) {
+                names.add(cv.getName());
+                if (cv.getCurrentState() != null) {
+                    power += Math.max(0, cv.getCurrentState().getPower());
+                }
+            }
+            forge.game.GameEntityView def = en.getKey();
+            if (def instanceof PlayerView pv) {
+                defenders.add(pv.getId());
+            } else if (def instanceof CardView dc && dc.getController() != null) {
+                defenders.add(dc.getController().getId());   // a planeswalker or battle: its controller
+            }
+        }
+        e.put("attackers", names.size());
+        e.put("power", power);
+        e.put("defenders", new ArrayList<>(defenders));
+        e.put("names", names);
+        push(e);
+    }
+
+    private void noteDamage(GameEventPlayerDamaged d) {
+        if (d.target() == null || d.amount() <= 0) {
+            return;
+        }
+        int target = d.target().getId();
+        Integer source = d.source() != null && d.source().getController() != null
+                ? d.source().getController().getId() : null;
+        PhaseHandler ph = game.getPhaseHandler();
+        int turn = ph != null ? ph.getTurn() : 0;
+        String phase = ph != null && ph.getPhase() != null ? ph.getPhase().name() : "";
+        Map<String, Object> last = events.peekLast();
+        // combat damage from several attackers lands as several events in one
+        // step: fold them into one so a 14-power swing reads as 14, not 5+9
+        if (last != null && "damage".equals(last.get("kind")) && d.combat()
+                && Boolean.TRUE.equals(last.get("combat"))
+                && Integer.valueOf(target).equals(last.get("seat"))
+                && Integer.valueOf(turn).equals(last.get("turn")) && phase.equals(last.get("phase"))) {
+            last.put("amount", ((Integer) last.get("amount")) + d.amount());
+            @SuppressWarnings("unchecked")
+            List<Integer> from = (List<Integer>) last.get("from");
+            if (source != null && !from.contains(source)) {
+                from.add(source);
+            }
+            return;
+        }
+        Map<String, Object> e = newEvent("damage");
+        e.put("seat", target);
+        e.put("amount", d.amount());
+        e.put("combat", d.combat());
+        List<Integer> from = new ArrayList<>();
+        if (source != null) {
+            from.add(source);
+        }
+        e.put("from", from);
+        push(e);
+    }
+
+    private void noteRemoved(GameEventSpellRemovedFromStack rm) {
+        SpellAbilityView sa = rm.sa();
+        if (sa == null || !sa.isSpell() || sa.getId() == lastResolvedId) {
+            return;   // an ability, or a spell that resolved (or fizzled) and is merely leaving
+        }
+        Map<String, Object> e = newEvent("countered");
+        CardView host = sa.getHostCard();
+        e.put("spell", host != null ? host.getName() : sa.getDescription());
+        e.put("seat", host != null && host.getController() != null ? host.getController().getId() : null);
+        Integer by = null;
+        try {
+            // the counterspell is resolving right now, so it is still on top of the stack
+            if (!game.getStack().isEmpty()) {
+                SpellAbilityStackInstance top = game.getStack().peek();
+                Player p = top != null ? top.getActivatingPlayer() : null;
+                by = p != null ? p.getId() : null;
+            }
+        } catch (RuntimeException ignored) {
+            by = null;
+        }
+        e.put("by", by);
+        push(e);
     }
 
     /** Build the snapshot; write it when it differs from the last write (or
@@ -251,6 +405,7 @@ public final class ObserverSnapshot {
         }
         snap.put("stack", stack);
         snap.put("stackDetail", detail);
+        snap.put("events", new ArrayList<>(events));
         return snap;
     }
 

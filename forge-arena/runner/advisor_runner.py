@@ -130,25 +130,42 @@ def split_bark(text: str, log=None) -> tuple[str, tuple[int, str] | None]:
     return clean, (seat, bid)
 
 
-def bark_guide(seat_voices: dict, mode: str, seat_decks: dict | None = None) -> str:
+def bark_guide(seat_voices: dict, mode: str, seat_decks: dict | None = None, owner=None) -> str:
     """The prompt sentence offering the seat-bark tag, or "" when barks are off
     or no seat voice library exists. `seat_voices` is voice_runner.load_seat_libraries();
     `seat_decks` maps seat -> deck slug so the model can name the seat it means.
 
-    The VOICE NAMES are deliberately absent (Ben, 2026-09-10, game 38: Joshua
-    called a player "Bill"): the model sees each seat's deck and temperament
-    only, and the convention — players are their commanders — is spelled out."""
+    `owner` shapes a RECAP's guide (the table-talk design, Ben 2026-09-10):
+    an AI seat's turn -> that seat speaks (one tag for it, expected); the
+    human's turn (0) -> Joshua's colour line, plus at most one seat reacting;
+    None -> an advice window: optional, sparse.
+
+    The VOICE NAMES are deliberately absent (game 38: Joshua called a player
+    "Bill"): the model sees each seat's deck and temperament only, and the
+    convention — players are their commanders — is spelled out."""
     if mode == "off" or not seat_voices:
         return ""
     decks = seat_decks or {}
     who = "; ".join(f"seat {k} ({decks.get(k, 'AI deck')}): {v['temperament']}"
                     for k, v in sorted(seat_voices.items()) if v.get("temperament"))
-    ids = "; ".join(f"[bark:<seat>:{b}] when it {w}" for b, w in BARK_WHEN.items())
+    ids = "; ".join(f"{b} when it {w}" for b, w in BARK_WHEN.items())
+    common = (" Tag form [bark:<seat>:<id>]; ids: " + ids + ". Never seat 0. Only public events; never a hidden hand. "
+              "A quip and a bark never share one reply. In your own words always call a player by their COMMANDER "
+              "(Urza, Giada, Purphoros…), never by a seat number or any other name.")
+    if owner is not None and int(owner) in seat_voices:
+        return (f"\nSEAT BARK: this recap is seat {int(owner)}'s own turn ({decks.get(int(owner), 'AI deck')}); the seats "
+                f"speak in their own voices ({who}). End with exactly ONE tag for seat {int(owner)} that fits the turn it "
+                "just had — what it did (commander-cast, big-swing, landed-hit, removal, sweep, counter, engine-online, "
+                "big-mana, kill), what it suffered (that-hurt, lost-commander, got-countered, got-swept, low-life), or "
+                "slow-turn if nothing happened. Table talk (taunt, respect, archenemy) only when it truly fits." + common)
+    if owner is not None and int(owner) == 0:
+        return ("\nSEAT BARK (optional): this recap is the human's turn. The seats speak in their own voices (" + who
+                + "). If ONE seat was clearly affected by what the human did — hit hard, swept, countered, out-played — "
+                "end with exactly one tag for that seat (that-hurt, got-swept, got-countered, respect, taunt…); otherwise "
+                "no tag." + common)
     return ("\nSEAT BARK (optional, sparse): the AI seats speak in their own voices (" + who + "). If ONE seat's "
             "situation in what you just saw clearly earns a line, end with exactly one tag naming that seat and the "
-            "moment: " + ids + ". Never seat 0. Only public events; never a hidden hand. One tag per reply: a quip OR "
-            "a bark, not both. Most replies carry no tag. In your own words always call a player by their COMMANDER "
-            "(Urza, Giada, Purphoros…), never by a seat number or any other name.")
+            "moment. Most replies carry no tag." + common)
 # Two densities (Ben, 2026-09-08): while the voice can render live lines the
 # quips stay rare ("if the moment earns it"); when live lines are down — no
 # ElevenLabs key (every package user without one), a spent quota, no usable
@@ -311,8 +328,8 @@ class AdvisorRunner:
         except Exception:  # noqa: BLE001 — the voice runner is optional
             self._seat_voices = {}
         roster = (os.environ.get("ARENA_SEAT_DECKS", "").split() or DEFAULT_TABLE.split())
-        seat_decks = {i + 1: slug for i, slug in enumerate(table_opponents(deck, roster))}
-        self._bark_guide_text = bark_guide(self._seat_voices, self._barks_mode, seat_decks)
+        self._seat_decks = {i + 1: slug for i, slug in enumerate(table_opponents(deck, roster))}
+        self._bark_guide_text = bark_guide(self._seat_voices, self._barks_mode, self._seat_decks)   # advice windows
         self._clock = TurnClock(base / "observer-state.json")
         self._voice_live = None
         self.timeout = timeout
@@ -682,15 +699,18 @@ class AdvisorRunner:
     def _commentate(self, digest: dict) -> None:
         turn = digest.get("turn")
         lines = digest.get("digest") or []
+        # whose turn was it? the clock observed the active seat as the turn ran
+        owner = self._clock.active_of.get(turn) if isinstance(turn, int) else None
         prompt = (f"TURN {turn} COMPLETE. Public log of the turn:\n"
                   + "\n".join(f"  {ln}" for ln in lines[-60:])
-                  + "\n\nONE line of color commentary (plain text)." + self._quip_guide() + self._bark_guide_text)
+                  + "\n\nONE line of color commentary (plain text)." + self._quip_guide()
+                  + bark_guide(self._seat_voices, self._barks_mode, self._seat_decks, owner))
         answer, meta = self.brain.decide(prompt, min(self.timeout, 45.0))
         text, quip = split_quip((meta.get("raw") or "").strip(), log=self._say)
         text, bark = split_bark(text, log=self._say)
         if text:
             self._stream_write(f"\n[{self._clock.label(turn)} · color] {text}\n")
-        self._record("color", {"seq": digest.get("seq"), "turn": turn,
+        self._record("color", {"seq": digest.get("seq"), "turn": turn, "owner": owner,
                                "text": text, "latency_s": meta.get("latency_s")})
         if quip:
             self._record("quip", {"id": quip, "turn": turn, "with": "color", "seq": digest.get("seq")})

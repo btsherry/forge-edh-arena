@@ -83,10 +83,15 @@ PRIORITY = {"game_over": 0, "human_out": 0, "startup": 1, "ask": 2, "advice": 3,
 # An AI seat's elimination is voiced ONCE: by the dying seat itself (its `eliminated`
 # bark, at once) with this probability, else by Joshua's "A player has been eliminated."
 ELIM_SEAT_P = 0.7
-# A recap that carries a bark tag is voiced ONCE (Ben, 2026-09-10): the seat's own
-# line with probability ARENA_BARKS_OVER_COLOR, else Joshua's colour line. The two
-# records land a moment apart, so a colour record waits this long for its bark.
-PAIR_WAIT_S = 1.0
+# Seat barks, the table-talk design (Ben, 2026-09-10 — "playing with the AI should
+# feel like sitting at the table with people"): every turn boundary has ONE owner.
+# The recap of an AI seat's turn belongs to that seat (its retrospective line,
+# authored by the advisor, rolled at ARENA_BARKS_P); the recap of the human's turn
+# belongs to Joshua's colour line (its own dice) plus, optionally, one seat's
+# reaction. Instant reactions come from the snapshot's public event ring — an
+# attack of ARENA_BARKS_SWING power, a hit of ARENA_BARKS_HIT, a countered spell —
+# with no LLM in the loop. Openers ("my turn") fire mechanically at a seat's turn
+# start, rarely. A (seat, line) already said this turn is never said again.
 
 
 def load_seat_libraries(voices_dir: Path | None = None) -> dict[int, dict]:
@@ -686,10 +691,14 @@ class VoiceRunner:
         self.barks_mode = os.environ.get("ARENA_BARKS", "some").lower()
         if self.barks_mode not in ("off", "some", "all"):
             self.barks_mode = "some"
-        self.barks_p = float(os.environ.get("ARENA_BARKS_P", "0.75"))
-        self.barks_cooldown = float(os.environ.get("ARENA_BARKS_COOLDOWN", "30"))
-        self.barks_over_color = float(os.environ.get("ARENA_BARKS_OVER_COLOR", "0.7"))
-        self._pending_color: dict[int, dict] = {}     # seq -> colour record waiting to learn whether a bark follows
+        self.barks_p = float(os.environ.get("ARENA_BARKS_P", "0.85"))
+        self.barks_cooldown = float(os.environ.get("ARENA_BARKS_COOLDOWN", "10"))
+        self.barks_opener_p = float(os.environ.get("ARENA_BARKS_OPENER_P", "0.35"))
+        self.barks_swing = int(os.environ.get("ARENA_BARKS_SWING", "6"))
+        self.barks_hit = int(os.environ.get("ARENA_BARKS_HIT", "8"))
+        self._said_this_turn: set[tuple[int, str]] = set()
+        self._said_turn = None
+        self._event_seq = None      # last snapshot event seq consumed; None until the first read
         self.seat_libraries = load_seat_libraries()
         self._bark_spoken_at: dict[int, float] = {}
         # Colour commentary (Ben, 2026-09-07: "it could say a thing during
@@ -838,65 +847,97 @@ class VoiceRunner:
         info = self.seat_libraries.get(int(seat))
         return info["library"] if info else ""
 
-    def maybe_bark(self, seat: int, pid: str, turn=None, paired: bool = False) -> bool:
-        """An advisor-authored bark for an AI seat, subject to the knob, the
-        seat's cooldown and the dice (a bark that already won its recap's
-        seat-vs-Joshua roll skips the dice). Records why when it does not play."""
+    def maybe_bark(self, seat: int, pid: str, turn=None, source: str = "advice", p: float | None = None) -> bool:
+        """A bark for an AI seat — from the advisor's recap ("recap"), an advice
+        window ("advice"), a snapshot event ("event") or a turn start ("opener") —
+        subject to the knob, the per-turn no-repeat rule, the short per-seat
+        guard and one roll of the dice. Records why when it does not play."""
         if self.barks_mode == "off":
-            self.record("skipped", kind="bark", why="barks off (ARENA_BARKS=off)", stock=pid, seat=seat)
+            self.record("skipped", kind="bark", why="barks off (ARENA_BARKS=off)", stock=pid, seat=seat, source=source)
             return False
         lib = self.library_for_seat(seat)
         if not lib:
-            self.record("skipped", kind="bark", why=f"no voice library for seat {seat}", stock=pid, seat=seat)
+            self.record("skipped", kind="bark", why=f"no voice library for seat {seat}", stock=pid, seat=seat, source=source)
+            return False
+        self._roll_turn(turn)
+        if (int(seat), pid) in self._said_this_turn:
+            self.record("skipped", kind="bark", why="already said this turn", stock=pid, seat=seat, source=source)
             return False
         since = self.clock() - self._bark_spoken_at.get(int(seat), -1e9)
         if since < self.barks_cooldown:
-            self.record("skipped", kind="bark", why=f"seat cooldown ({since:.0f}s < {self.barks_cooldown:.0f}s)", stock=pid, seat=seat)
+            self.record("skipped", kind="bark", why=f"seat guard ({since:.0f}s < {self.barks_cooldown:.0f}s)", stock=pid, seat=seat, source=source)
             return False
-        if not paired and self.barks_mode == "some" and self.rng.random() >= self.barks_p:
-            self.record("skipped", kind="bark", why="dice (ARENA_BARKS=some)", stock=pid, seat=seat)
+        # an explicit p (the opener's own knob) always applies; otherwise "all" means always, "some" means ARENA_BARKS_P
+        chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
+        if self.rng.random() >= chance:
+            self.record("skipped", kind="bark", why=f"dice ({source}, p={chance:.2f})", stock=pid, seat=seat, source=source)
             return False
+        self._said_this_turn.add((int(seat), pid))
         self.enqueue("bark", stock=pid, library=lib, seat=int(seat), ttl=20.0)
+        self.record("queued", kind="bark", stock=pid, seat=seat, source=source)
         return True
 
-    # -- colour vs bark: one line per recap
+    def _roll_turn(self, turn) -> None:
+        """The no-repeat set is per game turn."""
+        if turn is not None and turn != self._said_turn:
+            self._said_turn = turn
+            self._said_this_turn = set()
+
+    # -- colour: Joshua speaks after the human's turn
     def _voice_color(self, r: dict) -> None:
-        """Joshua's colour line under its own dice (the only alternative is silence)."""
+        """Joshua's colour line. A recap of an AI seat's turn belongs to that seat
+        (the advisor stamps `owner`); the human's turn is Joshua's, under his dice."""
+        owner = r.get("owner")
+        if self.barks_mode != "off" and owner is not None and int(owner) != self.human_seat and self.library_for_seat(int(owner)):
+            self.record("skipped", kind="color", why=f"seat {owner}'s turn — the seat speaks", text=r["text"][:80], seq=r.get("seq"))
+            return
         if self.color_mode == "all" or self.rng.random() < self.color_p:
             self.enqueue("color", text=first_sentence(r["text"]), ttl=40.0)
         else:
             self.record("skipped", kind="color", why="dice (ARENA_VOICE_COLOR=some)", text=r["text"][:80])
 
-    def _hold_color(self, r: dict) -> None:
-        """A recap's colour line waits PAIR_WAIT_S for a bark on the same seq;
-        with barks off nothing can pair, so it goes straight to the dice."""
-        seq = r.get("seq")
-        if self.barks_mode == "off" or seq is None:
-            self._voice_color(r)
+    # -- instant reactions from the snapshot's public event ring
+    def scan_events(self, d: dict) -> None:
+        events = d.get("events") or []
+        if self._event_seq is None:
+            # first read (fresh start or restart): never replay history
+            self._event_seq = max((int(e.get("seq", 0)) for e in events), default=0)
             return
-        self._pending_color[int(seq)] = {"text": r["text"], "since": self.clock()}
-
-    def _pair(self, seq: int, seat: int, pid: str, turn=None) -> None:
-        """The recap offered both: roll once. Seat wins -> its bark (no further
-        dice); Joshua wins -> the colour line (no further dice). A seat on
-        cooldown, or without a library, hands the line to Joshua."""
-        col = self._pending_color.pop(seq)
-        seat_line = self.rng.random() < self.barks_over_color
-        if seat_line and self.maybe_bark(seat, pid, turn=turn, paired=True):
-            self.record("skipped", kind="color", why="yielded to seat bark (ARENA_BARKS_OVER_COLOR)", text=col["text"][:80], seq=seq)
-            return
-        if not seat_line:
-            self.record("skipped", kind="bark", why="yielded to Joshua (ARENA_BARKS_OVER_COLOR)", stock=pid, seat=seat, seq=seq)
-        self.enqueue("color", text=first_sentence(col["text"]), ttl=40.0)
-
-    def _flush_colors(self) -> None:
-        now = self.clock()
-        for seq in [k for k, v in self._pending_color.items() if now - v["since"] >= PAIR_WAIT_S]:
-            self._voice_color(self._pending_color.pop(seq))
+        for e in events:
+            try:
+                seq = int(e.get("seq", 0))
+            except (TypeError, ValueError):
+                continue
+            if seq <= self._event_seq:
+                continue
+            self._event_seq = seq
+            if self.barks_mode == "off":
+                continue
+            kind, turn = e.get("kind"), e.get("turn")
+            try:
+                if kind == "attack":
+                    seat = int(e.get("seat"))
+                    if seat != self.human_seat and (int(e.get("power", 0)) >= self.barks_swing or int(e.get("attackers", 0)) >= 3):
+                        self.maybe_bark(seat, "big-swing", turn=turn, source="event")
+                elif kind == "damage" and int(e.get("amount", 0)) >= self.barks_hit:
+                    victim = int(e.get("seat"))
+                    if victim != self.human_seat:
+                        self.maybe_bark(victim, "that-hurt", turn=turn, source="event")
+                    else:
+                        hitters = [int(x) for x in (e.get("from") or []) if int(x) != self.human_seat and self.library_for_seat(int(x))]
+                        if hitters:
+                            self.maybe_bark(hitters[0], "landed-hit", turn=turn, source="event")
+                elif kind == "countered":
+                    by, victim = e.get("by"), e.get("seat")
+                    if by is not None and int(by) != self.human_seat and self.library_for_seat(int(by)):
+                        self.maybe_bark(int(by), "counter", turn=turn, source="event")
+                    elif victim is not None and int(victim) != self.human_seat:
+                        self.maybe_bark(int(victim), "got-countered", turn=turn, source="event")
+            except (TypeError, ValueError):
+                continue
 
     # -- sources
     def scan_advisor(self) -> None:
-        self._flush_colors()
         path = self.logs / "advisor-0.jsonl"
         try:
             st = path.stat()
@@ -925,18 +966,15 @@ class VoiceRunner:
             elif k == "ask" and r.get("answer"):
                 self.enqueue("ask", text=first_sentence(r["answer"], ASK_MAX), ttl=60.0)
             elif k == "color" and r.get("text") and self.color_mode != "off":
-                self._hold_color(r)
+                self._voice_color(r)
             elif k == "quip" and r.get("id"):
                 self.enqueue("quip", stock=str(r["id"]), ttl=20.0)
             elif k == "bark" and r.get("id") and r.get("seat") is not None:
                 try:
-                    seat, pid, seq = int(r["seat"]), str(r["id"]), r.get("seq")
+                    seat, pid = int(r["seat"]), str(r["id"])
                 except (TypeError, ValueError):
                     continue
-                if seq is not None and int(seq) in self._pending_color:
-                    self._pair(int(seq), seat, pid, turn=r.get("turn"))
-                else:
-                    self.maybe_bark(seat, pid, turn=r.get("turn"))
+                self.maybe_bark(seat, pid, turn=r.get("turn"), source="recap" if r.get("with") == "color" else "advice")
             elif k == "chosen" and r.get("seq") is not None:
                 self.answered.add(int(r["seq"]))
 
@@ -953,6 +991,7 @@ class VoiceRunner:
                 self.enqueue("startup", stock="startup", ttl=30.0)
             # a restart mid-game (supervisor, code reload) says nothing until the next event
         turn, active = d.get("turn"), d.get("activeSeat")
+        self.scan_events(d)
         seats = d.get("seats") or []
         for s in seats:
             if s.get("eliminated") and s.get("seat") not in self.eliminated:
@@ -971,12 +1010,16 @@ class VoiceRunner:
                         self.enqueue("event", stock="eliminated", library=lib, seat=int(s.get("seat")), ttl=20.0)
                     else:
                         self.enqueue("event", stock="player-eliminated", ttl=20.0)
-        if self.your_move_mode != "off" and turn is not None and (turn, active) != (self.seen_turn, self.seen_active):
-            if active == self.human_seat and self.seen_turn is not None and not self.executive_on():
+        if turn is not None and (turn, active) != (self.seen_turn, self.seen_active):
+            if active == self.human_seat and self.your_move_mode != "off" and self.seen_turn is not None and not self.executive_on():
                 if self.your_move_mode == "on" or self.rng.random() < self.your_move_p:
                     self.enqueue("your_move", stock="your-move", ttl=12.0)   # not while the advisor plays the seat
                 else:
                     self.record("skipped", kind="your_move", why="dice (ARENA_VOICE_YOUR_MOVE=some)", stock="your-move")
+            elif (active is not None and active != self.human_seat and self.seen_turn is not None
+                  and self.barks_opener_p > 0 and self.barks_mode != "off"):
+                # option A: an opener at a seat's turn start — rare, like a person who sometimes says "right, me"
+                self.maybe_bark(int(active), "my-turn", turn=turn, source="opener", p=self.barks_opener_p)
             self.seen_turn, self.seen_active = turn, active
         if d.get("gameOver") and not self.game_over_said:
             self.game_over_said = True
@@ -1031,7 +1074,7 @@ class VoiceRunner:
                  f"live={'on' if self.renderer.live else 'off (no ELEVENLABS_API_KEY)'}, min_gap={self.min_gap}s, "
                  f"fx={self.renderer.fx_mode}, format={self.renderer.format}, glitch={self.renderer.glitch}, sfx={'on' if self.sfx_on else 'off'}, color={self.color_mode}, "
                  f"your_move={self.your_move_mode}, barks={self.barks_mode}"
-                 + (f" (p={self.barks_p}, over_color={self.barks_over_color}, cooldown={self.barks_cooldown:.0f}s; " + ", ".join(f"seat {k} {v['voice']}" for k, v in sorted(self.seat_libraries.items())) + ")"
+                 + (f" (p={self.barks_p}, opener_p={self.barks_opener_p}, swing>={self.barks_swing}, hit>={self.barks_hit}, guard={self.barks_cooldown:.0f}s; " + ", ".join(f"seat {k} {v['voice']}" for k, v in sorted(self.seat_libraries.items())) + ")"
                     if self.barks_mode != "off" and self.seat_libraries else (" (no seat voice libraries found)" if self.barks_mode != "off" else "")))
         hb = self.mailbox / "seat-0-voice" / "heartbeat"
         hb.parent.mkdir(parents=True, exist_ok=True)
