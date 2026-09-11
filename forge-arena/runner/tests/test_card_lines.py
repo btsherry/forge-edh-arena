@@ -69,6 +69,27 @@ class CardLibraries(unittest.TestCase):
         self.assertEqual(vr.load_combo_index(Path("/nowhere")), {})
 
 
+class RenderedCards(unittest.TestCase):
+    """Every card wording of every voice is a baked take in the runner's format, with its dry take kept."""
+
+    def test_every_card_wording_is_a_baked_wav(self):
+        import wave
+        for lib in LIBS:
+            n = 0
+            for pid, ph in real_cards(lib)["phrases"].items():
+                for i, text in enumerate(ph["text"], 1):
+                    stem = pid if i == 1 else f"{pid}-{i}"
+                    f = REAL_VOICES / lib / "cards" / f"{stem}.wav"
+                    self.assertTrue(f.exists(), f"{lib}/cards/{stem}.wav missing for {text!r}")
+                    with wave.open(str(f)) as w:
+                        self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 22050), f"{lib}/cards/{stem}")
+                        secs = w.getnframes() / w.getframerate()
+                        self.assertTrue(0.4 <= secs <= 8.0, f"{lib}/cards/{stem}: {secs:.1f}s")   # Bill's slowest ten-word line runs 7.3 s
+                    self.assertTrue((REAL_VOICES / lib / "cards" / "raw" / f"{stem}.wav").exists(), f"{lib}/cards/raw/{stem}.wav")
+                    n += 1
+            self.assertEqual(n, 264, lib)
+
+
 class CardRuntime(_TableCase):
     def setUp(self):
         super().setUp()

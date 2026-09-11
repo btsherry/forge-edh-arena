@@ -186,6 +186,38 @@ class Builder(unittest.TestCase):
         err = 'size=N/A time=00:00:02.1\n[Parsed_loudnorm_0 @ 0x1] \n{\n\t"input_i" : "-17.61",\n\t"input_tp" : "-3.02",\n\t"input_lra" : "5.1"\n}\ntrailing line\n'
         self.assertEqual(bs.parse_loudnorm(err), (-17.61, -3.02))
 
+    def test_tts_request_retries_transport_failures_and_gives_up_cleanly(self):
+        """2026-09-11: a single 60 s socket timeout killed two Lily batches — now a take
+        gets four attempts with a growing pause, and a lost take is skipped, not fatal."""
+        import io
+        import urllib.error
+
+        class Resp(io.BytesIO):
+            headers = {"character-cost": "23"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+        calls, naps = [], []
+        def opener(req, timeout):
+            calls.append(timeout)
+            if len(calls) < 3:
+                raise TimeoutError("The read operation timed out")
+            return Resp(b"pcm")
+        self.assertEqual(bs.tts_request("req", opener=opener, sleep=naps.append), (b"pcm", 23))
+        self.assertEqual((len(calls), naps), (3, [5.0, 10.0]), "two failures, two growing pauses, then the take")
+        calls.clear(); naps.clear()
+        def always(req, timeout):
+            calls.append(1); raise urllib.error.URLError("dropped")
+        self.assertIsNone(bs.tts_request("req", opener=always, sleep=naps.append))
+        self.assertEqual((len(calls), len(naps)), (4, 3), "four attempts, then None — the caller skips the take")
+        def http(req, timeout):
+            raise urllib.error.HTTPError("u", 403, "forbidden", {}, io.BytesIO(b"tier"))
+        with self.assertRaises(urllib.error.HTTPError):
+            bs.tts_request("req", opener=http, sleep=naps.append)
+
     def test_resolve_library_by_name_and_default(self):
         self.assertEqual(bs.resolve_library(""), bs.STOCK)
         self.assertEqual(bs.resolve_library(None), bs.STOCK)

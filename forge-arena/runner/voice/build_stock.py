@@ -49,6 +49,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -160,6 +161,31 @@ def file_gain(gain_db: float, true_peak: float, ceiling: float) -> float:
     return round(min(gain_db, ceiling - true_peak), 2) if true_peak > -70 else gain_db
 
 
+RETRY_ATTEMPTS = 4
+RETRY_BACKOFF_S = 5.0
+
+
+def tts_request(req, attempts: int = RETRY_ATTEMPTS, backoff_s: float = RETRY_BACKOFF_S, opener=None, sleep=None) -> tuple[bytes, int] | None:
+    """One text-to-speech call with a bounded retry on transport failures (a read
+    timeout, a dropped connection — 2026-09-11: two Lily batches died on a single
+    60 s socket timeout). Returns (audio, character cost) or None when every
+    attempt failed; HTTP errors are the caller's to interpret and are re-raised."""
+    opener = opener or urllib.request.urlopen
+    sleep = sleep or time.sleep
+    for attempt in range(1, attempts + 1):
+        try:
+            with opener(req, timeout=60) as resp:
+                data = resp.read()
+                return data, int(resp.headers.get("character-cost") or 0)
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            print(f"[build_stock] transport failure ({e.__class__.__name__}: {str(e)[:60]}) — attempt {attempt}/{attempts}")
+            if attempt < attempts:
+                sleep(backoff_s * attempt)
+    return None
+
+
 def render_missing(lib: Path, ids: set[str] | None, limit: int | None = None) -> tuple[int, int]:
     """Render raw/<stem>.wav for every manifest wording without one (or only `ids`,
     at most `limit` takes). Returns (rendered, characters billed)."""
@@ -172,6 +198,7 @@ def render_missing(lib: Path, ids: set[str] | None, limit: int | None = None) ->
     (lib / "raw").mkdir(exist_ok=True)
     fmt_i = 0
     n = chars = 0
+    failed: list[str] = []
     for pid, num, text, stem in variants(m):
         if not selected(ids, pid, num):
             continue
@@ -187,9 +214,12 @@ def render_missing(lib: Path, ids: set[str] | None, limit: int | None = None) ->
                 f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format={fmt}",
                 data=body, headers={"xi-api-key": key, "Content-Type": "application/json"})
             try:
-                with urllib.request.urlopen(req, timeout=60) as resp:
-                    data = resp.read()
-                    cost = int(resp.headers.get("character-cost") or len(text))
+                got = tts_request(req)
+                if got is None:
+                    data = b""
+                    break
+                data, cost = got
+                cost = cost or len(text)
                 break
             except urllib.error.HTTPError as e:
                 detail = ""
@@ -203,12 +233,17 @@ def render_missing(lib: Path, ids: set[str] | None, limit: int | None = None) ->
                     fmt_i += 1
                     continue
                 sys.exit(f"[build_stock] render failed for {stem}: HTTP {e.code} {detail}")
+        if not data:
+            failed.append(stem)                      # skipped: rerun --render to pick it up
+            continue
         rate = int(fmt.split("_")[1])
         raw.write_bytes(pcm_to_wav(data, rate))
         n += 1
         chars += cost
         print(f"[build_stock] rendered {stem}: {len(data) / (2 * rate):.2f}s, {cost} chars")
     print(f"[build_stock] {n} takes rendered, {chars} characters billed ({lib.name})")
+    if failed:
+        print(f"[build_stock] {len(failed)} take(s) NOT rendered after {RETRY_ATTEMPTS} attempts each — rerun --render: {', '.join(failed[:8])}")
     return n, chars
 
 
