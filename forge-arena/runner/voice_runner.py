@@ -971,7 +971,7 @@ class VoiceRunner:
             return
         decks = seat_decks_from_game_log(self.logs / "game.jsonl")
         ai = {k: v for k, v in decks.items() if k != self.human_seat}
-        if len(ai) > len(self._seat_decks):
+        if len(ai) >= 3 and ai != self._seat_decks:          # the whole table, or keep the default seats
             self._seat_decks = ai
             self.seat_libraries = load_seat_libraries(seat_decks=ai)
             self.say("[voice] table: " + ", ".join(f"seat {k} {ai.get(k, '?')} -> {v['voice']}" for k, v in sorted(self.seat_libraries.items())))

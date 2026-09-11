@@ -166,6 +166,9 @@ class BarkRuntime(_TreeCase):
             {"seat": 0, "deck": "selvala-heart-of-the-wilds", "type": "MULLIGAN"})) + "\n")
         (Path(vr.VOICES_DIR) / "assign.json").write_text(json.dumps({"by_deck": {"purphoros-god-of-the-forge": "harry", "urza-lord-high-artificer": "bill", "giada-font-of-hope": "lily"}}))
         self.assertEqual({k: v["library"] for k, v in self.r.seat_libraries.items()}, {1: "harry", 2: "bill"}, "before the log: default seats")
+        (self.logs / "game-partial.jsonl").write_text(json.dumps({"seat": 2, "deck": "purphoros-god-of-the-forge"}) + "\n")
+        partial = vr.seat_decks_from_game_log(self.logs / "game-partial.jsonl")
+        self.assertEqual(len(partial), 1, "one deck known is not a table")
         self.r.learn_table()
         self.assertEqual(vr.seat_decks_from_game_log(self.logs / "game.jsonl")[2], "purphoros-god-of-the-forge")
         self.assertEqual({k: v["library"] for k, v in self.r.seat_libraries.items()}, {2: "harry", 3: "bill"},
