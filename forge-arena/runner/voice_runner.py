@@ -1680,8 +1680,9 @@ class VoiceRunner:
         if active is not None and int(active) in living:
             add("pass-already", int(active), 0.5)
         now = self.clock()
+        # a line the seat already said this turn is no candidate (game 46: 765 wasted gaps on one jab at turn 0)
         return [(sp, pid, tgt, w * (RECENT_WEIGHT if now - self._said_at.get(pid, -1e9) < RECENT_S else 1.0))
-                for sp, pid, tgt, w in out]
+                for sp, pid, tgt, w in out if (int(sp), pid) not in self._said_this_turn]
 
     def patter(self) -> None:
         if not self.patter_on or self.barks_mode == "off" or self.queue or self.final_locked:

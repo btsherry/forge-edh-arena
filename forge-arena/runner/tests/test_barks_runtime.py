@@ -817,6 +817,16 @@ class PatterClock(_TreeCase):
         self._board(turn=3, active=2); self._tick(6)
         self.assertEqual(len(self.r.queue), 1, "the board moved: patter resumes")
 
+    def test_a_line_already_said_this_turn_is_not_a_candidate(self):
+        self._board(hands=(3, 0, 3, 3), active=3)
+        self.r._roll_turn(5)
+        cands = self.r.patter_candidates(self.r._last_snapshot, [1, 2])
+        self.assertIn(("empty-hand", 1), {(pid, tgt) for _, pid, tgt, _ in cands})
+        self.r._said_this_turn.add((2, "empty-hand"))
+        cands = self.r.patter_candidates(self.r._last_snapshot, [1, 2])
+        self.assertNotIn((2, "empty-hand"), {(sp, pid) for sp, pid, _, _ in cands}, "seat 2 said it this turn: not offered again, the gap is not wasted")
+        self.assertTrue(any(sp == 2 for sp, *_ in cands), "seat 2 still has other things to say")
+
     def test_a_restarted_runner_does_not_replay_the_startup_line(self):
         (self.logs / "voice-0.jsonl").write_text(json.dumps({"ts": 1.0, "event": "spoke", "kind": "startup", "stock": "startup"}) + "\n")
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
