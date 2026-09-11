@@ -353,6 +353,96 @@
    ],
    "source": "table-arc-2026-09-10"
   },
+  "keep-seven": {
+   "category": "mulligan",
+   "when": "keeps its opening seven",
+   "text": [
+    "[warmly] I'll keep, dears.",
+    "[gently] Seven, thank you. Keeping.",
+    "[softly] A lovely seven."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-six": {
+   "category": "mulligan",
+   "when": "takes its first mulligan",
+   "text": [
+    "[sighs] Oh, a mulligan. Six for me.",
+    "[gently] Six it is, dears.",
+    "[softly] Down to six. Wish me luck."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-five": {
+   "category": "mulligan",
+   "when": "takes its second mulligan",
+   "text": [
+    "[sighs] Five, dears. Oh dear.",
+    "[gently] Five cards. Be kind to me.",
+    "[softly] Two mulligans. Poor me."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-four": {
+   "category": "mulligan",
+   "when": "takes its third mulligan",
+   "text": [
+    "[gasps] Four cards. Goodness.",
+    "[sighs] Four, dears. Say nothing.",
+    "[softly] Three mulligans. Be gentle with me."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-pity": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: sympathy",
+   "text": [
+    "[gently] Oh, bad luck, dear.",
+    "[softly] Poor thing. Rough start.",
+    "[warmly] It happens to the best of us, love."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-dig": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: suspicion",
+   "text": [
+    "[mischievously] Fishing for something, love?",
+    "[gently] Looking for the combo, are we, dear?",
+    "[softly] Someone wants a particular hand."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-screw": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: the mana question",
+   "text": [
+    "[gently] No lands, dear?",
+    "[softly] Mana troubles already? Oh dear.",
+    "[chuckles] Did the lands hide from you, love?"
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-risky": {
+   "category": "mulligan",
+   "when": "another seat kept a small hand",
+   "text": [
+    "[mischievously] A brave keep, dear.",
+    "[gently] Risky, love. Good luck.",
+    "[softly] Keeping that? Bold, dear."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-gloat": {
+   "category": "mulligan",
+   "when": "kept seven while another seat went small",
+   "text": [
+    "[chuckles] Seven here, dears. Sorry.",
+    "[warmly] My seven's lovely. Poor you.",
+    "[mischievously] Full hand. Don't hate me."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",

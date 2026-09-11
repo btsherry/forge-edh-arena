@@ -353,6 +353,96 @@
    ],
    "source": "table-arc-2026-09-10"
   },
+  "keep-seven": {
+   "category": "mulligan",
+   "when": "keeps its opening seven",
+   "text": [
+    "[smug] Seven. Keeping.",
+    "[excited] Keep! Let's go!",
+    "[laughs] Seven cards, no complaints."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-six": {
+   "category": "mulligan",
+   "when": "takes its first mulligan",
+   "text": [
+    "[frustrated] Mulligan. Six.",
+    "[angry] Ugh. Going to six.",
+    "[exhales] Shipping it. Six."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-five": {
+   "category": "mulligan",
+   "when": "takes its second mulligan",
+   "text": [
+    "[groans] Five. Five!",
+    "[angry] Two mulligans! This is fine!",
+    "[frustrated] Five cards. Don't laugh."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-four": {
+   "category": "mulligan",
+   "when": "takes its third mulligan",
+   "text": [
+    "[shouting] Four! Somebody shuffle me properly!",
+    "[groans] Four cards. Just end me.",
+    "[angry] Three mulligans. Unbelievable."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-pity": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: sympathy",
+   "text": [
+    "[laughs] Oof. Rough start!",
+    "[scoffs] Mulligan already? Yikes.",
+    "[laughs] Shuffle better next time!"
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-dig": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: suspicion",
+   "text": [
+    "[angry] Digging for the combo, are we?!",
+    "[scoffs] Mulligan for the good stuff. Typical.",
+    "[laughs] Fishing! Watch them!"
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-screw": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: the mana question",
+   "text": [
+    "[laughs] No lands? Ha!",
+    "[scoffs] Mana screw already? Brutal.",
+    "[laughs] Keep a land next time!"
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-risky": {
+   "category": "mulligan",
+   "when": "another seat kept a small hand",
+   "text": [
+    "[laughs] Keeping five? Bold!",
+    "[scoffs] Risky keep. Love it.",
+    "[excited] Small hand, big dreams!"
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-gloat": {
+   "category": "mulligan",
+   "when": "kept seven while another seat went small",
+   "text": [
+    "[smug] Seven for me. Enjoy your five!",
+    "[laughs] My seven's perfect. Sorry!",
+    "[smug] Full grip here. Just saying."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",

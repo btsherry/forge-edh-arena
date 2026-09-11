@@ -242,6 +242,46 @@ ARC: dict[str, tuple[str, dict[str, list[str]]]] = {
         "lily": ["[gasps] You promised, love!", "[gently] We had a deal, dear. Shame.", "[softly] Oh. So much for our truce."]}),
 }
 
+# mulligans (Ben, 2026-09-11: "a clear easy moment — digging for combos, pity, risky play, mana screw")
+MULLIGAN: dict[str, tuple[str, dict[str, list[str]]]] = {
+    "keep-seven": ("keeps its opening seven", {
+        "harry": ["[smug] Seven. Keeping.", "[excited] Keep! Let's go!", "[laughs] Seven cards, no complaints."],
+        "bill": ["[calmly] Seven. I keep.", "[dryly] Keeping. Naturally.", "[calmly] A keep. Proceed."],
+        "lily": ["[warmly] I'll keep, dears.", "[gently] Seven, thank you. Keeping.", "[softly] A lovely seven."]}),
+    "mull-to-six": ("takes its first mulligan", {
+        "harry": ["[frustrated] Mulligan. Six.", "[angry] Ugh. Going to six.", "[exhales] Shipping it. Six."],
+        "bill": ["[sighs] A mulligan. Six.", "[calmly] Down to six. Acceptable.", "[dryly] Six cards. Statistics, be kind."],
+        "lily": ["[sighs] Oh, a mulligan. Six for me.", "[gently] Six it is, dears.", "[softly] Down to six. Wish me luck."]}),
+    "mull-to-five": ("takes its second mulligan", {
+        "harry": ["[groans] Five. Five!", "[angry] Two mulligans! This is fine!", "[frustrated] Five cards. Don't laugh."],
+        "bill": ["[sighs] Five. This will be a long game.", "[dryly] Five cards. Character-building.", "[calmly] Down to five. Regrettable."],
+        "lily": ["[sighs] Five, dears. Oh dear.", "[gently] Five cards. Be kind to me.", "[softly] Two mulligans. Poor me."]}),
+    "mull-to-four": ("takes its third mulligan", {
+        "harry": ["[shouting] Four! Somebody shuffle me properly!", "[groans] Four cards. Just end me.", "[angry] Three mulligans. Unbelievable."],
+        "bill": ["[sighs] Four. Well.", "[dryly] Four cards. A philosophical exercise.", "[calmly] Three mulligans. Noted, bitterly."],
+        "lily": ["[gasps] Four cards. Goodness.", "[sighs] Four, dears. Say nothing.", "[softly] Three mulligans. Be gentle with me."]}),
+    "mull-pity": ("another seat mulliganed: sympathy", {
+        "harry": ["[laughs] Oof. Rough start!", "[scoffs] Mulligan already? Yikes.", "[laughs] Shuffle better next time!"],
+        "bill": ["[calmly] Unfortunate. My condolences.", "[dryly] A mulligan. The variance giveth.", "[calmly] Down a card already. Noted."],
+        "lily": ["[gently] Oh, bad luck, dear.", "[softly] Poor thing. Rough start.", "[warmly] It happens to the best of us, love."]}),
+    "mull-dig": ("another seat mulliganed: suspicion", {
+        "harry": ["[angry] Digging for the combo, are we?!", "[scoffs] Mulligan for the good stuff. Typical.", "[laughs] Fishing! Watch them!"],
+        "bill": ["[dryly] Digging for something specific, I presume.", "[calmly] A mulligan for the combo piece. Watch that seat.", "[dryly] Searching for the good hand. Naturally."],
+        "lily": ["[mischievously] Fishing for something, love?", "[gently] Looking for the combo, are we, dear?", "[softly] Someone wants a particular hand."]}),
+    "mull-screw": ("another seat mulliganed: the mana question", {
+        "harry": ["[laughs] No lands? Ha!", "[scoffs] Mana screw already? Brutal.", "[laughs] Keep a land next time!"],
+        "bill": ["[calmly] No lands, I take it.", "[dryly] Mana problems before turn one. Impressive.", "[calmly] A land-light seven, was it?"],
+        "lily": ["[gently] No lands, dear?", "[softly] Mana troubles already? Oh dear.", "[chuckles] Did the lands hide from you, love?"]}),
+    "mull-risky": ("another seat kept a small hand", {
+        "harry": ["[laughs] Keeping five? Bold!", "[scoffs] Risky keep. Love it.", "[excited] Small hand, big dreams!"],
+        "bill": ["[dryly] A risky keep. We shall see.", "[calmly] Five cards, kept. Confidence, or desperation.", "[dryly] A brave hand. Or a desperate one."],
+        "lily": ["[mischievously] A brave keep, dear.", "[gently] Risky, love. Good luck.", "[softly] Keeping that? Bold, dear."]}),
+    "mull-gloat": ("kept seven while another seat went small", {
+        "harry": ["[smug] Seven for me. Enjoy your five!", "[laughs] My seven's perfect. Sorry!", "[smug] Full grip here. Just saying."],
+        "bill": ["[dryly] I kept seven. Do catch up.", "[calmly] Seven here. No complaints.", "[dryly] A full hand. How novel."],
+        "lily": ["[chuckles] Seven here, dears. Sorry.", "[warmly] My seven's lovely. Poor you.", "[mischievously] Full hand. Don't hate me."]}),
+}
+
 # number lines: (family, template per lib) — {n} = the number in words, {N} capitalised
 NUMBER_TAGS = {
     "harry": lambda n: "[angry]" if n <= 10 else "[exhales]" if n <= 20 else "[smug]",
@@ -301,6 +341,8 @@ def build_manifest(lib: str) -> dict:
         ph[pid] = {"category": "procedural", "when": when, "text": list(by[lib]), "source": "table-2026-09-10"}
     for pid, (when, by) in ARC.items():
         ph[pid] = {"category": "arc", "when": when, "text": list(by[lib]), "source": "table-arc-2026-09-10"}
+    for pid, (when, by) in MULLIGAN.items():
+        ph[pid] = {"category": "mulligan", "when": when, "text": list(by[lib]), "source": "table-mulligan-2026-09-11"}
     for n in LIFE_NUMBERS:
         ph[f"life-{n}"] = {"category": "number", "when": f"announces or answers its life total: {n}", "text": [life_line(lib, n)], "source": "table-2026-09-10"}
     for n in HAND_NUMBERS:

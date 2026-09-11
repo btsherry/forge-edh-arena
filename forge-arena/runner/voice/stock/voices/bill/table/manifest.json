@@ -353,6 +353,96 @@
    ],
    "source": "table-arc-2026-09-10"
   },
+  "keep-seven": {
+   "category": "mulligan",
+   "when": "keeps its opening seven",
+   "text": [
+    "[calmly] Seven. I keep.",
+    "[dryly] Keeping. Naturally.",
+    "[calmly] A keep. Proceed."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-six": {
+   "category": "mulligan",
+   "when": "takes its first mulligan",
+   "text": [
+    "[sighs] A mulligan. Six.",
+    "[calmly] Down to six. Acceptable.",
+    "[dryly] Six cards. Statistics, be kind."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-five": {
+   "category": "mulligan",
+   "when": "takes its second mulligan",
+   "text": [
+    "[sighs] Five. This will be a long game.",
+    "[dryly] Five cards. Character-building.",
+    "[calmly] Down to five. Regrettable."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-four": {
+   "category": "mulligan",
+   "when": "takes its third mulligan",
+   "text": [
+    "[sighs] Four. Well.",
+    "[dryly] Four cards. A philosophical exercise.",
+    "[calmly] Three mulligans. Noted, bitterly."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-pity": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: sympathy",
+   "text": [
+    "[calmly] Unfortunate. My condolences.",
+    "[dryly] A mulligan. The variance giveth.",
+    "[calmly] Down a card already. Noted."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-dig": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: suspicion",
+   "text": [
+    "[dryly] Digging for something specific, I presume.",
+    "[calmly] A mulligan for the combo piece. Watch that seat.",
+    "[dryly] Searching for the good hand. Naturally."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-screw": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: the mana question",
+   "text": [
+    "[calmly] No lands, I take it.",
+    "[dryly] Mana problems before turn one. Impressive.",
+    "[calmly] A land-light seven, was it?"
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-risky": {
+   "category": "mulligan",
+   "when": "another seat kept a small hand",
+   "text": [
+    "[dryly] A risky keep. We shall see.",
+    "[calmly] Five cards, kept. Confidence, or desperation.",
+    "[dryly] A brave hand. Or a desperate one."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-gloat": {
+   "category": "mulligan",
+   "when": "kept seven while another seat went small",
+   "text": [
+    "[dryly] I kept seven. Do catch up.",
+    "[calmly] Seven here. No complaints.",
+    "[dryly] A full hand. How novel."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",

@@ -124,7 +124,14 @@ GRUDGE_EVERY = 3          # the third hit from the same seat (and every third af
 DEAL_TURNS = 8            # a truce is remembered for two rounds
 LONG_GAME_TURN = 14
 LETHAL_POWER = 15
-IDLE_S = 150.0            # the board unchanged this long (a human away from the keyboard): the patter clock waits
+IDLE_S = 150.0            # the board unchanged this long (a human away from the keyboard): the patter clock slows to a third
+IDLE_SLOWDOWN = 3.0       # Ben (2026-09-11): "a little patter during the human turn, especially if I idle, is okay"
+# Mulligans (Ben, 2026-09-11): the seats' keep/mulligan answers land in game.jsonl with the brain's reason;
+# the reaction follows the reason — lands/mana -> mull-screw, digging for a piece -> mull-dig, else pity.
+MULL_LINE = {1: "mull-to-six", 2: "mull-to-five", 3: "mull-to-four"}
+MULL_P = {"own": 0.8, "keep-seven": 0.35, "react": 0.7, "risky": 0.6, "gloat": 0.4}
+MULL_SCREW_WORDS = ("land", "mana", "colour", "color", "source")
+MULL_DIG_WORDS = ("dig", "tutor", "combo", "engine", "piece", "fast mana", "stronger", "better seven", "fish")
 # The cards sub-library (round 31, runner/voice/card_lines.py): game changers, commanders
 # and combos by name. The generic hooks stay; when the ctx names the card ("card" +
 # "card_kind" gc | cmd | combo) and the seat's cards library carries the wording, the
@@ -1002,6 +1009,10 @@ class VoiceRunner:
         self._sweeps = 0
         self._deals: dict[tuple[int, int], object] = {}       # (a, b) -> the turn the truce was struck (both directions)
         self._heads_up_said = False
+        self._mulls: dict[int, int] = {}                       # seat -> mulligans taken (from game.jsonl MULLIGAN records)
+        self._kept_seven: list[int] = []
+        self._human_mull_done = False
+        self._game_log_pos = self._game_log_size()             # a (re)started runner never replays old decisions
         self._board_fp = None                                  # what the table sees; unchanged for IDLE_S = an idle table
         self._board_changed_at = self.clock()
         self._idle_noted = False
@@ -1101,6 +1112,102 @@ class VoiceRunner:
             self.barks_cooldown = max(3.0, self.barks_cooldown / k)   # game 44: the 10 s guard silenced 15 barks at rowdy
         if k >= 1.5 and self.chains is not None:
             self.chains.max_hops += 1           # a livelier table talks back one more time
+
+    def _game_log_size(self) -> int:
+        try:
+            return (self.logs / "game.jsonl").stat().st_size
+        except OSError:
+            return 0
+
+    @staticmethod
+    def mull_reason(why: str) -> str:
+        w = (why or "").lower()
+        if any(k in w for k in MULL_DIG_WORDS):
+            return "mull-dig"
+        if any(k in w for k in MULL_SCREW_WORDS):
+            return "mull-screw"
+        return "mull-pity"
+
+    def scan_game_log(self) -> None:
+        """New MULLIGAN records in the seat runners' shared game log: the seat says
+        "mulligan, six" (or five, four) the moment it decides, the table answers in
+        the register the reason earns; a keep at seven may be announced; a keep at
+        five or fewer is called risky; a seat that kept seven may gloat."""
+        if self.barks_mode == "off" or self.final_locked or "mull-to-six" not in self.table_ids:
+            return
+        path = self.logs / "game.jsonl"
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return
+        if size <= self._game_log_pos:
+            if size < self._game_log_pos:
+                self._game_log_pos = 0                                         # a new game's log
+            return
+        try:
+            with path.open("rb") as f:
+                f.seek(self._game_log_pos)
+                chunk = f.read(size - self._game_log_pos)
+        except OSError:
+            return
+        self._game_log_pos = size
+        for raw in chunk.splitlines():
+            try:
+                r = json.loads(raw)
+            except ValueError:
+                continue
+            if r.get("type") != "MULLIGAN" or r.get("seat") is None:
+                continue
+            seat = int(r["seat"])
+            if seat == self.human_seat or not self.library_for_seat(seat):
+                continue
+            keep = bool((r.get("answer") or {}).get("keep", True))
+            turn = r.get("turn") or 0
+            others = [int(x) for x in self.seat_libraries if int(x) != seat and int(x) not in self.eliminated]
+            if not keep:
+                k = self._mulls.get(seat, 0) + 1
+                self._mulls[seat] = k
+                pid = MULL_LINE.get(min(k, 3), "mull-to-four")
+                if self.maybe_bark(seat, pid, turn=turn, source="event", p=MULL_P["own"], ctx={"targets": []}) and others:
+                    # the table answers in the register the reason earns, right behind the seat's line
+                    react = self.mull_reason(str(r.get("why") or ""))
+                    who = int(self.rng.choice(others))
+                    if not self.maybe_bark(who, react, turn=turn, source="event", p=MULL_P["react"], ctx={"targets": [seat]}, gap=0.4, evict=False) \
+                            and k >= 2 and self._kept_seven:
+                        self.maybe_bark(int(self.rng.choice(self._kept_seven)), "mull-gloat", turn=turn, source="event", p=MULL_P["gloat"],
+                                        ctx={"targets": [seat]}, gap=0.4, evict=False)
+            else:
+                k = self._mulls.get(seat, 0)
+                if k == 0:
+                    self._kept_seven.append(seat)
+                    self.maybe_bark(seat, "keep-seven", turn=turn, source="event", p=MULL_P["keep-seven"], ctx={"targets": []})
+                elif k >= 2 and others:
+                    self.maybe_bark(int(self.rng.choice(others)), "mull-risky", turn=turn, source="event", p=MULL_P["risky"], ctx={"targets": [seat]})
+
+    def human_mulligans(self, d: dict) -> None:
+        """The human's keep is not in the game log; the first snapshot of turn one shows the
+        kept hand (public), and a seat remarks on a mulligan once."""
+        if self._human_mull_done or (d.get("turn") or 0) != 1 or not d.get("phase") or "mull-pity" not in self.table_ids:
+            return
+        rec = self._seat_rec(self.human_seat, d)
+        if not rec:
+            return
+        self._human_mull_done = True
+        hand = int(rec.get("handSize") or 0)
+        phase = str(d.get("phase") or "")
+        if d.get("activeSeat") == self.human_seat:
+            if phase not in ("UNTAP", "UPKEEP", "DRAW"):
+                return                                                     # the hand may already have been played from
+            if phase == "DRAW":
+                hand -= 1
+        mulls = 7 - hand
+        if mulls < 1 or mulls > 4:
+            return
+        by = [int(x) for x in self.seat_libraries if int(x) not in self.eliminated]
+        if by:
+            line = "mull-dig" if mulls >= 2 else self.rng.choice(["mull-pity", "mull-screw"])
+            self.maybe_bark(int(self.rng.choice(by)), line, turn=1, source="event", p=self.barks_human_p,
+                            ctx={"targets": [self.human_seat], "aggressor": self.human_seat, "human_cause": True})
 
     def _startup_already_spoken(self) -> bool:
         try:
@@ -1696,20 +1803,20 @@ class VoiceRunner:
         snap = self._last_snapshot
         if (snap.get("turn") or 0) < 1 or not snap.get("phase"):
             return                                                # game 46: the table jabbed about "empty hands" at turn 0, before the deal
-        if now - self._board_changed_at > IDLE_S:
-            if not self._idle_noted:
-                self._idle_noted = True
-                self.record("skipped", kind="bark", why=f"idle table ({IDLE_S:.0f}s without a change) — the patter clock waits", source="patter")
-            return
+        idle = now - self._board_changed_at > IDLE_S
+        mult = IDLE_SLOWDOWN if idle else 1.0
+        if idle and not self._idle_noted:
+            self._idle_noted = True
+            self.record("skipped", kind="bark", why=f"idle table ({IDLE_S:.0f}s without a change) — the patter clock slows to a third", source="patter")
         human_turn = snap.get("activeSeat") == self.human_seat
         if self._patter_anchor != self.last_spoken_at:          # a line just played: rearm from its end
             self._patter_anchor = self.last_spoken_at
-            self._patter_due = self.last_spoken_at + self._patter_gap_s(human_turn)
+            self._patter_due = self.last_spoken_at + self._patter_gap_s(human_turn) * mult
         if now < self._patter_due or now - self._advisor_spoke_at < self.patter_after_advice:
             return
         living = [int(x) for x in self.seat_libraries if int(x) not in self.eliminated]
         cands = self.patter_candidates(snap, living) if living and snap.get("seats") else []
-        self._patter_due = now + self._patter_gap_s(human_turn)   # whatever happens, wait another gap
+        self._patter_due = now + self._patter_gap_s(human_turn) * mult   # whatever happens, wait another gap
         if not cands:
             return
         g = self.governor(optional=True)
@@ -2163,6 +2270,7 @@ class VoiceRunner:
         if self.barks_mode != "off" and not self.final_locked and not d.get("gameOver"):
             self.scan_stack(d)
             self.scan_combos(d)
+            self.human_mulligans(d)
         seats = d.get("seats") or []
         for s in seats:
             if s.get("eliminated") and s.get("seat") not in self.eliminated:
@@ -2312,6 +2420,7 @@ class VoiceRunner:
         self.learn_table()
         self.scan_advisor()
         self.scan_observer()
+        self.scan_game_log()
         self.mutter()
         self.patter()
         item = self.next_item()

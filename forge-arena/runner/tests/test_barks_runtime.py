@@ -812,10 +812,15 @@ class PatterClock(_TreeCase):
         self.assertEqual(len(self.r.queue), 1, "the game is on: patter"); self.r.queue.clear()
         self.r.scan_observer()                                              # the same board, unchanged...
         self.clock.t += vr.IDLE_S + 1; self.r.scan_observer(); self.r.patter()
-        self.assertEqual(self.r.queue, [], "...for two and a half minutes: an idle table, the clock waits")
+        self.assertEqual(len(self.r.queue), 1, "...for two and a half minutes: an idle table still gets a line (Ben: patter while afk is okay)")
         self.assertIn("idle table", self._records("skipped", "bark")[-1]["why"])
+        self.r.queue.clear(); self.r.last_spoken_at = self.clock.t
+        self._tick(6); self._tick(6)
+        self.assertEqual(self.r.queue, [], "...but at a third of the pace: the gap is fifteen seconds now, not five")
+        self._tick(4)
+        self.assertEqual(len(self.r.queue), 1); self.r.queue.clear()
         self._board(turn=3, active=2); self._tick(6)
-        self.assertEqual(len(self.r.queue), 1, "the board moved: patter resumes")
+        self.assertEqual(len(self.r.queue), 1, "the board moved: the full pace is back")
 
     def test_a_line_already_said_this_turn_is_not_a_candidate(self):
         self._board(hands=(3, 0, 3, 3), active=3)

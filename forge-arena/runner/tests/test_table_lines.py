@@ -53,6 +53,7 @@ class TableLibraries(unittest.TestCase):
                 self.assertEqual(len(set(ph["text"])), len(ph["text"]), f"{lib}/{pid}: wordings differ")
             self.assertEqual(cats["number"], 45 + 11, f"{lib}: life 1-40 + 45/50/60/80/100, hand 0-10")
             self.assertGreaterEqual(cats["procedural"], 20); self.assertEqual(cats["arc"], 10, f"{lib}: the memory and arc lines (phase D)")
+            self.assertEqual(cats["mulligan"], 9, f"{lib}: keep-seven, mull-to-six/five/four, pity, dig, screw, risky, gloat")
         for n in list(range(1, 41)) + [45, 50, 60, 80, 100]:
             self.assertIn(f"life-{n}", ids)
         for n in range(11):
@@ -125,7 +126,7 @@ class RenderedTable(unittest.TestCase):
                         self.assertTrue(0.4 <= secs <= 6.0, f"{lib}/table/{stem}: {secs:.1f}s")
                     self.assertTrue((REAL_VOICES / lib / "table" / "raw" / f"{stem}.wav").exists(), f"{lib}/table/raw/{stem}.wav")
                     n += 1
-            self.assertEqual(n, 290 + 30, lib)
+            self.assertEqual(n, 290 + 30 + 27, lib)
 
 
 class _TableCase(_TreeCase):
@@ -263,6 +264,75 @@ class MemoryAndArc(_TableCase):
         self.assertEqual(self.r._deals, {}, "a truce is forgotten after eight turns")
         # the human strikes a deal via a seat's promise? the human has no voice: only seat-seat truces are recorded
         self.assertEqual(len([p for p in self.r._deals if 0 in p]), 0)
+
+
+class Mulligans(_TableCase):
+    """Ben (2026-09-11): 'a clear easy moment' — the seats' keep/mulligan answers land in
+    game.jsonl with the brain's reason; the seat says it, the table answers in the
+    register the reason earns; the human's kept hand shows at turn one."""
+
+    def _log(self, seat, seq, keep, why):
+        with (self.logs / "game.jsonl").open("a") as f:
+            f.write(json.dumps({"ts": 1.0, "seat": seat, "deck": "x", "turn": 0, "phase": "", "type": "MULLIGAN", "seq": seq,
+                                "answer": {"keep": keep}, "why": why}) + "\n")
+
+    def test_reason_classes(self):
+        self.assertEqual(vr.VoiceRunner.mull_reason("One land (enters tapped), no fast mana, expensive hand"), "mull-dig", "'fast mana' is digging")
+        self.assertEqual(vr.VoiceRunner.mull_reason("Only one land, all five-drops"), "mull-screw")
+        self.assertEqual(vr.VoiceRunner.mull_reason("No engine, no tutor; dig for a stronger seven"), "mull-dig")
+        self.assertEqual(vr.VoiceRunner.mull_reason("Clunky. Trying again."), "mull-pity")
+        self.assertEqual(vr.VoiceRunner.mull_reason(""), "mull-pity")
+
+    def test_the_seat_announces_its_mulligan_and_the_table_answers_to_the_reason(self):
+        self._snap(0, None); self.r.queue.clear()
+        self._log(1, 1, False, "Only one land, no colour")
+        self.r.scan_game_log()
+        q = [(x["stock"], x["library"], x["seat"], x.get("gap")) for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual(q, [("mull-to-six", "harry/table", 1, None), ("mull-screw", "bill/table", 2, 0.4)], "the seat, then the mana question, sequenced")
+        self.r.queue.clear()
+        self._log(1, 2, False, "Dig for the combo piece")
+        self.r.scan_game_log()
+        self.assertEqual([(x["stock"], x["seat"]) for x in self.r.queue if x["kind"] == "bark"], [("mull-to-five", 1), ("mull-dig", 2)])
+        self.r.queue.clear()
+        self._log(2, 1, True, "Fine seven.")
+        self.r.scan_game_log()
+        self.assertEqual([(x["stock"], x["seat"]) for x in self.r.queue if x["kind"] == "bark"], [("keep-seven", 2)])
+        self.assertEqual(self.r._kept_seven, [2]); self.r.queue.clear()
+        self._log(1, 3, True, "Five cards, two lands, keeping.")
+        self.r.scan_game_log()
+        self.assertEqual([(x["stock"], x["seat"], x["ctx"]["targets"]) for x in self.r.queue if x["kind"] == "bark"], [("mull-risky", 2, [1])], "kept at five: risky")
+        self.r.queue.clear()
+        self.r.scan_game_log()
+        self.assertEqual(self.r.queue, [], "nothing new in the log: nothing said")
+        self.assertEqual(self.r._mulls, {1: 2})
+
+    def test_a_seat_that_kept_seven_may_gloat_when_the_reaction_does_not_fire(self):
+        self._snap(0, None); self.r.queue.clear()
+        self._log(2, 1, True, "Keep."); self.r.scan_game_log(); self.r.queue.clear()
+        self._log(1, 1, False, "Meh."); self.r.scan_game_log(); self.r.queue.clear()
+        self.r._said_this_turn.add((2, "mull-pity"))                       # the pity line is spent this turn
+        self._log(1, 2, False, "Meh again."); self.r.scan_game_log()
+        self.assertEqual([(x["stock"], x["seat"]) for x in self.r.queue if x["kind"] == "bark"], [("mull-to-five", 1), ("mull-gloat", 2)])
+
+    def test_a_restarted_runner_does_not_replay_old_mulligans_and_the_human_is_read_at_turn_one(self):
+        self._log(1, 1, False, "Meh.")
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        r.rng.random = lambda: 0.0
+        r._last_snapshot = {"turn": 0, "phase": "", "seats": [self._seat(i) for i in range(4)]}
+        r.scan_game_log()
+        self.assertEqual(r.queue, [], "the record was already there when the runner started")
+        seats = [self._seat(0, hand=5), self._seat(1), self._seat(2), self._seat(3)]
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 1, "phase": "UPKEEP", "activeSeat": 1, "gameOver": False, "seats": seats, "events": []}))
+        r.scan_observer()
+        got = [(x["stock"], x["ctx"]["targets"]) for x in r.queue if x["kind"] == "bark"]
+        self.assertEqual(got, [("mull-dig", [0])], "the human kept five: digging, says a seat")
+        r.queue.clear(); r.scan_observer()
+        self.assertEqual(r.queue, [], "once")
+        r2 = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock); r2.rng.random = lambda: 0.0
+        seats = [self._seat(0, hand=8), self._seat(1), self._seat(2), self._seat(3)]
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 1, "phase": "DRAW", "activeSeat": 0, "gameOver": False, "seats": seats, "events": []}))
+        r2.scan_observer()
+        self.assertEqual([x for x in r2.queue if x["kind"] == "bark"], [], "eight in the draw step of their own turn one is a kept seven")
 
 
 class TableRuntime(_TableCase):
