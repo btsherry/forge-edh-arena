@@ -125,17 +125,6 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
 
     @Override
     public boolean mayAutoPass() {
-        // The human's OWN "yield until end of turn" is intent, never vetoed (game 44,
-        // 2026-09-10: Omnath banked four floating mana all game, so the floating-mana
-        // rule below refused every yield — "I keep yielding and it keeps cancelling
-        // my yield"). The vetoes guard the AUTOMATIC layers (APINA, casts mode) only.
-        try {
-            if (getYieldController() != null && getYieldController().autoPassUntilEndOfTurn()) {
-                return true;
-            }
-        } catch (RuntimeException ignored) {
-            // no yield controller: fall through to the guarded path
-        }
         // Ben's floating-mana rule: unspent pool mana signals intent — never
         // auto-clear the stop, ours or upstream's. SCOPED strictly to the
         // priority-stop window: mayAutoPass is ALSO the guard inside
