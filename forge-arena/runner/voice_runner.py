@@ -88,6 +88,21 @@ PRIORITY = {"game_over": 0, "human_out": 0, "startup": 1, "ask": 2, "advice": 3,
 # retort landed on Joshua. Hops rank just below advice; if advice or a question
 # does interrupt, the pending hop is dropped rather than played orphaned.
 CHAIN_HOP_PRIORITY = 3.5
+# The bark ladder (round 31, 2026-09-10): a reaction to something that just happened
+# on the board plays ahead of Joshua's colour and the "your move" cue; the advisor's
+# tagged afterthoughts and the patter clock come last. Chain hops keep 3.5 (game 44).
+BARK_PRIORITY = {"chain": CHAIN_HOP_PRIORITY, "event": 5.5, "card": 5.5, "procedural": 5.5, "opener": 5.8,
+                 "recap": 8.0, "advice": 8.0, "patter": 8.5}
+# The duty-cycle governor (round 31): five Game Knights tapes run ~190 words/min; game 45
+# at rowdy measured 7.8 lines/min, a 31 % speaking duty — the right density with the wrong
+# mix (53 % banter, 38 % filler, 4 % about the game). The dial now sets a talk BUDGET —
+# the fraction of the last minute someone may be speaking — and every optional line is
+# rolled against the headroom left in it; lines anchored to a board event keep priority.
+DUTY_BASE = 0.18          # at chatter 1.0; quiet .09, lively .27, rowdy .36
+DUTY_WINDOW_S = 60.0
+DUTY_HUMAN_MULT = 0.4     # on the human's turn the table aims far lower (Ben: "patter being minimal during my turn")
+OPTIONAL_FLOOR = 0.15     # patter and banter at the goal: nearly silent; an anchored line never drops below half
+OPTIONAL_SOURCES = ("patter", "chain")
 # An AI seat's elimination is voiced ONCE: by the dying seat itself (its `eliminated`
 # bark, at once) with this probability, else by Joshua's "A player has been eliminated."
 ELIM_SEAT_P = 0.7
@@ -790,6 +805,7 @@ class VoiceRunner:
         self.mailbox = mailbox_dir
         self.dry_run = dry_run
         self.clock = clock
+        self.human_seat = 0
         self._log_path = logs_dir / "voice-0.log"
         self._jsonl = logs_dir / "voice-0.jsonl"
         self._control = logs_dir / "control" / "voice.json"
@@ -818,6 +834,15 @@ class VoiceRunner:
         self.barks_opener_p = float(os.environ.get("ARENA_BARKS_OPENER_P", "0.35"))
         self.barks_swing = int(os.environ.get("ARENA_BARKS_SWING", "6"))
         self.barks_hit = int(os.environ.get("ARENA_BARKS_HIT", "8"))
+        # reactions to the HUMAN's plays (round 31: before this the seats ignored every card Ben cast)
+        self.barks_human_p = float(os.environ.get("ARENA_BARKS_HUMAN_P", "0.7"))
+        # the talk budget: ARENA_VOICE_DUTY overrides the dial's derived goal
+        try:
+            self.duty_target = float(os.environ.get("ARENA_VOICE_DUTY", "") or 0) or min(0.45, DUTY_BASE * self.chatter)
+        except ValueError:
+            self.duty_target = min(0.45, DUTY_BASE * self.chatter)
+        self.duty_human = float(os.environ.get("ARENA_VOICE_DUTY_HUMAN", str(DUTY_HUMAN_MULT)))
+        self._spoken_log: list[tuple[float, float]] = []       # (start, seconds) of every line played
         self._said_this_turn: set[tuple[int, str]] = set()
         self._said_turn = None
         # Recency (game 44: "cards in hand" ten times in sixteen minutes, "good hand"
@@ -857,9 +882,10 @@ class VoiceRunner:
         self._last_snapshot: dict = {}
         # the table: from the launcher at startup (ARENA_HUMAN_DECK + the roster), else
         # default seats until the game log names all three AI decks
-        self._seat_decks: dict[int, str] = seat_decks_from_roster(os.environ.get("ARENA_HUMAN_DECK"), os.environ.get("ARENA_SEAT_DECKS", ""))
+        self._human_deck: str = os.environ.get("ARENA_HUMAN_DECK") or ""
+        self._seat_decks: dict[int, str] = seat_decks_from_roster(self._human_deck, os.environ.get("ARENA_SEAT_DECKS", ""))
         self.seat_libraries = load_seat_libraries(seat_decks=self._seat_decks or None)
-        self.game_changers: dict[int, set[str]] = {k: game_changers_of(v) for k, v in self._seat_decks.items()}
+        self.game_changers: dict[int, set[str]] = self._table_game_changers()
         self._bark_spoken_at: dict[int, float] = {}
         # Colour commentary (Ben, 2026-09-07: "it could say a thing during
         # opponents' turns some of the time"): the advisor's per-turn recap
@@ -888,20 +914,17 @@ class VoiceRunner:
         self.eliminated: set[int] = set()
         self.game_over_said = False
         self.started_said = False
-        self.human_seat = 0
         self._state_published = None
         self._live_published = None
 
     def apply_chatter(self) -> None:
-        """Scale the frequency knobs by the chatter dial (see chatter_level)."""
+        """The chatter dial sets the mechanical pace — the gap, the seat guard, the
+        reaction thresholds, the patter clock, one more chain hop at lively+. It no
+        longer pre-scales the probability knobs (round 31): the governor spends the
+        dial's headroom at roll time, so the knobs stay what the operator wrote."""
         k = self.chatter
         if k == 1.0:
             return
-        scale = lambda p: min(1.0, p * k)   # noqa: E731
-        self.barks_p, self.barks_opener_p = scale(self.barks_p), scale(self.barks_opener_p)
-        self.color_p, self.your_move_p = scale(self.color_p), scale(self.your_move_p)
-        if self.chains is not None:
-            self.chains.first_hop_p = scale(self.chains.first_hop_p)
         if k > 0:
             self.min_gap = max(3.0, self.min_gap / k)
             self.barks_swing = max(3, round(self.barks_swing / k))
@@ -910,6 +933,40 @@ class VoiceRunner:
             self.barks_cooldown = max(3.0, self.barks_cooldown / k)   # game 44: the 10 s guard silenced 15 barks at rowdy
         if k >= 1.5 and self.chains is not None:
             self.chains.max_hops += 1           # a livelier table talks back one more time
+
+    def _table_game_changers(self) -> dict[int, set[str]]:
+        out = {k: game_changers_of(v) for k, v in self._seat_decks.items()}
+        if self._human_deck:
+            out[self.human_seat] = game_changers_of(self._human_deck)     # the table reacts to the human's game changers too
+        return out
+
+    # -- the talk budget
+    def duty(self, window: float = DUTY_WINDOW_S) -> float:
+        """Fraction of the last `window` seconds somebody was speaking."""
+        now = self.clock()
+        lo = now - window
+        self._spoken_log = [(t, sec) for t, sec in self._spoken_log if t + sec > lo]
+        return min(1.0, sum(min(sec, t + sec - lo) for t, sec in self._spoken_log) / window) if window > 0 else 0.0
+
+    def duty_goal(self) -> float:
+        human_turn = self._last_snapshot.get("activeSeat") == self.human_seat
+        return self.duty_target * (self.duty_human if human_turn else 1.0)
+
+    def governor(self, optional: bool) -> float:
+        """Multiplier on a line's chance from the table's talk budget. Silence and a
+        lively dial boost (up to the dial, like the old pre-scaling); at the goal an
+        optional line (patter, a banter reply) falls to OPTIONAL_FLOOR while a line
+        anchored to a board event keeps at least half its chance."""
+        goal = self.duty_goal()
+        if goal <= 0:
+            return 1.0
+        d = self.duty()
+        if d >= goal:
+            return OPTIONAL_FLOOR if optional else max(0.5, goal / d)
+        head = (goal - d) / goal                                  # 1 in silence, 0 at the goal
+        k = self.chatter
+        boost = 1.0 + head * (k - 1.0) if k > 1.0 else k
+        return boost * (OPTIONAL_FLOOR + (1.0 - OPTIONAL_FLOOR) * head) if optional else boost
 
     # -- output
     def say(self, msg: str) -> None:
@@ -960,18 +1017,35 @@ class VoiceRunner:
     # -- queue
     def enqueue(self, kind: str, *, text: str = "", stock: str = "", seq: int | None = None, ttl: float = 25.0,
                 library: str = "", seat: int | None = None, ctx: dict | None = None, gap: float | None = None,
-                chain: dict | None = None) -> None:
+                chain: dict | None = None, prio: float | None = None) -> None:
         if self.final_locked:
             self.record("dropped", kind=kind, why="game over — nothing after the sign-off", stock=stock, text=text[:60])
             return
         item = {"kind": kind, "text": text, "stock": stock, "seq": seq,
-                "prio": CHAIN_HOP_PRIORITY if chain else PRIORITY.get(kind, 9),
+                "prio": prio if prio is not None else (CHAIN_HOP_PRIORITY if chain else PRIORITY.get(kind, 9)),
                 "at": self.clock(), "expires": self.clock() + ttl, "library": library, "seat": seat,
                 "ctx": ctx or {}, "gap": gap, "chain": chain}
-        # one pending item per kind for the chatty kinds: newest wins
-        if kind in ("advice", "your_move", "quip", "event", "color", "bark"):
-            self.queue = [q for q in self.queue if q["kind"] != kind]
+        if kind == "bark":
+            # one pending bark, newest wins — by class (round 31): a reaction to a board
+            # event clears everything pending; a retort clears other retorts and filler,
+            # never a reaction; the advisor's afterthoughts and patter clear only their peers
+            cls = self._bark_class(item)
+            if cls == "anchored":
+                self.queue = [q for q in self.queue if q["kind"] != "bark"]
+            elif cls == "chain":
+                self.queue = [q for q in self.queue if q["kind"] != "bark" or self._bark_class(q) == "anchored"]
+            else:
+                self.queue = [q for q in self.queue if q["kind"] != "bark" or self._bark_class(q) == "anchored"
+                              or self._bark_class(q) == "chain" or q["prio"] < item["prio"]]
+        elif kind in ("advice", "your_move", "quip", "event", "color"):
+            self.queue = [q for q in self.queue if q["kind"] != kind]       # one pending item per kind: newest wins
         self.queue.append(item)
+
+    @staticmethod
+    def _bark_class(item: dict) -> str:
+        if item.get("chain"):
+            return "chain"
+        return "anchored" if item["prio"] < BARK_PRIORITY["recap"] else "optional"
 
     def next_item(self) -> dict | None:
         now = self.clock()
@@ -1024,10 +1098,12 @@ class VoiceRunner:
             bleep = self.renderer.sfx()
             if bleep is not None:
                 self._play(bleep)
-        self.publish_speaking(item, wav_seconds(path))
+        secs = wav_seconds(path)
+        self.publish_speaking(item, secs)
         self._play(path)
         self.publish_speaking(None, 0.0)
         self.last_spoken_at = self.clock()
+        self._spoken_log.append((self.last_spoken_at - secs, secs))
         if item["kind"] in ("advice", "ask"):
             self._advisor_spoke_at = self.clock()
         if self.final_locked and not self.queue:
@@ -1036,9 +1112,9 @@ class VoiceRunner:
             self._bark_spoken_at[int(item["seat"])] = self.clock()
             self._said_at[item["stock"]] = self.clock()
             self._seat_said_at[(int(item["seat"]), item["stock"])] = self.clock()
-        self.record("spoke", kind=item["kind"], text=item["text"][:200], stock=item["stock"], seconds=round(wav_seconds(path), 2),
+        self.record("spoke", kind=item["kind"], text=item["text"][:200], stock=item["stock"], seconds=round(secs, 2),
                     chars_used=self.renderer.chars_used, library=item.get("library") or "", seat=item.get("seat"),
-                    file=path.name)
+                    file=path.name, duty=round(self.duty(), 2), goal=round(self.duty_goal(), 2))
         who = f" seat {item['seat']} ({item['library']})" if item.get("library") else ""
         hop = f" (chain hop {item['chain']['hop']})" if item.get("chain") else ""
         self.say(f"[voice] {item['kind']}{who}{hop}: {item['stock'] or item['text'][:90]}" + (f" [{path.name}]" if item["stock"] and path.name != f"{item['stock']}.wav" else ""))
@@ -1084,8 +1160,9 @@ class VoiceRunner:
         if plan is None:
             self._chain = None
             return
-        if self.rng.random() >= plan["p"]:
-            self.record("skipped", kind="bark", why=f"dice (chain hop {plan['hop']}, p={plan['p']:.2f})", stock=plan["id"],
+        p = min(1.0, plan["p"] * self.governor(optional=True))
+        if self.rng.random() >= p:
+            self.record("skipped", kind="bark", why=f"dice (chain hop {plan['hop']}, p={p:.2f})", stock=plan["id"],
                         seat=plan["seat"], source="chain")
             self._chain = None
             return
@@ -1115,7 +1192,8 @@ class VoiceRunner:
             if ai != self._seat_decks:
                 self._seat_decks = ai
                 self.seat_libraries = load_seat_libraries(seat_decks=ai)
-            self.game_changers = {k: game_changers_of(v) for k, v in self._seat_decks.items()}
+            self._human_deck = decks.get(self.human_seat) or self._human_deck
+            self.game_changers = self._table_game_changers()
             self.say("[voice] table: " + ", ".join(f"seat {k} {ai.get(k, '?')} -> {v['voice']}" for k, v in sorted(self.seat_libraries.items())))
 
     def library_for_seat(self, seat: int) -> str:
@@ -1151,11 +1229,13 @@ class VoiceRunner:
             return False
         # an explicit p (the opener's own knob) always applies; otherwise "all" means always, "some" means ARENA_BARKS_P
         chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
+        g = self.governor(optional=source in OPTIONAL_SOURCES)
+        chance = min(1.0, chance * g)
         if self.rng.random() >= chance:
-            self.record("skipped", kind="bark", why=f"dice ({source}, p={chance:.2f})", stock=pid, seat=seat, source=source)
+            self.record("skipped", kind="bark", why=f"dice ({source}, p={chance:.2f}, governor {g:.2f})", stock=pid, seat=seat, source=source)
             return False
         self._said_this_turn.add((int(seat), pid))
-        self.enqueue("bark", stock=pid, library=lib, seat=int(seat), ttl=20.0, ctx=ctx)
+        self.enqueue("bark", stock=pid, library=lib, seat=int(seat), ttl=20.0, ctx=ctx, prio=BARK_PRIORITY.get(source, BARK_PRIORITY["patter"]))
         self.record("queued", kind="bark", stock=pid, seat=seat, source=source)
         return True
 
@@ -1174,7 +1254,7 @@ class VoiceRunner:
         if self.barks_mode != "off" and owner is not None and int(owner) != self.human_seat and self.library_for_seat(int(owner)):
             self.record("skipped", kind="color", why=f"seat {owner}'s turn — the seat speaks", text=r["text"][:80], seq=r.get("seq"))
             return
-        if self.color_mode == "all" or self.rng.random() < self.color_p:
+        if self.color_mode == "all" or self.rng.random() < min(1.0, self.color_p * self.governor(optional=False)):
             self.enqueue("color", text=first_sentence(r["text"]), ttl=40.0)
         else:
             self.record("skipped", kind="color", why="dice (ARENA_VOICE_COLOR=some)", text=r["text"][:80])
@@ -1238,17 +1318,18 @@ class VoiceRunner:
             big = max(boards, key=boards.get)
             if boards[big] >= 3 and list(boards.values()).count(boards[big]) == 1:
                 add("board-envy", big, 1.0)
-        # filler, always (a bluff about one's hand is rarer than the rest — game 44)
+        # filler, always but a quarter of what it was (round 31: game 45 was 38 % filler);
+        # a bluff about one's hand is the rarest (game 44)
         for sp in living:
-            out.append((sp, "nothing-happening", None, 1.0 / len(living)))
-            out.append((sp, "this-is-fine", None, 1.0 / len(living)))
-            out.append((sp, "good-hand", None, 0.3 / len(living)))
-            out.append((sp, "what-turn", None, 0.4 / len(living)))
+            out.append((sp, "nothing-happening", None, 0.25 / len(living)))
+            out.append((sp, "this-is-fine", None, 0.25 / len(living)))
+            out.append((sp, "good-hand", None, 0.1 / len(living)))
+            out.append((sp, "what-turn", None, 0.15 / len(living)))
             tgt = [t for t in living if t != sp]
             if tgt:
-                out.append((sp, "deal", self.rng.choice(tgt), 0.8 / len(living)))
+                out.append((sp, "deal", self.rng.choice(tgt), 0.5 / len(living)))
         if active is not None and int(active) in living:
-            add("pass-already", int(active), 0.8)
+            add("pass-already", int(active), 0.5)
         now = self.clock()
         return [(sp, pid, tgt, w * (RECENT_WEIGHT if now - self._said_at.get(pid, -1e9) < RECENT_S else 1.0))
                 for sp, pid, tgt, w in out]
@@ -1268,6 +1349,10 @@ class VoiceRunner:
         cands = self.patter_candidates(snap, living) if living and snap.get("seats") else []
         self._patter_due = now + self._patter_gap_s(human_turn)   # whatever happens, wait another gap
         if not cands:
+            return
+        g = self.governor(optional=True)
+        if self.rng.random() >= g:
+            self.record("skipped", kind="bark", why=f"governor (duty {self.duty():.2f} vs goal {self.duty_goal():.2f}, p={g:.2f})", source="patter")
             return
         total = sum(w for *_, w in cands)
         pick = self.rng.random() * total
@@ -1299,9 +1384,16 @@ class VoiceRunner:
             try:
                 if kind == "attack":
                     seat = int(e.get("seat"))
-                    if seat != self.human_seat and (int(e.get("power", 0)) >= self.barks_swing or int(e.get("attackers", 0)) >= 3):
+                    big = int(e.get("power", 0)) >= self.barks_swing or int(e.get("attackers", 0)) >= 3
+                    if seat != self.human_seat and big:
                         self.maybe_bark(seat, "big-swing", turn=turn, source="event",
                                         ctx={"targets": [int(x) for x in (e.get("defenders") or [])], "aggressor": None})
+                    elif seat == self.human_seat and big:
+                        # the human swings big: a defender braces or complains (round 31)
+                        defenders = [int(x) for x in (e.get("defenders") or []) if self.library_for_seat(int(x)) and int(x) not in self.eliminated]
+                        if defenders:
+                            self.maybe_bark(int(self.rng.choice(defenders)), self.rng.choice(["brace", "why-me"]), turn=turn, source="event",
+                                            p=self.barks_human_p, ctx={"targets": [], "aggressor": seat, "human_cause": True})
                 elif kind == "damage":
                     victim = int(e.get("seat"))
                     froms = [int(x) for x in (e.get("from") or [])]
@@ -1319,8 +1411,27 @@ class VoiceRunner:
                                             ctx={"targets": [self.human_seat], "aggressor": None})
                 elif kind == "cast":
                     seat = int(e.get("seat"))
-                    if seat != self.human_seat and self.library_for_seat(seat):
-                        spell = str(e.get("spell") or "")
+                    spell = str(e.get("spell") or "")
+                    if seat == self.human_seat:
+                        # the human's play: the table reacts to HIM (round 31 — until now the seats
+                        # ignored every card the human cast): a game changer alarms, the commander
+                        # or a big spell draws a bystander's line
+                        by = [x for x in self.seat_libraries if int(x) not in self.eliminated]
+                        cmc = int(e.get("cmc", 0))
+                        if spell in self.game_changers.get(seat, set()):
+                            line = "gc-react"
+                        elif e.get("commander"):
+                            line = self.rng.choice(["oh-no", "brace", "read-that"])
+                        elif cmc >= 7:
+                            line = "wow"
+                        elif cmc >= 5:
+                            line = self.rng.choice(["nice-play", "read-that", "oh-no"])
+                        else:
+                            line = ""
+                        if by and line:
+                            self.maybe_bark(int(self.rng.choice(by)), line, turn=turn, source="event", p=self.barks_human_p,
+                                            ctx={"targets": [seat], "aggressor": seat, "human_cause": True})
+                    elif self.library_for_seat(seat):
                         if spell in self.game_changers.get(seat, set()):
                             # one of the bracket's game changers: the caster crows, the table reacts (chain)
                             self.maybe_bark(seat, "game-changer", turn=turn, source="event", ctx={"targets": []})
@@ -1366,6 +1477,10 @@ class VoiceRunner:
                     elif by is not None and n > tokens and all(int(by) != o for o in owners):
                         if int(by) != self.human_seat and self.library_for_seat(int(by)):
                             self.maybe_bark(int(by), "removal", turn=turn, source="event", ctx={"targets": owners})
+                        elif int(by) == self.human_seat and ai_owners:
+                            # the human's spot removal: the owner objects (round 31)
+                            self.maybe_bark(ai_owners[0], "oh-no", turn=turn, source="event", p=self.barks_human_p,
+                                            ctx={"targets": [], "aggressor": int(by), "human_cause": True})
                 elif kind == "gameover":
                     pass   # the final sequence in scan_observer plays the winner's line, then Joshua, then locks
                 elif kind == "countered":

@@ -451,7 +451,10 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | Variable | Default | Meaning |
 |---|---|---|
 | `ARENA_VOICE` | `on` | the advisor's voice (arena-play --no-voice = off) |
-| `ARENA_CHATTER` | `normal` | quiet \| normal \| lively \| rowdy (or a number) — one dial for how much the table talks: scales every voice frequency below, shortens the gap, lowers the reaction thresholds; advice frequency is untouched |
+| `ARENA_CHATTER` | `normal` | quiet \| normal \| lively \| rowdy (or a number) — one dial for how much the table talks: sets the talk budget (the speaking fraction of the last minute: .09 / .18 / .27 / .36) that the governor spends, shortens the gap, lowers the reaction thresholds; advice frequency is untouched |
+| `ARENA_VOICE_DUTY` | *(empty)* | talk budget override — the fraction of the last minute somebody may be speaking (e.g. `0.25`); empty = derived from `ARENA_CHATTER` |
+| `ARENA_VOICE_DUTY_HUMAN` | `0.4` | the talk budget on the human's turn, as a multiple of the budget |
+| `ARENA_BARKS_HUMAN_P` | `0.7` | chance a seat reacts to the HUMAN's play — a big attack, a game changer, the commander, a big spell, spot removal |
 | `ELEVENLABS_API_KEY` | unset | live spoken advice needs it; stock phrases play without it |
 | `ARENA_VOICE_FORMAT` | `pcm_24000` | ElevenLabs output; PCM needs no decoder |
 | `ARENA_VOICE_FX` | `on` | on = film effects (ffmpeg when present, else the lite chain) | lite | off |

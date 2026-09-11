@@ -239,7 +239,7 @@ class BarkRuntime(_TreeCase):
         self.r.barks_mode = "some"; self.r.barks_p = 0.85
         self.r.rng.random = lambda: 0.9
         self.assertFalse(self.r.maybe_bark(1, "big-swing", turn=3, source="recap"))
-        self.assertIn("dice (recap, p=0.85)", self._records("skipped", "bark")[-1]["why"])
+        self.assertIn("dice (recap, p=0.85, governor 1.00)", self._records("skipped", "bark")[-1]["why"])
         self.r.rng.random = lambda: 0.1
         self.assertTrue(self.r.maybe_bark(1, "big-swing", turn=3, source="event"))
         self.assertFalse(self.r.maybe_bark(1, "big-swing", turn=3, source="recap"), "the same line twice in one turn is a repeat")
@@ -328,9 +328,11 @@ class BarkRuntime(_TreeCase):
         self._observer(3, 1, events=ev); self.r.scan_observer()
         self.assertEqual(self._queued(), [("bark", "big-swing", "harry", 1)], "three attackers count too")
         self.r.queue.clear()
+        self.r.rng.random = lambda: 0.0
         ev.append({"seq": 5, "kind": "attack", "turn": 4, "seat": 0, "attackers": 4, "power": 20, "defenders": [1]})
         self._observer(4, 0, events=ev); self.r.scan_observer()
-        self.assertEqual([q for q in self._queued() if q[0] == "bark"], [], "the human's attack is not a bark")
+        got = [q for q in self._queued() if q[0] == "bark"]
+        self.assertEqual(len(got), 1); self.assertEqual((got[0][1] in ("brace", "why-me"), got[0][3]), (True, 1), f"the human's swing: the defender reacts (round 31): {got}")
 
     def test_damage_event_the_victim_speaks_or_the_hitter_when_the_victim_is_the_human(self):
         self._prime()
@@ -477,7 +479,7 @@ class BarkRuntime(_TreeCase):
         self.r.rng.random = lambda: 0.9
         self._observer(4, 1); self.r.scan_observer()
         self.assertEqual(self._queued(), [])
-        self.assertIn("dice (opener, p=0.35)", self._records("skipped", "bark")[-1]["why"])
+        self.assertIn("dice (opener, p=0.35, governor 1.00)", self._records("skipped", "bark")[-1]["why"])
         self.r.rng.random = lambda: 0.1
         self._observer(5, 2); self.r.scan_observer()
         self.assertEqual(self._queued(), [("bark", "my-turn", "bill", 2)])
@@ -532,20 +534,25 @@ class BarkRuntime(_TreeCase):
         self._observer(16, 0); self.r.scan_observer()
         self.assertEqual(self.r.queue[-1]["kind"], "your_move")
 
-    def test_chatter_dial_scales_every_frequency_the_gap_and_the_thresholds(self):
+    def test_chatter_dial_sets_the_pace_and_the_talk_budget_but_leaves_the_knobs_alone(self):
+        """Round 31: the dial no longer pre-scales the probability knobs — the governor
+        spends its headroom at roll time (test_table_budget) — but it still sets the
+        mechanical pace and the budget."""
         self.assertEqual([vr.chatter_level(x) for x in ("quiet", "normal", "lively", "rowdy", "1.25", "bogus", None)], [0.5, 1.0, 1.5, 2.0, 1.25, 1.0, 1.0])
         for k in ("ARENA_BARKS", "ARENA_BARKS_P", "ARENA_BARKS_OPENER_P", "ARENA_VOICE_YOUR_MOVE_P", "ARENA_VOICE_COLOR_P", "ARENA_VOICE_MIN_GAP"):
             os.environ.pop(k, None)
         os.environ["ARENA_CHATTER"] = "rowdy"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
-        self.assertEqual((r.barks_p, r.barks_opener_p, r.color_p, r.your_move_p), (1.0, 0.7, 1.0, 1.0), "×2, capped at 1")
+        self.assertEqual((r.barks_p, r.barks_opener_p, r.color_p, r.your_move_p), (0.85, 0.35, 0.5, 0.6), "the knobs as written")
         self.assertEqual((r.min_gap, r.barks_swing, r.barks_hit), (4.0, 3, 4), "gap halved, thresholds halved (floors 3 / 4)")
+        self.assertAlmostEqual(r.duty_target, 0.36); self.assertEqual(r.governor(optional=False), 2.0, "silence at rowdy: the old ×2, spent by the governor")
         os.environ["ARENA_CHATTER"] = "quiet"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
-        self.assertAlmostEqual(r.barks_p, 0.425); self.assertEqual((r.min_gap, r.barks_swing, r.barks_hit), (16.0, 12, 16))
+        self.assertEqual((r.barks_p, r.min_gap, r.barks_swing, r.barks_hit), (0.85, 16.0, 12, 16))
+        self.assertAlmostEqual(r.duty_target, 0.09); self.assertEqual(r.governor(optional=False), 0.5)
         os.environ["ARENA_CHATTER"] = "normal"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
-        self.assertEqual((r.barks_p, r.min_gap, r.barks_swing), (0.85, 8.0, 6), "normal = the knobs as written")
+        self.assertEqual((r.barks_p, r.min_gap, r.barks_swing, r.duty_target, r.governor(optional=True)), (0.85, 8.0, 6, 0.18, 1.0))
 
     def test_defaults_from_the_environment(self):
         for k in ("ARENA_BARKS", "ARENA_VOICE_YOUR_MOVE", "ARENA_BARKS_P", "ARENA_BARKS_COOLDOWN", "ARENA_VOICE_YOUR_MOVE_P",
@@ -661,11 +668,13 @@ class InteractionChains(_TreeCase):
         self._spoken(1, "big-swing", ctx={"targets": [2]})                     # the target is dead: no brace, and no bystander is left
         self.assertEqual(self._queued(), [])
 
-    def test_chatter_scales_the_first_hop_too(self):
+    def test_chatter_reaches_the_first_hop_through_the_governor(self):
         os.environ["ARENA_CHATTER"] = "rowdy"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
-        self.assertEqual(r.chains.first_hop_p, 1.0)
+        self.assertEqual(r.chains.first_hop_p, 0.6, "the table's knob is untouched (round 31)")
         self.assertEqual(r.chains.decay, 0.5, "the decay is not chatter")
+        self.assertEqual(r.chains.max_hops, 4)
+        self.assertEqual(min(1.0, r.chains.hop_p(1) * r.governor(optional=True)), 1.0, "in silence at rowdy a reply is certain — as the old ×2 made it")
 
     def test_a_hop_finishes_the_exchange_before_joshua_speaks_and_advice_drops_it(self):
         """Game 44, 20:43: 'your move' cut between a jab and its retort, so the retort landed on Joshua."""
