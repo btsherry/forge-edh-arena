@@ -253,6 +253,106 @@
    ],
    "source": "table-2026-09-10"
   },
+  "grudge": {
+   "category": "arc",
+   "when": "hit by the same seat for the third time this game",
+   "text": [
+    "[dryly] You again. I'm sensing a pattern.",
+    "[calmly] Third time. I am keeping count.",
+    "[sighs] Must it always be me?"
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "again-countered": {
+   "category": "arc",
+   "when": "its third spell countered this game",
+   "text": [
+    "[dryly] Countered. Again. How original.",
+    "[sighs] The third one. I'm keeping a ledger.",
+    "[calmly] Predictable. And still annoying."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "not-again-sweep": {
+   "category": "arc",
+   "when": "the second board wipe of the game hits it",
+   "text": [
+    "[sighs] Another wipe. Rebuilding, again.",
+    "[dryly] The second wipe. Tedious.",
+    "[calmly] Wipe two. My patience is finite."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "heads-up": {
+   "category": "arc",
+   "when": "only two players remain and it is one of them",
+   "text": [
+    "[calmly] Just the two of us. Finally.",
+    "[dryly] Heads up. May the better deck win.",
+    "[calmly] Two remain. Let us be efficient."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "early-game": {
+   "category": "arc",
+   "when": "its turn begins in the first round",
+   "text": [
+    "[calmly] Early days. Everyone develops.",
+    "[dryly] The opening. Ramp, ramp, pass.",
+    "[calmly] Turn one. Patience, all."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "long-game": {
+   "category": "arc",
+   "when": "the game has run past turn fourteen",
+   "text": [
+    "[dryly] Turn fourteen. Riveting.",
+    "[sighs] A long game. Someone should end it.",
+    "[calmly] The grind. My favourite phase."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "someone-wins": {
+   "category": "arc",
+   "when": "a board that could end the game next turn",
+   "text": [
+    "[calmly] Someone wins next turn unless we act.",
+    "[dryly] The end approaches. Any answers?",
+    "[calmly] That board is lethal. Respond, or lose."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "take-the-deal": {
+   "category": "arc",
+   "when": "accepts a truce",
+   "text": [
+    "[calmly] Agreed. This turn only.",
+    "[dryly] A truce. I'll hold you to it.",
+    "[calmly] Very well. We have terms."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "no-deal": {
+   "category": "arc",
+   "when": "refuses a truce",
+   "text": [
+    "[calmly] No. Your board says otherwise.",
+    "[dryly] Declined. Politely.",
+    "[calmly] I think not. Not today."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "you-promised": {
+   "category": "arc",
+   "when": "attacked by a seat it had a truce with",
+   "text": [
+    "[dryly] We had an agreement. Noted.",
+    "[calmly] So much for the truce.",
+    "[sighs] A deal, broken. I shall remember."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",

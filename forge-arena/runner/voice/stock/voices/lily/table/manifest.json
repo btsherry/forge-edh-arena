@@ -253,6 +253,106 @@
    ],
    "source": "table-2026-09-10"
   },
+  "grudge": {
+   "category": "arc",
+   "when": "hit by the same seat for the third time this game",
+   "text": [
+    "[gently] You do keep hitting me, love.",
+    "[softly] Again, dear? What did I do?",
+    "[chuckles] I'm starting to take this personally."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "again-countered": {
+   "category": "arc",
+   "when": "its third spell countered this game",
+   "text": [
+    "[sighs] Again, love? Let one resolve.",
+    "[gently] You've countered everything, dear.",
+    "[softly] Third time. I'm getting used to it."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "not-again-sweep": {
+   "category": "arc",
+   "when": "the second board wipe of the game hits it",
+   "text": [
+    "[sighs] Not another wipe, dears.",
+    "[gently] Oh, everything again? Oh dear.",
+    "[softly] Twice now. My poor board."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "heads-up": {
+   "category": "arc",
+   "when": "only two players remain and it is one of them",
+   "text": [
+    "[warmly] Just us now, dear. Shall we?",
+    "[gently] Two left. Let's make it a good ending.",
+    "[softly] Heads up, love. Good luck."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "early-game": {
+   "category": "arc",
+   "when": "its turn begins in the first round",
+   "text": [
+    "[warmly] Early yet, dears. Settle in.",
+    "[gently] Still setting up, loves.",
+    "[softly] The quiet part. Enjoy it."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "long-game": {
+   "category": "arc",
+   "when": "the game has run past turn fourteen",
+   "text": [
+    "[chuckles] We've been here a while, dears.",
+    "[gently] Long game. Anyone winning?",
+    "[softly] Shall we wrap this up, loves?"
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "someone-wins": {
+   "category": "arc",
+   "when": "a board that could end the game next turn",
+   "text": [
+    "[gasps] Someone's about to win, dears.",
+    "[gently] This is the turn, loves. Do something.",
+    "[softly] That board ends us, dears."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "take-the-deal": {
+   "category": "arc",
+   "when": "accepts a truce",
+   "text": [
+    "[warmly] Deal, love. Be good.",
+    "[gently] Peace it is, dear.",
+    "[softly] Agreed, dear. For now."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "no-deal": {
+   "category": "arc",
+   "when": "refuses a truce",
+   "text": [
+    "[gently] I'm afraid not, dear.",
+    "[chuckles] No deal, love. Not this time.",
+    "[softly] I'd rather not, dear. Sorry."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "you-promised": {
+   "category": "arc",
+   "when": "attacked by a seat it had a truce with",
+   "text": [
+    "[gasps] You promised, love!",
+    "[gently] We had a deal, dear. Shame.",
+    "[softly] Oh. So much for our truce."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",

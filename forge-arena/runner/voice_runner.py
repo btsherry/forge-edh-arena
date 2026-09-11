@@ -107,7 +107,8 @@ OPTIONAL_SOURCES = ("patter", "chain")
 # whole-sentence numbers and named addressing live in voices/<lib>/table/. Per-line odds
 # below are multiplied by ARENA_TABLE_P; the governor treats them as anchored.
 TABLE_LIB = "table"
-TABLE_P = {"land-go": 0.6, "pass": 0.4, "mana-up": 0.5, "tapped-out": 0.4, "untap-draw": 0.5, "come-on-land": 0.5, "thinking": 0.3,
+TABLE_P = {"grudge": 0.6, "again-countered": 0.7, "not-again-sweep": 0.7, "heads-up": 0.8, "early-game": 0.3, "you-promised": 0.7,
+           "land-go": 0.6, "pass": 0.4, "mana-up": 0.5, "tapped-out": 0.4, "untap-draw": 0.5, "come-on-land": 0.5, "thinking": 0.3,
            "cast": 0.3, "cast-big": 0.5, "in-response": 0.6, "poke": 0.35, "attack-you": 0.35, "no-blocks": 0.4, "take-it": 0.3,
            "sure": 0.15, "hold-on": 0.4, "life": 0.5, "address": 0.5}
 LIFE_FOLLOWUP = {"that-hurt": 0.6, "take-it": 0.5, "low-life": 0.5}          # the speaker announces its total right after
@@ -117,6 +118,10 @@ ADDRESS_SWAP = {"kill-that": ("hit", "target"), "archenemy": ("hit", "target"), 
 LIFE_STEPS = (45, 50, 60, 80, 100)
 THINK_S = 8.0
 NARRATIONS_PER_TURN = 2
+GRUDGE_EVERY = 3          # the third hit from the same seat (and every third after) earns "you again?!"
+DEAL_TURNS = 8            # a truce is remembered for two rounds
+LONG_GAME_TURN = 14
+LETHAL_POWER = 15
 # The cards sub-library (round 31, runner/voice/card_lines.py): game changers, commanders
 # and combos by name. The generic hooks stay; when the ctx names the card ("card" +
 # "card_kind" gc | cmd | combo) and the seat's cards library carries the wording, the
@@ -988,6 +993,12 @@ class VoiceRunner:
         self._stack_seen: set[tuple] = set()
         self._thought: set[str] = set()                        # decision requests already muttered about
         self._cards: dict[int, dict[str, dict]] = {}           # seat -> name -> card record (lazy)
+        # memory (phase D): who keeps hitting whom, how often a seat was countered, how many wipes, who promised whom
+        self._hits_from: dict[int, dict[int, int]] = {}
+        self._countered_n: dict[int, int] = {}
+        self._sweeps = 0
+        self._deals: dict[tuple[int, int], object] = {}       # (a, b) -> the turn the truce was struck (both directions)
+        self._heads_up_said = False
         self._said_this_turn: set[tuple[int, str]] = set()
         self._said_turn = None
         # Recency (game 44: "cards in hand" ten times in sixteen minutes, "good hand"
@@ -1213,14 +1224,14 @@ class VoiceRunner:
     # -- queue
     def enqueue(self, kind: str, *, text: str = "", stock: str = "", seq: int | None = None, ttl: float = 25.0,
                 library: str = "", seat: int | None = None, ctx: dict | None = None, gap: float | None = None,
-                chain: dict | None = None, prio: float | None = None, evict: bool = True) -> None:
+                chain: dict | None = None, prio: float | None = None, evict: bool = True, source: str = "") -> None:
         if self.final_locked:
             self.record("dropped", kind=kind, why="game over — nothing after the sign-off", stock=stock, text=text[:60])
             return
         item = {"kind": kind, "text": text, "stock": stock, "seq": seq,
                 "prio": prio if prio is not None else (CHAIN_HOP_PRIORITY if chain else PRIORITY.get(kind, 9)),
                 "at": self.clock(), "expires": self.clock() + ttl, "library": library, "seat": seat,
-                "ctx": ctx or {}, "gap": gap, "chain": chain}
+                "ctx": ctx or {}, "gap": gap, "chain": chain, "source": source or ("chain" if chain else kind)}
         if kind == "bark" and not evict:
             pass                                                            # a follow-on: it queues behind what is already pending
         elif kind == "bark":
@@ -1312,7 +1323,7 @@ class VoiceRunner:
             self._seat_said_at[(int(item["seat"]), item["stock"])] = self.clock()
         self.record("spoke", kind=item["kind"], text=item["text"][:200], stock=item["stock"], seconds=round(secs, 2),
                     chars_used=self.renderer.chars_used, library=item.get("library") or "", seat=item.get("seat"),
-                    file=path.name, duty=round(self.duty(), 2), goal=round(self.duty_goal(), 2))
+                    file=path.name, duty=round(self.duty(), 2), goal=round(self.duty_goal(), 2), source=item.get("source", ""))
         who = f" seat {item['seat']} ({item['library']})" if item.get("library") else ""
         hop = f" (chain hop {item['chain']['hop']})" if item.get("chain") else ""
         self.say(f"[voice] {item['kind']}{who}{hop}: {item['stock'] or item['text'][:90]}" + (f" [{path.name}]" if item["stock"] and path.name != f"{item['stock']}.wav" else ""))
@@ -1354,6 +1365,12 @@ class VoiceRunner:
         voiced = {int(k): v["library"] for k, v in self.seat_libraries.items() if int(k) not in self.eliminated}
         now = self.clock()
         speaker = int(item["seat"])
+        link0 = item.get("chain") or {}
+        parent = str(link0.get("parent") or "")
+        if item.get("stock") in ("promise", "take-the-deal") and (parent == "deal" or parent.startswith("deal-")) and link0.get("origin") is not None:
+            # a truce struck: remembered both ways, for DEAL_TURNS turns; an attack across it earns "you promised!"
+            a, b = int(link0["origin"]), speaker
+            self._deals[(a, b)] = self._deals[(b, a)] = turn if turn is not None else self._last_snapshot.get("turn")
         # a hit is followed by the total ("Take five. I'm at sixteen." — every table does it)
         p_follow = LIFE_FOLLOWUP.get(item.get("stock", ""), 0.0) * self.table_mult
         if p_follow and not (chain and chain.get("followup")):
@@ -1492,7 +1509,7 @@ class VoiceRunner:
             ctx = dict(ctx or {}); ctx["generic"] = pid                    # the chain plans from the generic line
             pid = named
         self.enqueue("bark", stock=pid, library=self.lib_for(int(seat), pid), seat=int(seat), ttl=20.0, ctx=ctx,
-                     prio=BARK_PRIORITY.get(source, BARK_PRIORITY["patter"]), gap=gap, evict=evict)
+                     prio=BARK_PRIORITY.get(source, BARK_PRIORITY["patter"]), gap=gap, evict=evict, source=source)
         self.record("queued", kind="bark", stock=pid, seat=seat, source=source)
         return True
 
@@ -1538,12 +1555,25 @@ class VoiceRunner:
             return ""
         return named
 
+    def _forget_stale_deals(self, turn) -> None:
+        try:
+            t = int(turn)
+        except (TypeError, ValueError):
+            return
+        for pair, struck in list(self._deals.items()):
+            try:
+                if t - int(struck) > DEAL_TURNS:
+                    self._deals.pop(pair, None)
+            except (TypeError, ValueError):
+                self._deals.pop(pair, None)
+
     def _roll_turn(self, turn) -> None:
         """The no-repeat set is per game turn."""
         if turn is not None and turn != self._said_turn:
             self._said_turn = turn
             self._said_this_turn = set()
             self._chain = None                           # a new turn ends any exchange
+        self._forget_stale_deals(turn)
 
     # -- colour: Joshua speaks after the human's turn
     def _voice_color(self, r: dict) -> None:
@@ -1612,6 +1642,15 @@ class VoiceRunner:
             creatures = [c for c in (x.get("battlefield") or []) if isinstance(c, dict) and c.get("power") is not None]
             if any((c.get("power") or 0) >= 6 for c in creatures):
                 add("kill-that", sid, 2.0)
+        # the arc (phase D): a lethal board on the table, a game that has run long
+        if self.table_ids:
+            for sid, x in by_id.items():
+                power = sum(int(c.get("power") or 0) for c in (x.get("battlefield") or []) if isinstance(c, dict) and c.get("power") is not None)
+                if power >= LETHAL_POWER and "someone-wins" in self.table_ids and any((y.get("life") or 0) <= power for t, y in by_id.items() if t != sid):
+                    add("someone-wins", sid, 2.0)
+            if (snap.get("turn") or 0) >= LONG_GAME_TURN and "long-game" in self.table_ids:
+                for sp in living:
+                    out.append((sp, "long-game", None, 1.0 / len(living)))
         boards = {sid: sum(1 for c in (x.get("battlefield") or []) if isinstance(c, dict) and c.get("power") is not None) for sid, x in by_id.items()}
         if boards:
             big = max(boards, key=boards.get)
@@ -1750,6 +1789,9 @@ class VoiceRunner:
         if self.table_ids and "come-on-land" in self.table_ids and lands < min(4, own_turn):
             if self.maybe_bark(int(active), "come-on-land", turn=turn, source="opener", p=self.table_p("come-on-land"), gap=gap, evict=evict):
                 return
+        if int(turn) <= 4 and "early-game" in self.table_ids and self.rng.random() < self.table_p("early-game"):
+            if self.maybe_bark(int(active), "early-game", turn=turn, source="opener", p=self.barks_opener_p, gap=gap, evict=evict):
+                return
         pid = "untap-draw" if self.table_ids and "untap-draw" in self.table_ids and self.rng.random() < self.table_p("untap-draw") else "my-turn"
         self.maybe_bark(int(active), pid, turn=turn, source="opener", p=self.barks_opener_p, gap=gap, evict=evict)
 
@@ -1870,7 +1912,15 @@ class VoiceRunner:
                     defenders = [int(x) for x in (e.get("defenders") or [])]
                     open_ = [x for x in defenders if x != self.human_seat and self.library_for_seat(x) and self._open_to_attack(self._seat_rec(x, d))]
                     power = int(e.get("power", 0))
-                    if seat != self.human_seat and big:
+                    betrayed = [x for x in defenders if (seat, x) in self._deals and x != self.human_seat and self.library_for_seat(x)]
+                    if betrayed and "you-promised" in self.table_ids:
+                        # a truce broken: the promised seat objects (and the deal is forgotten)
+                        who = int(self.rng.choice(betrayed))
+                        for pair in ((seat, who), (who, seat)):
+                            self._deals.pop(pair, None)
+                        self.maybe_bark(who, "you-promised", turn=turn, source="event", p=self.table_p("you-promised"),
+                                        ctx={"targets": [], "aggressor": seat, "human_cause": seat == self.human_seat})
+                    elif seat != self.human_seat and big:
                         self.maybe_bark(seat, "big-swing", turn=turn, source="event",
                                         ctx={"targets": defenders, "aggressor": None, "open": open_})
                     elif seat != self.human_seat and self.library_for_seat(seat) and power > 0:
@@ -1892,6 +1942,13 @@ class VoiceRunner:
                     if froms:
                         self._last_hit_by[victim] = (froms, turn)
                     amount = int(e.get("amount", 0))
+                    if len(froms) == 1 and froms[0] != victim and amount > 0:
+                        n = self._hits_from.setdefault(victim, {}).get(froms[0], 0) + 1
+                        self._hits_from[victim][froms[0]] = n
+                        if n % GRUDGE_EVERY == 0 and victim != self.human_seat and self.library_for_seat(victim) and "grudge" in self.table_ids:
+                            if self.maybe_bark(victim, "grudge", turn=turn, source="event", p=self.table_p("grudge"),
+                                               ctx={"targets": [], "aggressor": froms[0], "human_cause": froms[0] == self.human_seat}):
+                                continue                                # "you again?!" stands in for that-hurt / take-it this time
                     if amount < self.barks_hit:
                         if e.get("combat") and amount > 0 and victim != self.human_seat and self.library_for_seat(victim) and "take-it" in self.table_ids:
                             self.maybe_bark(victim, "take-it", turn=turn, source="procedural", p=self.table_p("take-it"),
@@ -1972,11 +2029,13 @@ class VoiceRunner:
                             said_gone = self.maybe_bark(int(self.rng.choice(others)), "gc-gone", turn=turn, source="event",
                                                         ctx={"targets": owners, "card": card_slug(gone_gc[0]), "card_kind": "gc"})
                     if n >= 3 and len(set(owners)) >= 2:
+                        self._sweeps += 1
+                        swept = "not-again-sweep" if self._sweeps >= 2 and "not-again-sweep" in self.table_ids else "got-swept"
                         if by is not None and int(by) != self.human_seat and self.library_for_seat(int(by)):
                             self.maybe_bark(int(by), "sweep", turn=turn, source="event", ctx={"targets": [o for o in owners if o != int(by)]})
                         for o in ai_owners:
                             if by is None or o != int(by):
-                                self.maybe_bark(o, "got-swept", turn=turn, source="event",
+                                self.maybe_bark(o, swept, turn=turn, source="event", p=self.table_p(swept) if swept != "got-swept" else None,
                                                 ctx={"aggressor": int(by) if by is not None else None, "human_cause": by is not None and int(by) == self.human_seat})
                     elif commanders:
                         for o in ai_owners:
@@ -1995,7 +2054,15 @@ class VoiceRunner:
                     pass   # the final sequence in scan_observer plays the winner's line, then Joshua, then locks
                 elif kind == "countered":
                     by, victim = e.get("by"), e.get("seat")
-                    if by is not None and int(by) != self.human_seat and self.library_for_seat(int(by)):
+                    n = self._countered_n.get(int(victim), 0) + 1 if victim is not None else 0
+                    if victim is not None:
+                        self._countered_n[int(victim)] = n
+                    if (victim is not None and int(victim) != self.human_seat and self.library_for_seat(int(victim)) and n and n % 3 == 0
+                            and "again-countered" in self.table_ids):
+                        self.maybe_bark(int(victim), "again-countered", turn=turn, source="event", p=self.table_p("again-countered"),
+                                        ctx={"targets": [], "aggressor": int(by) if by is not None else None,
+                                             "human_cause": by is not None and int(by) == self.human_seat})
+                    elif by is not None and int(by) != self.human_seat and self.library_for_seat(int(by)):
                         self.maybe_bark(int(by), "counter", turn=turn, source="event",
                                         ctx={"targets": [int(victim)] if victim is not None else [], "aggressor": None})
                     elif victim is not None and int(victim) != self.human_seat:
@@ -2090,6 +2157,15 @@ class VoiceRunner:
                         killers = [h for h in hit[0] if h != self.human_seat and self.library_for_seat(h) and h not in self.eliminated]
                         if killers:
                             self.maybe_bark(killers[-1], "kill", turn=turn, source="event", ctx={"targets": []})
+        living = [s.get("seat") for s in seats if s.get("seat") is not None and not s.get("eliminated")]
+        if len(living) == 2 and not self._heads_up_said and not d.get("gameOver") and self.barks_mode != "off" and "heads-up" in self.table_ids:
+            self._heads_up_said = True
+            for sid in living:
+                if sid != self.human_seat and self.library_for_seat(int(sid)):
+                    other = [x for x in living if x != sid]
+                    self.maybe_bark(int(sid), "heads-up", turn=turn, source="event", p=self.table_p("heads-up"),
+                                    ctx={"targets": other}, gap=0.6, evict=False)
+                    break
         for s in seats:
             sid, pool = s.get("seat"), s.get("pool") or 0
             if sid is None or sid == self.human_seat:

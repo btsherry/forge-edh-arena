@@ -198,6 +198,50 @@ PROCEDURAL: dict[str, tuple[str, dict[str, list[str]]]] = {
         "lily": ["[mischievously] Someone's holding something, dears.", "[gently] All that mana untapped, love?", "[softly] Hmm. Mana open."]}),
 }
 
+# memory and arc (phase D): grudges, running jokes, the shape of the game, deals kept and broken
+ARC: dict[str, tuple[str, dict[str, list[str]]]] = {
+    "grudge": ("hit by the same seat for the third time this game", {
+        "harry": ["[angry] You again?! Pick on someone else!", "[shouting] Every time! It's always me!", "[frustrated] What did I ever do to you?!"],
+        "bill": ["[dryly] You again. I'm sensing a pattern.", "[calmly] Third time. I am keeping count.", "[sighs] Must it always be me?"],
+        "lily": ["[gently] You do keep hitting me, love.", "[softly] Again, dear? What did I do?", "[chuckles] I'm starting to take this personally."]}),
+    "again-countered": ("its third spell countered this game", {
+        "harry": ["[angry] Again?! Counter something else!", "[shouting] Every spell! Every single one!", "[groans] Countered. Again. Of course."],
+        "bill": ["[dryly] Countered. Again. How original.", "[sighs] The third one. I'm keeping a ledger.", "[calmly] Predictable. And still annoying."],
+        "lily": ["[sighs] Again, love? Let one resolve.", "[gently] You've countered everything, dear.", "[softly] Third time. I'm getting used to it."]}),
+    "not-again-sweep": ("the second board wipe of the game hits it", {
+        "harry": ["[groans] Another wipe?! Come on!", "[angry] Not again! I just rebuilt!", "[frustrated] Two wipes! Who builds a deck like this?!"],
+        "bill": ["[sighs] Another wipe. Rebuilding, again.", "[dryly] The second wipe. Tedious.", "[calmly] Wipe two. My patience is finite."],
+        "lily": ["[sighs] Not another wipe, dears.", "[gently] Oh, everything again? Oh dear.", "[softly] Twice now. My poor board."]}),
+    "heads-up": ("only two players remain and it is one of them", {
+        "harry": ["[excited] Just you and me! Let's finish this!", "[shouting] Two left! No more hiding!", "[laughs] Heads up. I like my odds."],
+        "bill": ["[calmly] Just the two of us. Finally.", "[dryly] Heads up. May the better deck win.", "[calmly] Two remain. Let us be efficient."],
+        "lily": ["[warmly] Just us now, dear. Shall we?", "[gently] Two left. Let's make it a good ending.", "[softly] Heads up, love. Good luck."]}),
+    "early-game": ("its turn begins in the first round", {
+        "harry": ["[laughs] Early game. Nobody's dead yet!", "[excited] First turns! Let's get moving!", "[smug] Setting up. Watch closely."],
+        "bill": ["[calmly] Early days. Everyone develops.", "[dryly] The opening. Ramp, ramp, pass.", "[calmly] Turn one. Patience, all."],
+        "lily": ["[warmly] Early yet, dears. Settle in.", "[gently] Still setting up, loves.", "[softly] The quiet part. Enjoy it."]}),
+    "long-game": ("the game has run past turn fourteen", {
+        "harry": ["[groans] This game is taking forever!", "[frustrated] Somebody win already!", "[laughs] Still going? Fine. I've got time."],
+        "bill": ["[dryly] Turn fourteen. Riveting.", "[sighs] A long game. Someone should end it.", "[calmly] The grind. My favourite phase."],
+        "lily": ["[chuckles] We've been here a while, dears.", "[gently] Long game. Anyone winning?", "[softly] Shall we wrap this up, loves?"]}),
+    "someone-wins": ("a board that could end the game next turn", {
+        "harry": ["[shouting] Somebody's winning this turn! Do something!", "[angry] They're about to win! Wake up!", "[shouting] That board is lethal! Answers, now!"],
+        "bill": ["[calmly] Someone wins next turn unless we act.", "[dryly] The end approaches. Any answers?", "[calmly] That board is lethal. Respond, or lose."],
+        "lily": ["[gasps] Someone's about to win, dears.", "[gently] This is the turn, loves. Do something.", "[softly] That board ends us, dears."]}),
+    "take-the-deal": ("accepts a truce", {
+        "harry": ["[laughs] Deal. For one turn. Then you're mine.", "[smug] Fine. Deal. Don't push it.", "[laughs] Okay, okay. Truce. For now."],
+        "bill": ["[calmly] Agreed. This turn only.", "[dryly] A truce. I'll hold you to it.", "[calmly] Very well. We have terms."],
+        "lily": ["[warmly] Deal, love. Be good.", "[gently] Peace it is, dear.", "[softly] Agreed, dear. For now."]}),
+    "no-deal": ("refuses a truce", {
+        "harry": ["[laughs] No deal! You're the threat!", "[scoffs] Deal? With you? Never.", "[shouting] No truce! Not with that board!"],
+        "bill": ["[calmly] No. Your board says otherwise.", "[dryly] Declined. Politely.", "[calmly] I think not. Not today."],
+        "lily": ["[gently] I'm afraid not, dear.", "[chuckles] No deal, love. Not this time.", "[softly] I'd rather not, dear. Sorry."]}),
+    "you-promised": ("attacked by a seat it had a truce with", {
+        "harry": ["[angry] You promised! Liar!", "[shouting] We had a deal!", "[frustrated] Oh, so that's what your word is worth!"],
+        "bill": ["[dryly] We had an agreement. Noted.", "[calmly] So much for the truce.", "[sighs] A deal, broken. I shall remember."],
+        "lily": ["[gasps] You promised, love!", "[gently] We had a deal, dear. Shame.", "[softly] Oh. So much for our truce."]}),
+}
+
 # number lines: (family, template per lib) — {n} = the number in words, {N} capitalised
 NUMBER_TAGS = {
     "harry": lambda n: "[angry]" if n <= 10 else "[exhales]" if n <= 20 else "[smug]",
@@ -255,6 +299,8 @@ def build_manifest(lib: str) -> dict:
     ph = m["phrases"]
     for pid, (when, by) in PROCEDURAL.items():
         ph[pid] = {"category": "procedural", "when": when, "text": list(by[lib]), "source": "table-2026-09-10"}
+    for pid, (when, by) in ARC.items():
+        ph[pid] = {"category": "arc", "when": when, "text": list(by[lib]), "source": "table-arc-2026-09-10"}
     for n in LIFE_NUMBERS:
         ph[f"life-{n}"] = {"category": "number", "when": f"announces or answers its life total: {n}", "text": [life_line(lib, n)], "source": "table-2026-09-10"}
     for n in HAND_NUMBERS:

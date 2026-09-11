@@ -253,6 +253,106 @@
    ],
    "source": "table-2026-09-10"
   },
+  "grudge": {
+   "category": "arc",
+   "when": "hit by the same seat for the third time this game",
+   "text": [
+    "[angry] You again?! Pick on someone else!",
+    "[shouting] Every time! It's always me!",
+    "[frustrated] What did I ever do to you?!"
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "again-countered": {
+   "category": "arc",
+   "when": "its third spell countered this game",
+   "text": [
+    "[angry] Again?! Counter something else!",
+    "[shouting] Every spell! Every single one!",
+    "[groans] Countered. Again. Of course."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "not-again-sweep": {
+   "category": "arc",
+   "when": "the second board wipe of the game hits it",
+   "text": [
+    "[groans] Another wipe?! Come on!",
+    "[angry] Not again! I just rebuilt!",
+    "[frustrated] Two wipes! Who builds a deck like this?!"
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "heads-up": {
+   "category": "arc",
+   "when": "only two players remain and it is one of them",
+   "text": [
+    "[excited] Just you and me! Let's finish this!",
+    "[shouting] Two left! No more hiding!",
+    "[laughs] Heads up. I like my odds."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "early-game": {
+   "category": "arc",
+   "when": "its turn begins in the first round",
+   "text": [
+    "[laughs] Early game. Nobody's dead yet!",
+    "[excited] First turns! Let's get moving!",
+    "[smug] Setting up. Watch closely."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "long-game": {
+   "category": "arc",
+   "when": "the game has run past turn fourteen",
+   "text": [
+    "[groans] This game is taking forever!",
+    "[frustrated] Somebody win already!",
+    "[laughs] Still going? Fine. I've got time."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "someone-wins": {
+   "category": "arc",
+   "when": "a board that could end the game next turn",
+   "text": [
+    "[shouting] Somebody's winning this turn! Do something!",
+    "[angry] They're about to win! Wake up!",
+    "[shouting] That board is lethal! Answers, now!"
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "take-the-deal": {
+   "category": "arc",
+   "when": "accepts a truce",
+   "text": [
+    "[laughs] Deal. For one turn. Then you're mine.",
+    "[smug] Fine. Deal. Don't push it.",
+    "[laughs] Okay, okay. Truce. For now."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "no-deal": {
+   "category": "arc",
+   "when": "refuses a truce",
+   "text": [
+    "[laughs] No deal! You're the threat!",
+    "[scoffs] Deal? With you? Never.",
+    "[shouting] No truce! Not with that board!"
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "you-promised": {
+   "category": "arc",
+   "when": "attacked by a seat it had a truce with",
+   "text": [
+    "[angry] You promised! Liar!",
+    "[shouting] We had a deal!",
+    "[frustrated] Oh, so that's what your word is worth!"
+   ],
+   "source": "table-arc-2026-09-10"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",

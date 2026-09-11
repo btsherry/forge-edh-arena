@@ -52,7 +52,7 @@ class TableLibraries(unittest.TestCase):
                     self.assertLessEqual(len(t.split("]", 1)[1].split()), 10, f"{lib}/{pid}: {t!r}")
                 self.assertEqual(len(set(ph["text"])), len(ph["text"]), f"{lib}/{pid}: wordings differ")
             self.assertEqual(cats["number"], 45 + 11, f"{lib}: life 1-40 + 45/50/60/80/100, hand 0-10")
-            self.assertGreaterEqual(cats["procedural"], 20)
+            self.assertGreaterEqual(cats["procedural"], 20); self.assertEqual(cats["arc"], 10, f"{lib}: the memory and arc lines (phase D)")
         for n in list(range(1, 41)) + [45, 50, 60, 80, 100]:
             self.assertIn(f"life-{n}", ids)
         for n in range(11):
@@ -125,7 +125,7 @@ class RenderedTable(unittest.TestCase):
                         self.assertTrue(0.4 <= secs <= 6.0, f"{lib}/table/{stem}: {secs:.1f}s")
                     self.assertTrue((REAL_VOICES / lib / "table" / "raw" / f"{stem}.wav").exists(), f"{lib}/table/raw/{stem}.wav")
                     n += 1
-            self.assertEqual(n, 290, lib)
+            self.assertEqual(n, 290 + 30, lib)
 
 
 class _TableCase(_TreeCase):
@@ -171,7 +171,98 @@ class _TableCase(_TreeCase):
 
     def _spoken(self, seat, pid, ctx=None, chain=None):
         item = {"kind": "bark", "stock": pid, "text": "", "seat": seat, "library": self.r.lib_for(seat, pid), "ctx": ctx or {}, "chain": chain}
+        self.r._roll_turn(self.r._last_snapshot.get("turn") or 3)
         self.r.after_spoken(item)
+
+
+class MemoryAndArc(_TableCase):
+    """Phase D: the table remembers — who keeps hitting whom, the third counter, the
+    second wipe, two players left, the opening and the grind, a lethal board, and a
+    truce struck then broken."""
+
+    def _prime(self):
+        self._snap(3, 1, events=[{"seq": 1, "kind": "cast", "turn": 2, "seat": 1, "spell": "x", "cmc": 1}]); self.r.queue.clear()
+        return [{"seq": 1, "kind": "cast", "turn": 2, "seat": 1, "spell": "x", "cmc": 1}]
+
+    def test_the_third_hit_from_the_same_seat_is_a_grudge(self):
+        ev = self._prime()
+        seq = 2
+        for turn in (3, 7, 11):
+            ev.append({"seq": seq, "kind": "damage", "turn": turn, "seat": 2, "amount": 4, "combat": True, "from": [1]}); seq += 1
+            self._snap(turn, 1, events=ev)
+            got = self._barks()
+            if turn < 11:
+                self.assertEqual(got, [("take-it", "bill/table", 2)], f"turn {turn}: a plain hit")
+            else:
+                self.assertEqual(got, [("grudge", "bill/table", 2)], "the third hit from seat 1: 'you again?!' instead")
+        self.assertEqual(self.r._hits_from[2][1], 3)
+        ev.append({"seq": seq, "kind": "damage", "turn": 12, "seat": 2, "amount": 4, "combat": True, "from": [0, 1]})
+        self._snap(12, 0, events=ev)
+        self.assertEqual(self.r._hits_from[2][1], 3, "a hit from two sources is nobody's grudge")
+
+    def test_the_third_counter_and_the_second_wipe(self):
+        ev = self._prime()
+        for i, turn in enumerate((3, 4, 5), 2):
+            ev.append({"seq": i, "kind": "countered", "turn": turn, "seat": 1, "spell": f"s{i}", "by": 2})
+            self._snap(turn, 1, events=ev)
+            got = self._barks()
+            self.assertEqual(got, [("counter", "bill", 2)] if turn < 5 else [("again-countered", "harry/table", 1)], f"turn {turn}: {got}")
+        ev.append({"seq": 5, "kind": "left", "turn": 6, "by": 2, "cards": ["a", "b", "c"], "seats": [0, 1], "commanders": [], "n": 3, "tokens": 0})
+        self._snap(6, 2, events=ev)
+        self.assertEqual([r["stock"] for r in self._records("queued", "bark")][-2:], ["sweep", "got-swept"]); self.r.queue.clear()
+        ev.append({"seq": 6, "kind": "left", "turn": 10, "by": 2, "cards": ["d", "e", "f"], "seats": [0, 1], "commanders": [], "n": 3, "tokens": 0})
+        self._snap(10, 2, events=ev)
+        self.assertEqual([r["stock"] for r in self._records("queued", "bark")][-2:], ["sweep", "not-again-sweep"], "the second wipe of the game")
+        self.assertEqual(self.r.queue[-1]["library"], "harry/table")
+
+    def test_heads_up_once_when_two_remain(self):
+        seats = [self._seat(0), self._seat(1), self._seat(2), self._seat(3)]
+        seats[2]["eliminated"] = True; seats[3]["eliminated"] = True
+        self._snap(9, 0, seats=seats)
+        got = [(q["stock"], q["library"], q["seat"], q["ctx"]["targets"]) for q in self.r.queue if q["kind"] == "bark"]
+        self.assertIn(("heads-up", "harry/table", 1, [0]), got, f"seat 1 and the human remain: {got}")
+        self.r.queue.clear()
+        self._snap(9, 0, seats=seats)
+        self.assertEqual(self._barks(), [], "said once")
+
+    def test_the_opening_the_grind_and_a_lethal_board(self):
+        os.environ["ARENA_BARKS_OPENER_P"] = "1"
+        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        self.r.rng.random = lambda: 0.0; self.r.rng.shuffle = lambda x: None
+        two = lambda i: self._seat(i, lands=((False, False)))  # noqa: E731
+        self._snap(1, 0, seats=[two(i) for i in range(4)]); self.r.queue.clear()
+        self._snap(2, 1, seats=[two(i) for i in range(4)])
+        self.assertEqual(self._barks(), [("early-game", "harry/table", 1)], "turn two: the opening")
+        seats = [self._seat(0, life=12), self._seat(1, creatures=(("A", False), ("B", False), ("C", False), ("D", False), ("E", False))), self._seat(2), self._seat(3)]
+        cands = self.r.patter_candidates({"turn": 14, "activeSeat": 2, "seats": seats}, [1, 2])
+        ids = {(sp, pid, tgt) for sp, pid, tgt, _ in cands}
+        self.assertIn((2, "someone-wins", 1), ids, "fifteen power against a seat at twelve: someone wins next turn")
+        self.assertNotIn((1, "someone-wins", 1), ids, "nobody says it about themself")
+        self.assertIn((1, "long-game", None), ids); self.assertIn((2, "long-game", None), ids)
+        cands = self.r.patter_candidates({"turn": 9, "activeSeat": 2, "seats": [self._seat(i) for i in range(4)]}, [1, 2])
+        self.assertFalse(any(pid in ("someone-wins", "long-game") for _, pid, _, _ in cands))
+
+    def test_a_truce_struck_is_remembered_and_a_truce_broken_is_called_out(self):
+        self._snap(3, 1); self.r.queue.clear()
+        self.r.rng.random = lambda: 0.01
+        self._spoken(1, "deal", ctx={"targets": [2]})
+        q = [x for x in self.r.queue if x["kind"] == "bark"][0]
+        self.assertEqual((q["stock"], q["library"]), ("promise", "bill"), "the first reply on the table (promise; take-the-deal and no-deal are the others)")
+        self.r.queue.clear()
+        self._spoken(2, "promise", ctx=q["ctx"], chain=q["chain"])
+        self.assertEqual(self.r._deals[(1, 2)], 3); self.assertEqual(self.r._deals[(2, 1)], 3)
+        self.r.queue.clear()
+        ev = [{"seq": 1, "kind": "cast", "turn": 2, "seat": 1, "spell": "x", "cmc": 1}]
+        self._snap(3, 1, events=ev); self.r.queue.clear()
+        ev.append({"seq": 2, "kind": "attack", "turn": 5, "seat": 1, "attackers": 1, "power": 2, "defenders": [2]})
+        self._snap(5, 1, events=ev)
+        self.assertEqual(self._barks(), [("you-promised", "bill/table", 2)], "seat 1 attacks the seat it promised")
+        self.assertNotIn((1, 2), self.r._deals, "the broken deal is forgotten")
+        self.r._deals[(1, 2)] = self.r._deals[(2, 1)] = 3
+        self.r._roll_turn(12)
+        self.assertEqual(self.r._deals, {}, "a truce is forgotten after eight turns")
+        # the human strikes a deal via a seat's promise? the human has no voice: only seat-seat truces are recorded
+        self.assertEqual(len([p for p in self.r._deals if 0 in p]), 0)
 
 
 class TableRuntime(_TableCase):

@@ -132,6 +132,15 @@ def report(d: str) -> tuple[str, bool]:
     if voice:
         vc = collections.Counter(v.get("event") for v in voice)
         bk = collections.Counter(v.get("event") for v in voice if v.get("kind") == "bark")
+        spoke_barks = [v for v in voice if v.get("event") == "spoke" and v.get("kind") == "bark"]
+        anchored = sum(1 for v in spoke_barks if v.get("source") in ("event", "procedural", "card", "opener", "recap", "advice"))
+        duties = [v["duty"] for v in voice if v.get("event") == "spoke" and isinstance(v.get("duty"), (int, float))]
+        if spoke_barks:
+            # round 31: the mix — Ben's goal is an anchored share past 60 % at about 8 lines/min; the duty is the governor's measure
+            srcs = collections.Counter(v.get("source") or "?" for v in spoke_barks)
+            out.append(f"  table talk: {len(spoke_barks)} seat lines — anchored {anchored / len(spoke_barks):.0%} "
+                       f"({', '.join(f'{k} {n}' for k, n in srcs.most_common())})"
+                       + (f" | mean duty {sum(duties) / len(duties):.2f}" if duties else ""))
         out.append(f"  voice: spoke {vc.get('spoke', 0)} | skipped {vc.get('skipped', 0)} | dropped {vc.get('dropped', 0)} | "
                    f"render failures {vc.get('render-failed', 0)} | live paused {vc.get('live-paused', 0)}"
                    f" | barks spoke {bk.get('spoke', 0)} / skipped {bk.get('skipped', 0)} / dropped {bk.get('dropped', 0)}")
