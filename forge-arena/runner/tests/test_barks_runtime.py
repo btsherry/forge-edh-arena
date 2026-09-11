@@ -377,6 +377,11 @@ class BarkRuntime(_TreeCase):
         ev.append({"seq": 4, "kind": "cast", "turn": 3, "seat": 1, "spell": "Third", "commander": False, "cmc": 1})
         self._observer(3, 1, events=ev); self.r.scan_observer()
         self.assertEqual(self._queued(), [("bark", "play-slower", "bill", 2)], "three spells in thirty seconds: slow down")
+        self.r.queue.clear(); self.r._roll_turn(4)
+        ev.append({"seq": 5, "kind": "cast", "turn": 4, "seat": 1, "spell": "Mid", "commander": False, "cmc": 5})
+        self._observer(4, 1, events=ev); self.r.scan_observer()
+        called = [r["stock"] for r in self._records("queued", "bark") if r.get("source") == "event"]
+        self.assertTrue(any(x in ("nice-play", "read-that", "oh-no") for x in called[-2:]), f"a five-mana spell draws a bystander's reaction: {called}")
 
     def test_left_events_removal_sweep_and_lost_commander_with_the_right_speaker(self):
         self._prime()
@@ -637,6 +642,22 @@ class InteractionChains(_TreeCase):
         self.assertEqual(self.r.queue, [], "the orphaned retort is gone")
         self.assertIn("exchange interrupted by the advisor", self._records("dropped", "bark")[-1]["why"])
 
+    def test_recency_a_line_said_lately_is_a_weak_pick_and_a_seat_avoids_a_reply_it_just_used(self):
+        self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
+        self.r._said_at["cards-in-hand"] = self.clock.t - 60
+        seats = [{"seat": i, "name": f"s{i}", "eliminated": False, "life": 40, "handSize": 7 if i == 2 else 3, "battlefield": []} for i in range(4)]
+        cands = self.r.patter_candidates({"turn": 3, "activeSeat": 1, "seats": seats}, [1, 2])
+        w = {pid: wgt for _, pid, _, wgt in cands if pid == "cards-in-hand"}["cards-in-hand"]
+        self.assertLess(w, 0.5, "said a minute ago: weak")
+        self.r._said_at["cards-in-hand"] = self.clock.t - 600
+        cands = self.r.patter_candidates({"turn": 3, "activeSeat": 1, "seats": seats}, [1, 2])
+        self.assertEqual({pid: wgt for _, pid, _, wgt in cands if pid == "cards-in-hand"}["cards-in-hand"], 2.0, "ten minutes ago: full weight")
+        # chain: Bill's brace was used lately -> the table order puts it behind fresher replies
+        self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
+        self.r._seat_said_at[(2, "brace")] = self.clock.t - 30
+        self._spoken(1, "big-swing", ctx={"targets": [2]})
+        self.assertEqual(self._queued()[0][1], "why-me", "brace is stale for Bill; the next target reply is used")
+
     def test_chains_off_with_barks_off(self):
         self.r.barks_mode = "off"
         self._spoken(1, "big-swing", ctx={"targets": [2]})
@@ -673,6 +694,7 @@ class PatterClock(_TreeCase):
         os.environ["ARENA_CHATTER"] = "rowdy"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
         self.assertEqual(r.patter_gap, (2.5, 3.5)); self.assertEqual(r.chains.max_hops, 4, "a livelier table talks back one more time")
+        self.assertEqual(r.barks_cooldown, 5.0, "the seat guard follows the dial")
 
     def test_a_slow_seat_is_told_to_play_faster_by_someone_else(self):
         self._board(active=2)

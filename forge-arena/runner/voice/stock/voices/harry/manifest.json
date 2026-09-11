@@ -264,7 +264,9 @@
         "[excited] Exactly! What he said!",
         "[laughs] Yes! Finally, someone gets it!",
         "[shouting] Damn right!",
-        "[smug] Told you. Told all of you."
+        "[smug] Told you. Told all of you.",
+        "[shouting] Yes! Exactly that!",
+        "[laughs] What they said!"
       ],
       "when": "agrees with what another seat just said",
       "category": "reply",
@@ -275,7 +277,9 @@
         "[scoffs] Yeah, no.",
         "[angry] You're wrong, and loud about it!",
         "[laughs] Not a chance.",
-        "[shouting] Nonsense!"
+        "[shouting] Nonsense!",
+        "[angry] Wrong! Dead wrong!",
+        "[scoffs] That's nonsense and you know it."
       ],
       "when": "disagrees with what another seat just said",
       "category": "reply",
@@ -286,7 +290,9 @@
         "[scoffs] Oh, please.",
         "[laughs] That's it? That's your move?",
         "[angry] Cute. Real cute.",
-        "[mischievously] Somebody's proud of themselves."
+        "[mischievously] Somebody's proud of themselves.",
+        "[scoffs] Big deal.",
+        "[laughs] Wow. Impressive. Not."
       ],
       "when": "brushes off a boast, a counter or a removal aimed at it",
       "category": "reply",
@@ -297,7 +303,9 @@
         "[angry] Say that to my face!",
         "[laughs] Big words! Back them up!",
         "[shouting] Come get some, then!",
-        "[smug] Talk's cheap. Swing."
+        "[smug] Talk's cheap. Swing.",
+        "[laughs] Look who's talking!",
+        "[angry] Worry about your own board!"
       ],
       "when": "answers a taunt or a call-out aimed at it",
       "category": "reply",
@@ -341,7 +349,9 @@
         "[laughs] Ha! Ha ha!",
         "[laughs] Oh, that's good!",
         "[laughs] Ha! Brilliant!",
-        "[laughs] I love this table!"
+        "[laughs] I love this table!",
+        "[laughs] Ha! Oh, that's rich!",
+        "[laughs] Ha ha ha! Yes!"
       ],
       "when": "just laughs at what happened or was said",
       "category": "reply",
@@ -438,7 +448,9 @@
     "whats-your-life": {
       "text": [
         "[shouting] What are you at?!",
-        "[smug] Life total. Now."
+        "[smug] Life total. Now.",
+        "[angry] Life! How much!",
+        "[laughs] You're low, aren't you?"
       ],
       "when": "asked of the leader or a low seat",
       "category": "patter",
@@ -446,7 +458,9 @@
     },
     "cards-in-hand": {
       "text": [
-        "[angry] How many cards is that?!"
+        "[angry] How many cards is that?!",
+        "[laughs] Save some cards for the rest of us!",
+        "[angry] Play something already, you're holding a whole deck!"
       ],
       "when": "a seat holding six or more cards",
       "category": "patter",
@@ -455,7 +469,9 @@
     "youre-the-threat": {
       "text": [
         "[shouting] You're the threat! Everybody hear me?",
-        "[laughs] Look at them. That's the problem."
+        "[laughs] Look at them. That's the problem.",
+        "[shouting] Everybody! Look at that board!",
+        "[laughs] Oh, you're the problem now."
       ],
       "when": "naming the table leader",
       "category": "patter",
@@ -463,7 +479,9 @@
     },
     "im-not-the-threat": {
       "text": [
-        "[scoffs] Me?! Look at their board!"
+        "[scoffs] Me?! Look at their board!",
+        "[shouting] Not me! I'm harmless!",
+        "[laughs] I'm way behind! Look at them!"
       ],
       "when": "the leader denying it",
       "category": "reply",
@@ -487,7 +505,9 @@
     },
     "low-life-jab": {
       "text": [
-        "[smug] Low life. Bold strategy."
+        "[smug] Low life. Bold strategy.",
+        "[laughs] You're almost dead!",
+        "[smug] Living dangerously."
       ],
       "when": "a seat at ten or less",
       "category": "patter",
@@ -495,7 +515,9 @@
     },
     "kill-that": {
       "text": [
-        "[shouting] Somebody kill that thing!"
+        "[shouting] Somebody kill that thing!",
+        "[angry] Kill it! Kill it now!",
+        "[shouting] Will someone deal with that?!"
       ],
       "when": "a big creature on another board",
       "category": "patter",
@@ -503,7 +525,9 @@
     },
     "deal": {
       "text": [
-        "[laughs] Don't hit me, I don't hit you. Deal?"
+        "[laughs] Don't hit me, I don't hit you. Deal?",
+        "[laughs] Truce? Just for a turn?",
+        "[smug] Leave me alone and I'll forget you exist."
       ],
       "when": "politics",
       "category": "patter",
@@ -545,7 +569,9 @@
     "you-suck": {
       "text": [
         "[shouting] You suck!",
-        "[laughs] You. Suck."
+        "[laughs] You. Suck.",
+        "[angry] You are the worst!",
+        "[laughs] Terrible. Just terrible."
       ],
       "when": "light name-calling",
       "category": "reply",
@@ -554,7 +580,9 @@
     "you-wish": {
       "text": [
         "[laughs] You wish!",
-        "[scoffs] In your dreams."
+        "[scoffs] In your dreams.",
+        "[laughs] Ha! Keep dreaming!",
+        "[scoffs] As if!"
       ],
       "when": "light name-calling",
       "category": "reply",
@@ -570,7 +598,9 @@
     },
     "nerd": {
       "text": [
-        "[laughs] Nerd."
+        "[laughs] Nerd.",
+        "[laughs] Absolute nerd.",
+        "[scoffs] Nerd alert."
       ],
       "when": "light name-calling",
       "category": "reply",
@@ -578,7 +608,9 @@
     },
     "shut-it": {
       "text": [
-        "[angry] Oh, shut it."
+        "[angry] Oh, shut it.",
+        "[shouting] Zip it!",
+        "[angry] Nobody asked you!"
       ],
       "when": "light name-calling",
       "category": "reply",
@@ -586,7 +618,9 @@
     },
     "bite-me": {
       "text": [
-        "[scoffs] Bite me."
+        "[scoffs] Bite me.",
+        "[angry] Make me!",
+        "[scoffs] Whatever."
       ],
       "when": "light name-calling",
       "category": "reply",
@@ -595,7 +629,9 @@
     "nothing-happening": {
       "text": [
         "[angry] Nothing's happening! Somebody do something!",
-        "[scoffs] Boring."
+        "[scoffs] Boring.",
+        "[scoffs] Is anyone going to do anything?",
+        "[angry] Wake up! Play a card!"
       ],
       "when": "nothing is happening",
       "category": "patter",
@@ -619,7 +655,9 @@
     },
     "this-is-fine": {
       "text": [
-        "[laughs] This is fine. Everything's fine."
+        "[laughs] This is fine. Everything's fine.",
+        "[scoffs] Totally fine. Not worried at all.",
+        "[laughs] Everything's under control. Probably."
       ],
       "when": "filler",
       "category": "patter",
@@ -627,7 +665,9 @@
     },
     "good-hand": {
       "text": [
-        "[smug] I like my hand."
+        "[smug] I like my hand.",
+        "[smug] This hand? Oh, this hand is filthy.",
+        "[laughs] You do not want to see what I'm holding."
       ],
       "when": "filler, a bluff",
       "category": "patter",

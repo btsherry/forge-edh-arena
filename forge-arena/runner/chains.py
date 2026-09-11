@@ -80,7 +80,7 @@ def resolve_role(role: str, speaker: int, ctx: dict, chain: dict | None, voiced:
 
 
 def plan_reply(table: ChainTable, spoken: dict, chain: dict | None, voiced: dict, human_seat: int,
-               leader_of, said_this_turn: set, rng, turn) -> dict | None:
+               leader_of, said_this_turn: set, rng, turn, recent: set | None = None) -> dict | None:
     """What (if anything) answers the line just spoken. Returns a reply plan:
     {"seat": int | "joshua", "id": str, "hop": int, "origin": int, "p": float} or None.
     The caller rolls `p` itself so the decision is recorded either way."""
@@ -95,6 +95,14 @@ def plan_reply(table: ChainTable, spoken: dict, chain: dict | None, voiced: dict
     ctx = spoken.get("ctx") or {}
     options = list(table.invites.get(opener, []))
     rng.shuffle(options)
+    # a reply the answering seat used recently goes to the back of the line (soft; the per-turn rule is hard)
+    recent = recent or set()
+    if recent:
+        fresh, stale = [], []
+        for opt in options:
+            who = resolve_role(opt.get("role", ""), speaker, ctx, chain, voiced, human_seat, leader_of, rng)
+            (stale if who is not None and who != human_seat and (who, opt.get("reply", "")) in recent else fresh).append(opt)
+        options = fresh + stale
     for opt in options:
         who = resolve_role(opt.get("role", ""), speaker, ctx, chain, voiced, human_seat, leader_of, rng)
         if who is None:

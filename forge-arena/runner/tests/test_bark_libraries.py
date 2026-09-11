@@ -46,7 +46,7 @@ class SharedVocabulary(unittest.TestCase):
             for pid, ph in m["phrases"].items():
                 self.assertIsInstance(ph["text"], list, f"{lib}/{pid}: wordings are a list")
                 if ph.get("category") == "bark" or ph.get("source") == "elevenlabs-v3-2026-09-10-replies":
-                    self.assertEqual(len(ph["text"]), 4, f"{lib}/{pid}: the barks and the first ten replies carry four wordings")
+                    self.assertGreaterEqual(len(ph["text"]), 4, f"{lib}/{pid}: the barks and the first ten replies carry at least four wordings")
                 self.assertEqual(len(set(ph["text"])), len(ph["text"]), f"{lib}/{pid}: wordings must differ")
                 self.assertTrue(ph.get("when"), f"{lib}/{pid}: 'when' guides the advisor")
                 for t in ph["text"]:

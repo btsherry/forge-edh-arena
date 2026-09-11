@@ -91,6 +91,8 @@ CHAIN_HOP_PRIORITY = 3.5
 # An AI seat's elimination is voiced ONCE: by the dying seat itself (its `eliminated`
 # bark, at once) with this probability, else by Joshua's "A player has been eliminated."
 ELIM_SEAT_P = 0.7
+RECENT_S = 240.0          # a line said within this window is stale for the patter pick and for replies
+RECENT_WEIGHT = 0.15      # its patter weight is multiplied by this
 # Seat barks, the table-talk design (Ben, 2026-09-10 — "playing with the AI should
 # feel like sitting at the table with people"): every turn boundary has ONE owner.
 # The recap of an AI seat's turn belongs to that seat (its retrospective line,
@@ -804,6 +806,11 @@ class VoiceRunner:
         self.barks_hit = int(os.environ.get("ARENA_BARKS_HIT", "8"))
         self._said_this_turn: set[tuple[int, str]] = set()
         self._said_turn = None
+        # Recency (game 44: "cards in hand" ten times in sixteen minutes, "good hand"
+        # seven): a line said in the last RECENT_S is a weak candidate for anyone,
+        # and a seat avoids a reply it used recently. The per-turn rule stays hard.
+        self._said_at: dict[str, float] = {}                 # line id -> last time it was spoken (any seat)
+        self._seat_said_at: dict[tuple[int, str], float] = {}
         self._event_seq = None      # last snapshot event seq consumed; None until the first read
         # The patter clock (Ben, 2026-09-10: "someone should say something every 5-7
         # seconds"): when the queue is empty and nothing has played for a randomized
@@ -882,6 +889,7 @@ class VoiceRunner:
             self.barks_swing = max(3, round(self.barks_swing / k))
             self.barks_hit = max(4, round(self.barks_hit / k))
             self.patter_gap = (max(2.0, self.patter_gap[0] / k), max(2.5, self.patter_gap[1] / k))
+            self.barks_cooldown = max(3.0, self.barks_cooldown / k)   # game 44: the 10 s guard silenced 15 barks at rowdy
         if k >= 1.5 and self.chains is not None:
             self.chains.max_hops += 1           # a livelier table talks back one more time
 
@@ -1003,6 +1011,8 @@ class VoiceRunner:
             self._advisor_spoke_at = self.clock()
         if item.get("seat") is not None and item.get("library"):
             self._bark_spoken_at[int(item["seat"])] = self.clock()
+            self._said_at[item["stock"]] = self.clock()
+            self._seat_said_at[(int(item["seat"]), item["stock"])] = self.clock()
         self.record("spoke", kind=item["kind"], text=item["text"][:200], stock=item["stock"], seconds=round(wav_seconds(path), 2),
                     chars_used=self.renderer.chars_used, library=item.get("library") or "", seat=item.get("seat"),
                     file=path.name)
@@ -1034,7 +1044,9 @@ class VoiceRunner:
         turn = self._said_turn
         chain = item.get("chain") if item.get("chain") and item["chain"].get("turn") == turn else None
         voiced = {int(k): v["library"] for k, v in self.seat_libraries.items() if int(k) not in self.eliminated}
-        plan = plan_reply(self.chains, item, chain, voiced, self.human_seat, self.leader_of, self._said_this_turn, self.rng, turn)
+        now = self.clock()
+        recent = {k for k, t in self._seat_said_at.items() if now - t < RECENT_S}
+        plan = plan_reply(self.chains, item, chain, voiced, self.human_seat, self.leader_of, self._said_this_turn, self.rng, turn, recent)
         if plan is None:
             self._chain = None
             return
@@ -1188,18 +1200,20 @@ class VoiceRunner:
             big = max(boards, key=boards.get)
             if boards[big] >= 3 and list(boards.values()).count(boards[big]) == 1:
                 add("board-envy", big, 1.0)
-        # filler, always
+        # filler, always (a bluff about one's hand is rarer than the rest — game 44)
         for sp in living:
             out.append((sp, "nothing-happening", None, 1.0 / len(living)))
             out.append((sp, "this-is-fine", None, 1.0 / len(living)))
-            out.append((sp, "good-hand", None, 0.7 / len(living)))
+            out.append((sp, "good-hand", None, 0.3 / len(living)))
             out.append((sp, "what-turn", None, 0.4 / len(living)))
             tgt = [t for t in living if t != sp]
             if tgt:
                 out.append((sp, "deal", self.rng.choice(tgt), 0.8 / len(living)))
         if active is not None and int(active) in living:
             add("pass-already", int(active), 0.8)
-        return out
+        now = self.clock()
+        return [(sp, pid, tgt, w * (RECENT_WEIGHT if now - self._said_at.get(pid, -1e9) < RECENT_S else 1.0))
+                for sp, pid, tgt, w in out]
 
     def patter(self) -> None:
         if not self.patter_on or self.barks_mode == "off" or self.queue:
@@ -1270,10 +1284,12 @@ class VoiceRunner:
                     if seat != self.human_seat and self.library_for_seat(seat):
                         if e.get("commander"):
                             self.maybe_bark(seat, "commander-cast", turn=turn, source="event", ctx={"targets": []})
-                        elif int(e.get("cmc", 0)) >= 7:
+                        elif int(e.get("cmc", 0)) >= 5:
+                            # a big spell draws a bystander's reaction: wow at seven-plus, else admiration / read that / oh no
                             by = [x for x in self.seat_libraries if int(x) != seat and int(x) not in self.eliminated]
                             if by:
-                                self.maybe_bark(int(self.rng.choice(by)), "wow", turn=turn, source="event", ctx={"targets": [seat]})
+                                line = "wow" if int(e.get("cmc", 0)) >= 7 else self.rng.choice(["nice-play", "read-that", "oh-no"])
+                                self.maybe_bark(int(self.rng.choice(by)), line, turn=turn, source="event", ctx={"targets": [seat]})
                     # a flurry — three spells inside thirty seconds — earns "slow down" from someone else
                     now_t = time.time()
                     recent = [t for t in self._casts.get(seat, []) if now_t - t < 30] + [now_t]
