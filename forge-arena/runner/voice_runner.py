@@ -97,6 +97,26 @@ ELIM_SEAT_P = 0.7
 # start, rarely. A (seat, line) already said this turn is never said again.
 
 
+CHATTER_LEVELS = {"quiet": 0.5, "normal": 1.0, "lively": 1.5, "rowdy": 2.0}
+
+
+def chatter_level(raw: str | None) -> float:
+    """ARENA_CHATTER — one master dial for how much the table talks (Ben,
+    2026-09-10: "instead of trying to bake all of this just right anecdotally").
+    A name (quiet .5 / normal 1 / lively 1.5 / rowdy 2) or a number; 1 = the
+    knobs as written. Every frequency knob is multiplied by it (capped at 1),
+    the gap between lines divided by it (floor 3 s), the instant-reaction
+    thresholds divided by it (floors 3 power / 4 damage). Advice frequency —
+    model calls — is not chatter and is untouched."""
+    v = (raw or "normal").strip().lower()
+    if v in CHATTER_LEVELS:
+        return CHATTER_LEVELS[v]
+    try:
+        return max(0.0, min(4.0, float(v)))
+    except ValueError:
+        return 1.0
+
+
 def load_libraries(voices_dir: Path | None = None) -> dict[str, dict]:
     """{library: {"library", "voice", "temperament", "seat"}} from every
     voices/<name>/manifest.json; `seat` is the library's default seat."""
@@ -743,6 +763,7 @@ class VoiceRunner:
         self.renderer = Renderer(logs_dir / "cache" / "voice", log=self.say, fake_tts=fake_tts,
                                  record=self.record, clock=clock, rng=self.rng)
         self.player = player or Player(dry_run=dry_run, log=self.say)
+        self.chatter = chatter_level(os.environ.get("ARENA_CHATTER", "normal"))
         self.min_gap = float(os.environ.get("ARENA_VOICE_MIN_GAP", "8"))
         self.sfx_on = os.environ.get("ARENA_VOICE_SFX", "on").lower() != "off"
         # "Your move" (Ben, 2026-09-10: "cool the first time, okay the second, lame
@@ -781,6 +802,7 @@ class VoiceRunner:
         if self.color_mode not in ("off", "some", "all"):
             self.color_mode = "some"
         self.color_p = float(os.environ.get("ARENA_VOICE_COLOR_P", "0.5"))
+        self.apply_chatter()
         self.queue: list[dict] = []
         self.last_spoken_at = -1e9
         # Start at the END of the advisor's stream: a (re)started runner speaks
@@ -802,6 +824,21 @@ class VoiceRunner:
         self.human_seat = 0
         self._state_published = None
         self._live_published = None
+
+    def apply_chatter(self) -> None:
+        """Scale the frequency knobs by the chatter dial (see chatter_level)."""
+        k = self.chatter
+        if k == 1.0:
+            return
+        scale = lambda p: min(1.0, p * k)   # noqa: E731
+        self.barks_p, self.barks_opener_p = scale(self.barks_p), scale(self.barks_opener_p)
+        self.color_p, self.your_move_p = scale(self.color_p), scale(self.your_move_p)
+        if self.chains is not None:
+            self.chains.first_hop_p = scale(self.chains.first_hop_p)
+        if k > 0:
+            self.min_gap = max(3.0, self.min_gap / k)
+            self.barks_swing = max(3, round(self.barks_swing / k))
+            self.barks_hit = max(4, round(self.barks_hit / k))
 
     # -- output
     def say(self, msg: str) -> None:
@@ -1238,7 +1275,7 @@ class VoiceRunner:
             self.speak(item)
 
     def run(self) -> None:
-        self.say(f"[voice] up — stock {len(self.renderer.manifest.get('phrases', {}))} phrases, "
+        self.say(f"[voice] up — chatter={self.chatter:g}, stock {len(self.renderer.manifest.get('phrases', {}))} phrases, "
                  f"live={'on' if self.renderer.live else 'off (no ELEVENLABS_API_KEY)'}, min_gap={self.min_gap}s, "
                  f"fx={self.renderer.fx_mode}, format={self.renderer.format}, glitch={self.renderer.glitch}, sfx={'on' if self.sfx_on else 'off'}, color={self.color_mode}, "
                  f"your_move={self.your_move_mode}, barks={self.barks_mode}" + (f", chains p={self.chains.first_hop_p}/decay {self.chains.decay}/max {self.chains.max_hops}/gap {self.chains.gap_s}s" if self.chains else ", chains=off (no chains.json)")

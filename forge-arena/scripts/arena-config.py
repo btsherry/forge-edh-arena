@@ -49,6 +49,7 @@ KNOBS = {
     ],
     "voice": [
         ("ARENA_VOICE", "on", "the advisor's voice (arena-play --no-voice = off)"),
+        ("ARENA_CHATTER", "normal", "quiet | normal | lively | rowdy (or a number) — one dial for how much the table talks: scales every voice frequency below, shortens the gap, lowers the reaction thresholds; advice frequency is untouched"),
         ("ELEVENLABS_API_KEY", "", "live spoken advice needs it; stock phrases play without it"),
         ("ARENA_VOICE_FORMAT", "pcm_24000", "ElevenLabs output; PCM needs no decoder"),
         ("ARENA_VOICE_FX", "on", "on = film effects (ffmpeg when present, else the lite chain) | lite | off"),
@@ -74,7 +75,7 @@ KNOBS = {
         ("ARENA_BARKS_CHAIN_P", "0.6", "interaction chains: chance a spoken line gets a reply (the first hop)"),
         ("ARENA_BARKS_CHAIN_DECAY", "0.5", "each further hop multiplies the chance by this"),
         ("ARENA_BARKS_CHAIN_MAX", "3", "most hops in one exchange (reply, counter-reply, last word)"),
-        ("ARENA_BARKS_CHAIN_GAP", "0.5", "seconds between the lines of an exchange, a retort's beat (the normal gap is ARENA_VOICE_MIN_GAP)"),
+        ("ARENA_BARKS_CHAIN_GAP", "0.25", "seconds between the lines of an exchange, a retort's beat (the normal gap is ARENA_VOICE_MIN_GAP)"),
         ("ARENA_BARKS_CHAIN_HUMAN_P", "0.5", "multiplier on a chain the human's own play started (so the table doesn't feel like it gangs up)"),
     ],
     "backends (optional, API-billed)": [

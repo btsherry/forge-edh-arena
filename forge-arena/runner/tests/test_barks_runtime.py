@@ -407,6 +407,21 @@ class BarkRuntime(_TreeCase):
         self._observer(16, 0); self.r.scan_observer()
         self.assertEqual(self.r.queue[-1]["kind"], "your_move")
 
+    def test_chatter_dial_scales_every_frequency_the_gap_and_the_thresholds(self):
+        self.assertEqual([vr.chatter_level(x) for x in ("quiet", "normal", "lively", "rowdy", "1.25", "bogus", None)], [0.5, 1.0, 1.5, 2.0, 1.25, 1.0, 1.0])
+        for k in ("ARENA_BARKS", "ARENA_BARKS_P", "ARENA_BARKS_OPENER_P", "ARENA_VOICE_YOUR_MOVE_P", "ARENA_VOICE_COLOR_P", "ARENA_VOICE_MIN_GAP"):
+            os.environ.pop(k, None)
+        os.environ["ARENA_CHATTER"] = "rowdy"
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.assertEqual((r.barks_p, r.barks_opener_p, r.color_p, r.your_move_p), (1.0, 0.7, 1.0, 1.0), "×2, capped at 1")
+        self.assertEqual((r.min_gap, r.barks_swing, r.barks_hit), (4.0, 3, 4), "gap halved, thresholds halved (floors 3 / 4)")
+        os.environ["ARENA_CHATTER"] = "quiet"
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.assertAlmostEqual(r.barks_p, 0.425); self.assertEqual((r.min_gap, r.barks_swing, r.barks_hit), (16.0, 12, 16))
+        os.environ["ARENA_CHATTER"] = "normal"
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.assertEqual((r.barks_p, r.min_gap, r.barks_swing), (0.85, 8.0, 6), "normal = the knobs as written")
+
     def test_defaults_from_the_environment(self):
         for k in ("ARENA_BARKS", "ARENA_VOICE_YOUR_MOVE", "ARENA_BARKS_P", "ARENA_BARKS_COOLDOWN", "ARENA_VOICE_YOUR_MOVE_P",
                   "ARENA_BARKS_OPENER_P", "ARENA_BARKS_SWING", "ARENA_BARKS_HIT"):
@@ -434,7 +449,7 @@ class InteractionChains(_TreeCase):
 
     def test_table_loaded_and_the_banner_says_so(self):
         self.assertIsNotNone(self.r.chains)
-        self.assertEqual((self.r.chains.first_hop_p, self.r.chains.decay, self.r.chains.max_hops, self.r.chains.gap_s), (0.6, 0.5, 3, 0.5))
+        self.assertEqual((self.r.chains.first_hop_p, self.r.chains.decay, self.r.chains.max_hops, self.r.chains.gap_s), (0.6, 0.5, 3, 0.25))
         # the BarkRuntime tree has no chains.json: chains off, nothing else changes
         self.assertIsNone(vr.ChainTable.load(Path(self.tmp.name) / "nowhere"))
 
@@ -445,7 +460,7 @@ class InteractionChains(_TreeCase):
         self._spoken(1, "big-swing", ctx={"targets": [2], "aggressor": None})
         self.assertEqual(self._queued(), [("bark", "brace", "bill", 2)], "the defender braces")
         hop1 = self.r.queue[0]
-        self.assertEqual((hop1["gap"], hop1["chain"]["hop"], hop1["chain"]["origin"]), (0.5, 1, 1))
+        self.assertEqual((hop1["gap"], hop1["chain"]["hop"], hop1["chain"]["origin"]), (0.25, 1, 1))
         self.r.queue.clear()
         self._spoken(2, "brace", ctx=hop1["ctx"], chain=hop1["chain"])
         self.assertEqual(self._queued(), [("bark", "laugh", "harry", 1)], "the attacker laughs it off")
@@ -481,7 +496,7 @@ class InteractionChains(_TreeCase):
         self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
         self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
         self._spoken(1, "landed-hit", ctx={"targets": [0], "aggressor": None})   # the seat hit the HUMAN
-        self.assertEqual([(q["kind"], q["stock"], q["gap"]) for q in self.r.queue], [("quip", "ouch", 0.5)], "Joshua's stock quip, at the chain's pace")
+        self.assertEqual([(q["kind"], q["stock"], q["gap"]) for q in self.r.queue], [("quip", "ouch", 0.25)], "Joshua's stock quip, at the chain's pace")
         self.assertIsNone(self.r._chain, "nobody answers Joshua")
         self.r.queue.clear()
         self.r.after_spoken({"kind": "quip", "stock": "ouch", "text": "", "seat": None, "library": "", "ctx": {}, "chain": None})
@@ -520,6 +535,12 @@ class InteractionChains(_TreeCase):
         self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
         self._spoken(1, "big-swing", ctx={"targets": [2]})                     # the target is dead: no brace, and no bystander is left
         self.assertEqual(self._queued(), [])
+
+    def test_chatter_scales_the_first_hop_too(self):
+        os.environ["ARENA_CHATTER"] = "rowdy"
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.assertEqual(r.chains.first_hop_p, 1.0)
+        self.assertEqual(r.chains.decay, 0.5, "the decay is not chatter")
 
     def test_chains_off_with_barks_off(self):
         self.r.barks_mode = "off"

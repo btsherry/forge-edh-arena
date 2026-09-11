@@ -1,10 +1,10 @@
 {
   "schema": "arena.voice-chains/1",
-  "note": "Interaction chains (Ben, 2026-09-10): a spoken line invites replies from ROLES, each reply an atom from the replier's own library. The runner composes: opener -> hop 1 -> hop 2 ..., one line at a time, rolling first_hop_p * decay^(hop-1); a chain dies at max_hops or when the turn changes. Roles: target = the seat(s) the opener addressed (from the event), aggressor = the seat that caused the opener's grief, bystander = another voiced seat, leader = the highest-life other seat, origin = the chain's first speaker (hops >= 2). Nobody replies to themselves; nobody says the same line twice in a turn. Tuned after game 39: no single reply type may dominate — the bystander scoff was five openers' default and became a tic. Ben (game 41): responses and counter-responses must be tight in wall-clock — gap_s 0.5 from the end of the previous line, and the runner polls every 0.1 s while an exchange is pending — a retort lands in 0.5–0.6 s.",
+  "note": "Interaction chains (Ben, 2026-09-10): a spoken line invites replies from ROLES, each reply an atom from the replier's own library. The runner composes: opener -> hop 1 -> hop 2 ..., one line at a time, rolling first_hop_p * decay^(hop-1); a chain dies at max_hops or when the turn changes. Roles: target = the seat(s) the opener addressed (from the event), aggressor = the seat that caused the opener's grief, bystander = another voiced seat, leader = the highest-life other seat, origin = the chain's first speaker (hops >= 2). Nobody replies to themselves; nobody says the same line twice in a turn. Tuned after game 39: no single reply type may dominate — the bystander scoff was five openers' default and became a tic. Ben (game 41): responses and counter-responses must be tight in wall-clock — gap_s 0.25 from the end of the previous line, and the runner polls every 0.1 s while an exchange is pending — a retort lands in 0.25–0.35 s (Ben, game 42).",
   "first_hop_p": 0.6,
   "decay": 0.5,
   "max_hops": 3,
-  "gap_s": 0.5,
+  "gap_s": 0.25,
   "human_trigger_mult": 0.5,
   "invites": {
     "big-swing": [
