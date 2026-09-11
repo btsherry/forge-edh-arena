@@ -91,6 +91,8 @@ KNOBS = {
     "teardown watcher": [
         ("ARENA_AUTOSTOP_POLL", "5", "seconds between game-over checks"),
         ("ARENA_AUTOSTOP_GUI_GONE_LINGER", "10", "seconds after the GUI vanishes before teardown"),
+        ("ARENA_AUTOSTOP_VOICE_WAIT", "60", "at game over, how long to wait for the voice's final sign-off before tearing down"),
+        ("ARENA_AUTOSTOP_AFTER_VOICE", "5", "seconds after the voice's last line before teardown (replaces the linger when a voice runner is up)"),
     ],
 }
 SECRET = {"ELEVENLABS_API_KEY", "OPENROUTER_API_KEY", "ARENA_OAI_API_KEY"}

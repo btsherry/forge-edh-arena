@@ -61,6 +61,18 @@ while :; do
   sleep "$POLL"
 done
 
+# Voice (Ben, 2026-09-10): if a voice runner is alive, wait for its final sequence
+# (the winner's line, Joshua's verdict and sign-off; mailbox/seat-0-voice/final.json)
+# for up to ARENA_AUTOSTOP_VOICE_WAIT seconds, then stop ARENA_AUTOSTOP_AFTER_VOICE
+# seconds after the last line — instead of the fixed linger.
+VOICE_DIR="$(dirname "$STATE")/seat-0-voice"   # beside the snapshot (tests point STATE at a scratch dir)
+VOICE_HB="$VOICE_DIR/heartbeat"; VOICE_FINAL="$VOICE_DIR/final.json"
+voice_alive() { [ -f "$VOICE_HB" ] && [ $(( $(date +%s) - $(stat -f %m "$VOICE_HB" 2>/dev/null || echo 0) )) -lt 15 ]; }
+if [ "$why" = "match over (engine reports gameOver)" ] && voice_alive; then
+  waited=0; max="${ARENA_AUTOSTOP_VOICE_WAIT:-60}"
+  while [ ! -f "$VOICE_FINAL" ] && [ "$waited" -lt "$max" ]; do sleep 1; waited=$((waited + 1)); done
+  if [ -f "$VOICE_FINAL" ]; then LINGER="${ARENA_AUTOSTOP_AFTER_VOICE:-5}"; say "voice finished its sign-off after ${waited}s"; fi
+fi
 say "$why — stopping in ${LINGER}s (a hand arena-stop.sh now is fine too)"
 sleep "$LINGER"
 if stopped_already; then say "stopped by someone else meanwhile — nothing to do"; rm -f "$OWN_PID_FILE"; exit 0; fi

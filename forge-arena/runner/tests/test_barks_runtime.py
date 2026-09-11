@@ -412,10 +412,6 @@ class BarkRuntime(_TreeCase):
         self._observer(3, 1, events=ev, elim=(2,)); self.r.scan_observer()
         self.assertEqual([(q["kind"], q["stock"], q.get("seat")) for q in self.r.queue], [("event", "player-eliminated", None), ("bark", "kill", 1)],
                          "…and Harry, who hit Bill last this turn, takes the kill")
-        self.r.queue.clear()
-        ev.append({"seq": 3, "kind": "gameover", "turn": 3, "winner": 1})
-        self._observer(3, 1, events=ev, elim=(2,)); self.r.scan_observer()
-        self.assertIn(("bark", "win", "harry", 1), self._queued())
         self.r.queue.clear(); self.r.eliminated.clear()
         seats = [{"seat": i, "name": f"s{i}", "eliminated": False, "life": 40, "pool": 9 if i == 1 else 0} for i in range(4)]
         (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 4, "activeSeat": 1, "seats": seats, "events": ev}))
@@ -423,6 +419,40 @@ class BarkRuntime(_TreeCase):
         self.assertIn(("bark", "big-mana", "harry", 1), self._queued())
         self.r.queue.clear(); self.r.scan_observer()
         self.assertEqual([q for q in self._queued() if q[1] == "big-mana"], [], "still floating: said once")
+        # game over: the winner's line leads the final sequence (the ring names the winner)
+        ev.append({"seq": 3, "kind": "gameover", "turn": 4, "winner": 1})
+        self._observer(4, 1, events=ev, elim=(2, 3), game_over=True); self.r.scan_observer()
+        self.assertEqual([(q["kind"], q["stock"], q.get("seat")) for q in self.r.queue][:1], [("game_over", "win", 1)])
+
+    def test_game_over_plays_the_winner_then_joshua_then_nothing(self):
+        """Game 44: twelve patter and chain lines after Joshua's sign-off."""
+        self._observer(3, 1); self.r.scan_observer(); self._step()
+        self._advisor(kind="bark", seat=2, id="taunt", turn=9); self.r.scan_advisor()
+        self.assertEqual(len(self.r.queue), 1, "a bark is pending when the game ends…")
+        seats = [{"seat": i, "name": f"s{i}", "eliminated": i != 1, "life": 40 if i == 1 else 0} for i in range(4)]
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 9, "activeSeat": 1, "gameOver": True, "winner": "s1", "seats": seats,
+                                                                       "events": [{"seq": 5, "kind": "gameover", "turn": 9, "winner": 1}]}))
+        self.r.scan_observer()
+        self.assertEqual([(q["kind"], q["stock"], q.get("seat")) for q in self.r.queue],
+                         [("game_over", "win", 1), ("game_over", "strange-game", None), ("game_over", "game-over-gg", None)],
+                         "…it is dropped; Harry's win, Joshua's verdict, Joshua's sign-off")
+        self.assertTrue(self.r.final_locked)
+        self._step(3, dt=0.5)                                   # game_over items ignore the gap; the sequence drains
+        self.assertEqual(self.r.queue, [])
+        self.assertTrue((self.mailbox / "seat-0-voice" / "final.json").exists(), "the watcher is told the voice is done")
+        # afterwards: patter, events, advisor barks and chains are all silenced
+        self._advisor(kind="bark", seat=1, id="taunt", turn=9); self.r.scan_advisor()
+        self.r.after_spoken({"kind": "bark", "stock": "win", "text": "", "seat": 1, "library": "harry", "ctx": {}, "chain": None})
+        self.clock.t += 30; self.r.patter()
+        self.r.enqueue("color", text="A last word.")
+        self.assertEqual(self.r.queue, [], "nothing after the sign-off")
+        self.assertTrue(any(r.get("why") == "game over — nothing after the sign-off" for r in self._records("dropped")))
+        # the human wins: no seat line, Joshua's you-win pair only
+        r2 = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        seats = [{"seat": i, "name": f"s{i}", "eliminated": i != 0, "life": 40 if i == 0 else 0} for i in range(4)]
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 9, "activeSeat": 0, "gameOver": True, "winner": "s0", "seats": seats, "events": []}))
+        r2.scan_observer()
+        self.assertEqual([q["stock"] for q in r2.queue], ["you-win", "game-over-gg"])
 
     def test_opener_fires_at_a_seats_turn_start_at_its_own_probability(self):
         self.r.barks_opener_p = 0.35

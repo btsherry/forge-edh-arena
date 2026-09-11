@@ -1522,6 +1522,20 @@ class VoiceRunner:
                 self.say("[voice] live lines back on")
         self._live_published = live
 
+    def publish_final(self) -> None:
+        """mailbox/seat-0-voice/final.json once the final sequence has played:
+        the teardown watcher (arena-autostop) stops the table a few seconds after
+        the last line instead of a fixed linger (Ben, game 44)."""
+        try:
+            d = self.mailbox / "seat-0-voice"
+            d.mkdir(parents=True, exist_ok=True)
+            f = d / "final.json"
+            if not f.exists():
+                f.write_text(json.dumps({"done": round(time.time(), 3)}))
+                self.say("[voice] final sequence done — the table may be torn down")
+        except OSError:
+            pass
+
     def step(self) -> None:
         self.publish_state()
         if not self.enabled():
@@ -1536,6 +1550,8 @@ class VoiceRunner:
         item = self.next_item()
         if item is not None:
             self.speak(item)
+        elif self.final_locked and not self.queue:
+            self.publish_final()
 
     def run(self) -> None:
         self.say(f"[voice] up — chatter={self.chatter:g}, stock {len(self.renderer.manifest.get('phrases', {}))} phrases, "
