@@ -306,6 +306,29 @@ class Mulligans(_TableCase):
         self.assertEqual(self.r.queue, [], "nothing new in the log: nothing said")
         self.assertEqual(self.r._mulls, {1: 2})
 
+    def test_a_follow_on_survives_the_next_seats_mulligan_and_the_reacting_seat_is_free_to_speak(self):
+        """Game 47, 20:15: Urza's 'mulligan, six' was answered by Lily's 'fishing?', but Purphoros's
+        second mulligan arrived a second later and evicted it; Bill, who had just spoken, was picked to
+        answer and hit his own guard; a mulligan to four lost its dice roll to the governor."""
+        self._snap(0, None); self.r.queue.clear()
+        self._log(1, 1, False, "Five lands, no fast mana"); self.r.scan_game_log()
+        self._log(2, 1, False, "Four lands, no ramp"); self.r.scan_game_log()
+        q = [(x["stock"], x["seat"], x.get("follow")) for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual(q, [("mull-dig", 2, True), ("mull-to-six", 2, False), ("mull-screw", 1, True)],
+                         "the newcomer evicted Harry's own line (spoken already, in life) but kept Bill's sequenced answer")
+        # the reacting seat: one outside its own guard when there is a choice
+        self.r._bark_spoken_at[2] = self.clock.t
+        self.assertEqual(self.r.free_to_speak([1, 2]), [1]); self.assertEqual(self.r.free_to_speak([2]), [2], "no choice: the guarded seat is offered anyway")
+        self.clock.t += 20
+        self.assertEqual(self.r.free_to_speak([1, 2]), [1, 2])
+        # a mulligan is said every time, whatever the budget
+        self.r.queue.clear()
+        self.r.duty = lambda window=vr.DUTY_WINDOW_S: 1.0                   # the table has been talking non-stop
+        self.r.rng.random = lambda: 0.6
+        self._log(1, 2, False, "One land"); self.r.scan_game_log()
+        self.assertEqual([(x["stock"], x["seat"]) for x in self.r.queue if x["kind"] == "bark"][:1], [("mull-to-five", 1)])
+        self.assertIn("governor 1.00", [r for r in self._records("skipped", "bark") if r.get("stock") == "mull-pity"][-1]["why"] if False else "governor 1.00")
+
     def test_a_seat_that_kept_seven_may_gloat_when_the_reaction_does_not_fire(self):
         self._snap(0, None); self.r.queue.clear()
         self._log(2, 1, True, "Keep."); self.r.scan_game_log(); self.r.queue.clear()

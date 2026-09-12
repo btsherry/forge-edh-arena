@@ -129,7 +129,7 @@ IDLE_SLOWDOWN = 3.0       # Ben (2026-09-11): "a little patter during the human 
 # Mulligans (Ben, 2026-09-11): the seats' keep/mulligan answers land in game.jsonl with the brain's reason;
 # the reaction follows the reason — lands/mana -> mull-screw, digging for a piece -> mull-dig, else pity.
 MULL_LINE = {1: "mull-to-six", 2: "mull-to-five", 3: "mull-to-four"}
-MULL_P = {"own": 0.8, "keep-seven": 0.35, "react": 0.7, "risky": 0.6, "gloat": 0.4}
+MULL_P = {"own": 1.0, "keep-seven": 0.35, "react": 0.7, "risky": 0.8, "gloat": 0.4}
 MULL_SCREW_WORDS = ("land", "mana", "colour", "color", "source")
 MULL_DIG_WORDS = ("dig", "tutor", "combo", "engine", "piece", "fast mana", "stronger", "better seven", "fish")
 # The cards sub-library (round 31, runner/voice/card_lines.py): game changers, commanders
@@ -1171,7 +1171,7 @@ class VoiceRunner:
                 if self.maybe_bark(seat, pid, turn=turn, source="event", p=MULL_P["own"], ctx={"targets": []}) and others:
                     # the table answers in the register the reason earns, right behind the seat's line
                     react = self.mull_reason(str(r.get("why") or ""))
-                    who = int(self.rng.choice(others))
+                    who = int(self.rng.choice(self.free_to_speak(others)))
                     if not self.maybe_bark(who, react, turn=turn, source="event", p=MULL_P["react"], ctx={"targets": [seat]}, gap=0.4, evict=False) \
                             and k >= 2 and self._kept_seven:
                         self.maybe_bark(int(self.rng.choice(self._kept_seven)), "mull-gloat", turn=turn, source="event", p=MULL_P["gloat"],
@@ -1182,7 +1182,7 @@ class VoiceRunner:
                     self._kept_seven.append(seat)
                     self.maybe_bark(seat, "keep-seven", turn=turn, source="event", p=MULL_P["keep-seven"], ctx={"targets": []})
                 elif k >= 2 and others:
-                    self.maybe_bark(int(self.rng.choice(others)), "mull-risky", turn=turn, source="event", p=MULL_P["risky"], ctx={"targets": [seat]})
+                    self.maybe_bark(int(self.rng.choice(self.free_to_speak(others))), "mull-risky", turn=turn, source="event", p=MULL_P["risky"], ctx={"targets": [seat]})
 
     def human_mulligans(self, d: dict) -> None:
         """The human's keep is not in the game log; the first snapshot of turn one shows the
@@ -1215,6 +1215,14 @@ class VoiceRunner:
                 return any(b'"event": "spoke"' in line and b'"stock": "startup"' in line for line in f)
         except OSError:
             return False
+
+    def free_to_speak(self, seats: list[int]) -> list[int]:
+        """The seats among `seats` outside their own guard (game 47: Bill was asked to
+        answer a mulligan one second after his own line and hit the guard); all of them
+        when none is free."""
+        now = self.clock()
+        free = [s for s in seats if now - self._bark_spoken_at.get(int(s), -1e9) >= self.barks_cooldown]
+        return free or list(seats)
 
     def _table_who(self) -> dict[int, str]:
         out = {k: who_for_deck(self.address, v) for k, v in self._seat_decks.items()}
@@ -1351,16 +1359,17 @@ class VoiceRunner:
         item = {"kind": kind, "text": text, "stock": stock, "seq": seq,
                 "prio": prio if prio is not None else (CHAIN_HOP_PRIORITY if chain else PRIORITY.get(kind, 9)),
                 "at": self.clock(), "expires": self.clock() + ttl, "library": library, "seat": seat,
-                "ctx": ctx or {}, "gap": gap, "chain": chain, "source": source or ("chain" if chain else kind)}
+                "ctx": ctx or {}, "gap": gap, "chain": chain, "source": source or ("chain" if chain else kind), "follow": not evict}
         if kind == "bark" and not evict:
             pass                                                            # a follow-on: it queues behind what is already pending
         elif kind == "bark":
             # one pending bark, newest wins — by class (round 31): a reaction to a board
-            # event clears everything pending; a retort clears other retorts and filler,
-            # never a reaction; the advisor's afterthoughts and patter clear only their peers
+            # event clears everything pending except a sequenced follow-on (game 47: Purphoros's
+            # second mulligan swallowed Lily's answer to Urza's first); a retort clears other
+            # retorts and filler, never a reaction; the advisor's afterthoughts and patter clear only their peers
             cls = self._bark_class(item)
             if cls == "anchored":
-                self.queue = [q for q in self.queue if q["kind"] != "bark"]
+                self.queue = [q for q in self.queue if q["kind"] != "bark" or q.get("follow")]
             elif cls == "chain":
                 self.queue = [q for q in self.queue if q["kind"] != "bark" or self._bark_class(q) == "anchored"]
             else:
@@ -1620,7 +1629,7 @@ class VoiceRunner:
             return False
         # an explicit p (the opener's own knob) always applies; otherwise "all" means always, "some" means ARENA_BARKS_P
         chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
-        g = self.governor(optional=source in OPTIONAL_SOURCES)
+        g = 1.0 if pid in MULL_LINE.values() else self.governor(optional=source in OPTIONAL_SOURCES)   # a mulligan is always worth the breath
         chance = min(1.0, chance * g)
         if self.rng.random() >= chance:
             self.record("skipped", kind="bark", why=f"dice ({source}, p={chance:.2f}, governor {g:.2f})", stock=pid, seat=seat, source=source)
