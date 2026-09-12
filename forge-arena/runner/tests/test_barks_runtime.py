@@ -438,10 +438,11 @@ class BarkRuntime(_TreeCase):
         self.assertIn(("bark", "big-mana", "harry", 1), self._queued())
         self.r.queue.clear(); self.r.scan_observer()
         self.assertEqual([q for q in self._queued() if q[1] == "big-mana"], [], "still floating: said once")
-        # game over: the winner's line leads the final sequence (the ring names the winner)
+        # game over: the seats that died in that last moment exit first (Ben, 2026-09-11), then the winner's line leads the final sequence
         ev.append({"seq": 3, "kind": "gameover", "turn": 4, "winner": 1})
         self._observer(4, 1, events=ev, elim=(2, 3), game_over=True); self.r.scan_observer()
-        self.assertEqual([(q["kind"], q["stock"], q.get("seat")) for q in self.r.queue][:1], [("game_over", "win", 1)])
+        order = [(q["kind"], q["stock"], q.get("seat")) for q in sorted(self.r.queue, key=lambda q: (q["prio"], q["at"]))]
+        self.assertEqual(order[:3], [("event", "eliminated", 2), ("event", "player-eliminated", None), ("game_over", "win", 1)], order)
 
     def test_game_over_plays_the_winner_then_joshua_then_nothing(self):
         """Game 44: twelve patter and chain lines after Joshua's sign-off."""
@@ -452,11 +453,12 @@ class BarkRuntime(_TreeCase):
         (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 9, "activeSeat": 1, "gameOver": True, "winner": "s1", "seats": seats,
                                                                        "events": [{"seq": 5, "kind": "gameover", "turn": 9, "winner": 1}]}))
         self.r.scan_observer()
-        self.assertEqual([(q["kind"], q["stock"], q.get("seat")) for q in self.r.queue],
-                         [("game_over", "win", 1), ("game_over", "strange-game", None), ("game_over", "game-over-gg", None)],
-                         "…it is dropped; Harry's win, Joshua's verdict, Joshua's sign-off")
+        self.assertEqual([(q["kind"], q["stock"], q.get("seat")) for q in sorted(self.r.queue, key=lambda q: (q["prio"], q["at"]))],
+                         [("event", "eliminated", 2), ("event", "player-eliminated", None),
+                          ("game_over", "win", 1), ("game_over", "strange-game", None), ("game_over", "game-over-gg", None)],
+                         "…it is dropped; the seats that fell exit first (Bill's own line, Joshua's for the voiceless seat), then Harry's win, Joshua's verdict, Joshua's sign-off")
         self.assertTrue(self.r.final_locked)
-        self._step(3, dt=0.5)                                   # game_over items ignore the gap; the sequence drains
+        self._step(5, dt=1.0)                                   # the exits at a short gap, then game_over items ignore the gap; the sequence drains
         self.assertEqual(self.r.queue, [])
         self.assertTrue((self.mailbox / "seat-0-voice" / "final.json").exists(), "the watcher is told the voice is done")
         # afterwards: patter, events, advisor barks and chains are all silenced
@@ -471,7 +473,8 @@ class BarkRuntime(_TreeCase):
         seats = [{"seat": i, "name": f"s{i}", "eliminated": i != 0, "life": 40 if i == 0 else 0} for i in range(4)]
         (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 9, "activeSeat": 0, "gameOver": True, "winner": "s0", "seats": seats, "events": []}))
         r2.scan_observer()
-        self.assertEqual([q["stock"] for q in r2.queue], ["you-win", "game-over-gg"])
+        self.assertEqual([q["stock"] for q in sorted(r2.queue, key=lambda q: (q["prio"], q["at"]))],
+                         ["eliminated", "eliminated", "player-eliminated", "you-win", "game-over-gg"], "every fallen seat exits, then the pair")
 
     def test_opener_fires_at_a_seats_turn_start_at_its_own_probability(self):
         self.r.barks_opener_p = 0.35
@@ -507,6 +510,30 @@ class BarkRuntime(_TreeCase):
         self.assertEqual([q["stock"] for q in self.r.queue if q["kind"] == "event"], ["player-eliminated"])
 
     # ---- your move: on | some | off
+    def test_several_eliminations_at_once_all_get_their_exit_line_even_at_game_over(self):
+        """Ben (2026-09-11): 'when many players die at almost the same time they should all get to play
+        their elimination barks' — before this, 'event' items evicted each other and a game-over in the
+        same snapshot skipped the eliminations entirely."""
+        self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
+        self.r.rng.random = lambda: 0.0                                    # the seats' own lines
+        self._observer(4, 3, elim=(1, 2)); self.r.scan_observer()
+        got = [(q["kind"], q["stock"], q["seat"]) for q in self.r.queue if q["kind"] == "event"]
+        self.assertEqual(got, [("event", "eliminated", 1), ("event", "eliminated", 2)], "both exit lines, in seat order")
+        self.r.queue.clear(); self.r.eliminated.clear()
+        # the last two die as the game ends: their exits play before the winner and Joshua, and nothing is dropped
+        self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
+        self.r.enqueue("color", text="a recap that is now moot", ttl=40.0)
+        self._observer(5, 3, game_over=True, elim=(1, 2)); self.r.scan_observer()
+        order = [(q["kind"], q["stock"], q.get("seat")) for q in sorted(self.r.queue, key=lambda q: (q["prio"], q["at"]))]
+        self.assertEqual(order[:2], [("event", "eliminated", 1), ("event", "eliminated", 2)], f"the exits first: {order}")
+        self.assertEqual([k for k, _, _ in order[2:]], ["game_over", "game_over"], "then Joshua's verdict and sign-off (the human won: no seat line)")
+        self.assertTrue(self.r.final_locked)
+        dropped = [r for r in self._records("dropped") if r.get("why") == "game over"]
+        self.assertEqual([r.get("kind") for r in dropped], ["color"], "the recap was dropped; the exits were kept")
+        self._step(); self._step(dt=1); self._step(dt=1); self._step(dt=1)
+        self.assertEqual(self.player.played[:2], ["eliminated.wav", "eliminated.wav"], "both exits played, in order")
+        self.assertEqual(self.r.queue, [], "then the pair (no audio in this tree: skipped, not stuck)")
+
     def test_dead_players_do_not_talk(self):
         self._observer(3, 1); self.r.scan_observer(); self._step()
         self.r.rng.random = lambda: 0.1

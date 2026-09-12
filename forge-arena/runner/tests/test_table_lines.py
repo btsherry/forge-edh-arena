@@ -54,6 +54,7 @@ class TableLibraries(unittest.TestCase):
             self.assertEqual(cats["number"], 45 + 11, f"{lib}: life 1-40 + 45/50/60/80/100, hand 0-10")
             self.assertGreaterEqual(cats["procedural"], 20); self.assertEqual(cats["arc"], 10, f"{lib}: the memory and arc lines (phase D)")
             self.assertEqual(cats["mulligan"], 9, f"{lib}: keep-seven, mull-to-six/five/four, pity, dig, screw, risky, gloat")
+            self.assertEqual(cats["loop"], 2, f"{lib}: loop (the table) and looping (the owner)")
         for n in list(range(1, 41)) + [45, 50, 60, 80, 100]:
             self.assertIn(f"life-{n}", ids)
         for n in range(11):
@@ -126,7 +127,7 @@ class RenderedTable(unittest.TestCase):
                         self.assertTrue(0.4 <= secs <= 6.0, f"{lib}/table/{stem}: {secs:.1f}s")
                     self.assertTrue((REAL_VOICES / lib / "table" / "raw" / f"{stem}.wav").exists(), f"{lib}/table/raw/{stem}.wav")
                     n += 1
-            self.assertEqual(n, 290 + 30 + 27, lib)
+            self.assertEqual(n, 290 + 30 + 27 + 6, lib)
 
 
 class _TableCase(_TreeCase):

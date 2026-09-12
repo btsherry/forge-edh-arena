@@ -846,6 +846,30 @@
     "role": "target",
     "reply": "bite-me"
    }
+  ],
+  "loop": [
+   {
+    "role": "target",
+    "reply": "scoff"
+   },
+   {
+    "role": "target",
+    "reply": "laugh"
+   },
+   {
+    "role": "bystander",
+    "reply": "agree"
+   }
+  ],
+  "looping": [
+   {
+    "role": "bystander",
+    "reply": "kill-that"
+   },
+   {
+    "role": "bystander",
+    "reply": "oh-no"
+   }
   ]
  },
  "joshua_replies": {

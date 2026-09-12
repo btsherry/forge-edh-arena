@@ -443,6 +443,26 @@
    ],
    "source": "table-mulligan-2026-09-11"
   },
+  "loop": {
+   "category": "loop",
+   "when": "sees another seat recast or bounce the same card again — a loop, an engine, not removal",
+   "text": [
+    "[sighs] Round and round, dear.",
+    "[gently] That's a loop, loves. Break it.",
+    "[softly] Again? Oh, we're in trouble."
+   ],
+   "source": "table-loop-2026-09-11"
+  },
+  "looping": {
+   "category": "loop",
+   "when": "recasts or bounces its own card again",
+   "text": [
+    "[mischievously] Round we go again, dears.",
+    "[warmly] Once more, with feeling.",
+    "[chuckles] And again. Sorry, loves."
+   ],
+   "source": "table-loop-2026-09-11"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",

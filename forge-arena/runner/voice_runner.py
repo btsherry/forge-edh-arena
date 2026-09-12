@@ -112,7 +112,8 @@ TABLE_P = {"grudge": 0.6, "again-countered": 0.7, "not-again-sweep": 0.7, "heads
            "cast": 0.45, "cast-big": 0.6, "in-response": 0.7, "poke": 0.5, "attack-you": 0.45, "no-blocks": 0.4, "take-it": 0.35,
            "sure": 0.25, "hold-on": 0.4, "life": 0.5, "address": 0.5}
 # game 46 (turns 8-13): "come on, land" four times in seven minutes — these lines are said by a seat at most once in RECENT_S
-RARE_REPEATS = {"come-on-land", "thinking", "holding-mana", "tapped-out", "mana-up", "land-go", "early-game", "long-game"}
+RARE_REPEATS = {"come-on-land", "thinking", "holding-mana", "tapped-out", "mana-up", "land-go", "early-game", "long-game", "loop", "looping"}
+LOOP_AT = 2               # the second time the same card is cast or bounced by its owner in one turn: a loop, not a fresh event
 LIFE_FOLLOWUP = {"that-hurt": 0.6, "take-it": 0.5, "low-life": 0.5}          # the speaker announces its total right after
 STATE_ANSWERS = {"whats-your-life": "life", "low-life-jab": "life", "cards-in-hand": "hand", "empty-hand": "hand"}
 ADDRESS_SWAP = {"kill-that": ("hit", "target"), "archenemy": ("hit", "target"), "youre-the-threat": ("threat", "target"),
@@ -1009,6 +1010,8 @@ class VoiceRunner:
         self._sweeps = 0
         self._deals: dict[tuple[int, int], object] = {}       # (a, b) -> the turn the truce was struck (both directions)
         self._heads_up_said = False
+        self._gc_cast_seen: set[tuple[int, str]] = set()       # (seat, card) game changers already crowed about this game
+        self._card_events_turn: dict[tuple[int, str], int] = {}  # (seat, card) -> casts + self-bounces this turn (a loop past LOOP_AT)
         self._mulls: dict[int, int] = {}                       # seat -> mulligans taken (from game.jsonl MULLIGAN records)
         self._kept_seven: list[int] = []
         self._human_mull_done = False
@@ -1375,7 +1378,11 @@ class VoiceRunner:
             else:
                 self.queue = [q for q in self.queue if q["kind"] != "bark" or self._bark_class(q) == "anchored"
                               or self._bark_class(q) == "chain" or q["prio"] < item["prio"]]
-        elif kind in ("advice", "your_move", "quip", "event", "color"):
+        elif kind == "event" and evict:
+            # Joshua's generic "a player has been eliminated" stands in once for any number of voiceless seats;
+            # a seat's own exit line (queued with evict=False) is never displaced (Ben, 2026-09-11)
+            self.queue = [q for q in self.queue if q["kind"] != "event" or q.get("follow") or q["stock"] != stock]
+        elif kind in ("advice", "your_move", "quip", "color"):
             self.queue = [q for q in self.queue if q["kind"] != kind]       # one pending item per kind: newest wins
         self.queue.append(item)
 
@@ -1699,12 +1706,31 @@ class VoiceRunner:
             except (TypeError, ValueError):
                 self._deals.pop(pair, None)
 
+    def loop_tick(self, seat: int, card: str, turn) -> bool:
+        """One more cast or self-bounce of `card` by `seat` this turn. At LOOP_AT the
+        table calls the loop (a bystander, then the owner may relish it). True when
+        this event is part of a loop and the card's own lines should stay quiet."""
+        self._roll_turn(turn)                                   # the turn's counters roll before this event counts
+        key = (int(seat), card)
+        n = self._card_events_turn.get(key, 0) + 1
+        self._card_events_turn[key] = n
+        if n < LOOP_AT:
+            return False
+        if n == LOOP_AT and "loop" in self.table_ids:
+            by = [int(x) for x in self.seat_libraries if int(x) != int(seat) and int(x) not in self.eliminated]
+            if by:
+                said = self.maybe_bark(int(self.rng.choice(self.free_to_speak(by))), "loop", turn=turn, source="event", ctx={"targets": [int(seat)]})
+                if said and self.library_for_seat(int(seat)):
+                    self.maybe_bark(int(seat), "looping", turn=turn, source="event", p=0.5, ctx={"targets": []}, gap=0.4, evict=False)
+        return True
+
     def _roll_turn(self, turn) -> None:
         """The no-repeat set is per game turn."""
         if turn is not None and turn != self._said_turn:
             self._said_turn = turn
             self._said_this_turn = set()
             self._chain = None                           # a new turn ends any exchange
+            self._card_events_turn = {}                  # the loop counters are per turn too
         self._forget_stale_deals(turn)
 
     # -- colour: Joshua speaks after the human's turn
@@ -1996,7 +2022,9 @@ class VoiceRunner:
                 done.add(pieces)
                 ctx = {"card": key, "card_kind": "combo"} if key else {}
                 if int(seat) != self.human_seat and self.library_for_seat(int(seat)):
-                    self.maybe_bark(int(seat), "engine-online", turn=d.get("turn"), source="event", ctx={"targets": [], **ctx})
+                    # the announcement queues behind whatever is pending and survives the flood of piece events that
+                    # follows (game 47: Urza's Hullbreaker alarm was queued at 20:36:27 and evicted by the Vault lines)
+                    self.maybe_bark(int(seat), "engine-online", turn=d.get("turn"), source="event", ctx={"targets": [], **ctx}, gap=0.5, evict=False)
                 elif int(seat) == self.human_seat:
                     by = [x for x in self.seat_libraries if int(x) not in self.eliminated]
                     if by:
@@ -2113,7 +2141,11 @@ class VoiceRunner:
                         cmc = int(e.get("cmc", 0))
                         card: dict = {}
                         if spell in self.game_changers.get(seat, set()):
-                            line = "gc-react"
+                            if self.loop_tick(seat, spell, turn) or (seat, spell) in self._gc_cast_seen:
+                                line = ""                                          # a recast: the table has met this card
+                            else:
+                                line = "gc-react"
+                            self._gc_cast_seen.add((seat, spell))
                             card = {"card": card_slug(spell), "card_kind": "gc"}
                         elif e.get("commander"):
                             line = self.rng.choice(["oh-no", "brace", "read-that"])
@@ -2134,9 +2166,13 @@ class VoiceRunner:
                         if seat in self._turn_start:
                             self._turn_start[seat]["casts"] += 1        # the turn summary: not a "land, go" turn
                         if spell in self.game_changers.get(seat, set()):
-                            # one of the bracket's game changers: the caster crows, the table reacts (chain)
-                            self.maybe_bark(seat, "game-changer", turn=turn, source="event",
-                                            ctx={"targets": [], "card": card_slug(spell), "card_kind": "gc"})
+                            # one of the bracket's game changers: the caster crows ONCE a game, the table reacts (chain);
+                            # a recast is quiet, and the second cast in a turn is a loop (game 47: Urza's Mana Vault, six times a turn)
+                            looping = self.loop_tick(seat, spell, turn)
+                            if not looping and (seat, spell) not in self._gc_cast_seen:
+                                self.maybe_bark(seat, "game-changer", turn=turn, source="event",
+                                                ctx={"targets": [], "card": card_slug(spell), "card_kind": "gc"})
+                            self._gc_cast_seen.add((seat, spell))
                         elif e.get("commander"):
                             self.maybe_bark(seat, "commander-cast", turn=turn, source="event",
                                             ctx={"targets": [], "card": self._who.get(seat, ""), "card_kind": "cmd"})
@@ -2162,6 +2198,11 @@ class VoiceRunner:
                     ai_owners = [o for o in owners if o != self.human_seat and self.library_for_seat(o)]
                     gone_gc = [c for c in (e.get("cards") or []) if any(c in self.game_changers.get(o, set()) for o in owners)]
                     said_gone = False
+                    if gone_gc and by is not None and int(by) in owners:
+                        # the owner bounced or sacrificed its own game changer: no relief — an engine turning (game 47)
+                        for c in gone_gc:
+                            self.loop_tick(int(by), c, turn)
+                        gone_gc = []
                     if gone_gc and n < 3:
                         # a game changer left the board: someone other than its owner is glad
                         others = [x for x in self.seat_libraries if int(x) not in owners and int(x) not in self.eliminated]
@@ -2284,8 +2325,8 @@ class VoiceRunner:
         for s in seats:
             if s.get("eliminated") and s.get("seat") not in self.eliminated:
                 self.eliminated.add(s.get("seat"))
-                if d.get("gameOver"):
-                    continue  # the game-over pair covers the last elimination
+                if d.get("gameOver") and s.get("seat") == self.human_seat:
+                    continue  # the game-over pair covers the human's own last stand; the AI seats still get their exit lines
                 if s.get("seat") == self.human_seat:
                     # the human's own death (Ben, 2026-09-07): one line from the
                     # rotation, straight away, ahead of the rate limit
@@ -2293,11 +2334,13 @@ class VoiceRunner:
                     self.enqueue("human_out", stock=self.rng.choice(rotation), ttl=60.0)
                 else:
                     # one line, at once: the dying seat's own exit bark (ELIM_SEAT_P) or Joshua's
+                    # Ben (2026-09-11): when several die at once, every one of them gets its exit line —
+                    # these queue without evicting each other (and Joshua's stands in for a voiceless seat)
                     lib = self.library_for_seat(s.get("seat")) if self.barks_mode != "off" else ""
-                    if lib and self.rng.random() < ELIM_SEAT_P:
-                        self.enqueue("event", stock="eliminated", library=lib, seat=int(s.get("seat")), ttl=20.0, ctx={"targets": []})
+                    if lib and (d.get("gameOver") or self.rng.random() < ELIM_SEAT_P):
+                        self.enqueue("event", stock="eliminated", library=lib, seat=int(s.get("seat")), ttl=30.0, ctx={"targets": []}, evict=False)
                     else:
-                        self.enqueue("event", stock="player-eliminated", ttl=20.0)
+                        self.enqueue("event", stock="player-eliminated", ttl=30.0)
                     # who finished them? the last seat to hit them this turn gets the kill line
                     hit = self._last_hit_by.get(int(s.get("seat")))
                     if hit and hit[1] == turn:
@@ -2341,11 +2384,16 @@ class VoiceRunner:
             self.game_over_said = True
             human = next((s for s in seats if s.get("seat") == self.human_seat), None)
             won = human is not None and not human.get("eliminated")
-            # everything pending is moot now; the final sequence is: the winning seat's
-            # own line (if a voiced AI won), Joshua's verdict, Joshua's sign-off — then silence
+            # everything pending is moot now — except the exit lines of seats that died in this last
+            # moment, which play first (Ben, 2026-09-11); then the winning seat's own line (if a
+            # voiced AI won), Joshua's verdict, Joshua's sign-off — then silence
+            exits = [q for q in self.queue if q["kind"] == "event" and q["stock"] in ("eliminated", "player-eliminated")]
             for q in self.queue:
-                self.record("dropped", kind=q["kind"], why="game over", stock=q["stock"])
-            self.queue = []
+                if q not in exits:
+                    self.record("dropped", kind=q["kind"], why="game over", stock=q["stock"])
+            for q in exits:
+                q["prio"], q["expires"], q["gap"] = -1.0, self.clock() + 120.0, 0.6
+            self.queue = exits
             winner = self._winner_seat(d, seats)
             t = self.clock()
             if winner is not None and winner != self.human_seat and self.library_for_seat(winner) and self.barks_mode != "off":

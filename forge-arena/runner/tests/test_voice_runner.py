@@ -169,9 +169,9 @@ class VoiceRunnerTests(unittest.TestCase):
         self.assertEqual(self.player.played[-1], "your-move.wav")   # one of its wordings; FakePlayer folds the -N
         self.clock.t += 10; self._observer(3, 1, elim=(2,)); self.r.step()
         self.assertEqual(self.player.played[-1], "player-eliminated.wav")
-        self.clock.t += 1; self._observer(9, 1, game_over=True, elim=(1, 2, 3)); self.r.step(); self.r.step()
-        self.assertEqual(self.player.played[-2:], ["you-win.wav", "game-over-gg.wav"],
-                         "the win line then the sign-off, ignoring the gap")
+        self.clock.t += 1; self._observer(9, 1, game_over=True, elim=(1, 2, 3)); self.r.step(); self.r.step(); self.r.step()
+        self.assertEqual(self.player.played[-3:], ["player-eliminated.wav", "you-win.wav", "game-over-gg.wav"],
+                         "the fallen seats' exit (Joshua's, once, for voiceless seats), the win line, then the sign-off, ignoring the gap")
 
     def test_loss_says_the_strange_game_line(self):
         self._observer(1, 1); self.r.step()

@@ -184,6 +184,45 @@ class CardRuntime(_TableCase):
         self.r.scan_advisor()
         self.assertEqual([(q["stock"], q["library"]) for q in self.r.queue if q["kind"] == "bark"], [("cmd-urza-cast", "harry/cards")])
 
+    def test_a_recast_is_no_crow_a_self_bounce_is_no_relief_and_the_second_round_is_a_loop(self):
+        """Game 47, turn 20: Urza bounced his own Mana Vault with Hullbreaker Horror and recast it six
+        times; Harry and Lily gave relief lines ("Vault's gone!") and Bill crowed "Mana Vault. Three
+        mana, now." each turn. A self-caused departure is never relief, a recast is never a crow, and
+        the second round of the same card in a turn is a loop with its own line."""
+        ev = self._prime()
+        ev.append({"seq": 2, "kind": "cast", "turn": 3, "seat": 1, "spell": "Mana Vault", "commander": False, "cmc": 1})
+        self._snap(3, 1, events=ev)
+        self.assertEqual(self._barks(), [("gc-mana-vault-cast", "harry/cards", 1)], "the first cast of the game: the crow")
+        ev.append({"seq": 3, "kind": "left", "turn": 3, "by": 1, "cards": ["Mana Vault"], "seats": [1], "commanders": [], "n": 1, "tokens": 0})
+        self._snap(3, 1, events=ev)
+        got = self._barks()
+        self.assertEqual([g[0] for g in got], ["loop", "looping"], f"the owner bounced it: no relief; cast + self-bounce = the second round = a loop: {got}")
+        self.assertEqual((got[0][1], got[0][2], got[1][1], got[1][2]), ("bill/table", 2, "harry/table", 1))
+        ev.append({"seq": 4, "kind": "cast", "turn": 3, "seat": 1, "spell": "Mana Vault", "commander": False, "cmc": 1})
+        ev.append({"seq": 5, "kind": "left", "turn": 3, "by": 1, "cards": ["Mana Vault"], "seats": [1], "commanders": [], "n": 1, "tokens": 0})
+        self._snap(3, 1, events=ev)
+        self.assertEqual(self._barks(), [], "rounds three and four: quiet — the loop was called once")
+        self.assertEqual(self.r._card_events_turn[(1, "Mana Vault")], 4)
+        # next turn: a recast is still no crow (the table has met the card), and the loop line is rare
+        self.r._casts[1] = []                                                # (no flurry in this instant)
+        ev.append({"seq": 6, "kind": "cast", "turn": 7, "seat": 1, "spell": "Mana Vault", "commander": False, "cmc": 1})
+        self._snap(7, 1, events=ev)
+        self.assertEqual(self._barks(), [], "a recast the next turn: no crow")
+        self.assertEqual(self.r._card_events_turn.get((1, "Mana Vault")), 1, "the per-turn count rolled")
+        # an OPPONENT removing it is still relief
+        ev.append({"seq": 7, "kind": "left", "turn": 7, "by": 2, "cards": ["Mana Vault"], "seats": [1], "commanders": [], "n": 1, "tokens": 0})
+        self._snap(7, 1, events=ev)
+        self.assertEqual(self._barks(), [("gc-mana-vault-gone", "bill/cards", 2)])
+        # the human's recast of a game changer: the alarm sounds once
+        self.r._roll_turn(8)
+        ev.append({"seq": 8, "kind": "cast", "turn": 8, "seat": 0, "spell": "Smothering Tithe", "commander": False, "cmc": 4})
+        self._snap(8, 0, events=ev)
+        self.assertEqual([g[0] for g in self._barks()], ["gc-smothering-tithe-react"])
+        self.r._roll_turn(12)
+        ev.append({"seq": 9, "kind": "cast", "turn": 12, "seat": 0, "spell": "Smothering Tithe", "commander": False, "cmc": 4})
+        self._snap(12, 0, events=ev)
+        self.assertEqual(self._barks(), [], "recast: the table has met it")
+
     def test_without_the_take_or_the_library_the_generic_line_stays(self):
         (vr.VOICES_DIR / "harry" / "cards" / "gc-rhystic-study-cast.wav").unlink()
         ev = self._prime()

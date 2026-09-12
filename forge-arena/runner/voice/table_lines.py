@@ -282,6 +282,18 @@ MULLIGAN: dict[str, tuple[str, dict[str, list[str]]]] = {
         "lily": ["[chuckles] Seven here, dears. Sorry.", "[warmly] My seven's lovely. Poor you.", "[mischievously] Full hand. Don't hate me."]}),
 }
 
+# loops (Ben, game 47: "Vault's gone!" fell flat while Urza bounced his own Mana Vault over and over)
+LOOP: dict[str, tuple[str, dict[str, list[str]]]] = {
+    "loop": ("sees another seat recast or bounce the same card again — a loop, an engine, not removal", {
+        "harry": ["[angry] Again?! Stop looping that thing!", "[shouting] That's a loop! Somebody break it!", "[groans] Round and round. Kill the engine!"],
+        "bill": ["[dryly] A loop. How tedious.", "[calmly] The same card, again. That is an engine.", "[sighs] Bounce, recast, repeat. Someone interrupt."],
+        "lily": ["[sighs] Round and round, dear.", "[gently] That's a loop, loves. Break it.", "[softly] Again? Oh, we're in trouble."]}),
+    "looping": ("recasts or bounces its own card again", {
+        "harry": ["[laughs] Again! And again!", "[smug] One more time. And another.", "[excited] Loop it! Loop it!"],
+        "bill": ["[calmly] Once more. And again.", "[dryly] The engine turns.", "[calmly] Bounce. Recast. Proceed."],
+        "lily": ["[mischievously] Round we go again, dears.", "[warmly] Once more, with feeling.", "[chuckles] And again. Sorry, loves."]}),
+}
+
 # number lines: (family, template per lib) — {n} = the number in words, {N} capitalised
 NUMBER_TAGS = {
     "harry": lambda n: "[angry]" if n <= 10 else "[exhales]" if n <= 20 else "[smug]",
@@ -343,6 +355,8 @@ def build_manifest(lib: str) -> dict:
         ph[pid] = {"category": "arc", "when": when, "text": list(by[lib]), "source": "table-arc-2026-09-10"}
     for pid, (when, by) in MULLIGAN.items():
         ph[pid] = {"category": "mulligan", "when": when, "text": list(by[lib]), "source": "table-mulligan-2026-09-11"}
+    for pid, (when, by) in LOOP.items():
+        ph[pid] = {"category": "loop", "when": when, "text": list(by[lib]), "source": "table-loop-2026-09-11"}
     for n in LIFE_NUMBERS:
         ph[f"life-{n}"] = {"category": "number", "when": f"announces or answers its life total: {n}", "text": [life_line(lib, n)], "source": "table-2026-09-10"}
     for n in HAND_NUMBERS:

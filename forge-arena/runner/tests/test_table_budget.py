@@ -196,7 +196,7 @@ class LeanerBags(_TreeCase):
         inv = table["invites"]
         table_ids = set(json.loads((Path(__file__).resolve().parents[1] / "voice" / "stock" / "voices" / "harry" / "table" / "manifest.json").read_text())["phrases"])
         self.assertEqual(sum(len(v) for k, v in inv.items() if k not in table_ids), 93, "140 invites before round 31 (the generic lines: 90 pruned + big-swing's 'open' row + deal's two arc replies)")
-        self.assertEqual(sum(len(v) for v in inv.values()), 161, "plus the table openers', the arc lines' and the mulligan lines' invites")
+        self.assertEqual(sum(len(v) for v in inv.values()), 166, "plus the table openers', the arc, mulligan and loop lines' invites")
         for opener in ("big-swing", "landed-hit", "that-hurt", "counter", "got-countered", "removal", "sweep", "got-swept", "kill", "game-changer", "commander-cast", "lost-commander"):
             self.assertGreaterEqual(len(inv[opener]), 2, f"{opener} is anchored to a board event: it keeps its replies")
         for reply in ("agree", "clapback", "sympathy", "gg", "last-word", "nerd", "wow", "read-that", "thinking-hard", "what-turn"):

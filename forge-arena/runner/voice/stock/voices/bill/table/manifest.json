@@ -443,6 +443,26 @@
    ],
    "source": "table-mulligan-2026-09-11"
   },
+  "loop": {
+   "category": "loop",
+   "when": "sees another seat recast or bounce the same card again — a loop, an engine, not removal",
+   "text": [
+    "[dryly] A loop. How tedious.",
+    "[calmly] The same card, again. That is an engine.",
+    "[sighs] Bounce, recast, repeat. Someone interrupt."
+   ],
+   "source": "table-loop-2026-09-11"
+  },
+  "looping": {
+   "category": "loop",
+   "when": "recasts or bounces its own card again",
+   "text": [
+    "[calmly] Once more. And again.",
+    "[dryly] The engine turns.",
+    "[calmly] Bounce. Recast. Proceed."
+   ],
+   "source": "table-loop-2026-09-11"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",
