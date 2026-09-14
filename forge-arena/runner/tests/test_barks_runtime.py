@@ -535,6 +535,44 @@ class BarkRuntime(_TreeCase):
         self.assertEqual(self.player.played[:2], ["eliminated.wav", "eliminated.wav"], "both exits played, in order")
         self.assertEqual(self.r.queue, [], "then the pair (no audio in this tree: skipped, not stuck)")
 
+    def test_a_seat_gone_from_the_snapshot_has_left_the_game(self):
+        """Game 48 (2026-09-14 14:14): Urza's Reservoir shot three players in eight seconds. Forge drops a
+        loser from its in-game list once the leaving-the-game cleanup is done, so the observer's `eliminated`
+        flag showed for Giada alone; the human and Purphoros simply vanished — no human_out, no exit line."""
+        def snap(seats, game_over=False):
+            (self.mailbox / "observer-state.json").write_text(json.dumps(
+                {"turn": 14, "phase": "MAIN1", "activeSeat": 1, "gameOver": game_over, "events": [],
+                 "seats": [{"seat": i, "name": f"s{i}", "eliminated": False, "life": 40, "handSize": 3, "battlefield": []} for i in seats]}))
+            self.r.scan_observer()
+        self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
+        self.r.rng.random = lambda: 0.0
+        snap([])                                                            # a snapshot with no seats at all: nobody has died
+        self.assertEqual(self.r.eliminated, set()); self.assertEqual(self.r.queue, [])
+        snap([1, 2, 3])                                                     # the human is gone, unflagged
+        self.assertEqual([q["kind"] for q in self.r.queue if q["kind"] != "bark"], ["human_out"])
+        self.assertEqual(self.r.eliminated, {0})
+        self.r.queue.clear()
+        snap([1, 2])                                                        # then seat 3, which has no voice in this fixture
+        self.assertEqual([(q["kind"], q["stock"], q["seat"]) for q in self.r.queue if q["kind"] == "event"], [("event", "player-eliminated", None)])
+        self.assertEqual(self.r.eliminated, {0, 3})
+        self.r.queue.clear()
+        snap([1], game_over=True)                                           # Bill's seat falls as the game ends
+        order = [(q["kind"], q["stock"], q.get("seat")) for q in sorted(self.r.queue, key=lambda q: (q["prio"], q["at"]))]
+        self.assertEqual(order[0], ("event", "eliminated", 2), f"Bill's exit first: {order}")
+        self.assertEqual(order[1], ("game_over", "win", 1), "then the winner's own line")
+        self.assertEqual([s for _, s, _ in order[2:]], ["strange-game", "game-over-gg"])
+        self.assertEqual(len([r for r in self._records("noted") if "gone from the snapshot" in r["why"]]), 3)
+
+    def test_an_eviction_leaves_a_trace(self):
+        """Game 48: Urza's 'kill' was queued and never heard — Purphoros's 'that-hurt' evicted it silently
+        in the same snapshot that then dropped 'that-hurt' for game over."""
+        self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
+        self.r.enqueue("bark", stock="kill", library="harry", seat=1, source="event")
+        self.r.enqueue("bark", stock="that-hurt", library="lily", seat=3, source="event")
+        self.assertEqual([q["stock"] for q in self.r.queue], ["that-hurt"])
+        d = self._records("dropped")[-1]
+        self.assertEqual((d["stock"], d["seat"], d["why"]), ("kill", 1, "evicted by that-hurt"))
+
     def test_dead_players_do_not_talk(self):
         self._observer(3, 1); self.r.scan_observer(); self._step()
         self.r.rng.random = lambda: 0.1

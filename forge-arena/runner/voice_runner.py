@@ -1113,6 +1113,7 @@ class VoiceRunner:
         self.seen_turn = None
         self.seen_active = None
         self.eliminated: set[int] = set()
+        self._seen_seats: set[int] = set()                    # every seat the snapshot has ever listed
         self.game_over_said = False
         self.started_said = self._startup_already_spoken()   # a restart never replays "would you like to play a game?"
         self._state_published = None
@@ -1384,6 +1385,7 @@ class VoiceRunner:
                 "prio": prio if prio is not None else (CHAIN_HOP_PRIORITY if chain else PRIORITY.get(kind, 9)),
                 "at": self.clock(), "expires": self.clock() + ttl, "library": library, "seat": seat,
                 "ctx": ctx or {}, "gap": gap, "chain": chain, "source": source or ("chain" if chain else kind), "follow": not evict}
+        before = self.queue
         if kind == "bark" and not evict:
             pass                                                            # a follow-on: it queues behind what is already pending
         elif kind == "bark":
@@ -1405,6 +1407,9 @@ class VoiceRunner:
             self.queue = [q for q in self.queue if q["kind"] != "event" or q.get("follow") or q["stock"] != stock]
         elif kind in ("advice", "your_move", "quip", "color"):
             self.queue = [q for q in self.queue if q["kind"] != kind]       # one pending item per kind: newest wins
+        for q in before:
+            if q not in self.queue and q["kind"] in ("bark", "event"):     # game 48: Urza's "kill" vanished without a trace
+                self.record("dropped", kind=q["kind"], why=f"evicted by {stock or kind}", stock=q["stock"], seat=q.get("seat"))
         self.queue.append(item)
 
     @staticmethod
@@ -2399,7 +2404,18 @@ class VoiceRunner:
             self.scan_stack(d)
             self.scan_combos(d)
             self.human_mulligans(d)
-        seats = d.get("seats") or []
+        seats = [s for s in (d.get("seats") or []) if isinstance(s, dict) and s.get("seat") is not None]
+        if seats and (turn or 0) >= 1:
+            # Forge drops a loser from its in-game list once the leaving-the-game cleanup is done; the
+            # observer's `eliminated` flag shows only when a poll lands inside that window (game 48: the
+            # human and Purphoros vanished unflagged, Giada was caught — one exit line of three). A seat
+            # the snapshot listed before and lists no more has left the game.
+            present = {int(s["seat"]) for s in seats}
+            vanished = sorted(sid for sid in self._seen_seats if sid not in present and sid not in self.eliminated)
+            self._seen_seats |= present
+            for sid in vanished:
+                self.record("noted", kind="event", why="seat gone from the snapshot: eliminated", seat=sid)
+            seats = seats + [{"seat": sid, "eliminated": True, "vanished": True} for sid in vanished]
         for s in seats:
             if s.get("eliminated") and s.get("seat") not in self.eliminated:
                 self.eliminated.add(s.get("seat"))
