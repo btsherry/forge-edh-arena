@@ -1,714 +1,719 @@
 {
-  "schema": "arena.voice-stock/1",
-  "library": "harry",
-  "seat": 1,
-  "voice": "Harry - Fierce Warrior (ElevenLabs default library), eleven_v3 stability 0.0 speed 1.05",
-  "voice_id": "SOYHLrjzK2X1ezoPC6cr",
-  "voice_name": "Harry - Fierce Warrior",
-  "temperament": "fiery young warrior: loud, cocky, quick to anger and quick to laugh; never sulks for long",
-  "render": {
-    "model": "eleven_v3",
-    "voice_settings": {
-      "stability": 0.0,
-      "speed": 1.05
-    },
-    "formats": [
-      "pcm_24000"
-    ]
+ "schema": "arena.voice-stock/1",
+ "library": "harry",
+ "seat": 1,
+ "voice": "Harry - Fierce Warrior (ElevenLabs default library), eleven_v3 stability 0.0 speed 1.05",
+ "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+ "voice_name": "Harry - Fierce Warrior",
+ "temperament": "fiery young warrior: loud, cocky, quick to anger and quick to laugh; never sulks for long",
+ "render": {
+  "model": "eleven_v3",
+  "voice_settings": {
+   "stability": 0.0,
+   "speed": 1.05
   },
-  "bake": {
-    "rate": 22050,
-    "fx": "none",
-    "glitch": "off",
-    "gain": "library",
-    "target_lufs": -24.0,
-    "true_peak_max": -1.0,
-    "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
+  "formats": [
+   "pcm_24000"
+  ]
+ },
+ "bake": {
+  "rate": 22050,
+  "fx": "none",
+  "glitch": "off",
+  "gain": "library",
+  "target_lufs": -24.0,
+  "true_peak_max": -1.0,
+  "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
+ },
+ "sample_rate": 22050,
+ "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
+ "phrases": {
+  "commander-cast": {
+   "text": [
+    "[shouting] Here I come. Deal with it!",
+    "[mischievously] Look who's back. Scared yet?",
+    "[excited] My champion takes the field!",
+    "[laughs] Alright! Now it's a fight!"
+   ],
+   "when": "casts/recasts its commander",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
   },
-  "sample_rate": 22050,
-  "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
-  "phrases": {
-    "commander-cast": {
-      "text": [
-        "[shouting] Here I come. Deal with it!",
-        "[mischievously] Look who's back. Scared yet?",
-        "[excited] My champion takes the field!",
-        "[laughs] Alright! Now it's a fight!"
-      ],
-      "when": "casts/recasts its commander",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "big-swing": {
-      "text": [
-        "[shouting] Everything in! Hold on tight!",
-        "[shouting] Charge! No mercy!",
-        "[excited] All of it. Right at your face!",
-        "[laughs] Turn 'em sideways! Here we go!"
-      ],
-      "when": "declares a large attack",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "landed-hit": {
-      "text": [
-        "[smug] Feel that? There's more coming.",
-        "[excited] Boom! That's what I'm talking about!",
-        "[shouting] Direct hit! Stay down!",
-        "[laughs] Ha! Right through the teeth!"
-      ],
-      "when": "its attack connects for big damage",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "removal": {
-      "text": [
-        "[shouting] Gone! Try again.",
-        "[excited] Smash! Nothing left of it!",
-        "[mischievously] That thing? Not anymore.",
-        "[scoffs] Trash. Next!"
-      ],
-      "when": "destroys/exiles a key permanent",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "sweep": {
-      "text": [
-        "[shouting] Burn it all down!",
-        "[shouting] Clear the table! All of it!",
-        "[laughs] Everything dies! Everything!",
-        "[excited] Scorched earth, baby!"
-      ],
-      "when": "wipes the board",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "counter": {
-      "text": [
-        "[shouting] Denied! Sit down!",
-        "[laughs] Nope! Not happening!",
-        "[excited] Blocked! Try harder!",
-        "[laughs] Ha! Nice try, genius!"
-      ],
-      "when": "counters a spell",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "engine-online": {
-      "text": [
-        "[excited] Now we're cooking!",
-        "[laughs] It's alive! Ha ha!",
-        "[mischievously] Pieces are set. Buckle up!",
-        "[excited] Oh, now the fun starts!"
-      ],
-      "when": "engine/combo pieces visibly assembled",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "big-mana": {
-      "text": [
-        "[excited] Look at all this power!",
-        "[laughs] So much fuel! Unbelievable!",
-        "[excited] Feel the surge? I do!",
-        "[shouting] Loaded! Fully loaded!"
-      ],
-      "when": "explosive amount of mana",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "kill": {
-      "text": [
-        "[shouting] One down! Who's next?",
-        "[laughs] Crushed! Anyone else?",
-        "[excited] Boom! Off the table!",
-        "[smug] That's one. Keep 'em coming!"
-      ],
-      "when": "eliminates another player",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "win": {
-      "text": [
-        "[laughs] Ha! Told you! All of you!",
-        "[shouting] Victory! Never doubted it!",
-        "[laughs] Champion! Read it and weep!",
-        "[excited] That's how it's done! Ha!"
-      ],
-      "when": "wins the game",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "that-hurt": {
-      "text": [
-        "[angry] Argh! You'll pay for that!",
-        "[groans] Ow! Okay, that's it!",
-        "[angry] Cheap shot! Cheap!",
-        "[frustrated] Grr! Lucky hit!"
-      ],
-      "when": "takes a big hit",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "lost-commander": {
-      "text": [
-        "[angry] You'll see me again. Soon.",
-        "[shouting] Down, not out! Back soon!",
-        "[angry] Fine! I'll come back angrier!",
-        "[groans] Knocked down. Getting up!"
-      ],
-      "when": "its commander dies/leaves",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "got-countered": {
-      "text": [
-        "[angry] Are you kidding me?!",
-        "[frustrated] Oh, come on! Seriously?!",
-        "[shouting] You did NOT just do that!",
-        "[angry] Cowards! Fight fair!"
-      ],
-      "when": "its spell is countered",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "got-swept": {
-      "text": [
-        "[angry] My whole board! Unbelievable!",
-        "[shouting] Everything?! You took everything?!",
-        "[frustrated] Rebuild? Fine. Watch me!",
-        "[angry] That's low! Real low!"
-      ],
-      "when": "its board is wiped",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "low-life": {
-      "text": [
-        "[shouting] I'm not done yet! Come on!",
-        "[laughs] Bleeding? Good. I fight better bleeding!",
-        "[exhales] Still standing! Barely, but standing!",
-        "[angry] Come finish it, if you dare!"
-      ],
-      "when": "drops to ~10 life or less",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "eliminated": {
-      "text": [
-        "[angry] This isn't over! Next time!",
-        "[frustrated] I'm out?! Unbelievable!",
-        "[shouting] Went down swinging! Remember that!",
-        "[scoffs] Fine! Enjoy it while it lasts!"
-      ],
-      "when": "out of the game",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "taunt": {
-      "text": [
-        "[mischievously] Somebody's getting cocky over there.",
-        "[laughs] Big board. Bigger target.",
-        "[smug] Enjoying the lead? Won't last.",
-        "[shouting] Somebody's asking for it!"
-      ],
-      "when": "needle at whoever is ahead",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "respect": {
-      "text": [
-        "[sighs] Okay, that was good. I hate it.",
-        "[scoffs] Fine. That was a good play.",
-        "[laughs] Huh. Didn't see that coming. Nice.",
-        "[angry] Respect. Now I'm mad."
-      ],
-      "when": "another player's good play (human incl.)",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "archenemy": {
-      "text": [
-        "[shouting] Everybody on them! Now!",
-        "[excited] You see that? Get 'em!",
-        "[shouting] Team up! Take 'em down!",
-        "[angry] They're the problem! Hit them!"
-      ],
-      "when": "calling out the table leader",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "slow-turn": {
-      "text": [
-        "[mischievously] Nothing yet. Don't get comfortable.",
-        "[scoffs] Quiet turn. Enjoy it.",
-        "[whispers] Saving it. You'll see.",
-        "[laughs] Just warming up."
-      ],
-      "when": "its own turn passes with nothing done",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "my-turn": {
-      "text": [
-        "[excited] My turn. Finally! Stand back.",
-        "[shouting] About time. Watch this.",
-        "[excited] Let's go! My turn!",
-        "[laughs] Move over. I'm up!"
-      ],
-      "when": "opener for the seat whose turn just began",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "agree": {
-      "text": [
-        "[excited] Exactly! What he said!",
-        "[laughs] Yes! Finally, someone gets it!",
-        "[shouting] Damn right!",
-        "[smug] Told you. Told all of you.",
-        "[shouting] Yes! Exactly that!",
-        "[laughs] What they said!"
-      ],
-      "when": "agrees with what another seat just said",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "disagree": {
-      "text": [
-        "[scoffs] Yeah, no.",
-        "[angry] You're wrong, and loud about it!",
-        "[laughs] Not a chance.",
-        "[shouting] Nonsense!",
-        "[angry] Wrong! Dead wrong!",
-        "[scoffs] That's nonsense and you know it."
-      ],
-      "when": "disagrees with what another seat just said",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "scoff": {
-      "text": [
-        "[scoffs] Oh, please.",
-        "[laughs] That's it? That's your move?",
-        "[angry] Cute. Real cute.",
-        "[mischievously] Somebody's proud of themselves.",
-        "[scoffs] Big deal.",
-        "[laughs] Wow. Impressive. Not."
-      ],
-      "when": "brushes off a boast, a counter or a removal aimed at it",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "clapback": {
-      "text": [
-        "[angry] Say that to my face!",
-        "[laughs] Big words! Back them up!",
-        "[shouting] Come get some, then!",
-        "[smug] Talk's cheap. Swing.",
-        "[laughs] Look who's talking!",
-        "[angry] Worry about your own board!"
-      ],
-      "when": "answers a taunt or a call-out aimed at it",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "brace": {
-      "text": [
-        "[shouting] Bring it!",
-        "[excited] Finally! A real fight!",
-        "[laughs] Is that all of them?",
-        "[angry] You'll regret this!"
-      ],
-      "when": "faces an attack just declared at it",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "pile-on": {
-      "text": [
-        "[laughs] Ha! Get 'em!",
-        "[excited] Oh, that's gotta sting!",
-        "[mischievously] Somebody's having a bad day.",
-        "[shouting] Again! Do it again!"
-      ],
-      "when": "joins in against whoever just got hit, countered or called out",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "sympathy": {
-      "text": [
-        "[scoffs] Rough. Walk it off.",
-        "[laughs] Ouch. Glad it wasn't me.",
-        "[smug] Better you than me.",
-        "[sighs] Yeah, that one hurt to watch."
-      ],
-      "when": "consoles whoever just suffered",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "laugh": {
-      "text": [
-        "[laughs] Ha! Ha ha!",
-        "[laughs] Oh, that's good!",
-        "[laughs] Ha! Brilliant!",
-        "[laughs] I love this table!",
-        "[laughs] Ha! Oh, that's rich!",
-        "[laughs] Ha ha ha! Yes!"
-      ],
-      "when": "just laughs at what happened or was said",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "last-word": {
-      "text": [
-        "[smug] Anyway. Where were we?",
-        "[scoffs] Whatever.",
-        "[laughs] Enough talk!",
-        "[calmly] Moving on."
-      ],
-      "when": "closes an exchange",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "gg": {
-      "text": [
-        "[sighs] Fine. Good game.",
-        "[scoffs] You got lucky. Good game.",
-        "[laughs] Alright, alright. Well played.",
-        "[angry] Next time!"
-      ],
-      "when": "congratulates the winner",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "nice-play": {
-      "text": [
-        "[laughs] Okay, that's a real card.",
-        "[excited] Oh, that's nasty. I like it."
-      ],
-      "when": "another seat made a good play",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "thats-mean": {
-      "text": [
-        "[laughs] That's mean! I love it!",
-        "[shouting] Brutal!"
-      ],
-      "when": "a removal or attack on a third party",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "oh-no": {
-      "text": [
-        "[angry] Oh no. Oh no no no."
-      ],
-      "when": "a threat lands",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "wow": {
-      "text": [
-        "[excited] Wow. Okay. Wow."
-      ],
-      "when": "anything big",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "why-me": {
-      "text": [
-        "[angry] Why me?! Hit them!"
-      ],
-      "when": "it is being attacked",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "attack-them": {
-      "text": [
-        "[shouting] Not me! Them! Look at their board!"
-      ],
-      "when": "deflecting an attack onto someone else",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "not-sorry": {
-      "text": [
-        "[laughs] Sorry. Not sorry."
-      ],
-      "when": "after hurting someone",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "read-that": {
-      "text": [
-        "[scoffs] Wait. Read that again."
-      ],
-      "when": "an unfamiliar spell",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "whats-your-life": {
-      "text": [
-        "[shouting] What are you at?!",
-        "[smug] Life total. Now.",
-        "[angry] Life! How much!",
-        "[laughs] You're low, aren't you?"
-      ],
-      "when": "asked of the leader or a low seat",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "cards-in-hand": {
-      "text": [
-        "[angry] How many cards is that?!",
-        "[laughs] Save some cards for the rest of us!",
-        "[angry] Play something already, you're holding a whole deck!"
-      ],
-      "when": "a seat holding six or more cards",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "youre-the-threat": {
-      "text": [
-        "[shouting] You're the threat! Everybody hear me?",
-        "[laughs] Look at them. That's the problem.",
-        "[shouting] Everybody! Look at that board!",
-        "[laughs] Oh, you're the problem now."
-      ],
-      "when": "naming the table leader",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "im-not-the-threat": {
-      "text": [
-        "[scoffs] Me?! Look at their board!",
-        "[shouting] Not me! I'm harmless!",
-        "[laughs] I'm way behind! Look at them!"
-      ],
-      "when": "the leader denying it",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "board-envy": {
-      "text": [
-        "[angry] I hate your creatures."
-      ],
-      "when": "at the biggest board",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "empty-hand": {
-      "text": [
-        "[laughs] Playing off the top? Cute."
-      ],
-      "when": "a seat with nothing in hand",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "low-life-jab": {
-      "text": [
-        "[smug] Low life. Bold strategy.",
-        "[laughs] You're almost dead!",
-        "[smug] Living dangerously."
-      ],
-      "when": "a seat at ten or less",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "kill-that": {
-      "text": [
-        "[shouting] Somebody kill that thing!",
-        "[angry] Kill it! Kill it now!",
-        "[shouting] Will someone deal with that?!"
-      ],
-      "when": "a big creature on another board",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "deal": {
-      "text": [
-        "[laughs] Don't hit me, I don't hit you. Deal?",
-        "[laughs] Truce? Just for a turn?",
-        "[smug] Leave me alone and I'll forget you exist."
-      ],
-      "when": "politics",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "promise": {
-      "text": [
-        "[smug] I promise. I promise nothing."
-      ],
-      "when": "after a deal",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "play-faster": {
-      "text": [
-        "[shouting] Any day now!",
-        "[angry] Play faster!"
-      ],
-      "when": "a seat has been thinking for twenty seconds",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "thinking-hard": {
-      "text": [
-        "[laughs] They're thinking. That's never good."
-      ],
-      "when": "same, from a bystander",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "play-slower": {
-      "text": [
-        "[angry] Slow down! I can't read that fast!"
-      ],
-      "when": "a seat firing off plays",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "you-suck": {
-      "text": [
-        "[shouting] You suck!",
-        "[laughs] You. Suck.",
-        "[angry] You are the worst!",
-        "[laughs] Terrible. Just terrible."
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "you-wish": {
-      "text": [
-        "[laughs] You wish!",
-        "[scoffs] In your dreams.",
-        "[laughs] Ha! Keep dreaming!",
-        "[scoffs] As if!"
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "you-cheat": {
-      "text": [
-        "[shouting] You cheat! I saw that!",
-        "[angry] That's cheating!",
-        "[scoffs] Sure. Totally legal."
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "nerd": {
-      "text": [
-        "[laughs] Nerd.",
-        "[laughs] Absolute nerd.",
-        "[scoffs] Nerd alert."
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "shut-it": {
-      "text": [
-        "[angry] Oh, shut it.",
-        "[shouting] Zip it!",
-        "[angry] Nobody asked you!"
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "bite-me": {
-      "text": [
-        "[scoffs] Bite me.",
-        "[angry] Make me!",
-        "[scoffs] Whatever."
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "nothing-happening": {
-      "text": [
-        "[angry] Nothing's happening! Somebody do something!",
-        "[scoffs] Boring.",
-        "[scoffs] Is anyone going to do anything?",
-        "[angry] Wake up! Play a card!"
-      ],
-      "when": "nothing is happening",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "pass-already": {
-      "text": [
-        "[shouting] Pass already!"
-      ],
-      "when": "the active seat is dawdling",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "what-turn": {
-      "text": [
-        "[scoffs] What turn is it even?"
-      ],
-      "when": "filler",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "this-is-fine": {
-      "text": [
-        "[laughs] This is fine. Everything's fine.",
-        "[scoffs] Totally fine. Not worried at all.",
-        "[laughs] Everything's under control. Probably."
-      ],
-      "when": "filler",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "good-hand": {
-      "text": [
-        "[smug] I like my hand.",
-        "[smug] This hand? Oh, this hand is filthy.",
-        "[laughs] You do not want to see what I'm holding."
-      ],
-      "when": "filler, a bluff",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "game-changer": {
-      "text": [
-        "[laughs] Game changer! Read it and weep!",
-        "[shouting] Here comes the power!",
-        "[smug] Yeah. That one's on the list."
-      ],
-      "when": "casts one of its game changers",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-gamechangers"
-    },
-    "gc-react": {
-      "text": [
-        "[angry] That's a game changer! Kill it!",
-        "[shouting] Oh, come on! Not that card!",
-        "[scoffs] Bracket four, is it?"
-      ],
-      "when": "sees another seat cast a game changer",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-gamechangers"
-    },
-    "gc-gone": {
-      "text": [
-        "[laughs] Good riddance!",
-        "[excited] And there it goes! Ha!"
-      ],
-      "when": "a game changer leaves the battlefield",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-gamechangers"
-    }
+  "big-swing": {
+   "text": [
+    "[shouting] Everything in! Hold on tight!",
+    "[shouting] Charge! No mercy!",
+    "[excited] All of it. Right at your face!",
+    "[laughs] Turn 'em sideways! Here we go!"
+   ],
+   "when": "declares a large attack",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
   },
-  "sources": {
-    "elevenlabs-v3-2026-09-10": "seat-bark library 'harry' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
-    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py",
-    "elevenlabs-v3-2026-09-10-patter": "table patter (board-state, pace, name-calling, filler) after five Game Knights episodes were measured: ~190 words/min, a silence over 4 s only every ~78 s",
-    "elevenlabs-v3-2026-09-10-gamechangers": "game-changer lines (WotC bracket list, per Scryfall's game_changer flag in each dossier) + more you-cheat wordings (Purphoros repeated it)"
+  "landed-hit": {
+   "text": [
+    "[smug] Feel that? There's more coming.",
+    "[excited] Boom! That's what I'm talking about!",
+    "[shouting] Direct hit! Stay down!",
+    "[laughs] Ha! Right through the teeth!"
+   ],
+   "when": "its attack connects for big damage",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "removal": {
+   "text": [
+    "[shouting] Gone! Try again.",
+    "[excited] Smash! Nothing left of it!",
+    "[mischievously] That thing? Not anymore.",
+    "[scoffs] Trash. Next!"
+   ],
+   "when": "destroys/exiles a key permanent",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "sweep": {
+   "text": [
+    "[shouting] Burn it all down!",
+    "[shouting] Clear the table! All of it!",
+    "[laughs] Everything dies! Everything!",
+    "[excited] Scorched earth, baby!"
+   ],
+   "when": "wipes the board",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "counter": {
+   "text": [
+    "[shouting] Denied! Sit down!",
+    "[laughs] Nope! Not happening!",
+    "[excited] Blocked! Try harder!",
+    "[laughs] Ha! Nice try, genius!"
+   ],
+   "when": "counters a spell",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "engine-online": {
+   "text": [
+    "[excited] Now we're cooking!",
+    "[laughs] It's alive! Ha ha!",
+    "[mischievously] Pieces are set. Buckle up!",
+    "[excited] Oh, now the fun starts!"
+   ],
+   "when": "engine/combo pieces visibly assembled",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "big-mana": {
+   "text": [
+    "[excited] Look at all this power!",
+    "[laughs] So much fuel! Unbelievable!",
+    "[excited] Feel the surge? I do!",
+    "[shouting] Loaded! Fully loaded!"
+   ],
+   "when": "explosive amount of mana",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "kill": {
+   "text": [
+    "[shouting] One down! Who's next?",
+    "[laughs] Crushed! Anyone else?",
+    "[excited] Boom! Off the table!",
+    "[smug] That's one. Keep 'em coming!"
+   ],
+   "when": "eliminates another player",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "win": {
+   "text": [
+    "[laughs] Ha! Told you! All of you!",
+    "[shouting] Victory! Never doubted it!",
+    "[laughs] Champion! Read it and weep!",
+    "[excited] That's how it's done! Ha!"
+   ],
+   "when": "wins the game",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "that-hurt": {
+   "text": [
+    "[angry] Argh! You'll pay for that!",
+    "[groans] Ow! Okay, that's it!",
+    "[angry] Cheap shot! Cheap!",
+    "[frustrated] Grr! Lucky hit!"
+   ],
+   "when": "takes a big hit",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "lost-commander": {
+   "text": [
+    "[angry] You'll see me again. Soon.",
+    "[shouting] Down, not out! Back soon!",
+    "[angry] Fine! I'll come back angrier!",
+    "[groans] Knocked down. Getting up!"
+   ],
+   "when": "its commander dies/leaves",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "got-countered": {
+   "text": [
+    "[angry] Are you kidding me?!",
+    "[frustrated] Oh, come on! Seriously?!",
+    "[shouting] You did NOT just do that!",
+    "[angry] Cowards! Fight fair!"
+   ],
+   "when": "its spell is countered",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "got-swept": {
+   "text": [
+    "[angry] My whole board! Unbelievable!",
+    "[shouting] Everything?! You took everything?!",
+    "[frustrated] Rebuild? Fine. Watch me!",
+    "[angry] That's low! Real low!"
+   ],
+   "when": "its board is wiped",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "low-life": {
+   "text": [
+    "[shouting] I'm not done yet! Come on!",
+    "[laughs] Bleeding? Good. I fight better bleeding!",
+    "[exhales] Still standing! Barely, but standing!",
+    "[angry] Come finish it, if you dare!"
+   ],
+   "when": "drops to ~10 life or less",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "eliminated": {
+   "text": [
+    "[angry] This isn't over! Next time!",
+    "[frustrated] I'm out?! Unbelievable!",
+    "[shouting] Went down swinging! Remember that!",
+    "[scoffs] Fine! Enjoy it while it lasts!"
+   ],
+   "when": "out of the game",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "taunt": {
+   "text": [
+    "[mischievously] Somebody's getting cocky over there.",
+    "[laughs] Big board. Bigger target.",
+    "[smug] Enjoying the lead? Won't last.",
+    "[shouting] Somebody's asking for it!"
+   ],
+   "when": "needle at whoever is ahead",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "respect": {
+   "text": [
+    "[sighs] Okay, that was good. I hate it.",
+    "[scoffs] Fine. That was a good play.",
+    "[laughs] Huh. Didn't see that coming. Nice.",
+    "[angry] Respect. Now I'm mad."
+   ],
+   "when": "another player's good play (human incl.)",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "archenemy": {
+   "text": [
+    "[shouting] Everybody on them! Now!",
+    "[excited] You see that? Get 'em!",
+    "[shouting] Team up! Take 'em down!",
+    "[angry] They're the problem! Hit them!"
+   ],
+   "when": "calling out the table leader",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "slow-turn": {
+   "text": [
+    "[mischievously] Nothing yet. Don't get comfortable.",
+    "[scoffs] Quiet turn. Enjoy it.",
+    "[whispers] Saving it. You'll see.",
+    "[laughs] Just warming up."
+   ],
+   "when": "its own turn passes with nothing done",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "my-turn": {
+   "text": [
+    "[excited] My turn. Finally! Stand back.",
+    "[shouting] About time. Watch this.",
+    "[excited] Let's go! My turn!",
+    "[laughs] Move over. I'm up!"
+   ],
+   "when": "opener for the seat whose turn just began",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "agree": {
+   "text": [
+    "[excited] Exactly! What he said!",
+    "[laughs] Yes! Finally, someone gets it!",
+    "[shouting] Damn right!",
+    "[smug] Told you. Told all of you.",
+    "[shouting] Yes! Exactly that!",
+    "[laughs] What they said!"
+   ],
+   "when": "agrees with what another seat just said",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "disagree": {
+   "text": [
+    "[scoffs] Yeah, no.",
+    "[angry] You're wrong, and loud about it!",
+    "[laughs] Not a chance.",
+    "[shouting] Nonsense!",
+    "[angry] Wrong! Dead wrong!",
+    "[scoffs] That's nonsense and you know it."
+   ],
+   "when": "disagrees with what another seat just said",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "scoff": {
+   "text": [
+    "[scoffs] Oh, please.",
+    "[laughs] That's it? That's your move?",
+    "[angry] Cute. Real cute.",
+    "[mischievously] Somebody's proud of themselves.",
+    "[scoffs] Big deal.",
+    "[laughs] Wow. Impressive. Not."
+   ],
+   "when": "brushes off a boast, a counter or a removal aimed at it",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "clapback": {
+   "text": [
+    "[angry] Say that to my face!",
+    "[laughs] Big words! Back them up!",
+    "[shouting] Come get some, then!",
+    "[smug] Talk's cheap. Swing.",
+    "[laughs] Look who's talking!",
+    "[angry] Worry about your own board!"
+   ],
+   "when": "answers a taunt or a call-out aimed at it",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "brace": {
+   "text": [
+    "[shouting] Bring it!",
+    "[excited] Finally! A real fight!",
+    "[laughs] Is that all of them?",
+    "[angry] You'll regret this!"
+   ],
+   "when": "faces an attack just declared at it",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "pile-on": {
+   "text": [
+    "[laughs] Ha! Get 'em!",
+    "[excited] Oh, that's gotta sting!",
+    "[mischievously] Somebody's having a bad day.",
+    "[shouting] Again! Do it again!"
+   ],
+   "when": "joins in against whoever just got hit, countered or called out",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "sympathy": {
+   "text": [
+    "[scoffs] Rough. Walk it off.",
+    "[laughs] Ouch. Glad it wasn't me.",
+    "[smug] Better you than me.",
+    "[sighs] Yeah, that one hurt to watch."
+   ],
+   "when": "consoles whoever just suffered",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "laugh": {
+   "text": [
+    "[laughs] Ha! Ha ha!",
+    "[laughs] Oh, that's good!",
+    "[laughs] Ha! Brilliant!",
+    "[laughs] I love this table!",
+    "[laughs] Ha! Oh, that's rich!",
+    "[laughs] Ha ha ha! Yes!"
+   ],
+   "when": "just laughs at what happened or was said",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "last-word": {
+   "text": [
+    "[smug] Anyway. Where were we?",
+    "[scoffs] Whatever.",
+    "[laughs] Enough talk!",
+    "[calmly] Moving on."
+   ],
+   "when": "closes an exchange",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "gg": {
+   "text": [
+    "[sighs] Fine. Good game.",
+    "[scoffs] You got lucky. Good game.",
+    "[laughs] Alright, alright. Well played.",
+    "[angry] Next time!"
+   ],
+   "when": "congratulates the winner",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "nice-play": {
+   "text": [
+    "[laughs] Okay, that's a real card.",
+    "[excited] Oh, that's nasty. I like it."
+   ],
+   "when": "another seat made a good play",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "thats-mean": {
+   "text": [
+    "[laughs] That's mean! I love it!",
+    "[shouting] Brutal!"
+   ],
+   "when": "a removal or attack on a third party",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "oh-no": {
+   "text": [
+    "[angry] Oh no. Oh no no no."
+   ],
+   "when": "a threat lands",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "wow": {
+   "text": [
+    "[excited] Wow. Okay. Wow."
+   ],
+   "when": "anything big",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "why-me": {
+   "text": [
+    "[angry] Why me?! Hit them!"
+   ],
+   "when": "it is being attacked",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "attack-them": {
+   "text": [
+    "[shouting] Not me! Them! Look at their board!"
+   ],
+   "when": "deflecting an attack onto someone else",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "not-sorry": {
+   "text": [
+    "[laughs] Sorry. Not sorry."
+   ],
+   "when": "after hurting someone",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "read-that": {
+   "text": [
+    "[scoffs] Wait. Read that again."
+   ],
+   "when": "an unfamiliar spell",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "whats-your-life": {
+   "text": [
+    "[shouting] What are you at?!",
+    "[smug] Life total. Now.",
+    "[angry] Life! How much!",
+    "[laughs] You're low, aren't you?"
+   ],
+   "when": "asked of the leader or a low seat",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "cards-in-hand": {
+   "text": [
+    "[angry] How many cards is that?!",
+    "[laughs] Save some cards for the rest of us!",
+    "[angry] Play something already, you're holding a whole deck!"
+   ],
+   "when": "a seat holding six or more cards",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "youre-the-threat": {
+   "text": [
+    "[shouting] You're the threat! Everybody hear me?",
+    "[laughs] Look at them. That's the problem.",
+    "[shouting] Everybody! Look at that board!",
+    "[laughs] Oh, you're the problem now."
+   ],
+   "when": "naming the table leader",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "im-not-the-threat": {
+   "text": [
+    "[scoffs] Me?! Look at their board!",
+    "[shouting] Not me! I'm harmless!",
+    "[laughs] I'm way behind! Look at them!"
+   ],
+   "when": "the leader denying it",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "board-envy": {
+   "text": [
+    "[angry] I hate your creatures."
+   ],
+   "when": "at the biggest board",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "empty-hand": {
+   "text": [
+    "[laughs] Playing off the top? Cute."
+   ],
+   "when": "a seat with nothing in hand",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "low-life-jab": {
+   "text": [
+    "[smug] Low life. Bold strategy.",
+    "[laughs] You're almost dead!",
+    "[smug] Living dangerously."
+   ],
+   "when": "a seat at ten or less",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "kill-that": {
+   "text": [
+    "[shouting] Somebody kill that thing!",
+    "[angry] Kill it! Kill it now!",
+    "[shouting] Will someone deal with that?!"
+   ],
+   "when": "a big creature on another board",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "deal": {
+   "text": [
+    "[laughs] Don't hit me, I don't hit you. Deal?",
+    "[laughs] Truce? Just for a turn?",
+    "[smug] Leave me alone and I'll forget you exist."
+   ],
+   "when": "politics",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "promise": {
+   "text": [
+    "[smug] I promise. I promise nothing."
+   ],
+   "when": "after a deal",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "play-faster": {
+   "text": [
+    "[shouting] Any day now!",
+    "[angry] Play faster!"
+   ],
+   "when": "a seat has been thinking for twenty seconds",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "thinking-hard": {
+   "text": [
+    "[laughs] They're thinking. That's never good."
+   ],
+   "when": "same, from a bystander",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "play-slower": {
+   "text": [
+    "[angry] Slow down! I can't read that fast!"
+   ],
+   "when": "a seat firing off plays",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "you-suck": {
+   "text": [
+    "[shouting] You suck!",
+    "[laughs] You. Suck.",
+    "[angry] You are the worst!",
+    "[laughs] Terrible. Just terrible."
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "you-wish": {
+   "text": [
+    "[laughs] You wish!",
+    "[scoffs] In your dreams.",
+    "[laughs] Ha! Keep dreaming!",
+    "[scoffs] As if!"
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "you-cheat": {
+   "text": [
+    "[shouting] You cheat! I saw that!",
+    "[angry] That's cheating!",
+    "[scoffs] Sure. Totally legal."
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "nerd": {
+   "text": [
+    "[laughs] Nerd.",
+    "[laughs] Absolute nerd.",
+    "[scoffs] Nerd alert."
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "shut-it": {
+   "text": [
+    "[angry] Oh, shut it.",
+    "[shouting] Zip it!",
+    "[angry] Nobody asked you!"
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "bite-me": {
+   "text": [
+    "[scoffs] Bite me.",
+    "[angry] Make me!",
+    "[scoffs] Whatever."
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "nothing-happening": {
+   "text": [
+    "[angry] Nothing's happening! Somebody do something!",
+    "[scoffs] Boring.",
+    "[scoffs] Is anyone going to do anything?",
+    "[angry] Wake up! Play a card!"
+   ],
+   "when": "nothing is happening",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "pass-already": {
+   "text": [
+    "[shouting] Pass already!"
+   ],
+   "when": "the active seat is dawdling",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "what-turn": {
+   "text": [
+    "[scoffs] What turn is it even?"
+   ],
+   "when": "filler",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "this-is-fine": {
+   "text": [
+    "[laughs] This is fine. Everything's fine.",
+    "[scoffs] Totally fine. Not worried at all.",
+    "[laughs] Everything's under control. Probably."
+   ],
+   "when": "filler",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "good-hand": {
+   "text": [
+    "[smug] I like my hand.",
+    "[smug] This hand? Oh, this hand is filthy.",
+    "[laughs] You do not want to see what I'm holding."
+   ],
+   "when": "filler, a bluff",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "game-changer": {
+   "text": [
+    "[laughs] Game changer! Read it and weep!",
+    "[shouting] Here comes the power!",
+    "[smug] Yeah. That one's on the list."
+   ],
+   "when": "casts one of its game changers",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-gamechangers"
+  },
+  "gc-react": {
+   "text": [
+    "[angry] That's a game changer! Kill it!",
+    "[shouting] Oh, come on! Not that card!",
+    "[scoffs] Bracket four, is it?"
+   ],
+   "when": "sees another seat cast a game changer",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-gamechangers"
+  },
+  "gc-gone": {
+   "text": [
+    "[laughs] Good riddance!",
+    "[excited] And there it goes! Ha!"
+   ],
+   "when": "a game changer leaves the battlefield",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-gamechangers"
   }
+ },
+ "sources": {
+  "elevenlabs-v3-2026-09-10": "seat-bark library 'harry' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
+  "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py",
+  "elevenlabs-v3-2026-09-10-patter": "table patter (board-state, pace, name-calling, filler) after five Game Knights episodes were measured: ~190 words/min, a silence over 4 s only every ~78 s",
+  "elevenlabs-v3-2026-09-10-gamechangers": "game-changer lines (WotC bracket list, per Scryfall's game_changer flag in each dossier) + more you-cheat wordings (Purphoros repeated it)"
+ },
+ "baked": {
+  "gain_db": -8.83,
+  "takes": 214,
+  "target_lufs": -24.0
+ }
 }

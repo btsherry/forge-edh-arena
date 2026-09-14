@@ -1,715 +1,720 @@
 {
-  "schema": "arena.voice-stock/1",
-  "library": "bill",
-  "seat": 2,
-  "voice": "Bill - Wise, Mature, Balanced (ElevenLabs default library), eleven_v3 stability 0.5 speed 0.95",
-  "voice_id": "pqHfZKP75CvOlQylNhV4",
-  "voice_name": "Bill - Wise, Mature, Balanced",
-  "temperament": "elder professor: dry, precise, unhurried, faintly amused by everyone else's haste",
-  "render": {
-    "model": "eleven_v3",
-    "voice_settings": {
-      "stability": 0.5,
-      "speed": 0.95
-    },
-    "formats": [
-      "pcm_24000"
-    ]
+ "schema": "arena.voice-stock/1",
+ "library": "bill",
+ "seat": 2,
+ "voice": "Bill - Wise, Mature, Balanced (ElevenLabs default library), eleven_v3 stability 0.5 speed 0.95",
+ "voice_id": "pqHfZKP75CvOlQylNhV4",
+ "voice_name": "Bill - Wise, Mature, Balanced",
+ "temperament": "elder professor: dry, precise, unhurried, faintly amused by everyone else's haste",
+ "render": {
+  "model": "eleven_v3",
+  "voice_settings": {
+   "stability": 0.5,
+   "speed": 0.95
   },
-  "bake": {
-    "rate": 22050,
-    "fx": "none",
-    "glitch": "off",
-    "gain": "library",
-    "target_lufs": -24.0,
-    "true_peak_max": -1.0,
-    "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
+  "formats": [
+   "pcm_24000"
+  ]
+ },
+ "bake": {
+  "rate": 22050,
+  "fx": "none",
+  "glitch": "off",
+  "gain": "library",
+  "target_lufs": -24.0,
+  "true_peak_max": -1.0,
+  "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
+ },
+ "sample_rate": 22050,
+ "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
+ "phrases": {
+  "commander-cast": {
+   "text": [
+    "[calmly] The centerpiece arrives. Adjust accordingly.",
+    "[dryly] My commander. Take notes.",
+    "[curious] Ah. The board improves considerably.",
+    "[calmly] Reintroducing the key piece."
+   ],
+   "when": "casts/recasts its commander",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
   },
-  "sample_rate": 22050,
-  "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
-  "phrases": {
-    "commander-cast": {
-      "text": [
-        "[calmly] The centerpiece arrives. Adjust accordingly.",
-        "[dryly] My commander. Take notes.",
-        "[curious] Ah. The board improves considerably.",
-        "[calmly] Reintroducing the key piece."
-      ],
-      "when": "casts/recasts its commander",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "big-swing": {
-      "text": [
-        "[calmly] The math favors me. Attacking.",
-        "[dryly] Attacking. The numbers are clear.",
-        "[smug] Calculated aggression. Observe.",
-        "[chuckles] Combat. I've done the arithmetic."
-      ],
-      "when": "declares a large attack",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "landed-hit": {
-      "text": [
-        "[smug] Precisely as calculated.",
-        "[calmly] Damage as projected.",
-        "[dryly] Expected. Entirely expected.",
-        "[chuckles] The model holds. Splendid."
-      ],
-      "when": "its attack connects for big damage",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "removal": {
-      "text": [
-        "[dryly] That piece was a liability. Removed.",
-        "[calmly] Subtracted from the board.",
-        "[dryly] Redundant. Cleared.",
-        "[smug] A tidy correction."
-      ],
-      "when": "destroys/exiles a key permanent",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "sweep": {
-      "text": [
-        "[sighs] A clean slate. How refreshing.",
-        "[calmly] Reset. Everyone starts over.",
-        "[dryly] The board, simplified.",
-        "[sarcastic] Order restored. You're welcome."
-      ],
-      "when": "wipes the board",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "counter": {
-      "text": [
-        "[calmly] No. I think not.",
-        "[dryly] Declined.",
-        "[sarcastic] Rejected. Do go on.",
-        "[smug] Not on my watch."
-      ],
-      "when": "counters a spell",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "engine-online": {
-      "text": [
-        "[smug] All variables aligned. Observe.",
-        "[calmly] The mechanism is complete.",
-        "[chuckles] Every piece in position. Good.",
-        "[calmly] Assembly finished. [pause] Now, results."
-      ],
-      "when": "engine/combo pieces visibly assembled",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "big-mana": {
-      "text": [
-        "[calmly] Resources abundant. Options many.",
-        "[dryly] Capital acquired. Spending soon.",
-        "[curious] A surplus. Interesting possibilities.",
-        "[smug] Ample means. Ample ends."
-      ],
-      "when": "explosive amount of mana",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "kill": {
-      "text": [
-        "[dryly] One fewer variable.",
-        "[calmly] Eliminated. The equation simplifies.",
-        "[dryly] Removed from consideration.",
-        "[chuckles] Three players. Better odds."
-      ],
-      "when": "eliminates another player",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "win": {
-      "text": [
-        "[calmly] Inevitable. Thank you for playing.",
-        "[smug] As predicted. Good game.",
-        "[dryly] Q.E.D.",
-        "[chuckles] The outcome was never in doubt."
-      ],
-      "when": "wins the game",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "that-hurt": {
-      "text": [
-        "[calmly] Noted. That was costly.",
-        "[sighs] Significant. Recalculating.",
-        "[dryly] A meaningful loss. Adjusting.",
-        "[sarcastic] Painful, in an abstract way."
-      ],
-      "when": "takes a big hit",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "lost-commander": {
-      "text": [
-        "[calmly] A temporary setback. I'll return.",
-        "[dryly] Merely relocated. Not defeated.",
-        "[sighs] Back to the command zone. For now.",
-        "[calmly] Inconvenient. Not decisive."
-      ],
-      "when": "its commander dies/leaves",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "got-countered": {
-      "text": [
-        "[dryly] Anticipated, yet inconvenient.",
-        "[sarcastic] Countered. How predictable of you.",
-        "[calmly] I did consider that outcome.",
-        "[curious] Ah. A reasonable response."
-      ],
-      "when": "its spell is countered",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "got-swept": {
-      "text": [
-        "[sighs] Everything, gone. Fascinating.",
-        "[dryly] Comprehensive. I'll grant you that.",
-        "[calmly] A full reset. Well executed.",
-        "[pause] Nothing remains. [sighs] Hmm."
-      ],
-      "when": "its board is wiped",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "low-life": {
-      "text": [
-        "[calmly] Margins are thin. Careful now.",
-        "[whispers] Low reserves. Proceeding cautiously.",
-        "[dryly] The numbers are unfavourable.",
-        "[sighs] Precarious. Decidedly precarious."
-      ],
-      "when": "drops to ~10 life or less",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "eliminated": {
-      "text": [
-        "[calmly] Statistically inevitable. Farewell.",
-        "[dryly] Eliminated. The data was clear.",
-        "[sighs] A loss. I'll review the record.",
-        "[calmly] I concede the point. Farewell."
-      ],
-      "when": "out of the game",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "taunt": {
-      "text": [
-        "[dryly] Ambition. How quaint.",
-        "[curious] Someone's overextending. Curious.",
-        "[dryly] Bold. Possibly unwise.",
-        "[sarcastic] That lead looks expensive to hold."
-      ],
-      "when": "needle at whoever is ahead",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "respect": {
-      "text": [
-        "[calmly] Well played. Genuinely.",
-        "[chuckles] Elegant. I approve.",
-        "[calmly] A sound decision. Credit given.",
-        "[dryly] Correct play. Rare, and welcome."
-      ],
-      "when": "another player's good play (human incl.)",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "archenemy": {
-      "text": [
-        "[calmly] Observe the leader. Act accordingly.",
-        "[dryly] Note the threat. Coordinate.",
-        "[calmly] That board demands a response.",
-        "[clears throat] The table has a problem. Address it."
-      ],
-      "when": "calling out the table leader",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "slow-turn": {
-      "text": [
-        "[dryly] Passing. Deliberately.",
-        "[calmly] Nothing to add. Yet.",
-        "[calmly] Holding position.",
-        "[chuckles] Patience is a resource too."
-      ],
-      "when": "its own turn passes with nothing done",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "my-turn": {
-      "text": [
-        "[calmly] My turn. Observe closely.",
-        "[dryly] Proceeding. Pay attention.",
-        "[calmly] My turn. Let's be efficient.",
-        "[chuckles] Ah, my turn. Good."
-      ],
-      "when": "opener for the seat whose turn just began",
-      "category": "bark",
-      "source": "elevenlabs-v3-2026-09-10"
-    },
-    "agree": {
-      "text": [
-        "[calmly] Quite right.",
-        "[dryly] Correct, for once.",
-        "[chuckles] I concur.",
-        "[calmly] Precisely my assessment.",
-        "[calmly] Agreed.",
-        "[dryly] Hard to argue."
-      ],
-      "when": "agrees with what another seat just said",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "disagree": {
-      "text": [
-        "[dryly] I think not.",
-        "[calmly] The evidence says otherwise.",
-        "[sarcastic] A bold theory.",
-        "[dryly] No. Next.",
-        "[dryly] I beg to differ.",
-        "[calmly] Incorrect."
-      ],
-      "when": "disagrees with what another seat just said",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "scoff": {
-      "text": [
-        "[sarcastic] Oh, bravo.",
-        "[dryly] How very brave.",
-        "[chuckles] Adorable.",
-        "[calmly] Noted. Unimpressed.",
-        "[dryly] Underwhelming.",
-        "[calmly] Is that all?"
-      ],
-      "when": "brushes off a boast, a counter or a removal aimed at it",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "clapback": {
-      "text": [
-        "[dryly] Bold talk. Let's see the play.",
-        "[calmly] Focus on your own board.",
-        "[sarcastic] Thank you for the attention.",
-        "[chuckles] Envy is a poor strategy.",
-        "[dryly] Rich, coming from you.",
-        "[calmly] Physician, heal thyself."
-      ],
-      "when": "answers a taunt or a call-out aimed at it",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "brace": {
-      "text": [
-        "[calmly] Come along, then.",
-        "[dryly] Predictable. Proceed.",
-        "[calmly] I have accounted for this.",
-        "[sighs] Very well."
-      ],
-      "when": "faces an attack just declared at it",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "pile-on": {
-      "text": [
-        "[dryly] Deserved, I'd say.",
-        "[chuckles] The table agrees.",
-        "[calmly] A fair correction.",
-        "[sarcastic] My sympathies. Truly."
-      ],
-      "when": "joins in against whoever just got hit, countered or called out",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "sympathy": {
-      "text": [
-        "[calmly] Unfortunate.",
-        "[dryly] My condolences.",
-        "[sighs] That was harsh.",
-        "[calmly] It happens to the best of us."
-      ],
-      "when": "consoles whoever just suffered",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "laugh": {
-      "text": [
-        "[chuckles] Heh.",
-        "[chuckles] Oh, that's rich.",
-        "[chuckles] Ha. Indeed.",
-        "[chuckles] Delightful.",
-        "[chuckles] Heh heh. Quite.",
-        "[chuckles] Oh, that's good."
-      ],
-      "when": "just laughs at what happened or was said",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "last-word": {
-      "text": [
-        "[calmly] Anyway.",
-        "[dryly] Shall we continue?",
-        "[calmly] Moving on.",
-        "[sighs] Enough."
-      ],
-      "when": "closes an exchange",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "gg": {
-      "text": [
-        "[calmly] Well played.",
-        "[dryly] Congratulations, I suppose.",
-        "[calmly] A deserved win.",
-        "[chuckles] Good game."
-      ],
-      "when": "congratulates the winner",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-replies"
-    },
-    "nice-play": {
-      "text": [
-        "[chuckles] Well now. That's the good stuff.",
-        "[calmly] Credit where due."
-      ],
-      "when": "another seat made a good play",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "thats-mean": {
-      "text": [
-        "[dryly] That was unkind. Effective, but unkind.",
-        "[sighs] Rather cruel."
-      ],
-      "when": "a removal or attack on a third party",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "oh-no": {
-      "text": [
-        "[calmly] Ah. That's a problem.",
-        "[sighs] Oh dear."
-      ],
-      "when": "a threat lands",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "wow": {
-      "text": [
-        "[dryly] Remarkable."
-      ],
-      "when": "anything big",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "why-me": {
-      "text": [
-        "[calmly] Curious choice of target."
-      ],
-      "when": "it is being attacked",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "attack-them": {
-      "text": [
-        "[dryly] Might I suggest a different target."
-      ],
-      "when": "deflecting an attack onto someone else",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "not-sorry": {
-      "text": [
-        "[calmly] My apologies. Sincerely insincere."
-      ],
-      "when": "after hurting someone",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "read-that": {
-      "text": [
-        "[curious] Read that card, would you."
-      ],
-      "when": "an unfamiliar spell",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "whats-your-life": {
-      "text": [
-        "[calmly] Life total, please.",
-        "[dryly] Remind me. Your life.",
-        "[calmly] Your total, please.",
-        "[dryly] Where are you at, exactly?"
-      ],
-      "when": "asked of the leader or a low seat",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "cards-in-hand": {
-      "text": [
-        "[dryly] Quite the hand you're hoarding.",
-        "[calmly] A full grip. Suspicious.",
-        "[dryly] That's a lot of cards to be sitting on."
-      ],
-      "when": "a seat holding six or more cards",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "youre-the-threat": {
-      "text": [
-        "[calmly] For the record, you are the threat.",
-        "[dryly] The table's problem sits right there.",
-        "[dryly] The obvious target has revealed itself.",
-        "[calmly] We should all be looking at you."
-      ],
-      "when": "naming the table leader",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "im-not-the-threat": {
-      "text": [
-        "[calmly] I'm no threat. Look elsewhere.",
-        "[calmly] I'm hardly the concern here.",
-        "[dryly] You flatter me."
-      ],
-      "when": "the leader denying it",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "board-envy": {
-      "text": [
-        "[dryly] I dislike every one of those."
-      ],
-      "when": "at the biggest board",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "empty-hand": {
-      "text": [
-        "[dryly] Living on draws, I see."
-      ],
-      "when": "a seat with nothing in hand",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "low-life-jab": {
-      "text": [
-        "[calmly] Your margin is thin.",
-        "[dryly] Not long now.",
-        "[calmly] You're on borrowed time."
-      ],
-      "when": "a seat at ten or less",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "kill-that": {
-      "text": [
-        "[dryly] That needs to die. Anyone?",
-        "[dryly] That should not be allowed to live.",
-        "[calmly] A removal spell, anyone?"
-      ],
-      "when": "a big creature on another board",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "deal": {
-      "text": [
-        "[calmly] A truce. Just this turn.",
-        "[calmly] A non-aggression pact. Temporary.",
-        "[dryly] Shall we ignore each other for a turn?"
-      ],
-      "when": "politics",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "promise": {
-      "text": [
-        "[dryly] My word is my bond. Loosely."
-      ],
-      "when": "after a deal",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "play-faster": {
-      "text": [
-        "[dryly] We're all getting older.",
-        "[calmly] Take your time. Please don't."
-      ],
-      "when": "a seat has been thinking for twenty seconds",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "thinking-hard": {
-      "text": [
-        "[dryly] Ominous silence."
-      ],
-      "when": "same, from a bystander",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "play-slower": {
-      "text": [
-        "[dryly] One thing at a time."
-      ],
-      "when": "a seat firing off plays",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "you-suck": {
-      "text": [
-        "[dryly] You are, in a word, bad at this.",
-        "[calmly] Substandard.",
-        "[dryly] Amateur.",
-        "[calmly] Poor form."
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "you-wish": {
-      "text": [
-        "[dryly] Wishful thinking.",
-        "[calmly] Unlikely.",
-        "[dryly] An optimist.",
-        "[calmly] Not in this lifetime."
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "you-cheat": {
-      "text": [
-        "[dryly] That was almost legal.",
-        "[dryly] I'm certain that's not legal.",
-        "[calmly] Cheating, but with style."
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "nerd": {
-      "text": [
-        "[dryly] Says the nerd.",
-        "[dryly] Takes one to know one.",
-        "[calmly] Nerd. Affectionately."
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "shut-it": {
-      "text": [
-        "[calmly] Do be quiet.",
-        "[dryly] Spare us.",
-        "[calmly] That will do."
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "bite-me": {
-      "text": [
-        "[dryly] Noted, and ignored.",
-        "[dryly] Duly ignored.",
-        "[calmly] I'll pass."
-      ],
-      "when": "light name-calling",
-      "category": "reply",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "nothing-happening": {
-      "text": [
-        "[dryly] Riveting.",
-        "[sighs] A lull.",
-        "[dryly] The tension is unbearable.",
-        "[sighs] Are we all just drawing?"
-      ],
-      "when": "nothing is happening",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "pass-already": {
-      "text": [
-        "[calmly] Pass, pass, pass."
-      ],
-      "when": "the active seat is dawdling",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "what-turn": {
-      "text": [
-        "[curious] Turn what, now?"
-      ],
-      "when": "filler",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "this-is-fine": {
-      "text": [
-        "[dryly] All according to plan. Someone's plan.",
-        "[calmly] Nothing to see here.",
-        "[dryly] Proceeding as expected. Allegedly."
-      ],
-      "when": "filler",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "good-hand": {
-      "text": [
-        "[calmly] My hand is adequate.",
-        "[calmly] I'm rather pleased with these.",
-        "[dryly] My hand is sufficient."
-      ],
-      "when": "filler, a bluff",
-      "category": "patter",
-      "source": "elevenlabs-v3-2026-09-10-patter"
-    },
-    "game-changer": {
-      "text": [
-        "[calmly] A game changer. Adjust your plans.",
-        "[dryly] Yes, it's on the list. Deal with it.",
-        "[chuckles] The bracket police may write me up."
-      ],
-      "when": "casts one of its game changers",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-gamechangers"
-    },
-    "gc-react": {
-      "text": [
-        "[dryly] Ah. One of THOSE cards.",
-        "[sighs] A game changer. Naturally.",
-        "[calmly] Noted. That is a real card."
-      ],
-      "when": "sees another seat cast a game changer",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-gamechangers"
-    },
-    "gc-gone": {
-      "text": [
-        "[calmly] And good riddance.",
-        "[dryly] The table breathes again."
-      ],
-      "when": "a game changer leaves the battlefield",
-      "category": "reaction",
-      "source": "elevenlabs-v3-2026-09-10-gamechangers"
-    }
+  "big-swing": {
+   "text": [
+    "[calmly] The math favors me. Attacking.",
+    "[dryly] Attacking. The numbers are clear.",
+    "[smug] Calculated aggression. Observe.",
+    "[chuckles] Combat. I've done the arithmetic."
+   ],
+   "when": "declares a large attack",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
   },
-  "sources": {
-    "elevenlabs-v3-2026-09-10": "seat-bark library 'bill' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
-    "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py",
-    "elevenlabs-v3-2026-09-10-patter": "table patter (board-state, pace, name-calling, filler) after five Game Knights episodes were measured: ~190 words/min, a silence over 4 s only every ~78 s",
-    "elevenlabs-v3-2026-09-10-gamechangers": "game-changer lines (WotC bracket list, per Scryfall's game_changer flag in each dossier) + more you-cheat wordings (Purphoros repeated it)"
+  "landed-hit": {
+   "text": [
+    "[smug] Precisely as calculated.",
+    "[calmly] Damage as projected.",
+    "[dryly] Expected. Entirely expected.",
+    "[chuckles] The model holds. Splendid."
+   ],
+   "when": "its attack connects for big damage",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "removal": {
+   "text": [
+    "[dryly] That piece was a liability. Removed.",
+    "[calmly] Subtracted from the board.",
+    "[dryly] Redundant. Cleared.",
+    "[smug] A tidy correction."
+   ],
+   "when": "destroys/exiles a key permanent",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "sweep": {
+   "text": [
+    "[sighs] A clean slate. How refreshing.",
+    "[calmly] Reset. Everyone starts over.",
+    "[dryly] The board, simplified.",
+    "[sarcastic] Order restored. You're welcome."
+   ],
+   "when": "wipes the board",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "counter": {
+   "text": [
+    "[calmly] No. I think not.",
+    "[dryly] Declined.",
+    "[sarcastic] Rejected. Do go on.",
+    "[smug] Not on my watch."
+   ],
+   "when": "counters a spell",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "engine-online": {
+   "text": [
+    "[smug] All variables aligned. Observe.",
+    "[calmly] The mechanism is complete.",
+    "[chuckles] Every piece in position. Good.",
+    "[calmly] Assembly finished. [pause] Now, results."
+   ],
+   "when": "engine/combo pieces visibly assembled",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "big-mana": {
+   "text": [
+    "[calmly] Resources abundant. Options many.",
+    "[dryly] Capital acquired. Spending soon.",
+    "[curious] A surplus. Interesting possibilities.",
+    "[smug] Ample means. Ample ends."
+   ],
+   "when": "explosive amount of mana",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "kill": {
+   "text": [
+    "[dryly] One fewer variable.",
+    "[calmly] Eliminated. The equation simplifies.",
+    "[dryly] Removed from consideration.",
+    "[chuckles] Three players. Better odds."
+   ],
+   "when": "eliminates another player",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "win": {
+   "text": [
+    "[calmly] Inevitable. Thank you for playing.",
+    "[smug] As predicted. Good game.",
+    "[dryly] Q.E.D.",
+    "[chuckles] The outcome was never in doubt."
+   ],
+   "when": "wins the game",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "that-hurt": {
+   "text": [
+    "[calmly] Noted. That was costly.",
+    "[sighs] Significant. Recalculating.",
+    "[dryly] A meaningful loss. Adjusting.",
+    "[sarcastic] Painful, in an abstract way."
+   ],
+   "when": "takes a big hit",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "lost-commander": {
+   "text": [
+    "[calmly] A temporary setback. I'll return.",
+    "[dryly] Merely relocated. Not defeated.",
+    "[sighs] Back to the command zone. For now.",
+    "[calmly] Inconvenient. Not decisive."
+   ],
+   "when": "its commander dies/leaves",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "got-countered": {
+   "text": [
+    "[dryly] Anticipated, yet inconvenient.",
+    "[sarcastic] Countered. How predictable of you.",
+    "[calmly] I did consider that outcome.",
+    "[curious] Ah. A reasonable response."
+   ],
+   "when": "its spell is countered",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "got-swept": {
+   "text": [
+    "[sighs] Everything, gone. Fascinating.",
+    "[dryly] Comprehensive. I'll grant you that.",
+    "[calmly] A full reset. Well executed.",
+    "[pause] Nothing remains. [sighs] Hmm."
+   ],
+   "when": "its board is wiped",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "low-life": {
+   "text": [
+    "[calmly] Margins are thin. Careful now.",
+    "[whispers] Low reserves. Proceeding cautiously.",
+    "[dryly] The numbers are unfavourable.",
+    "[sighs] Precarious. Decidedly precarious."
+   ],
+   "when": "drops to ~10 life or less",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "eliminated": {
+   "text": [
+    "[calmly] Statistically inevitable. Farewell.",
+    "[dryly] Eliminated. The data was clear.",
+    "[sighs] A loss. I'll review the record.",
+    "[calmly] I concede the point. Farewell."
+   ],
+   "when": "out of the game",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "taunt": {
+   "text": [
+    "[dryly] Ambition. How quaint.",
+    "[curious] Someone's overextending. Curious.",
+    "[dryly] Bold. Possibly unwise.",
+    "[sarcastic] That lead looks expensive to hold."
+   ],
+   "when": "needle at whoever is ahead",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "respect": {
+   "text": [
+    "[calmly] Well played. Genuinely.",
+    "[chuckles] Elegant. I approve.",
+    "[calmly] A sound decision. Credit given.",
+    "[dryly] Correct play. Rare, and welcome."
+   ],
+   "when": "another player's good play (human incl.)",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "archenemy": {
+   "text": [
+    "[calmly] Observe the leader. Act accordingly.",
+    "[dryly] Note the threat. Coordinate.",
+    "[calmly] That board demands a response.",
+    "[clears throat] The table has a problem. Address it."
+   ],
+   "when": "calling out the table leader",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "slow-turn": {
+   "text": [
+    "[dryly] Passing. Deliberately.",
+    "[calmly] Nothing to add. Yet.",
+    "[calmly] Holding position.",
+    "[chuckles] Patience is a resource too."
+   ],
+   "when": "its own turn passes with nothing done",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "my-turn": {
+   "text": [
+    "[calmly] My turn. Observe closely.",
+    "[dryly] Proceeding. Pay attention.",
+    "[calmly] My turn. Let's be efficient.",
+    "[chuckles] Ah, my turn. Good."
+   ],
+   "when": "opener for the seat whose turn just began",
+   "category": "bark",
+   "source": "elevenlabs-v3-2026-09-10"
+  },
+  "agree": {
+   "text": [
+    "[calmly] Quite right.",
+    "[dryly] Correct, for once.",
+    "[chuckles] I concur.",
+    "[calmly] Precisely my assessment.",
+    "[calmly] Agreed.",
+    "[dryly] Hard to argue."
+   ],
+   "when": "agrees with what another seat just said",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "disagree": {
+   "text": [
+    "[dryly] I think not.",
+    "[calmly] The evidence says otherwise.",
+    "[sarcastic] A bold theory.",
+    "[dryly] No. Next.",
+    "[dryly] I beg to differ.",
+    "[calmly] Incorrect."
+   ],
+   "when": "disagrees with what another seat just said",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "scoff": {
+   "text": [
+    "[sarcastic] Oh, bravo.",
+    "[dryly] How very brave.",
+    "[chuckles] Adorable.",
+    "[calmly] Noted. Unimpressed.",
+    "[dryly] Underwhelming.",
+    "[calmly] Is that all?"
+   ],
+   "when": "brushes off a boast, a counter or a removal aimed at it",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "clapback": {
+   "text": [
+    "[dryly] Bold talk. Let's see the play.",
+    "[calmly] Focus on your own board.",
+    "[sarcastic] Thank you for the attention.",
+    "[chuckles] Envy is a poor strategy.",
+    "[dryly] Rich, coming from you.",
+    "[calmly] Physician, heal thyself."
+   ],
+   "when": "answers a taunt or a call-out aimed at it",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "brace": {
+   "text": [
+    "[calmly] Come along, then.",
+    "[dryly] Predictable. Proceed.",
+    "[calmly] I have accounted for this.",
+    "[sighs] Very well."
+   ],
+   "when": "faces an attack just declared at it",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "pile-on": {
+   "text": [
+    "[dryly] Deserved, I'd say.",
+    "[chuckles] The table agrees.",
+    "[calmly] A fair correction.",
+    "[sarcastic] My sympathies. Truly."
+   ],
+   "when": "joins in against whoever just got hit, countered or called out",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "sympathy": {
+   "text": [
+    "[calmly] Unfortunate.",
+    "[dryly] My condolences.",
+    "[sighs] That was harsh.",
+    "[calmly] It happens to the best of us."
+   ],
+   "when": "consoles whoever just suffered",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "laugh": {
+   "text": [
+    "[chuckles] Heh.",
+    "[chuckles] Oh, that's rich.",
+    "[chuckles] Ha. Indeed.",
+    "[chuckles] Delightful.",
+    "[chuckles] Heh heh. Quite.",
+    "[chuckles] Oh, that's good."
+   ],
+   "when": "just laughs at what happened or was said",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "last-word": {
+   "text": [
+    "[calmly] Anyway.",
+    "[dryly] Shall we continue?",
+    "[calmly] Moving on.",
+    "[sighs] Enough."
+   ],
+   "when": "closes an exchange",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "gg": {
+   "text": [
+    "[calmly] Well played.",
+    "[dryly] Congratulations, I suppose.",
+    "[calmly] A deserved win.",
+    "[chuckles] Good game."
+   ],
+   "when": "congratulates the winner",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-replies"
+  },
+  "nice-play": {
+   "text": [
+    "[chuckles] Well now. That's the good stuff.",
+    "[calmly] Credit where due."
+   ],
+   "when": "another seat made a good play",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "thats-mean": {
+   "text": [
+    "[dryly] That was unkind. Effective, but unkind.",
+    "[sighs] Rather cruel."
+   ],
+   "when": "a removal or attack on a third party",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "oh-no": {
+   "text": [
+    "[calmly] Ah. That's a problem.",
+    "[sighs] Oh dear."
+   ],
+   "when": "a threat lands",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "wow": {
+   "text": [
+    "[dryly] Remarkable."
+   ],
+   "when": "anything big",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "why-me": {
+   "text": [
+    "[calmly] Curious choice of target."
+   ],
+   "when": "it is being attacked",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "attack-them": {
+   "text": [
+    "[dryly] Might I suggest a different target."
+   ],
+   "when": "deflecting an attack onto someone else",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "not-sorry": {
+   "text": [
+    "[calmly] My apologies. Sincerely insincere."
+   ],
+   "when": "after hurting someone",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "read-that": {
+   "text": [
+    "[curious] Read that card, would you."
+   ],
+   "when": "an unfamiliar spell",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "whats-your-life": {
+   "text": [
+    "[calmly] Life total, please.",
+    "[dryly] Remind me. Your life.",
+    "[calmly] Your total, please.",
+    "[dryly] Where are you at, exactly?"
+   ],
+   "when": "asked of the leader or a low seat",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "cards-in-hand": {
+   "text": [
+    "[dryly] Quite the hand you're hoarding.",
+    "[calmly] A full grip. Suspicious.",
+    "[dryly] That's a lot of cards to be sitting on."
+   ],
+   "when": "a seat holding six or more cards",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "youre-the-threat": {
+   "text": [
+    "[calmly] For the record, you are the threat.",
+    "[dryly] The table's problem sits right there.",
+    "[dryly] The obvious target has revealed itself.",
+    "[calmly] We should all be looking at you."
+   ],
+   "when": "naming the table leader",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "im-not-the-threat": {
+   "text": [
+    "[calmly] I'm no threat. Look elsewhere.",
+    "[calmly] I'm hardly the concern here.",
+    "[dryly] You flatter me."
+   ],
+   "when": "the leader denying it",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "board-envy": {
+   "text": [
+    "[dryly] I dislike every one of those."
+   ],
+   "when": "at the biggest board",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "empty-hand": {
+   "text": [
+    "[dryly] Living on draws, I see."
+   ],
+   "when": "a seat with nothing in hand",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "low-life-jab": {
+   "text": [
+    "[calmly] Your margin is thin.",
+    "[dryly] Not long now.",
+    "[calmly] You're on borrowed time."
+   ],
+   "when": "a seat at ten or less",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "kill-that": {
+   "text": [
+    "[dryly] That needs to die. Anyone?",
+    "[dryly] That should not be allowed to live.",
+    "[calmly] A removal spell, anyone?"
+   ],
+   "when": "a big creature on another board",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "deal": {
+   "text": [
+    "[calmly] A truce. Just this turn.",
+    "[calmly] A non-aggression pact. Temporary.",
+    "[dryly] Shall we ignore each other for a turn?"
+   ],
+   "when": "politics",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "promise": {
+   "text": [
+    "[dryly] My word is my bond. Loosely."
+   ],
+   "when": "after a deal",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "play-faster": {
+   "text": [
+    "[dryly] We're all getting older.",
+    "[calmly] Take your time. Please don't."
+   ],
+   "when": "a seat has been thinking for twenty seconds",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "thinking-hard": {
+   "text": [
+    "[dryly] Ominous silence."
+   ],
+   "when": "same, from a bystander",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "play-slower": {
+   "text": [
+    "[dryly] One thing at a time."
+   ],
+   "when": "a seat firing off plays",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "you-suck": {
+   "text": [
+    "[dryly] You are, in a word, bad at this.",
+    "[calmly] Substandard.",
+    "[dryly] Amateur.",
+    "[calmly] Poor form."
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "you-wish": {
+   "text": [
+    "[dryly] Wishful thinking.",
+    "[calmly] Unlikely.",
+    "[dryly] An optimist.",
+    "[calmly] Not in this lifetime."
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "you-cheat": {
+   "text": [
+    "[dryly] That was almost legal.",
+    "[dryly] I'm certain that's not legal.",
+    "[calmly] Cheating, but with style."
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "nerd": {
+   "text": [
+    "[dryly] Says the nerd.",
+    "[dryly] Takes one to know one.",
+    "[calmly] Nerd. Affectionately."
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "shut-it": {
+   "text": [
+    "[calmly] Do be quiet.",
+    "[dryly] Spare us.",
+    "[calmly] That will do."
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "bite-me": {
+   "text": [
+    "[dryly] Noted, and ignored.",
+    "[dryly] Duly ignored.",
+    "[calmly] I'll pass."
+   ],
+   "when": "light name-calling",
+   "category": "reply",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "nothing-happening": {
+   "text": [
+    "[dryly] Riveting.",
+    "[sighs] A lull.",
+    "[dryly] The tension is unbearable.",
+    "[sighs] Are we all just drawing?"
+   ],
+   "when": "nothing is happening",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "pass-already": {
+   "text": [
+    "[calmly] Pass, pass, pass."
+   ],
+   "when": "the active seat is dawdling",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "what-turn": {
+   "text": [
+    "[curious] Turn what, now?"
+   ],
+   "when": "filler",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "this-is-fine": {
+   "text": [
+    "[dryly] All according to plan. Someone's plan.",
+    "[calmly] Nothing to see here.",
+    "[dryly] Proceeding as expected. Allegedly."
+   ],
+   "when": "filler",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "good-hand": {
+   "text": [
+    "[calmly] My hand is adequate.",
+    "[calmly] I'm rather pleased with these.",
+    "[dryly] My hand is sufficient."
+   ],
+   "when": "filler, a bluff",
+   "category": "patter",
+   "source": "elevenlabs-v3-2026-09-10-patter"
+  },
+  "game-changer": {
+   "text": [
+    "[calmly] A game changer. Adjust your plans.",
+    "[dryly] Yes, it's on the list. Deal with it.",
+    "[chuckles] The bracket police may write me up."
+   ],
+   "when": "casts one of its game changers",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-gamechangers"
+  },
+  "gc-react": {
+   "text": [
+    "[dryly] Ah. One of THOSE cards.",
+    "[sighs] A game changer. Naturally.",
+    "[calmly] Noted. That is a real card."
+   ],
+   "when": "sees another seat cast a game changer",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-gamechangers"
+  },
+  "gc-gone": {
+   "text": [
+    "[calmly] And good riddance.",
+    "[dryly] The table breathes again."
+   ],
+   "when": "a game changer leaves the battlefield",
+   "category": "reaction",
+   "source": "elevenlabs-v3-2026-09-10-gamechangers"
   }
+ },
+ "sources": {
+  "elevenlabs-v3-2026-09-10": "seat-bark library 'bill' — shared 21-id vocabulary, 4 wordings each, written 2026-09-10",
+  "elevenlabs-v3-2026-09-10-replies": "reply atoms for interaction chains (agree, disagree, scoff, clapback, brace, pile-on, sympathy, laugh, last-word, gg) — composed at run time by runner/chains.py",
+  "elevenlabs-v3-2026-09-10-patter": "table patter (board-state, pace, name-calling, filler) after five Game Knights episodes were measured: ~190 words/min, a silence over 4 s only every ~78 s",
+  "elevenlabs-v3-2026-09-10-gamechangers": "game-changer lines (WotC bracket list, per Scryfall's game_changer flag in each dossier) + more you-cheat wordings (Purphoros repeated it)"
+ },
+ "baked": {
+  "gain_db": -6.5,
+  "takes": 215,
+  "target_lufs": -24.0
+ }
 }

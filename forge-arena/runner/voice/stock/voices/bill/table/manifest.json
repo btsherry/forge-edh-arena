@@ -2223,5 +2223,10 @@
    ],
    "source": "table-2026-09-10"
   }
+ },
+ "baked": {
+  "gain_db": -6.61,
+  "takes": 353,
+  "target_lufs": -24.0
  }
 }

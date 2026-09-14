@@ -130,6 +130,12 @@ def bake_argv(raw: Path, tmp: Path, lib: Path, m: dict, b: dict, gain_db: float 
         af = chain
     else:
         af = f"volume={gain_db or 0.0:.2f}dB"
+    if b.get("trim"):
+        # the atoms (2026-09-14): a sub-second sigh or gasp arrives with up to a second of
+        # room tone either side; cut it to the voiced part plus a short tail so it sits
+        # under a line instead of after it. Two passes of silenceremove: head, then tail.
+        af += (",silenceremove=start_periods=1:start_threshold=-40dB:start_silence=0.05"
+               ",areverse,silenceremove=start_periods=1:start_threshold=-40dB:start_silence=0.12,areverse")
     return base + ["-af", af, "-ar", str(b.get("rate", 44100)), "-ac", "1", str(tmp)]
 
 
@@ -254,11 +260,21 @@ def bake(lib: Path, ids: set[str] | None, glitch_override: str | None = None) ->
     raws = sorted((lib / "raw").glob("*.wav"))
     gain = None
     peaks: dict[str, float] = {}
+    baked = m.get("baked") or {}
     if b.get("fx", "chain") != "chain" and raws:
-        measures = {r.stem: measure(r) for r in raws}           # the WHOLE library, not just --ids:
-        gain = library_gain(list(measures.values()), float(b.get("target_lufs", -24.0)))   # the gain is a library constant
+        measures = {r.stem: measure(r) for r in raws}
+        if baked.get("gain_db") is not None and len(measures) < int(baked.get("takes") or 0):
+            # the raws on disk are only the new takes (the old ones left the tree, 2026-09-14): the
+            # library's gain is the one recorded when the whole library was measured, so a new
+            # wording bakes to the level of its neighbours instead of to its own mean
+            gain = float(baked["gain_db"])
+            print(f"[build_stock] library gain {gain:+.2f} dB (recorded from {baked.get('takes')} takes; {len(measures)} raw here)")
+        else:
+            gain = library_gain(list(measures.values()), float(b.get("target_lufs", -24.0)))   # the gain is a library constant
+            print(f"[build_stock] library gain {gain:+.2f} dB ({len(measures)} takes -> {b.get('target_lufs', -24.0)} LUFS mean)")
+            m["baked"] = {"gain_db": gain, "takes": len(measures), "target_lufs": float(b.get("target_lufs", -24.0))}
+            (lib / "manifest.json").write_text(json.dumps(m, indent=1, ensure_ascii=False) + "\n")   # remembered for re-bakes without the raws
         peaks = {k: tp for k, (_i, tp) in measures.items()}
-        print(f"[build_stock] library gain {gain:+.2f} dB ({len(measures)} takes -> {b.get('target_lufs', -24.0)} LUFS mean)")
     n = 0
     for raw in raws:
         stem = raw.stem

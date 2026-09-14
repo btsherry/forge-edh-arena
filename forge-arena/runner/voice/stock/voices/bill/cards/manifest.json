@@ -1797,5 +1797,10 @@
    ],
    "source": "cards-2026-09-10"
   }
+ },
+ "baked": {
+  "gain_db": -6.47,
+  "takes": 264,
+  "target_lufs": -24.0
  }
 }

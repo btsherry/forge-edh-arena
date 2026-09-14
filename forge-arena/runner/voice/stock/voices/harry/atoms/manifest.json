@@ -1,0 +1,323 @@
+{
+ "schema": "arena.voice-stock/1",
+ "library": "harry/atoms",
+ "parent": "harry",
+ "seat": null,
+ "note": "the atoms sub-library (2026-09-14, Ben: 'one of the best suggestions'): sub-second non-verbal presence — sighs, chuckles, gasps, backchannels — played on the under channel beneath a line or at the floor when there is nothing worth saying; never counted as talk",
+ "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+ "voice_name": "Harry - Fierce Warrior",
+ "temperament": "fiery young warrior: loud, cocky, quick to anger and quick to laugh; never sulks for long",
+ "render": {
+  "model": "eleven_v3",
+  "voice_settings": {
+   "stability": 0.0,
+   "speed": 1.05
+  },
+  "formats": [
+   "pcm_24000"
+  ]
+ },
+ "bake": {
+  "rate": 22050,
+  "fx": "none",
+  "glitch": "off",
+  "gain": "library",
+  "target_lufs": -27.0,
+  "true_peak_max": -1.0,
+  "note": "the table's level minus 3 dB: an atom sits under a line, never over it; trimmed to the voiced part",
+  "trim": true
+ },
+ "phrases": {
+  "sigh": {
+   "category": "atom",
+   "when": "a beat of presence; the floor with nothing worth saying",
+   "text": [
+    "[sighs] Hmm.",
+    "[sighs] Hm.",
+    "[tired sigh] Ah.",
+    "[sighs heavily] Right.",
+    "[soft sigh] Mm."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "hmm": {
+   "category": "atom",
+   "when": "thinking along; under a proposal or a question",
+   "text": [
+    "[thoughtful] Hmm.",
+    "Hm-mm.",
+    "[curious] Hmm?",
+    "[pondering] Hmmm.",
+    "[skeptical] Hm."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "chuckle": {
+   "category": "atom",
+   "when": "under a jab or a clapback",
+   "text": [
+    "[chuckles] Heh.",
+    "[chuckles softly] Heh heh.",
+    "[amused chuckle] Ha.",
+    "[dry chuckle] Hm, heh.",
+    "[chuckles] Oh, heh."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "laugh": {
+   "category": "atom",
+   "when": "a short laugh under a good line",
+   "text": [
+    "[laughs] Ha!",
+    "[laughs] Ha ha.",
+    "[short laugh] Hah-ha.",
+    "[laughing] Oh, ha!",
+    "[snorts] Ha."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "gasp": {
+   "category": "atom",
+   "when": "a big swing, a kill, a sweep — from a seat not speaking",
+   "text": [
+    "[gasps] Oh!",
+    "[sharp gasp] Ah!",
+    "[gasps] Whoa.",
+    "[shocked gasp] Oh no.",
+    "[gasps] What?"
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "cough": {
+   "category": "atom",
+   "when": "presence at an idle table",
+   "text": [
+    "[coughs] Ahem.",
+    "[clears throat] Hm.",
+    "[coughs twice] Ahem, ahem.",
+    "[soft cough] Hm-hm."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "throat": {
+   "category": "atom",
+   "when": "presence; before a seat's own turn",
+   "text": [
+    "[clears throat] Ahem.",
+    "[clears throat] Right.",
+    "[clears throat] So.",
+    "[clears throat] Okay."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "tsk": {
+   "category": "atom",
+   "when": "disapproval under a removal or a betrayal",
+   "text": [
+    "[tsk] Tsk.",
+    "Tch.",
+    "[disapproving] Tsk tsk.",
+    "[clicks tongue] Tch, tch.",
+    "[tsk] Hm."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "exhale": {
+   "category": "atom",
+   "when": "relief under a fizzle or a whiff",
+   "text": [
+    "[exhales] Phew.",
+    "[exhales slowly] Hoo.",
+    "[relieved] Phew!",
+    "[breathes out] Okay.",
+    "[exhales] Right."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "groan": {
+   "category": "atom",
+   "when": "a wipe, a counter, a long think",
+   "text": [
+    "[groans] Ugh.",
+    "[groans] Ohh.",
+    "[long groan] Uuugh.",
+    "[pained groan] Ow.",
+    "[groans] Oh, come on."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "oof": {
+   "category": "atom",
+   "when": "the target of a hit, under the hit line",
+   "text": [
+    "[winces] Oof.",
+    "Oof.",
+    "[pained] Oof!",
+    "[winces] Ooh, oof.",
+    "[grunts] Ugh, oof."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "ooh": {
+   "category": "atom",
+   "when": "a spicy cast, under the caster's line",
+   "text": [
+    "[intrigued] Ooh.",
+    "Oooh.",
+    "[delighted] Ooh!",
+    "[interested] Ooh, okay.",
+    "[sly] Ooh."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "hah": {
+   "category": "atom",
+   "when": "a bystander under a jab",
+   "text": [
+    "[amused] Hah.",
+    "Hah!",
+    "[mocking] Hah.",
+    "[surprised laugh] Hah!",
+    "[dry] Hah, right."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "mm-hm": {
+   "category": "atom",
+   "when": "assent under a proposal",
+   "text": [
+    "Mm-hm.",
+    "[agreeing] Mm-hm.",
+    "[nodding] Mm-hm, mm-hm.",
+    "[warm] Mm-hm.",
+    "[flat] Mm-hm."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "yeah": {
+   "category": "atom",
+   "when": "assent, casual",
+   "text": [
+    "[casual] Yeah.",
+    "Yeah, yeah.",
+    "[agreeing] Yeah.",
+    "[reluctant] Yeah...",
+    "[bright] Yeah!"
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "no-way": {
+   "category": "atom",
+   "when": "disbelief under a big play",
+   "text": [
+    "[surprised] No way.",
+    "No way!",
+    "[disbelieving] No. Way.",
+    "[whispers] No way.",
+    "[stunned] No way..."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "nice": {
+   "category": "atom",
+   "when": "appreciation under a good play",
+   "text": [
+    "[impressed] Nice.",
+    "Nice.",
+    "[approving] Nice, nice.",
+    "[quiet] Nice.",
+    "[grudging] ...Nice."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "wow": {
+   "category": "atom",
+   "when": "awe under a huge play",
+   "text": [
+    "[impressed] Wow.",
+    "Wow.",
+    "[awed] Wow...",
+    "[flat] Wow.",
+    "[whispers] Wow."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "ugh": {
+   "category": "atom",
+   "when": "disgust under a stax piece or a counter",
+   "text": [
+    "[disgusted] Ugh.",
+    "Ugh.",
+    "[annoyed] Ugh!",
+    "[weary] Ugh...",
+    "[groans] Ugh, that card."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "hmph": {
+   "category": "atom",
+   "when": "a huff under a proposal against this seat",
+   "text": [
+    "[huffs] Hmph.",
+    "Hmph.",
+    "[indignant] Hmph!",
+    "[sulky] Hmph...",
+    "[scoffs] Hmph."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "come-on": {
+   "category": "atom",
+   "when": "impatience at a slow seat or an open window",
+   "text": [
+    "[impatient] Come on.",
+    "Come on...",
+    "[urging] Come on, come on.",
+    "[muttering] Come on.",
+    "[exasperated] Oh, come on."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "oh-no": {
+   "category": "atom",
+   "when": "dread under a combo piece landing",
+   "text": [
+    "[worried] Oh no.",
+    "Oh, no.",
+    "[dread] Oh no, no, no.",
+    "[quiet] Oh no...",
+    "[alarmed] Oh no!"
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "right": {
+   "category": "atom",
+   "when": "a seat squaring up to its own turn",
+   "text": [
+    "[decisive] Right.",
+    "Right, right.",
+    "[squaring up] Right then.",
+    "[brisk] Right. Okay.",
+    "[thoughtful] Right..."
+   ],
+   "source": "atoms-2026-09-14"
+  },
+  "yikes": {
+   "category": "atom",
+   "when": "a wince at someone else's misfortune",
+   "text": [
+    "[wincing] Yikes.",
+    "Yikes.",
+    "[hushed] Yikes...",
+    "[sympathetic] Ooh, yikes.",
+    "[amused] Yikes!"
+   ],
+   "source": "atoms-2026-09-14"
+  }
+ },
+ "baked": {
+  "gain_db": -9.84,
+  "takes": 118,
+  "target_lufs": -27.0
+ }
+}
