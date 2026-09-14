@@ -731,8 +731,7 @@ class InteractionChains(_TreeCase):
         self.r._said_at["cards-in-hand"] = self.clock.t - 60
         seats = [{"seat": i, "name": f"s{i}", "eliminated": False, "life": 40, "handSize": 7 if i == 2 else 3, "battlefield": []} for i in range(4)]
         cands = self.r.patter_candidates({"turn": 3, "activeSeat": 1, "seats": seats}, [1, 2])
-        w = {pid: wgt for _, pid, _, wgt in cands if pid == "cards-in-hand"}["cards-in-hand"]
-        self.assertLess(w, 0.5, "said a minute ago: weak")
+        self.assertNotIn("cards-in-hand", {pid for _, pid, _, _ in cands}, "said a minute ago by anyone: no candidate at all (game 48)")
         self.r._said_at["cards-in-hand"] = self.clock.t - 600
         cands = self.r.patter_candidates({"turn": 3, "activeSeat": 1, "seats": seats}, [1, 2])
         self.assertEqual({pid: wgt for _, pid, _, wgt in cands if pid == "cards-in-hand"}["cards-in-hand"], 1.0, "ten minutes ago: full weight (1.0 since game 46)")
@@ -849,6 +848,15 @@ class PatterClock(_TreeCase):
         self.assertEqual(len(self.r.queue), 1); self.r.queue.clear()
         self._board(turn=3, active=2); self._tick(6)
         self.assertEqual(len(self.r.queue), 1, "the board moved: the full pace is back")
+
+    def test_a_named_line_counts_as_its_generic_for_recency(self):
+        """Game 48: 'Deal, Urza?' three times — the memory held deal-urza while the clock looked up deal."""
+        self._board(active=1)
+        (Path(vr.VOICES_DIR) / "harry" / "deal-urza.wav").write_bytes(silent_wav())
+        self.r.speak({"kind": "bark", "text": "", "stock": "deal-urza", "seat": 1, "library": "harry", "ctx": {"targets": [2], "generic": "deal"}, "chain": None, "source": "patter"})
+        self.assertIn("deal", self.r._said_at); self.assertIn((1, "deal"), self.r._seat_said_at)
+        cands = self.r.patter_candidates(self.r._last_snapshot, [1, 2])
+        self.assertNotIn("deal", {pid for _, pid, _, _ in cands}, "no deal from anyone for five minutes")
 
     def test_a_line_already_said_this_turn_is_not_a_candidate(self):
         self._board(hands=(3, 0, 3, 3), active=3)

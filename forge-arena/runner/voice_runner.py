@@ -154,6 +154,7 @@ CARD_REACTIONS = {"gc": ({"gc-react", "oh-no", "kill-that", "wow", "read-that", 
 # bark, at once) with this probability, else by Joshua's "A player has been eliminated."
 ELIM_SEAT_P = 0.7
 RECENT_S = 240.0          # a line said within this window is stale for the patter pick and for replies
+PATTER_REPEAT_S = 300.0   # a patter line said by ANY seat within this window is no candidate at all (game 48: "cards in hand" x4)
 RECENT_WEIGHT = 0.15      # its patter weight is multiplied by this
 # Seat barks, the table-talk design (Ben, 2026-09-10 — "playing with the AI should
 # feel like sitting at the table with people"): every turn boundary has ONE owner.
@@ -1465,6 +1466,10 @@ class VoiceRunner:
             self._bark_spoken_at[int(item["seat"])] = self.clock()
             self._said_at[item["stock"]] = self.clock()
             self._seat_said_at[(int(item["seat"]), item["stock"])] = self.clock()
+            generic = (item.get("ctx") or {}).get("generic")
+            if generic:                                             # "deal-urza" was a "deal": the recency memory knows both
+                self._said_at[generic] = self.clock()
+                self._seat_said_at[(int(item["seat"]), generic)] = self.clock()
         self.record("spoke", kind=item["kind"], text=item["text"][:200], stock=item["stock"], seconds=round(secs, 2),
                     chars_used=self.renderer.chars_used, library=item.get("library") or "", seat=item.get("seat"),
                     file=path.name, duty=round(self.duty(), 2), goal=round(self.duty_goal(), 2), source=item.get("source", ""))
@@ -1835,9 +1840,11 @@ class VoiceRunner:
         if active is not None and int(active) in living:
             add("pass-already", int(active), 0.5)
         now = self.clock()
-        # a line the seat already said this turn is no candidate (game 46: 765 wasted gaps on one jab at turn 0)
-        return [(sp, pid, tgt, w * (RECENT_WEIGHT if now - self._said_at.get(pid, -1e9) < RECENT_S else 1.0))
-                for sp, pid, tgt, w in out if (int(sp), pid) not in self._said_this_turn]
+        # a line the seat already said this turn is no candidate (game 46: 765 wasted gaps on one jab at turn 0);
+        # a line ANY seat said in the last five minutes is no candidate either (game 48: "cards in hand" x4)
+        return [(sp, pid, tgt, w)
+                for sp, pid, tgt, w in out
+                if (int(sp), pid) not in self._said_this_turn and now - self._said_at.get(pid, -1e9) >= PATTER_REPEAT_S]
 
     def patter(self) -> None:
         if not self.patter_on or self.barks_mode == "off" or self.queue or self.final_locked:
