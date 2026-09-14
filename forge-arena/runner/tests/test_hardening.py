@@ -365,6 +365,7 @@ class LaunchBanner(unittest.TestCase):
         py = re.compile(r'environ\.get\("((?:ARENA|SEAT)_[A-Z_]+)"(?:,\s*"([^"]*)")?\)')
         sh = re.compile(r'\$\{((?:ARENA|SEAT)_[A-Z_]+)(?::-([^}]*))?\}')
         files = list((ROOT / "runner").glob("*.py")) + list((ROOT / "runner" / "seatd").glob("*.py")) \
+            + list((ROOT / "runner" / "voice").glob("*.py")) \
             + list((ROOT / "runner").glob("*.sh")) + list((ROOT / "scripts").glob("*.sh"))
         for f in files:
             text = f.read_text(errors="replace")

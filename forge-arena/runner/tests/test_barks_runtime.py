@@ -23,6 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import voice_runner as vr  # noqa: E402
+from voice import renderer as vr_renderer, table as vr_table  # noqa: E402  — the split (2026-09-14): STOCK/VOICES_DIR live here
 
 LINES = ("big-swing", "eliminated", "my-turn", "that-hurt", "landed-hit", "counter", "got-countered", "slow-turn", "respect",
          "game-changer", "gc-react", "gc-gone",
@@ -91,7 +92,11 @@ class _TreeCase(unittest.TestCase):
         self.logs.mkdir(); self.mailbox.mkdir()
         stock, voices = build_tree(base, chains=self.CHAINS)
         self._stock, self._voices = vr.STOCK, vr.VOICES_DIR
+        # the fake tree: voice_runner re-exports the paths, but the Renderer and the table's load_* defaults
+        # read them from voice/renderer.py and voice/table.py, so all three bindings are swapped
         vr.STOCK, vr.VOICES_DIR = stock, voices
+        vr_renderer.STOCK, vr_renderer.VOICES_DIR = stock, voices
+        vr_table.VOICES_DIR = voices
         self._env = dict(os.environ)
         os.environ.pop("ELEVENLABS_API_KEY", None)
         for k, v in {"ARENA_VOICE_MIN_GAP": "8", "ARENA_VOICE_SFX": "off", "ARENA_VOICE_FX": "off",
@@ -104,6 +109,8 @@ class _TreeCase(unittest.TestCase):
 
     def tearDown(self):
         vr.STOCK, vr.VOICES_DIR = self._stock, self._voices
+        vr_renderer.STOCK, vr_renderer.VOICES_DIR = self._stock, self._voices
+        vr_table.VOICES_DIR = self._voices
         os.environ.clear(); os.environ.update(self._env)
         self.tmp.cleanup()
 
