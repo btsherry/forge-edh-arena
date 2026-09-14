@@ -343,7 +343,8 @@ PLAN_KEY_INSTRUCTION = (
 def build_user_prompt(req: dict, plan: str | None = None,
                       observer: dict | None = None,
                       speculative: bool = False, react_hold: bool = False,
-                      combo_status: str | None = None) -> str:
+                      combo_status: str | None = None,
+                      runner_note: str | None = None) -> str:
     """Per-decision prompt for the seat's model session (dossier already lives
     in the session's first message — this carries only the fresh decision).
 
@@ -370,6 +371,8 @@ def build_user_prompt(req: dict, plan: str | None = None,
                      f"if they disagree): {plan}")
     if combo_status:
         parts.append(combo_status)
+    if runner_note:
+        parts.append(f"RUNNER NOTE: {runner_note}")     # loop stopped/paused, or the loop offer (round 31)
     if dtype in ("CAST_SPELL", "CHOOSE_NUMBER"):
         parts.append(MANA_GROUND_TRUTH)
     parts.append("REQUEST (ground truth — re-derive your decision from this):")

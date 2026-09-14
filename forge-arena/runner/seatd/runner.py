@@ -476,6 +476,213 @@ class SeatRunner:
                     "CHOOSE_NUMBER")
     CYCLE_MAX_ROUNDS = 64
     CYCLE_MAX_HIST = 120
+    # Stop conditions + the loop offer (Ben, 2026-09-14, after game 47's Reservoir turn: the
+    # brain declared one cycle at the earliest possible moment, then after an interruption
+    # looped 28 windows by hand while its own reasons counted "six spells reach 180").
+    UNTIL_OPERANDS = ("life", "opp_life_max", "opp_life_min", "pool", "mana_now", "hand", "library", "perms", "poison", "casts", "rounds")
+    UNTIL_CMPS = (">=", "<=", "==")
+    UNTIL_FLOOR_LIFE = 5          # a replayed loop never continues at or below this life
+    UNTIL_FLAT_ROUNDS = 2         # rounds without progress toward the target: the loop is not doing what was declared
+    OFFER_PERIODS = range(1, 13)  # a repeating pattern of 1..12 decisions, seen twice, earns one offer (a 1-step pattern must be an action, not a pass)
+
+    def _loop_state(self) -> None:
+        """Round-31 loop state, defaulted lazily: a parked cycle (until unmet, broken by an
+        interruption), the patterns already offered this turn, own casts this turn, and a
+        one-shot note for the next prompt."""
+        if not hasattr(self, "_parked"):
+            self._parked = None
+        if not hasattr(self, "_offered"):
+            self._offered = set()
+        if not hasattr(self, "_casts_turn"):
+            self._casts_turn = 0
+        if not hasattr(self, "_runner_note"):
+            self._runner_note = None
+        if not hasattr(self, "_offer_for"):
+            self._offer_for = None
+
+    @staticmethod
+    def _loose(sig: tuple) -> tuple:
+        """A declared loop's own churn is not novelty: which rock sits in hand or lies tapped
+        changes the option list every round (game 47: Sol Ring and Mana Vault alternating),
+        so a cycle WITH a target matches steps on decision type, phase, own stack and
+        opponent count, and lets the answer's unique binding + validation guard the rest.
+        Without a target the strict signature (option list included) stays in force."""
+        return (sig[0], sig[1], sig[2], sig[4]) if isinstance(sig, tuple) and len(sig) >= 5 else sig
+
+    @classmethod
+    def _step_key(cls, entry: tuple, loose: bool) -> tuple:
+        sig, dt, shape = entry
+        return ((cls._loose(sig) if loose else sig), dt, shape)
+
+    def _hist_push(self, cyc_sig, dtype, shape) -> None:
+        """Append to this turn's tape (bounded), count own casts, and let a parked loop
+        re-arm the moment its pattern recurs."""
+        self._loop_state()
+        self._hist.append((cyc_sig, dtype, shape))
+        del self._hist[:-self.CYCLE_MAX_HIST]
+        if dtype == "CAST_SPELL" and shape is not None and shape != ("id0",):
+            self._casts_turn += 1
+        self._maybe_rearm()
+
+    # ---- until: the stop condition on a declared cycle ----------------------
+    @classmethod
+    def parse_until(cls, spec):
+        """Normalise the brain's `until` into ("all"|"any", [(operand, cmp, n)...]) or raise ValueError.
+        {"life": ">=180"} | {"pool": 40} (bare int = >=) | {"any": [{...}, {...}]} | {"all": [...]}"""
+        if not isinstance(spec, dict) or not spec:
+            raise ValueError("until must be a non-empty object")
+        if set(spec) <= {"any", "all"} and len(spec) == 1:
+            mode = next(iter(spec))
+            items = spec[mode]
+            if not isinstance(items, list) or not items:
+                raise ValueError(f"until.{mode} must be a non-empty list")
+            clauses = []
+            for it in items:
+                m, cl = cls.parse_until(it)
+                if m != "all":
+                    raise ValueError("nested any/all is not supported")
+                clauses.extend(cl)
+            return mode, clauses
+        clauses = []
+        for k, v in spec.items():
+            if k not in cls.UNTIL_OPERANDS:
+                raise ValueError(f"unknown operand {k!r} (operands: {', '.join(cls.UNTIL_OPERANDS)})")
+            if isinstance(v, bool):
+                raise ValueError(f"{k}: a comparison is needed")
+            if isinstance(v, int):
+                cmp, n = ">=", v
+            elif isinstance(v, str):
+                m = re.fullmatch(r"\s*(>=|<=|==)\s*(-?\d+)\s*", v)
+                if not m:
+                    raise ValueError(f"{k}: use '>=N', '<=N' or '==N'")
+                cmp, n = m.group(1), int(m.group(2))
+            else:
+                raise ValueError(f"{k}: a comparison is needed")
+            clauses.append((k, cmp, n))
+        return "all", clauses
+
+    @staticmethod
+    def until_text(parsed) -> str:
+        mode, clauses = parsed
+        return f" {'or' if mode == 'any' else 'and'} ".join(f"{k} {c} {n}" for k, c, n in clauses)
+
+    def _until_operands(self, req: dict) -> dict:
+        st = req.get("state") or {}
+        opp = [o.get("life") for o in (st.get("opponents") or []) if isinstance(o, dict) and isinstance(o.get("life"), int)]
+        hand = st.get("handSize") if isinstance(st.get("handSize"), int) else (len(st["hand"]) if isinstance(st.get("hand"), list) else None)
+        return {"life": st.get("life") if isinstance(st.get("life"), int) else None,
+                "opp_life_max": max(opp) if opp else None, "opp_life_min": min(opp) if opp else None,
+                "pool": st.get("manaPool") if isinstance(st.get("manaPool"), int) else None,
+                "mana_now": st.get("manaAvailableNow") if isinstance(st.get("manaAvailableNow"), int) else None,
+                "hand": hand, "library": st.get("librarySize") if isinstance(st.get("librarySize"), int) else None,
+                "perms": len(st["battlefield"]) if isinstance(st.get("battlefield"), list) else None,
+                "poison": st.get("poison") if isinstance(st.get("poison"), int) else None,
+                "casts": getattr(self, "_casts_turn", 0), "rounds": (self.cycle or {}).get("done", 0)}
+
+    @staticmethod
+    def until_met(parsed, ops: dict):
+        """(met, detail). An unavailable operand never satisfies its clause."""
+        mode, clauses = parsed
+        hits, texts = [], []
+        for k, c, n in clauses:
+            v = ops.get(k)
+            ok = isinstance(v, int) and ((c == ">=" and v >= n) or (c == "<=" and v <= n) or (c == "==" and v == n))
+            hits.append(ok); texts.append(f"{k} {v if v is not None else '?'} {'meets' if ok else 'vs'} {c} {n}")
+        met = all(hits) if mode == "all" else any(hits)
+        return met, "; ".join(texts)
+
+    @staticmethod
+    def _toward(parsed, before: dict, after: dict) -> bool:
+        """Did any clause's operand move toward its target between two rounds?"""
+        _, clauses = parsed
+        for k, c, n in clauses:
+            a, b = before.get(k), after.get(k)
+            if not isinstance(a, int) or not isinstance(b, int):
+                continue
+            if c == ">=" and b > a or c == "<=" and b < a or c == "==" and abs(b - n) < abs(a - n):
+                return True
+        return False
+
+    def _wake(self, why: str, note: str) -> None:
+        """Stop the loop and tell the brain why, in its next prompt."""
+        self._loop_state()
+        self._say(f"[seat {self.seat}] CYCLE {why} — model resumes")
+        self._runner_note = note
+        self.cycle = None
+
+    def _maybe_rearm(self) -> None:
+        """A parked loop (until unmet, broken by an interruption) re-arms when its steps
+        recur for one full round, at any rotation; a different answer discards it."""
+        p = getattr(self, "_parked", None)
+        if not p or self.cycle is not None or p.get("turn") != self._last_turn:
+            return
+        steps = p["steps"]; k = len(steps)
+        loose = p.get("loose", False)
+        if len(self._hist) < k:
+            return
+        keyed = [self._step_key(e, loose) for e in steps]
+        tail = [self._step_key(e, loose) for e in self._hist[-k:]]
+        for r in range(k):
+            if tail == keyed[r:] + keyed[:r]:
+                self.cycle = {"steps": steps, "ptr": r, "rounds": p["rounds"], "total": p["total"], "until": p["until"],
+                              "until_text": p["until_text"], "last_vals": None, "flat": 0, "done": p["done"], "loose": loose}
+                self._parked = None
+                self._say(f"[seat {self.seat}] CYCLE re-armed after the interruption: {k} step(s), "
+                          f"{p['rounds']} round(s) left, until {p['until_text']}")
+                return
+        # one of the loop's OWN windows answered in a way no step of the loop answers it: the brain's
+        # judgement wins, the parked loop is gone (the interruption's other windows are not the loop's and
+        # do not count; an alternating loop has several steps sharing one window, any of their answers is fine)
+        sig, dt, shape = self._hist[-1]
+        same = [s_shape for s_sig, s_dt, s_shape in steps
+                if s_dt == dt and ((self._loose(s_sig) == self._loose(sig)) if loose else (s_sig == sig))]
+        if same and shape not in same:
+            self._say(f"[seat {self.seat}] parked loop discarded: the brain answered a {dt} window differently")
+            self._parked = None
+
+    # ---- the offer: the runner notices a loop, the brain decides -------------
+    def _loop_offer(self, req: dict, cyc_sig) -> str | None:
+        """One line for the next prompt when this turn's tape shows the last k decisions
+        repeating the k before them with identical answers, every step replayable and the
+        seat's own engine (empty stack or all-own objects), and THIS window opens a third
+        round. Once per pattern per turn. The brain may decline by answering normally."""
+        self._loop_state()
+        if self.cycle is not None or self._parked is not None or cyc_sig is None:
+            return None
+        if req.get("decisionType") not in self.CYCLE_DTYPES:
+            return None
+        st = req.get("state") or {}
+        if (st.get("stack") or []) and not self._all_own_objects(req):
+            return None
+        h = [self._step_key(e, loose=True) for e in self._hist]
+        for k in self.OFFER_PERIODS:
+            if len(h) < 2 * k:
+                break
+            a, b = h[-2 * k:-k], h[-k:]
+            if a != b:
+                continue
+            # the smallest repeating period is THE pattern: a longer multiple of it is the same loop
+            if any(shape is None or dt not in self.CYCLE_DTYPES for (_, dt, shape) in b):
+                return None
+            if k == 1 and b[0][2] == ("id0",):
+                return None                                       # passing twice is not a loop
+            if any(sig[2] not in ((), ("OWN-OBJECTS",)) for (sig, _, _) in b):
+                return None                                       # an opponent's object inside the pattern: not our engine
+            if self._loose(cyc_sig) != b[0][0]:
+                return None                                       # this window does not open the pattern again
+            key = (k, frozenset(repr(e) for e in b))              # the same loop at any rotation is one offer
+            if key in self._offered:
+                return None
+            self._offered.add(key)
+            self._offer_for = (req.get("seq"), k)                # a declaration in THIS answer is bound to this pattern
+            kinds = ", ".join(dt for (_, dt, _) in b)
+            self._say(f"[seat {self.seat}] LOOP OFFER: {k}-step pattern seen twice ({kinds}) — the brain decides")
+            return (f"LOOP OFFER: the runner sees your last {k} decisions ({kinds}) repeating the {k} before them with the same "
+                    f"answers, and this window opens that pattern again. If this is a loop you are executing, add \"repeat_cycle\": N "
+                    f"(rounds still needed, max {self.CYCLE_MAX_ROUNDS}) and, whenever you can name the goal, \"until\": {{\"life\": \">=180\"}} "
+                    f"(operands: {', '.join(self.UNTIL_OPERANDS)}; comparators >=, <=, ==) to this answer — the runner replays and "
+                    f"stops at the target or N, whichever comes first, and wakes you on any novelty. If it is not a loop, answer normally.")
+        return None
 
     def _cycle_signature(self, req: dict) -> tuple:
         """Decision-shape signature for loop replay. Deliberately EXCLUDES
@@ -574,21 +781,58 @@ class SeatRunner:
         return None
 
     def _cycle_try_arm(self, req: dict, sig: tuple, out: dict) -> None:
-        """Model declared repeat_cycle: N — extract the just-completed cycle
-        from this turn's tape and arm the replay."""
+        """Model declared repeat_cycle: N (and/or until: {...}) — extract the just-completed
+        cycle from this turn's tape and arm the replay. An `until` alone takes the cap as N."""
+        self._loop_state()
         n = out.get("repeat_cycle")
-        if not isinstance(n, int) or n < 1:
+        until_spec = out.get("until")
+        if (not isinstance(n, int) or n < 1) and until_spec is None:
             return
+        parsed = None
+        if until_spec is not None:
+            try:
+                parsed = self.parse_until(until_spec)
+            except ValueError as e:
+                self._say(f"[seat {self.seat}] until ignored: {e}")
+                if not isinstance(n, int) or n < 1:
+                    return
+        if not isinstance(n, int) or n < 1:
+            n = self.CYCLE_MAX_ROUNDS
         n = min(n, self.CYCLE_MAX_ROUNDS)
+        if parsed is not None:
+            met, detail = self.until_met(parsed, self._until_operands(req))
+            if met:
+                self._say(f"[seat {self.seat}] repeat_cycle not armed: until already satisfied ({detail})")
+                return
         if req.get("decisionType") not in self.CYCLE_DTYPES:
             self._say(f"[seat {self.seat}] repeat_cycle ignored: "
                       f"{req.get('decisionType')} is not replayable")
             return
         prev = None
-        for i in range(len(self._hist) - 1, -1, -1):
-            if self._hist[i][0] == sig:
-                prev = i
-                break
+        loose = False
+        offer = getattr(self, "_offer_for", None)
+        self._offer_for = None
+        if offer and offer[0] == req.get("seq") and len(self._hist) >= offer[1]:
+            prev, loose = len(self._hist) - offer[1], True        # the brain took the offer: replay the pattern it was shown
+        elif parsed is not None:
+            # a target-bearing loop is matched loosely, so it may only be BOUNDED by a repetition the
+            # tape has actually shown twice (never by "the last window that looked like this one" —
+            # after an interruption that would sweep the interruption into the cycle)
+            h = [self._step_key(e, loose=True) for e in self._hist]
+            for k in self.OFFER_PERIODS:
+                if len(h) < 2 * k:
+                    break
+                if h[-k:] == h[-2 * k:-k] and self._loose(sig) == h[-k][0][0] if False else (h[-k:] == h[-2 * k:-k] and self._loose(sig) == h[-k][0]):
+                    prev, loose = len(self._hist) - k, True
+                    break
+        if prev is None:
+            for i in range(len(self._hist) - 1, -1, -1):
+                if self._hist[i][0] == sig:
+                    prev = i
+                    break
+            # a strict bound (two identical windows) proves a genuine round; with a target declared, the
+            # REPLAY of that round may then match loosely — every replayed answer still binds uniquely and validates
+            loose = parsed is not None and prev is not None
         if prev is None:
             self._say(f"[seat {self.seat}] repeat_cycle ignored: no earlier "
                       f"identical window this turn to bound the cycle")
@@ -601,20 +845,52 @@ class SeatRunner:
             return
         self.cycle = {"steps": steps, "ptr": 1 % len(steps),
                       "rounds": n - (1 if len(steps) == 1 else 0),
-                      "total": n}
+                      "total": n, "until": parsed, "until_text": self.until_text(parsed) if parsed else "",
+                      "last_vals": self._until_operands(req) if parsed else None, "flat": 0, "done": 0, "loose": loose}
+        self._parked = None
         self._say(f"[seat {self.seat}] CYCLE armed: {len(steps)} step(s) x {n} "
                   f"round(s) — replaying identical windows without model calls; "
-                  f"ANY novelty breaks out")
+                  f"ANY novelty breaks out"
+                  + (f"; stops when {self.cycle['until_text']}" if parsed else ""))
 
     def _cycle_replay(self, req: dict, sig: tuple):
         """Return (answer, note) replayed from the armed cycle, or None
         (breaks the cycle on any mismatch)."""
         if not self.cycle:
             return None
-        step_sig, dt, shape = self.cycle["steps"][self.cycle["ptr"]]
-        if sig != step_sig or req.get("decisionType") != dt:
+        cyc = self.cycle
+        if cyc.get("until") is not None:
+            ops = self._until_operands(req)
+            met, detail = self.until_met(cyc["until"], ops)
+            if met:
+                self._wake(f"stopped: {detail} after {cyc['done']} round(s)",
+                           f"LOOP STOPPED: {detail} after {cyc['done']} replayed round(s) — the target you declared is met; decide the next step fresh.")
+                return None
+            life = ops.get("life")
+            if isinstance(life, int) and life <= self.UNTIL_FLOOR_LIFE:
+                self._wake(f"stopped: life {life} at the safety floor after {cyc['done']} round(s)",
+                           f"LOOP STOPPED: your life is {life}, at the runner's safety floor — the replay will not continue; decide fresh.")
+                return None
+        step_sig, dt, shape = cyc["steps"][cyc["ptr"]]
+        loose = cyc.get("loose", False)
+        match = (self._loose(sig) == self._loose(step_sig)) if loose else (sig == step_sig)
+        if loose and req.get("decisionType") not in self.CYCLE_DTYPES:
+            # a window outside the loop's pattern (a mode choice, a trigger order): answered normally,
+            # the loop stays armed and waits for its next step
+            return None
+        if not match or req.get("decisionType") != dt:
+            if cyc.get("until") is not None and cyc["rounds"] > 0:
+                # an interruption, target unmet: park the loop; it re-arms when the pattern recurs this turn
+                self._parked = {"steps": cyc["steps"], "rounds": cyc["rounds"], "total": cyc["total"], "until": cyc["until"],
+                                "until_text": cyc["until_text"], "done": cyc["done"], "turn": self._last_turn, "loose": cyc.get("loose", False)}
+                self._say(f"[seat {self.seat}] CYCLE paused at step {cyc['ptr'] + 1}/{len(cyc['steps'])} (window changed; "
+                          f"until {cyc['until_text']} unmet) — model resumes; the loop re-arms if its steps recur")
+                self._runner_note = (f"LOOP PAUSED: your loop (until {cyc['until_text']}; {cyc['done']} round(s) done, {cyc['rounds']} left) "
+                                     f"met something new. Handle it; the runner resumes the replay by itself if the same steps recur this turn.")
+                self.cycle = None
+                return None
             self._say(f"[seat {self.seat}] CYCLE broken at step "
-                      f"{self.cycle['ptr'] + 1}/{len(self.cycle['steps'])} "
+                      f"{cyc['ptr'] + 1}/{len(cyc['steps'])} "
                       f"(window changed) — model resumes")
             self.cycle = None
             return None
@@ -630,6 +906,21 @@ class SeatRunner:
         if self.cycle["ptr"] >= len(self.cycle["steps"]):
             self.cycle["ptr"] = 0
             self.cycle["rounds"] -= 1
+            self.cycle["done"] = self.cycle.get("done", 0) + 1
+            if self.cycle.get("until") is not None:
+                # the progress check: the target operand must move toward the target between rounds
+                now_vals = self._until_operands(req)
+                before = self.cycle.get("last_vals")
+                if before is not None and not self._toward(self.cycle["until"], before, now_vals):
+                    self.cycle["flat"] += 1
+                else:
+                    self.cycle["flat"] = 0
+                self.cycle["last_vals"] = now_vals
+                if self.cycle["flat"] >= self.UNTIL_FLAT_ROUNDS:
+                    done = self.cycle["done"]
+                    self._wake(f"stopped: no progress toward {self.cycle['until_text']} over {self.UNTIL_FLAT_ROUNDS} rounds ({done} done)",
+                               f"LOOP STOPPED: no progress toward {self.cycle['until_text']} over the last {self.UNTIL_FLAT_ROUNDS} rounds — the loop is not doing what you declared; decide fresh.")
+                    return answer, note
             if self.cycle["rounds"] <= 0:
                 self._say(f"[seat {self.seat}] CYCLE complete "
                           f"({self.cycle['total']} rounds) — model resumes")
@@ -1276,6 +1567,12 @@ class SeatRunner:
             self.turn_intent = None
             self.cycle = None   # loops never survive a turn boundary
             self._hist = []
+            self._parked = None
+            self._offered = set()
+            self._casts_turn = 0
+            self._runner_note = None
+            self._offer_for = None
+        self._loop_state()
 
         seq, dtype = req.get("seq"), req.get("decisionType")
         # Item 12: the engine publishes its wait on every request. It is the
@@ -1318,8 +1615,7 @@ class SeatRunner:
                           f"{json.dumps(answer)} [{note}]"
                           f"{'' if ok else ' WINDOW LOST'}")
                 self._record(req, answer, "cycle", why=note, consumed=ok)
-                self._hist.append((cyc_sig, dtype, self._cycle_shape(req, answer)))
-                del self._hist[:-self.CYCLE_MAX_HIST]
+                self._hist_push(cyc_sig, dtype, self._cycle_shape(req, answer))
                 return
 
         fast = self._fastpath(req)
@@ -1333,8 +1629,7 @@ class SeatRunner:
                       f"[{source}]{'' if ok else ' WINDOW LOST'}")
             self._record(req, answer, source, why=why, consumed=ok)
             if cyc_sig is not None:
-                self._hist.append((cyc_sig, dtype, self._cycle_shape(req, answer)))
-                del self._hist[:-self.CYCLE_MAX_HIST]
+                self._hist_push(cyc_sig, dtype, self._cycle_shape(req, answer))
             return
 
         # Guards #1-3: consume an executable plan step for a CAST_SPELL window,
@@ -1356,8 +1651,7 @@ class SeatRunner:
                 self._record(req, answer, "plan",
                              why=step.get("why"), consumed=ok)
                 if cyc_sig is not None:
-                    self._hist.append((cyc_sig, dtype, self._cycle_shape(req, answer)))
-                    del self._hist[:-self.CYCLE_MAX_HIST]
+                    self._hist_push(cyc_sig, dtype, self._cycle_shape(req, answer))
                 return
             self._say(f"[seat {self.seat}] plan invalidated (divergence at seq {seq})")
             self.plan = None
@@ -1384,10 +1678,20 @@ class SeatRunner:
                     plan_text = "remaining planned casts: " + ", ".join(rem)
             elif self.turn_intent:
                 plan_text = self.turn_intent
+            # one-shot notes from the loop machinery: why a replay stopped or paused, and the
+            # offer when this turn's tape shows a repeating pattern the brain has not declared
+            armed_note = None
+            if self.cycle and self.cycle.get("until") is not None:
+                armed_note = (f"LOOP ARMED: your loop (until {self.cycle['until_text']}; {self.cycle['done']} round(s) done, "
+                              f"{self.cycle['rounds']} left) is waiting; this window is outside its pattern. Answer it; add "
+                              f"\"stop_loop\": true if the loop should end.")
+            notes = [x for x in (self._runner_note, armed_note, self._loop_offer(req, cyc_sig)) if x]
+            self._runner_note = None
             prompt = rules.build_user_prompt(
                 req, plan=plan_text, observer=self.mb.read_observer(),
                 speculative=self.speculative, react_hold=self.react_hold,
-                combo_status=rules.combo_status_line(self.combos, req))
+                combo_status=rules.combo_status_line(self.combos, req),
+                runner_note=" ".join(notes) if notes else None)
             # Item 2: the brain gets the DEADLINE, not a duration — init and
             # the decision call each spend only what remains of it (the old
             # min(budget, 240) handed the same budget to both, so a lazy
@@ -1472,7 +1776,11 @@ class SeatRunner:
                                   + ", ".join(s["card"] for s in self.plan["steps"]))
                 # Cycle replay arming: the brain declared it just completed an
                 # iteration of a loop it wants fast-forwarded.
-                if isinstance(out, dict) and out.get("repeat_cycle") is not None \
+                if isinstance(out, dict) and out.get("stop_loop") is True and (self.cycle or getattr(self, "_parked", None)):
+                    self._say(f"[seat {self.seat}] loop ended by the brain (stop_loop)")
+                    self.cycle = None
+                    self._parked = None
+                elif isinstance(out, dict) and (out.get("repeat_cycle") is not None or out.get("until") is not None) \
                         and cyc_sig is not None:
                     self._cycle_try_arm(req, cyc_sig, out)
                 # #2 hold posture: arm/refresh on a REACT-pass with hold_turn set;
@@ -1536,5 +1844,4 @@ class SeatRunner:
             # (the existing "non-replayable decision" check), so a punted
             # decline can never be replayed 64 times as source "cycle".
             shape = None if source == "punt" else self._cycle_shape(req, answer)
-            self._hist.append((cyc_sig, dtype, shape))
-            del self._hist[:-self.CYCLE_MAX_HIST]
+            self._hist_push(cyc_sig, dtype, shape)

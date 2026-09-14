@@ -208,6 +208,22 @@ Every one of your own main phases:
   and your growing mana pool are EXPECTED to change inside a declared loop
   and do not wake you. Declare N from your loop math (cycles needed for
   lethal/target + margin), not "as many as possible".
+  STOP CONDITION: you may add "until": {"life": ">=180"} beside repeat_cycle
+  (or instead of it). Operands: life, opp_life_max, opp_life_min, pool,
+  mana_now, hand, library, perms, poison, casts (your spells this turn), rounds;
+  comparators >=, <=, == ; {"any": [...]} for alternatives. The runner stops
+  at the target or at N, whichever comes first; it pauses on any novelty and
+  RESUMES by itself if the same steps recur this turn while the target is
+  unmet; it stops on its own if the target operand makes no progress for two
+  rounds or your life reaches 5. You are woken with a one-line RUNNER NOTE
+  saying why. A LOOP OFFER note means the runner saw your last decisions
+  repeat with identical answers: if that is your loop, declare it in that
+  answer; if not, answer normally — nothing is replayed without your say.
+  With a target declared, the runner matches your loop's steps on decision
+  type, phase and your own stack (not on the exact option list, which shifts
+  as your pieces move between hand, battlefield and tapped), and a window
+  outside the pattern (a mode choice, a trigger order) is simply asked of you
+  while the loop waits; add "stop_loop": true to any answer to end it.
 - REACT windows are pre-filtered to real, affordable responses — but a legal
   response is not automatically a good one. Counters and protection are spent
   on threats that matter, not on the first thing that moves.
