@@ -383,8 +383,9 @@ class StopConditionTests(unittest.TestCase):
         # and the runner note channel survives a declined offer: the next prompt carries nothing
         r4 = make_runner(); r4.brain.script = [{"chosenId": 1}] * 6
         for s_ in range(1, 6): r4.handle(A(s_))
-        self.assertIn("LOOP OFFER", r4.brain.prompts[2], "a one-step pattern: offered at the third identical window")
-        self.assertNotIn("LOOP OFFER", r4.brain.prompts[3]); self.assertIsNone(r4.cycle, "declined: nothing replayed")
+        self.assertNotIn("LOOP OFFER", r4.brain.prompts[2], "one action twice is everyday play (game 48: two mana floats)")
+        self.assertIn("LOOP OFFER", r4.brain.prompts[3], "a one-step pattern: offered at the fourth identical window")
+        self.assertNotIn("LOOP OFFER", r4.brain.prompts[4]); self.assertIsNone(r4.cycle, "declined: nothing replayed")
 
     def test_a_loop_with_a_target_tolerates_its_own_churn_but_not_an_opponent(self):
         """Game 47: Sol Ring and Mana Vault alternate between hand and battlefield, so no two

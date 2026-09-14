@@ -330,6 +330,43 @@ class Mulligans(_TableCase):
         self.assertEqual([(x["stock"], x["seat"]) for x in self.r.queue if x["kind"] == "bark"][:1], [("mull-to-five", 1)])
         self.assertIn("governor 1.00", [r for r in self._records("skipped", "bark") if r.get("stock") == "mull-pity"][-1]["why"] if False else "governor 1.00")
 
+    def test_own_action_lines_skip_the_seat_guard_and_the_heckler_is_a_seat_that_has_decided(self):
+        """Game 48, 13:54:39: Harry heckled Giada's mulligan and his own 'seven, keeping' one second later
+        was silenced by his five-second guard. A seat announcing its own action is never guarded; a
+        reaction still is; and the heckler is chosen among seats whose own keep is already recorded."""
+        r = self.r
+        self._snap(0, None); r.queue.clear()
+        r._bark_spoken_at[1] = self.clock.t                                 # Harry has just spoken
+        self.assertTrue(r.maybe_bark(1, "keep-seven", turn=0, source="event", p=1.0), "his own keep: not guarded")
+        self.assertFalse(r.maybe_bark(1, "mull-pity", turn=0, source="event", p=1.0), "a reaction: guarded")
+        self.assertIn("seat guard", self._records("skipped", "bark")[-1]["why"])
+        self.assertTrue(r.maybe_bark(1, "my-turn", turn=0, source="opener", p=1.0)); self.assertTrue(r.maybe_bark(1, "cast-creature", turn=0, source="procedural", p=1.0))
+        self.assertFalse(r.maybe_bark(1, "deal", turn=0, source="patter", p=1.0, ctx={"targets": [2]}), "patter: guarded")
+        r.queue.clear()
+        # three voiced seats: seat 2 has kept, seat 3 has not decided -> seat 2 heckles seat 1's mulligan
+        d = vr.VOICES_DIR / "lily"; d.mkdir()
+        (d / "manifest.json").write_text(json.dumps({"schema": "arena.voice-stock/1", "library": "lily", "seat": 3, "voice_name": "Lily - Velvety Actress",
+                                                     "temperament": "warm", "phrases": {}}))
+        for f in (vr.VOICES_DIR / "bill").glob("*.wav"):
+            (d / f.name).write_bytes(f.read_bytes())
+        (d / "table").mkdir()
+        (d / "table" / "manifest.json").write_text((vr.VOICES_DIR / "bill" / "table" / "manifest.json").read_text())
+        for f in (vr.VOICES_DIR / "bill" / "table").glob("*.wav"):
+            (d / "table" / f.name).write_bytes(f.read_bytes())
+        os.environ["ARENA_SEAT_DECKS"] = "urza-lord-high-artificer purphoros-god-of-the-forge sythis-harvests-hand giada-font-of-hope"
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        r.rng.random = lambda: 0.0
+        r.rng.choice = lambda xs: xs[-1]                                    # would pick the undecided seat 3 without the preference
+        self.assertEqual(sorted(r.seat_libraries), [1, 2, 3])
+        r._last_snapshot = {"turn": 0, "phase": "", "seats": [self._seat(i) for i in range(4)]}
+        with (self.logs / "game.jsonl").open("a") as f:
+            f.write(json.dumps({"ts": 1.0, "seat": 2, "deck": "x", "turn": 0, "phase": "", "type": "MULLIGAN", "seq": 1, "answer": {"keep": True}, "why": "fine"}) + "\n")
+        r.scan_game_log(); r.queue.clear()
+        with (self.logs / "game.jsonl").open("a") as f:
+            f.write(json.dumps({"ts": 1.0, "seat": 1, "deck": "x", "turn": 0, "phase": "", "type": "MULLIGAN", "seq": 1, "answer": {"keep": False}, "why": "no lands"}) + "\n")
+        r.scan_game_log()
+        self.assertEqual([(q["stock"], q["seat"]) for q in r.queue if q["kind"] == "bark"], [("mull-to-six", 1), ("mull-screw", 2)], "the seat that has kept heckles")
+
     def test_a_seat_that_kept_seven_may_gloat_when_the_reaction_does_not_fire(self):
         self._snap(0, None); self.r.queue.clear()
         self._log(2, 1, True, "Keep."); self.r.scan_game_log(); self.r.queue.clear()

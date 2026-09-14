@@ -664,8 +664,8 @@ class SeatRunner:
             # the smallest repeating period is THE pattern: a longer multiple of it is the same loop
             if any(shape is None or dt not in self.CYCLE_DTYPES for (_, dt, shape) in b):
                 return None
-            if k == 1 and b[0][2] == ("id0",):
-                return None                                       # passing twice is not a loop
+            if k == 1 and (b[0][2] == ("id0",) or len(h) < 3 or h[-3] != h[-1]):
+                return None                                       # passing twice is not a loop; one action twice is everyday play (game 48: two mana floats) — three times is a loop
             if any(sig[2] not in ((), ("OWN-OBJECTS",)) for (sig, _, _) in b):
                 return None                                       # an opponent's object inside the pattern: not our engine
             if self._loose(cyc_sig) != b[0][0]:

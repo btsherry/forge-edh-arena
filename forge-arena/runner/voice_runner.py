@@ -113,6 +113,12 @@ TABLE_P = {"grudge": 0.6, "again-countered": 0.7, "not-again-sweep": 0.7, "heads
            "sure": 0.25, "hold-on": 0.4, "life": 0.5, "address": 0.5}
 # game 46 (turns 8-13): "come on, land" four times in seven minutes — these lines are said by a seat at most once in RECENT_S
 RARE_REPEATS = {"come-on-land", "thinking", "holding-mana", "tapped-out", "mana-up", "land-go", "early-game", "long-game", "loop", "looping"}
+# A line a seat says because it just ACTED skips the per-seat guard (game 48: Harry heckled Giada's mulligan
+# and one second later his own "seven, keeping" was silenced by his guard). Reactions, patter and banter keep it.
+OWN_ACTION_LINES = {"keep-seven", "mull-to-six", "mull-to-five", "mull-to-four", "my-turn", "untap-draw", "early-game", "come-on-land",
+                    "land-go", "pass", "mana-up", "tapped-out", "cast-creature", "cast-artifact", "cast-enchantment", "cast-instant",
+                    "cast-sorcery", "cast-planeswalker", "cast-big", "in-response", "poke", "attack-you", "big-swing", "game-changer",
+                    "commander-cast", "engine-online", "looping", "counter", "removal", "sweep", "kill", "win", "eliminated"}
 LOOP_AT = 2               # the second time the same card is cast or bounced by its owner in one turn: a loop, not a fresh event
 LIFE_FOLLOWUP = {"that-hurt": 0.6, "take-it": 0.5, "low-life": 0.5}          # the speaker announces its total right after
 STATE_ANSWERS = {"whats-your-life": "life", "low-life-jab": "life", "cards-in-hand": "hand", "empty-hand": "hand"}
@@ -1172,9 +1178,11 @@ class VoiceRunner:
                 self._mulls[seat] = k
                 pid = MULL_LINE.get(min(k, 3), "mull-to-four")
                 if self.maybe_bark(seat, pid, turn=turn, source="event", p=MULL_P["own"], ctx={"targets": []}) and others:
-                    # the table answers in the register the reason earns, right behind the seat's line
+                    # the table answers in the register the reason earns, right behind the seat's line — by a seat
+                    # that has already kept or mulliganed (its own decision is not about to collide), else any free seat
                     react = self.mull_reason(str(r.get("why") or ""))
-                    who = int(self.rng.choice(self.free_to_speak(others)))
+                    decided = [o for o in others if o in self._kept_seven or o in self._mulls]
+                    who = int(self.rng.choice(self.free_to_speak(decided or others)))
                     if not self.maybe_bark(who, react, turn=turn, source="event", p=MULL_P["react"], ctx={"targets": [seat]}, gap=0.4, evict=False) \
                             and k >= 2 and self._kept_seven:
                         self.maybe_bark(int(self.rng.choice(self._kept_seven)), "mull-gloat", turn=turn, source="event", p=MULL_P["gloat"],
@@ -1631,7 +1639,7 @@ class VoiceRunner:
             self.record("skipped", kind="bark", why=f"said lately ({pid} within {RECENT_S:.0f}s)", stock=pid, seat=seat, source=source)
             return False
         since = self.clock() - self._bark_spoken_at.get(int(seat), -1e9)
-        if since < self.barks_cooldown:
+        if since < self.barks_cooldown and pid not in OWN_ACTION_LINES:
             self.record("skipped", kind="bark", why=f"seat guard ({since:.0f}s < {self.barks_cooldown:.0f}s)", stock=pid, seat=seat, source=source)
             return False
         # an explicit p (the opener's own knob) always applies; otherwise "all" means always, "some" means ARENA_BARKS_P

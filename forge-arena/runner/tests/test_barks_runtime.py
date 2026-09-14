@@ -246,9 +246,10 @@ class BarkRuntime(_TreeCase):
         self.assertIn("already said this turn", self._records("skipped", "bark")[-1]["why"])
         self.assertTrue(self.r.maybe_bark(1, "that-hurt", turn=3, source="event"), "a different line is fine")
         self._step()                                                            # spoken -> the 10 s guard
-        self.assertFalse(self.r.maybe_bark(1, "counter", turn=3, source="event"))
+        self.assertFalse(self.r.maybe_bark(1, "respect", turn=3, source="event"), "a reaction is guarded")
         self.assertIn("seat guard", self._records("skipped", "bark")[-1]["why"])
-        self.assertTrue(self.r.maybe_bark(2, "counter", turn=3, source="event"), "another seat is not guarded")
+        self.assertTrue(self.r.maybe_bark(2, "respect", turn=3, source="event"), "another seat is not guarded")
+        self.assertTrue(self.r.maybe_bark(1, "counter", turn=3, source="event"), "a seat's own action is never guarded (game 48)")
         self.clock.t += 11
         self.assertTrue(self.r.maybe_bark(1, "big-swing", turn=4, source="recap"), "a new turn forgets what was said")
         self.assertFalse(self.r.maybe_bark(3, "big-swing", turn=4))
