@@ -109,6 +109,36 @@ REACT_HOLD_HINT = (
     'top of the stack, do NOT set it.')
 
 
+# §4.4 (hardening plan 2026-09-14): the brain may add ONE table line to a non-procedural
+# answer. Every id below is a phrase id in the seat libraries (harry/manifest.json or
+# harry/table/manifest.json; bill and lily carry the same ids) — test_say_key pins that.
+# The runner validates against SAY_MENU, keeps the key out of the engine answer
+# (validate() strips it) and records it beside "why" for the voice runner to tail.
+SAY_MENU = ("taunt", "respect", "nice-play", "kill-that", "youre-the-threat", "im-not-the-threat",
+            "deal", "no-deal", "promise", "looping", "big-swing", "that-hurt", "gg", "heads-up",
+            "nothing-happening", "this-is-fine")
+# Windows the offer goes on: casts, reactions (counters), attacks, blocks and target picks.
+# A mulligan, a mode/number/colour pick, a confirm or a pay-unless is procedural.
+SAY_WINDOWS = ("CAST_SPELL", "REACT", "DECLARE_ATTACKERS", "DECLARE_BLOCKERS", "CHOOSE_ENTITY", "CHOOSE_ENTITIES")
+SAY_OFFER = ('OPTIONAL "say": one of [' + ", ".join(SAY_MENU) + '] — a table line your seat speaks '
+             'aloud. Only when it fits this moment, at most one, otherwise omit the key.')
+
+
+def say_offer(req: dict, seat: int | None = None) -> bool:
+    """Offer the say key on this window? Never on a procedural one: a window with a
+    single option (a plain pass, a forced pick) is ceremony, not a moment — and never
+    to seat 0: the advisor plays the human's seat in executive mode and Joshua is a
+    ghost outside the game, not a voice at the table (Ben, 2026-09-14)."""
+    if seat is not None and int(seat) not in (1, 2, 3):
+        return False
+    dtype = req.get("decisionType")
+    if dtype not in SAY_WINDOWS:
+        return False
+    if dtype in ("DECLARE_ATTACKERS", "DECLARE_BLOCKERS"):
+        return True                     # the choice lives in state.attackers/defenders, not options
+    return len(req.get("options") or []) > 1
+
+
 def _is_int(v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
 
@@ -344,7 +374,7 @@ def build_user_prompt(req: dict, plan: str | None = None,
                       observer: dict | None = None,
                       speculative: bool = False, react_hold: bool = False,
                       combo_status: str | None = None,
-                      runner_note: str | None = None) -> str:
+                      runner_note: str | None = None, seat: int | None = None) -> str:
     """Per-decision prompt for the seat's model session (dossier already lives
     in the session's first message — this carries only the fresh decision).
 
@@ -385,6 +415,8 @@ def build_user_prompt(req: dict, plan: str | None = None,
     if (speculative and dtype == "CAST_SPELL"
             and req.get("phase") in ("MAIN1", "MAIN2")):
         tail += "\n" + PLAN_KEY_INSTRUCTION
+    if say_offer(req, seat):
+        tail += "\n" + SAY_OFFER
     parts.append(tail)
     return "\n".join(parts)
 

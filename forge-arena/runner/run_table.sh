@@ -64,7 +64,9 @@ seat() { # seat_no deck model
   fails=0; win_start=$(date +%s)
   mkdir -p "$DIR/logs/pids"
   while true; do
-    python3 "$DIR/seat_runner.py" --seat "$1" --deck "$2" \
+    # B4 (2026-09-14): ELEVENLABS_API_KEY is the voice runner's alone — a seat's
+    # claude -p children never need it (env -u is a no-op when it is unset)
+    env -u ELEVENLABS_API_KEY python3 "$DIR/seat_runner.py" --seat "$1" --deck "$2" \
       --model "$3" --effort "$EFFORT" --base "$BASE" $SPEC_FLAG $HOLD_FLAG &
     child=$!
     echo "$child" > "$DIR/logs/pids/seat-$1.pid"   # item 13e: arena-stop kills by PID

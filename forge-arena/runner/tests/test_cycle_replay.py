@@ -64,6 +64,7 @@ def make_runner():
     r.cycle = None
     r._hist = []
     r._last_turn = None
+    r._init_loop_state()      # D4: __init__ owns the loop state; a __new__ runner sets it here
     r._deviation = None
     r.log_lines = []
     r._say = r.log_lines.append

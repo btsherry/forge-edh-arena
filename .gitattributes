@@ -1,1 +1,4 @@
 * text=auto
+# voice takes (C5, 2026-09-14): never eol-normalised or diffed as text
+*.wav binary
+*.mp3 binary

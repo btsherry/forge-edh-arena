@@ -167,8 +167,8 @@ cp "$LOGS/launch-config.txt" "$LOGS/run_table.out" 2>/dev/null
 cp "$LOGS/launch-config.txt" "$LOGS/gui.out" 2>/dev/null
 
 # 2) seat runners (all four for all-ai; seats 1-3 for human)
-env $ALL SEAT_MODEL="$MODEL" SEAT_EFFORT="$EFFORT" ARENA_MAILBOX_TIMEOUT="$TIMEOUT" \
-  nohup "$ROOT/runner/run_table.sh" >>"$LOGS/run_table.out" 2>&1 &
+env -u ELEVENLABS_API_KEY $ALL SEAT_MODEL="$MODEL" SEAT_EFFORT="$EFFORT" ARENA_MAILBOX_TIMEOUT="$TIMEOUT" \
+  nohup "$ROOT/runner/run_table.sh" >>"$LOGS/run_table.out" 2>&1 &   # B4: the voice key stays with the voice runner
 echo $! > "$LOGS/pids/run_table.pid"
 sleep 3
 
@@ -176,10 +176,11 @@ sleep 3
 # engine writes; one-way, so it can never stall the game. Backend API keys are
 # stripped (plan F-19): only run_table.sh's seat children may hold them —
 # env -u is a no-op when the vars are unset, so the Claude path is untouched.
+# B4 (2026-09-14): ELEVENLABS_API_KEY likewise — only the voice runner (2.6) needs it.
 # BL-26: supervised like the seats (runner/run_advisor.sh restart loop); the
 # loop writes advisor.pid per restart, this PID is the loop itself.
 if [ "$ADVISOR" = "1" ]; then
-  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
+  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY -u ELEVENLABS_API_KEY \
     "$ROOT/runner/run_advisor.sh" --deck "$HUMAN_SLUG" \
     --model "$MODEL" --effort "$EFFORT" >"$LOGS/advisor_runner.out" 2>&1 &
   echo $! > "$LOGS/pids/advisor-loop.pid"

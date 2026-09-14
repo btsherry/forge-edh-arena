@@ -34,8 +34,71 @@ SEAT_LOG_SIGNALS = [
     ("restarts", re.compile(r"RESTART mid-game"), False),
 ]
 # run_table.out echoes every seat log line (stdout of the seat loops), so it is
-# read ONLY for the supervisor's own restart line.
+# read ONLY for the supervisor's own restart line. C3 (2026-09-14): the voice and
+# advisor supervisors write the same line to their own .out — counted too (game 48
+# read "restarts 0" with two voice restarts).
 RESTART_LINE = re.compile(r"runner exited")
+SUPERVISOR_OUTS = ("run_table.out", "voice_runner.out", "advisor_runner.out")
+
+
+def anchored(v: dict) -> bool:
+    """A spoken seat line tied to something that happened (not the floor's chatter).
+    ONE named rule here so plan C2 can swap in the shared classify() later; until
+    then the governor and the eviction class keep their own definitions."""
+    return v.get("source") in ("event", "procedural", "card", "opener", "recap", "advice")
+
+
+# Ben's table-talk targets (round 31): the pace and the anchored share he steers by.
+TARGET_LINES_PER_MIN = 8.0
+TARGET_ANCHORED = 0.60
+LONG_GAP_S = 24.0          # a silence longer than this is what the ear notices
+VOICES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "runner", "voice", "stock", "voices")
+
+
+def _p90(sorted_vals):
+    """The same p90 arithmetic the model-latency line uses."""
+    n = len(sorted_vals)
+    return sorted_vals[int(n * 0.9) - 1 if n > 1 else 0]
+
+
+def voice_pace(voice: list) -> list[str]:
+    """Lines for the voice section: pace and anchored share beside the targets, the
+    gap distribution between spoken lines (a gap runs from one line's end to the
+    next line's start), and the distinct ids spoken against the ids the seated
+    libraries hold (their manifests, when found beside this script)."""
+    out = []
+    spoke = sorted((v for v in voice if v.get("event") == "spoke" and isinstance(v.get("ts"), (int, float))),
+                   key=lambda v: v["ts"])
+    barks = [v for v in spoke if v.get("kind") == "bark"]
+    if len(spoke) >= 2:
+        # the pace target counts the SEATS' lines (Ben: 8 seat lines a minute); a silence is a
+        # silence whoever broke it, so the gaps run over every line, Joshua's included
+        ends = [v["ts"] + (v.get("seconds") if isinstance(v.get("seconds"), (int, float)) else 0) for v in spoke]
+        gaps = sorted(max(0.0, spoke[i + 1]["ts"] - ends[i]) for i in range(len(spoke) - 1))
+        span_min = max(ends[-1] - spoke[0]["ts"], 1e-9) / 60.0
+        long_gaps = [g for g in gaps if g > LONG_GAP_S]
+        share = f"{sum(1 for v in barks if anchored(v)) / len(barks):.0%}" if barks else "n/a"
+        out.append(f"  voice pace: {len(barks) / span_min:.1f} seat lines/min (target {TARGET_LINES_PER_MIN:.0f}) | "
+                   f"anchored {share} (target {TARGET_ANCHORED:.0%}) | "
+                   f"gaps median {gaps[len(gaps) // 2]:.1f}s p90 {_p90(gaps):.1f}s max {gaps[-1]:.1f}s | "
+                   f"{sum(long_gaps):.0f}s inside {len(long_gaps)} gap(s) over {LONG_GAP_S:.0f}s")
+    ids = {v.get("stock") for v in spoke if v.get("stock")}
+    if ids:
+        line = f"  voice ids: {len(ids)} distinct spoken"
+        libs, avail = [], 0
+        for lib in sorted({v.get("library") for v in spoke if v.get("library")}):
+            try:
+                with open(os.path.join(VOICES_DIR, lib, "manifest.json"), encoding="utf-8") as f:
+                    avail += len(json.load(f).get("phrases") or {})
+                libs.append(lib)
+            except (OSError, ValueError, AttributeError):
+                continue
+        if libs:
+            line += f" / {avail} available ({', '.join(libs)})"
+        out.append(line)
+    return out
+
+
 GUI_SIGNALS = [("yield-mirror", "yield-mirror"), ("TARGETLOSS", "TARGETLOSS"), ("SA-SWAP", "SA-SWAP"),
                ("java exceptions", "Exception")]
 
@@ -108,7 +171,7 @@ def report(d: str) -> tuple[str, bool]:
         for label, rx, _ in SEAT_LOG_SIGNALS:
             if rx.search(line):
                 counts[label] += 1
-    counts["restarts"] += sum(1 for line in lines_of([os.path.join(d, "run_table.out")]) if RESTART_LINE.search(line))
+    counts["restarts"] += sum(1 for line in lines_of([os.path.join(d, n) for n in SUPERVISOR_OUTS]) if RESTART_LINE.search(line))
     gui = ""
     try:
         gui = open(os.path.join(d, "gui.out"), encoding="utf-8", errors="replace").read()
@@ -133,17 +196,18 @@ def report(d: str) -> tuple[str, bool]:
         vc = collections.Counter(v.get("event") for v in voice)
         bk = collections.Counter(v.get("event") for v in voice if v.get("kind") == "bark")
         spoke_barks = [v for v in voice if v.get("event") == "spoke" and v.get("kind") == "bark"]
-        anchored = sum(1 for v in spoke_barks if v.get("source") in ("event", "procedural", "card", "opener", "recap", "advice"))
+        n_anchored = sum(1 for v in spoke_barks if anchored(v))
         duties = [v["duty"] for v in voice if v.get("event") == "spoke" and isinstance(v.get("duty"), (int, float))]
         if spoke_barks:
             # round 31: the mix — Ben's goal is an anchored share past 60 % at about 8 lines/min; the duty is the governor's measure
             srcs = collections.Counter(v.get("source") or "?" for v in spoke_barks)
-            out.append(f"  table talk: {len(spoke_barks)} seat lines — anchored {anchored / len(spoke_barks):.0%} "
+            out.append(f"  table talk: {len(spoke_barks)} seat lines — anchored {n_anchored / len(spoke_barks):.0%} "
                        f"({', '.join(f'{k} {n}' for k, n in srcs.most_common())})"
                        + (f" | mean duty {sum(duties) / len(duties):.2f}" if duties else ""))
         out.append(f"  voice: spoke {vc.get('spoke', 0)} | skipped {vc.get('skipped', 0)} | dropped {vc.get('dropped', 0)} | "
                    f"render failures {vc.get('render-failed', 0)} | live paused {vc.get('live-paused', 0)}"
                    f" | barks spoke {bk.get('spoke', 0)} / skipped {bk.get('skipped', 0)} / dropped {bk.get('dropped', 0)}")
+        out.extend(voice_pace(voice))
         if vc.get("live-paused"):
             bad["voice live paused"] = vc["live-paused"]
     adv = rows_of(os.path.join(d, "advisor-0.jsonl"))

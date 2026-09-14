@@ -256,6 +256,30 @@ class RoundTurnLabels(unittest.TestCase):
         # a line for a turn the snapshot has not shown yet: same round as the latest known
         self.assertEqual(clk.label(14), "r4-t14")
 
+    def test_snapshot_is_parsed_only_when_it_changes(self):
+        """Plan §3 (2026-09-14): stat first; the JSON is read only on a new mtime/size."""
+        import advisor_runner as ar
+        self.assertEqual(ar.POLL_S, 1.0)
+        tmp = Path(tempfile.mkdtemp(prefix="sig-"))
+        st = tmp / "observer-state.json"
+        clk = ar.TurnClock(st)
+        clk.observe(); self.assertEqual(clk.last, {}, "no file: nothing")
+        st.write_text(json.dumps({"turn": 7, "activeSeat": 1})); clk.observe()
+        self.assertEqual(clk.last["activeSeat"], 1)
+        before = st.stat()
+        st.write_text(json.dumps({"turn": 7, "activeSeat": 2}))      # same size ...
+        os.utime(st, ns=(before.st_atime_ns, before.st_mtime_ns))     # ... same mtime: unchanged to a stat
+        clk.observe()
+        self.assertEqual(clk.last["activeSeat"], 1, "same mtime and size: not re-parsed")
+        os.utime(st, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000))
+        clk.observe()
+        self.assertEqual(clk.last["activeSeat"], 2, "a moved mtime: parsed")
+        st.write_text("{partial")
+        clk.observe()
+        self.assertEqual(clk.last["activeSeat"], 2, "a torn write keeps the last snapshot ...")
+        st.write_text(json.dumps({"turn": 8, "activeSeat": 3})); clk.observe()
+        self.assertEqual(clk.last["turn"], 8, "... and the next change is still seen")
+
     def test_stream_lines_carry_the_label(self):
         import advisor_runner as ar
         tmp = Path(tempfile.mkdtemp(prefix="lbl-"))
@@ -404,6 +428,30 @@ class HygieneBlock(unittest.TestCase):
         text, ok = hy.report(str(clean))
         self.assertTrue(ok); self.assertIn("OK: no punts", text)
 
+    def test_voice_restarts_pace_gaps_and_ids(self):
+        """C3 + observability (2026-09-14): restarts from every supervisor log; the gap
+        distribution, pace and anchored share beside Ben's targets; ids spoken vs held."""
+        hy = _load_script("arena-hygiene")
+        d = Path(tempfile.mkdtemp(prefix="hy3-"))
+        (d / "game.jsonl").write_text(json.dumps({"seat": 1, "gameId": "g", "source": "model"}) + "\n")
+        (d / "run_table.out").write_text("[seat 1] runner exited (1) — restarting in 2s\n")
+        (d / "voice_runner.out").write_text("[voice] runner exited (1) — restarting in 2s\n[voice] runner exited (0) — restarting in 2s\n")
+        spoke = [dict(ts=100.0, seconds=2.0, kind="startup", stock="startup", library="", source="startup"),
+                 dict(ts=110.0, seconds=3.0, kind="bark", stock="taunt", library="harry", seat=1, source="event"),
+                 dict(ts=150.0, seconds=1.0, kind="bark", stock="pass", library="harry/table", seat=1, source="floor"),
+                 dict(ts=155.0, seconds=2.0, kind="bark", stock="taunt", library="harry", seat=1, source="card")]
+        (d / "voice-0.jsonl").write_text("".join(json.dumps(dict(event="spoke", **s)) + "\n" for s in spoke))
+        text, _ = hy.report(str(d))
+        self.assertIn("restarts 3", text, "run_table.out + voice_runner.out")
+        # gaps: 110-102 = 8, 150-113 = 37, 155-151 = 4 -> sorted 4, 8, 37; span 57 s for 4 lines
+        self.assertIn("voice pace: 3.2 seat lines/min (target 8) | anchored 67% (target 60%) | "
+                      "gaps median 8.0s p90 8.0s max 37.0s | 37s inside 1 gap(s) over 24s", text)
+        self.assertIn("voice ids: 3 distinct spoken", text)
+        if (ROOT / "runner" / "voice" / "stock" / "voices" / "harry" / "table" / "manifest.json").exists():
+            self.assertRegex(text, r"voice ids: 3 distinct spoken / \d+ available \(harry, harry/table\)")
+        self.assertTrue(callable(hy.anchored), "one named rule, to be swapped for the shared classify() (plan C2)")
+        self.assertTrue(hy.anchored({"source": "event"})); self.assertFalse(hy.anchored({"source": "floor"}))
+
 
 class PackagerShipsWhatTheScriptsCall(unittest.TestCase):
     """The packager copies scripts by an explicit list; a script arena-play /
@@ -434,6 +482,45 @@ class PackagerShipsWhatTheScriptsCall(unittest.TestCase):
             self.assertNotIn('$(ls "$REPO_ROOT"/forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)', text)
             self.assertNotIn('$(ls "$REPO"/forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar 2>/dev/null | head -n1)', text)
         self.assertIn("--exclude '.DS_Store'", pk)
+
+
+class VoicePackagePreflight(unittest.TestCase):
+    """C5 (2026-09-14): the packager refuses a tree where a manifest promises a take
+    that is not there — <id>.wav for wording 1, <id>-N.wav for wording N (build_stock)."""
+    def _dest(self):
+        dest = Path(tempfile.mkdtemp(prefix="pkg-"))
+        voices = dest / "forge-arena" / "runner" / "voice" / "stock" / "voices"
+        harry = voices / "harry"; table = harry / "table"
+        table.mkdir(parents=True)
+        (harry / "manifest.json").write_text(json.dumps({"phrases": {"taunt": {"text": "one"}, "gg": {"text": ["a", "b", "c"]}}}))
+        (table / "manifest.json").write_text(json.dumps({"phrases": {"pass": {"text": ["x", "y"]}}}))
+        for name in ("harry/taunt", "harry/gg", "harry/gg-2", "harry/gg-3", "harry/table/pass", "harry/table/pass-2"):
+            (voices / f"{name}.wav").write_bytes(b"RIFF")
+        (harry / "raw").mkdir(); (harry / "raw" / "taunt.wav").write_bytes(b"RIFF")   # a raw dir has no manifest: ignored
+        return dest, voices
+
+    def test_missing_takes_are_named_and_fail_the_script(self):
+        chk = importlib.util.spec_from_file_location("check_voice_takes", ROOT / "packaging" / "check-voice-takes.py")
+        mod = importlib.util.module_from_spec(chk); chk.loader.exec_module(mod)
+        dest, voices = self._dest()
+        self.assertEqual(mod.missing_takes(str(dest)), [])
+        r = subprocess.run([sys.executable, str(ROOT / "packaging" / "check-voice-takes.py"), str(dest)], capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        (voices / "harry" / "gg-3.wav").unlink(); (voices / "harry" / "table" / "pass.wav").unlink()
+        self.assertEqual(mod.missing_takes(str(dest)), ["harry: gg-3", "harry/table: pass"])
+        r = subprocess.run([sys.executable, str(ROOT / "packaging" / "check-voice-takes.py"), str(dest)], capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 1); self.assertIn("harry: gg-3", r.stderr); self.assertIn("harry/table: pass", r.stderr)
+        (voices / "harry" / "manifest.json").write_text("{broken")
+        self.assertTrue(any("unreadable" in m for m in mod.missing_takes(str(dest))))
+        empty = Path(tempfile.mkdtemp(prefix="pkg0-"))
+        r = subprocess.run([sys.executable, str(ROOT / "packaging" / "check-voice-takes.py"), str(empty)], capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 1, "no voice tree at all is a broken package, not a pass")
+
+    def test_the_packager_runs_the_preflight_after_the_voice_tree_is_copied(self):
+        pk = (ROOT / "packaging" / "build-light-package.sh").read_text()
+        i_copy, i_check, i_next = pk.index("[7/9] runner"), pk.index('check-voice-takes.py" "$DEST"'), pk.index("[8/9] scripts")
+        self.assertTrue(i_copy < i_check < i_next, "the check runs once the runner tree (voices included) is in DEST")
+        self.assertIn("|| { echo \"ERROR: voice takes missing", pk, "a failed check ends the build")
 
 
 class StopsRestore(unittest.TestCase):

@@ -95,6 +95,46 @@ class AutostopTests(unittest.TestCase):
         self.assertFalse(self.mark.exists(), out)
         self.assertIn("stopped by someone else", out)
 
+    def _voice(self, age_s=0):
+        vd = Path(self.tmp.name) / "seat-0-voice"   # beside the snapshot, as the script derives it
+        vd.mkdir(exist_ok=True)
+        hb = vd / "heartbeat"
+        hb.touch()
+        if age_s:
+            os.utime(hb, (time.time() - age_s, time.time() - age_s))
+        return vd
+
+    def test_a_live_voice_gets_its_sign_off_before_the_stop(self):
+        # B5 (2026-09-14): the heartbeat's age is read portably (os.stat via python3), not BSD stat
+        self._snapshot(True)
+        self.gui_pid.write_text(str(os.getpid()))
+        vd = self._voice()
+        env = dict(self.env, ARENA_AUTOSTOP_VOICE_WAIT="6", ARENA_AUTOSTOP_AFTER_VOICE="0")
+        p = subprocess.Popen(["sh", str(SCRIPT), "0"], env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        time.sleep(1.0)
+        self.assertIsNone(p.poll(), "a fresh heartbeat: the watcher waits for the voice's final sequence")
+        self.assertFalse(self.mark.exists())
+        (vd / "final.json").write_text("{}")
+        out, _ = p.communicate(timeout=12)
+        self.assertEqual(p.returncode, 0, out)
+        self.assertTrue(self.mark.exists(), out)
+        self.assertIn("voice finished its sign-off", out)
+
+    def test_a_stale_voice_heartbeat_is_not_waited_for(self):
+        self._snapshot(True)
+        self.gui_pid.write_text(str(os.getpid()))
+        self._voice(age_s=60)
+        env = dict(self.env, ARENA_AUTOSTOP_VOICE_WAIT="6")
+        t0 = time.time()
+        p = subprocess.Popen(["sh", str(SCRIPT), "0"], env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        out, _ = p.communicate(timeout=12)
+        self.assertEqual(p.returncode, 0, out)
+        self.assertTrue(self.mark.exists(), out)
+        self.assertNotIn("voice finished", out)
+        self.assertLess(time.time() - t0, 5.0, "a dead voice is not waited for")
+
     def test_linger_must_be_a_whole_number(self):
         p = subprocess.run(["sh", str(SCRIPT), "soon"], env=self.env,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10)

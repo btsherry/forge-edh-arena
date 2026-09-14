@@ -172,6 +172,11 @@ if [ -n "$KEEP" ]; then
   rm -rf "$KEEP"
   echo "[preserve] ELO ratings restored into the rebuilt tree"
 fi
+# C5 preflight (2026-09-14): every phrase id in every manifest under the copied voice
+# tree has its baked take(s) in DEST (<id>.wav / <id>-N.wav per wording, the names
+# build_stock.py bakes) — a manifest line with no audio would be a bark that never plays.
+python3 "$DIR/check-voice-takes.py" "$DEST" \
+  || { echo "ERROR: voice takes missing from the package tree (C5) — refusing to build" >&2; exit 1; }
 
 echo "[8/9] scripts — play/stop/launch/ingest/observe/cardwatch (batch, canary, prep,"
 echo "      smoke and the discovery harnesses stay home)"

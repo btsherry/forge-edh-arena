@@ -35,7 +35,8 @@ from seatd import backends  # noqa: E402
 from seatd.brain import SeatBrain
 from seatd.runner import SeatRunner  # noqa: E402
 
-POLL_S = 0.25  # advice feels snappier; cost is a stat() at 4Hz
+POLL_S = 1.0   # plan §3 (2026-09-14): one inbox listing a second still lands a request within the
+               # second; the snapshot is stat-gated below, so an idle table costs nearly nothing
 # Table roster convention shared with run_table.sh / GuiPilotMatch: four deck
 # slugs in seat order, overridable via ARENA_SEAT_DECKS.
 # Item R (Ben, 2026-09-04): the all-AI table is Urza, Giada, Purphoros, Selvala
@@ -234,13 +235,22 @@ class TurnClock:
         self._seen: set = set()       # seats active in the round being built
         self._round = 1
         self._last_turn = 0
+        self._sig = None              # (mtime_ns, size) of the snapshot last parsed
 
     def observe(self) -> None:
-        """Record the snapshot's (turn, activeSeat) if new; cheap, call often."""
+        """Record the snapshot's (turn, activeSeat) if new; cheap, call often — the
+        file is stat-ed first and parsed only when its mtime or size moved (plan §3:
+        four full parses a second on an idle table). A partial write leaves the
+        signature unset, so the next poll reads again."""
         try:
+            st = os.stat(self.path)
+            sig = (st.st_mtime_ns, st.st_size)
+            if sig == self._sig:
+                return
             d = json.loads(Path(self.path).read_text())
         except (OSError, ValueError, TypeError):
             return
+        self._sig = sig
         self.last = d if isinstance(d, dict) else {}
         turn, active = d.get("turn"), d.get("activeSeat")
         if not isinstance(turn, int) or isinstance(turn, bool) or active is None or turn in self.active_of:

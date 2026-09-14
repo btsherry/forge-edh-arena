@@ -67,7 +67,10 @@ done
 # seconds after the last line — instead of the fixed linger.
 VOICE_DIR="$(dirname "$STATE")/seat-0-voice"   # beside the snapshot (tests point STATE at a scratch dir)
 VOICE_HB="$VOICE_DIR/heartbeat"; VOICE_FINAL="$VOICE_DIR/final.json"
-voice_alive() { [ -f "$VOICE_HB" ] && [ $(( $(date +%s) - $(stat -f %m "$VOICE_HB" 2>/dev/null || echo 0) )) -lt 15 ]; }
+# B5 (2026-09-14): the heartbeat's mtime via python3 (already a dependency of over()) —
+# BSD `stat -f %m` is macOS-only and GNU `stat -f` means something else entirely.
+mtime_of() { python3 -c 'import os, sys; print(int(os.stat(sys.argv[1]).st_mtime))' "$1" 2>/dev/null || echo 0; }
+voice_alive() { [ -f "$VOICE_HB" ] && [ $(( $(date +%s) - $(mtime_of "$VOICE_HB") )) -lt 15 ]; }
 if [ "$why" = "match over (engine reports gameOver)" ] && voice_alive; then
   waited=0; max="${ARENA_AUTOSTOP_VOICE_WAIT:-60}"
   while [ ! -f "$VOICE_FINAL" ] && [ "$waited" -lt "$max" ]; do sleep 1; waited=$((waited + 1)); done

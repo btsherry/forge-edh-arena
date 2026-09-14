@@ -107,6 +107,7 @@ class SeatRunner:
         self.cycle = None          # {steps, ptr, rounds, total}
         self._hist = []            # [(sig, dtype, shape)] this turn
         self._last_turn: int | None = None
+        self._init_loop_state()    # parked cycle, offers, own casts, one-shot note, offer (round 31)
         # Stated intent for the current own turn (brain's `turn_plan`), kept in
         # NORMAL mode purely as an ADVISORY quote-back + deviation reference —
         # never executed (that is the separate, off-by-default speculative
@@ -266,8 +267,8 @@ class SeatRunner:
                                for a in combat][:6]
         return stamp
 
-    def _transport_event(self, kind: str, game_id=None) -> None:
-        """Append {ts, seat, kind, gameId} to logs/transport-events.jsonl — the
+    def _transport_event(self, kind: str, game_id=None, **extra) -> None:
+        """Append {ts, seat, kind, gameId, ...extra} to logs/transport-events.jsonl — the
         ratings applier voids transport-contaminated games from this file
         (any wedge, or a punt pile-up on one seat). BL-09: the game id lets
         the sweep attribute an event to its game exactly; the time window is
@@ -277,7 +278,7 @@ class SeatRunner:
             p = self._jsonl_path.parent / "transport-events.jsonl"
             with p.open("a") as f:
                 f.write(json.dumps({"ts": time.time(), "seat": self.seat,
-                                    "kind": kind, "gameId": game_id}) + "\n")
+                                    "kind": kind, "gameId": game_id, **extra}) + "\n")
         except OSError:
             pass  # never let bookkeeping hurt the game
 
@@ -304,8 +305,22 @@ class SeatRunner:
             paths.append(flat.with_name(f"game-{gid}.jsonl"))
         return paths
 
+    def _say_key(self, req: dict, raw) -> str | None:
+        """§4.4: the brain's optional table line. Menu ids only, and only on a window
+        the prompt offered it on; anything else is dropped with a note — never an
+        error, never part of the engine answer (validate() strips the key)."""
+        sid = str(raw).strip().lower()
+        if not rules.say_offer(req, self.seat):
+            self._say(f"[seat {self.seat}] say {sid!r} dropped: procedural window ({req.get('decisionType')}) or not a table seat")
+            return None
+        if sid not in rules.SAY_MENU:
+            self._say(f"[seat {self.seat}] say {sid!r} dropped: not on the menu")
+            return None
+        return sid
+
     def _record(self, req: dict, answer: dict, source: str, meta=None,
-                why: str | None = None, consumed: bool = True) -> None:
+                why: str | None = None, consumed: bool = True,
+                say: str | None = None) -> None:
         stamp = self.board_stamp(req)
         rec = {"ts": time.time(), "seat": self.seat, "gameId": req.get("gameId"),
                "seq": req.get("seq"),
@@ -331,6 +346,8 @@ class SeatRunner:
         dev = getattr(self, "_deviation", None)
         if dev:
             rec["deviation"] = dev
+        if say:
+            rec["say"] = say                     # §4.4: the seat's table line, for the voice runner
         if self.turn_intent and source == "model":
             rec["turn_intent"] = self.turn_intent
         cum = dict(self.brain.totals)  # burn since instantiation
@@ -357,7 +374,7 @@ class SeatRunner:
             # enough on a local fs; no seat ever reads this file). BL-21: the
             # same line goes to game.jsonl (human tail, archived at teardown)
             # and to game-<gameId>.jsonl (the per-game machine record).
-            line = json.dumps({
+            shared = {
                 "ts": rec["ts"], "seat": self.seat, "deck": self.deck,
                 "gameId": req.get("gameId"),
                 "turn": rec["turn"], "phase": rec["phase"],
@@ -365,7 +382,10 @@ class SeatRunner:
                 "model": self.brain.model, "effort": rec["effort"],
                 "answer": answer, "why": why,
                 "deviation": rec.get("deviation"),
-                "latency_s": rec.get("latency_s"), "board": stamp}) + "\n"
+                "latency_s": rec.get("latency_s"), "board": stamp}
+            if say:
+                shared["say"] = say
+            line = json.dumps(shared) + "\n"
             for gp in self._game_log_paths(req.get("gameId")):
                 with gp.open("a") as f:
                     f.write(line)
@@ -485,20 +505,15 @@ class SeatRunner:
     UNTIL_FLAT_ROUNDS = 2         # rounds without progress toward the target: the loop is not doing what was declared
     OFFER_PERIODS = range(1, 13)  # a repeating pattern of 1..12 decisions, seen twice, earns one offer (a 1-step pattern must be an action, not a pass)
 
-    def _loop_state(self) -> None:
-        """Round-31 loop state, defaulted lazily: a parked cycle (until unmet, broken by an
-        interruption), the patterns already offered this turn, own casts this turn, and a
-        one-shot note for the next prompt."""
-        if not hasattr(self, "_parked"):
-            self._parked = None
-        if not hasattr(self, "_offered"):
-            self._offered = set()
-        if not hasattr(self, "_casts_turn"):
-            self._casts_turn = 0
-        if not hasattr(self, "_runner_note"):
-            self._runner_note = None
-        if not hasattr(self, "_offer_for"):
-            self._offer_for = None
+    def _init_loop_state(self) -> None:
+        """Round-31 loop state: a parked cycle (until unmet, broken by an interruption), the
+        patterns already offered this turn, own casts this turn, a one-shot note for the next
+        prompt, and the (seq, period) of the offer the brain may take. Set once in __init__."""
+        self._parked = None
+        self._offered = set()
+        self._casts_turn = 0
+        self._runner_note = None
+        self._offer_for = None
 
     @staticmethod
     def _loose(sig: tuple) -> tuple:
@@ -517,7 +532,6 @@ class SeatRunner:
     def _hist_push(self, cyc_sig, dtype, shape) -> None:
         """Append to this turn's tape (bounded), count own casts, and let a parked loop
         re-arm the moment its pattern recurs."""
-        self._loop_state()
         self._hist.append((cyc_sig, dtype, shape))
         del self._hist[:-self.CYCLE_MAX_HIST]
         if dtype == "CAST_SPELL" and shape is not None and shape != ("id0",):
@@ -605,7 +619,6 @@ class SeatRunner:
 
     def _wake(self, why: str, note: str) -> None:
         """Stop the loop and tell the brain why, in its next prompt."""
-        self._loop_state()
         self._say(f"[seat {self.seat}] CYCLE {why} — model resumes")
         self._runner_note = note
         self.cycle = None
@@ -646,7 +659,6 @@ class SeatRunner:
         repeating the k before them with identical answers, every step replayable and the
         seat's own engine (empty stack or all-own objects), and THIS window opens a third
         round. Once per pattern per turn. The brain may decline by answering normally."""
-        self._loop_state()
         if self.cycle is not None or self._parked is not None or cyc_sig is None:
             return None
         if req.get("decisionType") not in self.CYCLE_DTYPES:
@@ -783,7 +795,6 @@ class SeatRunner:
     def _cycle_try_arm(self, req: dict, sig: tuple, out: dict) -> None:
         """Model declared repeat_cycle: N (and/or until: {...}) — extract the just-completed
         cycle from this turn's tape and arm the replay. An `until` alone takes the cap as N."""
-        self._loop_state()
         n = out.get("repeat_cycle")
         until_spec = out.get("until")
         if (not isinstance(n, int) or n < 1) and until_spec is None:
@@ -822,7 +833,7 @@ class SeatRunner:
             for k in self.OFFER_PERIODS:
                 if len(h) < 2 * k:
                     break
-                if h[-k:] == h[-2 * k:-k] and self._loose(sig) == h[-k][0][0] if False else (h[-k:] == h[-2 * k:-k] and self._loose(sig) == h[-k][0]):
+                if h[-k:] == h[-2 * k:-k] and self._loose(sig) == h[-k][0]:
                     prev, loose = len(self._hist) - k, True
                     break
         if prev is None:
@@ -1481,20 +1492,25 @@ class SeatRunner:
             self._say(f"[seat {self.seat}] restart check failed ({e}) — starting without a record")
             return None
 
-    def _maybe_rotate(self, hard: bool = False) -> bool:
+    def _maybe_rotate(self, hard: bool = False, reason: str | None = None) -> bool:
         """Layer two (Ben, 2026-09-07): when the last call re-read more than
         ARENA_ROTATE_TOKENS, start a fresh session with the same dossier plus
         the machine-built game record (seatd/record.py). Runs at a turn
         boundary, or mid-turn past ARENA_ROTATE_HARD (hard=True). A failed
-        rotation keeps the old session."""
+        rotation keeps the old session. A `reason` (B3/W-18: "stall-x2" after
+        two consecutive persistent-call timeouts) forces the rotation past the
+        token caps; every rotate event carries its reason."""
         size = getattr(self.brain, "last_prompt_tokens", 0)
-        cap = self.rotate_hard if hard else self.rotate_at
-        if (not cap or not isinstance(size, int) or size < cap
-                or not getattr(self.brain, "session_id", None)):
+        if not getattr(self.brain, "session_id", None):
             return False
-        if hard:
-            self._say(f"[seat {self.seat}] context {size // 1000}k past the hard ceiling "
-                      f"{cap // 1000}k — rotating mid-turn")
+        if reason is None:
+            cap = self.rotate_hard if hard else self.rotate_at
+            if not cap or not isinstance(size, int) or size < cap:
+                return False
+            reason = "hard-ceiling" if hard else "turn-boundary"
+            if hard:
+                self._say(f"[seat {self.seat}] context {size // 1000}k past the hard ceiling "
+                          f"{cap // 1000}k — rotating mid-turn")
         try:
             from . import record as _record
             text = _record.render(self._game_log, self._jsonl_path, self.seat, game_id=self._game_id)
@@ -1505,7 +1521,7 @@ class SeatRunner:
         # keeps the old session rather than costing the turn's first decision
         ok = self.brain.rotate(text, timeout_s=min(45.0, 0.5 * self.timeout_s))
         if ok:
-            self._transport_event("rotate", self._game_id)
+            self._transport_event("rotate", self._game_id, reason=reason)
         return ok
 
     def handle(self, req: dict) -> None:
@@ -1572,7 +1588,6 @@ class SeatRunner:
             self._casts_turn = 0
             self._runner_note = None
             self._offer_for = None
-        self._loop_state()
 
         seq, dtype = req.get("seq"), req.get("decisionType")
         # Item 12: the engine publishes its wait on every request. It is the
@@ -1668,7 +1683,7 @@ class SeatRunner:
             mtime = time.time()
         deadline = mtime + 0.8 * self.timeout_s
         budget = 0.0 if vanished else deadline - time.time()
-        answer, source, meta, why = None, "punt", None, None
+        answer, source, meta, why, say = None, "punt", None, None, None
         if budget > 5.0:
             # Advisory: remaining planned cards (if a plan survives) fed as text.
             plan_text = None
@@ -1691,7 +1706,7 @@ class SeatRunner:
                 req, plan=plan_text, observer=self.mb.read_observer(),
                 speculative=self.speculative, react_hold=self.react_hold,
                 combo_status=rules.combo_status_line(self.combos, req),
-                runner_note=" ".join(notes) if notes else None)
+                runner_note=" ".join(notes) if notes else None, seat=self.seat)
             # Item 2: the brain gets the DEADLINE, not a duration — init and
             # the decision call each spend only what remains of it (the old
             # min(budget, 240) handed the same budget to both, so a lazy
@@ -1736,6 +1751,8 @@ class SeatRunner:
             clean = rules.validate(req, out) if out is not None else None
             if isinstance(out, dict) and isinstance(out.get("why"), str):
                 why = out["why"][:200]
+            if isinstance(out, dict) and out.get("say") is not None:
+                say = self._say_key(req, out.get("say"))     # §4.4: validated, logged, never sent
             # Capture stated intent (normal mode) and surface deviations
             # LOUDLY: a plan the brain wanted but could not execute is the
             # single most useful line in a play-quality review.
@@ -1837,7 +1854,17 @@ class SeatRunner:
                   f"{req.get('phase', '')} -> {json.dumps(answer)} [{source}{lat}]"
                   f"{('  # ' + why) if why else ''}"
                   f"{'' if ok else ' WINDOW LOST'}")
-        self._record(req, answer, source, meta, why=why, consumed=ok)
+        self._record(req, answer, source, meta, why=why, consumed=ok,
+                     say=say if source == "model" else None)   # a punted answer's line is not spoken
+        if source == "punt" and getattr(self.brain, "stalls", 0) >= 2:
+            # B3 / W-18 (plan 2026-09-14): the resident process timed out twice running
+            # with no answer between — re-resuming the same session only waits for
+            # WEDGE_FAILS to drop the memory. The window is answered; rotate NOW (fresh
+            # session + game record) so the next window starts on a live session. A
+            # failed rotation keeps the old one and the next stall tries again.
+            self._say(f"[seat {self.seat}] two consecutive persistent-call stalls "
+                      f"({self.brain.stalls}) — rotating the session now (stall-x2)")
+            self._maybe_rotate(hard=True, reason="stall-x2")
         if cyc_sig is not None:
             # BL-20: a punt is never a replayable step. Recording it with an
             # unreplayable shape makes repeat_cycle refuse to arm across it

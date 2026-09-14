@@ -129,6 +129,7 @@ class PersistentClaude:
         self._q = None
         self._reader = None
         self._err = None
+        self.last_timeout = False   # the last call() ended in a deadline kill (B3/W-18: the brain counts these)
 
     def alive(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
@@ -191,6 +192,7 @@ class PersistentClaude:
     def call(self, prompt: str, timeout_s: float) -> dict | None:
         """One turn. None on any failure (the process is then dead)."""
         import queue
+        self.last_timeout = False
         if not self.alive() and not self.start():
             return None
         msg = json.dumps({"type": "user", "message": {"role": "user", "content": prompt}})
@@ -206,6 +208,7 @@ class PersistentClaude:
             left = deadline - time.time()
             if left <= 0:
                 self.log(f"persistent claude call timed out ({timeout_s:.0f}s) — process killed")
+                self.last_timeout = True
                 self.kill()
                 return None
             try:
@@ -272,6 +275,11 @@ class SeatBrain:
         self._rejoin_pending = False
         self.wedges = 0  # lifetime count; the runner mirrors these into
                          # transport-events.jsonl for the ratings void check
+        # B3 / W-18 (plan 2026-09-14): persistent-call timeouts back to back with no
+        # answered call between them. The second one is the runner's cue to rotate
+        # the session at once (fresh session + game record) rather than re-resuming
+        # a process that is not coming back until WEDGE_FAILS drops the memory.
+        self.stalls = 0
         self._child = None  # the in-flight CLI process, for kill_child (BL-28)
         # Cumulative burn since instantiation (includes the dossier init call).
         self.totals = {"calls": 0, "input_tokens": 0, "output_tokens": 0,
@@ -491,6 +499,8 @@ class SeatBrain:
         self._child = None
         if env is None:
             self.persistent_fallbacks += 1
+            if getattr(p, "last_timeout", False):
+                self.stalls += 1
             self._persistent = None
             return None
         if env.get("is_error"):
@@ -605,6 +615,9 @@ class SeatBrain:
         self.session_id = env["session_id"]
         self.calls += 1
         self.rotations += 1
+        self.stalls = 0                 # a fresh session is a fresh transport (B3): stall and failure streaks restart
+        self._fail_streak = 0
+        self._fail_streak_t0 = None
         before = self.last_prompt_tokens
         self._accumulate(env)
         self.log(f"[seat {self.seat}] session rotated #{self.rotations} in {time.time() - t0:.1f}s: "
@@ -623,6 +636,7 @@ class SeatBrain:
         if env is None:
             return False
         self.calls += 1
+        self.stalls = 0                 # an answered note is an answered call (B3)
         self._accumulate(env)
         return True
 
@@ -637,6 +651,7 @@ class SeatBrain:
         self.calls = 0
         self._fail_streak = 0
         self._fail_streak_t0 = None
+        self.stalls = 0
         self._rejoin_pending = False
         self.totals = {k: (0.0 if k == "cost_usd" else 0) for k in self.totals}
         # Per-game backend state: model-class latches (incl. cost/call caps)
@@ -726,6 +741,7 @@ class SeatBrain:
             return None, meta
         self._fail_streak = 0
         self._fail_streak_t0 = None
+        self.stalls = 0
         self.calls += 1
         self._accumulate(env)
         usage = env.get("usage") or {}

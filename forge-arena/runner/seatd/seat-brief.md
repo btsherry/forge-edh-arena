@@ -198,6 +198,11 @@ Every one of your own main phases:
   "deviation" key: {"wanted": "<the line>", "blocked_by": "<why>"}. Keep it
   to one sentence each. This is for the record, not a request to change your
   answer; still answer with the best legal choice.
+- TABLE TALK: a cast, reaction, attack, block or target window may offer an
+  OPTIONAL "say" key with a short menu of ids (taunt, respect, kill-that,
+  deal …). Add at most one, only when it fits the moment — your seat speaks
+  that line aloud at the table. It never changes your answer; a window that
+  offers no menu drops any "say", as does an id not on the menu.
 - LOOP FAST-FORWARD: when you are executing a repetitive loop (Scepter/
   Reversal mana, Reservoir storm, token pings) and THIS decision is identical
   to one you already answered this turn, add "repeat_cycle": N (an integer,
