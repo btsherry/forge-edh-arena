@@ -29,6 +29,18 @@ The AI seats talk like people at a table. Built in live games 38–46.
   the last minute) the runner spends: filler and banter go quiet as it fills,
   board-anchored lines keep priority, quieter on your turn; `ARENA_VOICE_DUTY`
   overrides. Nothing before the deal or at an idle table.
+- **No dead air, no hanging questions (game 48):** a silence floor under the
+  budget — twelve seconds quiet on an AI turn, twenty-four on yours (slower at
+  an idle table), and the patter clock speaks its best line regardless of dice
+  and budget; a question put to a seat ("what are you at?", "peace for a turn?")
+  is answered with certainty, and no question is ever put to the human; a
+  proposal ("might I suggest we all hit Selvala") draws a yea or nay from every
+  other player and, half the time, a retort from its subject. The table aims
+  a little higher on your turn than before.
+- **Every death gets its line:** a seat that disappears from the observer's
+  snapshot has left the game — Forge drops a loser from its player list before
+  most polls can see the flag — so the human's own line, each AI seat's exit and
+  the killer's line play even when three players fall in eight seconds.
 - **Seats are named for their commander** ("Purphoros, God of the Forge-S3"),
   the human is "Player One"; the "AI can't play these cards" boxes at launch
   are gone; each AI seat's process starts at its base effort and the effort
