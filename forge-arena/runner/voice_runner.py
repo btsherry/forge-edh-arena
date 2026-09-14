@@ -195,7 +195,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin):
         self.patter_human = float(os.environ.get("ARENA_VOICE_PATTER_HUMAN", "0.33"))     # rate on the human's turn
         self.patter_after_advice = float(os.environ.get("ARENA_VOICE_PATTER_AFTER_ADVICE", "6"))
         self.barks_slow = float(os.environ.get("ARENA_BARKS_SLOW", "20"))                  # a seat thinking this long gets told
-        self.barks_mana = int(os.environ.get("ARENA_BARKS_MANA", "8"))                       # floating this much is "big mana"
+        self.barks_mana = int(os.environ.get("ARENA_BARKS_MANA", "6"))                       # floating this much is "big mana"
         self._last_hit_by: dict[int, tuple[list[int], object]] = {}   # seat -> (hitters, turn) from the ring: kill attribution
         self._casts: dict[int, list[float]] = {}                      # seat -> recent cast times (a flurry earns "play slower")
         self._pool_high: set[int] = set()                             # seats currently over the big-mana line

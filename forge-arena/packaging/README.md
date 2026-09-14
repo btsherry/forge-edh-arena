@@ -523,7 +523,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_VOICE` | `on` | the advisor's voice (arena-play --no-voice = off) |
 | `ARENA_CHATTER` | `normal` | quiet \| normal \| lively \| rowdy (or a number) — one dial for how much the table talks: sets the talk budget (the speaking fraction of the last minute: .09 / .18 / .27 / .36) that the governor spends, shortens the gap, lowers the reaction thresholds; advice frequency is untouched |
 | `ARENA_VOICE_DUTY` | *(empty)* | talk budget override — the fraction of the last minute somebody may be speaking (e.g. `0.25`); empty = derived from `ARENA_CHATTER` |
-| `ARENA_VOICE_DUTY_HUMAN` | `0.4` | the talk budget on the human's turn, as a multiple of the budget |
+| `ARENA_VOICE_DUTY_HUMAN` | `0.6` | the talk budget on your turn, as a multiple of the budget (an AI turn's budget while Executive plays your seat) |
 | `ARENA_TABLE_P` | `1.0` | multiplier on the table lines' odds — self-narration (land-go, pass, cast types, pokes, no blocks, in response), whole-sentence life/hand numbers and named addressing (hit Urza / Giada's the threat / leave me alone, mono-red) |
 | `ARENA_BARKS_HUMAN_P` | `0.7` | chance a seat reacts to the HUMAN's play — a big attack, a game changer, the commander, a big spell, spot removal |
 | `ELEVENLABS_API_KEY` | unset | live spoken advice needs it; stock phrases play without it |
@@ -556,7 +556,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_VOICE_PATTER_HUMAN` | `0.33` | patter rate during the human's turn (a third as often; reactions to the human's plays are unaffected) |
 | `ARENA_VOICE_PATTER_AFTER_ADVICE` | `6` | seconds of patter silence after an advisor line, so advice is never talked over |
 | `ARENA_BARKS_SLOW` | `20` | a seat with a decision pending this many seconds gets told to play faster |
-| `ARENA_BARKS_MANA` | `8` | floating this much mana earns an instant 'big mana' line |
+| `ARENA_BARKS_MANA` | `6` | floating this much mana earns an instant 'big mana' line |
 
 **Backends (optional, API-billed)**
 
