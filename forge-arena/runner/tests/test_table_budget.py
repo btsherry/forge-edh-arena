@@ -34,7 +34,7 @@ class TalkBudget(_TreeCase):
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
         self.assertAlmostEqual(r.duty_target, 0.27); self.assertAlmostEqual(r.duty_goal(), 0.27)
         r._last_snapshot = {"activeSeat": 0}
-        self.assertAlmostEqual(r.duty_goal(), 0.27 * 0.4, msg="the human's turn: well under half")
+        self.assertAlmostEqual(r.duty_goal(), 0.27 * 0.6, msg="the human's turn: lower, not hushed (game 48: silences were the bigger issue)")
         os.environ["ARENA_VOICE_DUTY"] = "0.25"; os.environ["ARENA_VOICE_DUTY_HUMAN"] = "0.5"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
         self.assertEqual((r.duty_target, r.duty_human), (0.25, 0.5), "the override beats the dial")

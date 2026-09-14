@@ -840,7 +840,9 @@ class PatterClock(_TreeCase):
         self.r.scan_observer()                                              # the same board, unchanged...
         self.clock.t += vr.IDLE_S + 1; self.r.scan_observer(); self.r.patter()
         self.assertEqual(len(self.r.queue), 1, "...for two and a half minutes: an idle table still gets a line (Ben: patter while afk is okay)")
-        self.assertIn("idle table", self._records("skipped", "bark")[-1]["why"])
+        whys = [x["why"] for x in self._records("skipped", "bark")]
+        self.assertTrue(any("idle table" in w for w in whys))
+        self.assertTrue(any("silence floor" in w and ">= 36s" in w for w in whys), "quiet that long trips the floor, itself slowed to a third (12 s -> 36 s)")
         self.r.queue.clear(); self.r.last_spoken_at = self.clock.t
         self._tick(6); self._tick(6)
         self.assertEqual(self.r.queue, [], "...but at a third of the pace: the gap is fifteen seconds now, not five")

@@ -396,6 +396,79 @@ class Mulligans(_TableCase):
         self.assertEqual([x for x in r2.queue if x["kind"] == "bark"], [], "eight in the draw step of their own turn one is a kept seven")
 
 
+class SilenceQuestionsProposals(_TableCase):
+    """Game 48 (Ben): silences are the bigger issue; questions must be answered and never put to the human;
+    a proposal ('we all hit Selvala') draws every other player's yea or nay and maybe the subject's retort."""
+
+    def test_the_silence_floor_speaks_when_the_budget_would_not(self):
+        r = self.r
+        r.patter_on = True; r.patter_gap = (3.0, 3.0); r.rng.uniform = lambda a, b: a
+        r.duty = lambda window=vr.DUTY_WINDOW_S: 1.0                       # the budget says: nothing optional
+        r.rng.random = lambda: 0.99                                        # and the dice say no
+        seats = [self._seat(i, hand=3) for i in range(4)]
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 5, "phase": "MAIN1", "activeSeat": 1, "gameOver": False, "seats": seats, "events": []}))
+        r.scan_observer(); r.queue.clear(); r.last_spoken_at = self.clock.t
+        self.clock.t += 5; r.patter()
+        self.assertEqual(r.queue, [], "five seconds quiet: the governor holds")
+        self.assertIn("governor", self._records("skipped", "bark")[-1]["why"])
+        self.clock.t += 2; r.patter()
+        self.assertEqual(r.queue, [])
+        self.clock.t += 6; r.patter()                                      # 13 s quiet on an AI turn at normal: the floor
+        self.assertEqual(len(r.queue), 1, "the floor speaks")
+        self.assertTrue(any("silence floor" in (x.get("why") or "") for x in self._records("skipped", "bark")))
+        r.queue.clear()
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 6, "phase": "MAIN1", "activeSeat": 0, "gameOver": False, "seats": seats, "events": []}))
+        r.scan_observer(); r.queue.clear(); r.last_spoken_at = self.clock.t
+        self.clock.t += 20; r.patter()
+        self.assertEqual(r.queue, [], "the human's turn: the floor is twenty-four seconds")
+        self.clock.t += 5; r.patter()
+        self.assertEqual(len(r.queue), 1)
+        r2 = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.assertEqual(r2.duty_human, 0.6)
+
+    def test_a_question_to_a_seat_is_answered_with_certainty_and_never_put_to_the_human(self):
+        r = self.r
+        self._snap(4, 1); r.queue.clear()
+        r.duty = lambda window=vr.DUTY_WINDOW_S: 1.0                       # over budget: replies would otherwise be near-silent
+        r.rng.random = lambda: 0.99
+        self._spoken(1, "deal", ctx={"targets": [2]})
+        q = [(x["stock"], x["seat"]) for x in r.queue if x["kind"] == "bark"]
+        self.assertEqual(len(q), 1); self.assertEqual(q[0][1], 2); self.assertIn(q[0][0], ("promise", "take-the-deal", "no-deal"))
+        r.queue.clear()
+        self._spoken(1, "deal-purphoros", ctx={"targets": [2], "generic": "deal"})
+        self.assertEqual(len([x for x in r.queue if x["kind"] == "bark"]), 1, "a named question is still a question")
+        r.queue.clear()
+        self._spoken(1, "whats-your-life", ctx={"targets": [2]})
+        self.assertEqual([(x["stock"], x["seat"]) for x in r.queue if x["kind"] == "bark"], [("life-40", 2)])
+        seats = [self._seat(0, life=45, hand=7), self._seat(1), self._seat(2), self._seat(3)]
+        cands = r.patter_candidates({"turn": 4, "phase": "MAIN1", "activeSeat": 1, "seats": seats}, [1, 2])
+        pairs = {(pid, tgt) for _, pid, tgt, _ in cands}
+        self.assertNotIn(("cards-in-hand", 0), pairs); self.assertNotIn(("deal", 0), pairs); self.assertNotIn(("whats-your-life", 0), pairs)
+        self.assertIn(("youre-the-threat", 0), pairs, "a statement may still be aimed at the human")
+
+    def test_a_proposal_draws_every_other_players_yea_or_nay_then_the_subjects_retort(self):
+        d = vr.VOICES_DIR / "lily"; d.mkdir()
+        (d / "manifest.json").write_text(json.dumps({"schema": "arena.voice-stock/1", "library": "lily", "seat": 3, "voice_name": "Lily - Velvety Actress", "temperament": "warm", "phrases": {}}))
+        for f in (vr.VOICES_DIR / "bill").glob("*.wav"):
+            (d / f.name).write_bytes(f.read_bytes())
+        os.environ["ARENA_SEAT_DECKS"] = "urza-lord-high-artificer purphoros-god-of-the-forge sythis-harvests-hand giada-font-of-hope"
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        r.rng.random = lambda: 0.0; r.rng.choice = lambda xs: xs[0]
+        r._last_snapshot = {"turn": 4, "phase": "MAIN1", "activeSeat": 1, "seats": [self._seat(i) for i in range(4)]}
+        r._roll_turn(4)
+        r.after_spoken({"kind": "bark", "stock": "hit-sythis", "text": "", "seat": 1, "library": "harry/table", "ctx": {"targets": [3], "generic": "kill-that"}, "chain": None})
+        q = [(x["stock"], x["seat"], x.get("follow"), x["gap"]) for x in r.queue if x["kind"] == "bark"]
+        self.assertEqual(q, [("agree", 2, True, 0.3), ("im-not-the-threat", 3, True, 0.3)], "Bill weighs in, then Sythis's seat retorts; sequenced, nothing evicts")
+        self.assertIsNone(r._chain, "the table has had its say: no third round")
+        r.queue.clear(); r._roll_turn(5)
+        r.rng.random = lambda: 0.9
+        r.after_spoken({"kind": "bark", "stock": "youre-the-threat", "text": "", "seat": 2, "library": "bill", "ctx": {"targets": [0]}, "chain": None})
+        self.assertEqual([x for x in r.queue if x["kind"] == "bark"], [], "dice can leave a proposal hanging; the human as subject never retorts")
+        r._roll_turn(6); r.rng.random = lambda: 0.0
+        r.after_spoken({"kind": "bark", "stock": "youre-the-threat", "text": "", "seat": 2, "library": "bill", "ctx": {"targets": [0]}, "chain": None})
+        self.assertEqual([(x["stock"], x["seat"]) for x in r.queue if x["kind"] == "bark"], [("agree", 1), ("agree", 3)], "about the human: the other two players answer, nobody speaks for the human")
+
+
 class TableRuntime(_TableCase):
     def test_table_ids_resolve_to_the_sub_library_and_the_table_knows_who_is_who(self):
         r = self.r

@@ -100,7 +100,19 @@ BARK_PRIORITY = {"chain": CHAIN_HOP_PRIORITY, "event": 5.5, "card": 5.5, "proced
 # rolled against the headroom left in it; lines anchored to a board event keep priority.
 DUTY_BASE = 0.18          # at chatter 1.0; quiet .09, lively .27, rowdy .36
 DUTY_WINDOW_S = 60.0
-DUTY_HUMAN_MULT = 0.4     # on the human's turn the table aims far lower (Ben: "patter being minimal during my turn")
+DUTY_HUMAN_MULT = 0.6     # on the human's turn the table aims lower (Ben, game 44: minimal on my turn; game 48: silences are the bigger issue)
+# The silence floor (Ben, game 48: "too many long pauses"): nothing has played for this long -> the patter clock speaks
+# its best candidate regardless of dice and budget. Divided by the chatter dial.
+SILENCE_FLOOR_S = {"ai": 12.0, "human": 24.0}
+# Lines that are QUESTIONS get an answer with certainty and are never put to the human (who cannot answer);
+# PROPOSALS ("we all hit Selvala") draw a yea or nay from every other player, then the subject may retort.
+QUESTION_LINES = {"deal", "whats-your-life", "cards-in-hand", "mull-screw"}
+QUESTION_PREFIXES = ("deal-",)
+PROPOSAL_LINES = {"kill-that", "youre-the-threat", "archenemy", "someone-wins"}
+PROPOSAL_PREFIXES = ("hit-", "threat-")
+PROPOSAL_P, PROPOSAL_TARGET_P = 0.85, 0.5
+PROPOSAL_REPLIES = ("agree", "disagree")
+PROPOSAL_TARGET_REPLIES = ("im-not-the-threat", "clapback", "you-wish", "laugh")
 OPTIONAL_FLOOR = 0.15     # patter and banter at the goal: nearly silent; an anchored line never drops below half
 OPTIONAL_SOURCES = ("patter", "chain")
 # The table sub-library (round 31, runner/voice/table_lines.py): procedural self-narration,
@@ -1491,6 +1503,41 @@ class VoiceRunner:
         return int(alive[0]["seat"]) if len(alive) == 1 else None
 
     # -- interaction chains
+    def _respond_to_proposal(self, item: dict, opener_id: str, voiced: dict, turn) -> bool:
+        """Ben (game 48): "'Might I suggest we all hit Selvala' should garner nays or assents from the other
+        two, and Selvala should complain, laugh it off, say come at me, or not respond." Every other voiced
+        player answers yea or nay in seat order, then the subject may retort — all sequenced as follow-ons."""
+        if not (opener_id in PROPOSAL_LINES or opener_id.startswith(PROPOSAL_PREFIXES)):
+            return False
+        if item.get("chain"):
+            return False                                          # a proposal made as a reply does not restart the table
+        speaker = int(item["seat"])
+        targets = [int(t) for t in ((item.get("ctx") or {}).get("targets") or [])]
+        others = [s for s in sorted(voiced) if s != speaker and s not in targets]
+        for seat in others:
+            if self.rng.random() >= PROPOSAL_P:
+                continue
+            reply = self.rng.choice(PROPOSAL_REPLIES)
+            if (seat, reply) in self._said_this_turn:
+                reply = PROPOSAL_REPLIES[1 - PROPOSAL_REPLIES.index(reply)]
+            self._said_this_turn.add((seat, reply))
+            link = {"origin": speaker, "hop": 1, "turn": turn, "parent": item.get("stock")}
+            self.enqueue("bark", stock=reply, library=self.lib_for(seat, reply), seat=seat, ttl=15.0, gap=0.3,
+                         ctx={"targets": [speaker], "aggressor": speaker}, chain=link, evict=False)
+            self.record("queued", kind="bark", stock=reply, seat=seat, source="chain", hop=1, parent=item.get("stock"))
+        subject = next((t for t in targets if t in voiced and t != speaker), None)
+        if subject is not None and self.rng.random() < PROPOSAL_TARGET_P:
+            options = [r for r in PROPOSAL_TARGET_REPLIES if (subject, r) not in self._said_this_turn]
+            if options:
+                reply = self.rng.choice(options)
+                self._said_this_turn.add((subject, reply))
+                link = {"origin": speaker, "hop": 1, "turn": turn, "parent": item.get("stock")}
+                self.enqueue("bark", stock=reply, library=self.lib_for(subject, reply), seat=subject, ttl=15.0, gap=0.3,
+                             ctx={"targets": [speaker], "aggressor": speaker}, chain=link, evict=False)
+                self.record("queued", kind="bark", stock=reply, seat=subject, source="chain", hop=1, parent=item.get("stock"))
+        self._chain = None                                        # the table has had its say; no third round
+        return True
+
     def leader_of(self, speaker: int):
         """The highest-life seat still in the game, other than the speaker and the human."""
         best, best_life = None, -1
@@ -1535,6 +1582,10 @@ class VoiceRunner:
             # the number was the speaker's own follow-up: the table replies to the line before it
             item = dict(item, stock=chain.get("parent") or item["stock"])
             chain = None
+        opener_id = (item.get("ctx") or {}).get("generic") or item.get("stock", "")
+        question = opener_id in QUESTION_LINES or opener_id.startswith(QUESTION_PREFIXES)
+        if self._respond_to_proposal(item, opener_id, voiced, turn):
+            return
         # a question about a seat's state gets the true number back (whole-sentence lines)
         kind = STATE_ANSWERS.get(item.get("stock", ""))
         if kind:
@@ -1544,7 +1595,8 @@ class VoiceRunner:
                 pid = life_pid(self._seat_field(who, "life")) if kind == "life" else hand_pid(self._seat_field(who, "handSize"))
                 hop = int((chain or {}).get("hop", 0)) + 1
                 if pid and pid in self.table_ids and (who, pid) not in self._said_this_turn and hop <= self.chains.max_hops:
-                    p = min(1.0, self.chains.hop_p(hop) * self.governor(optional=True))
+                    # a question gets its number with certainty (game 48: 8 of 17 questions hung); a jab is rolled
+                    p = 1.0 if (question and hop == 1) else min(1.0, self.chains.hop_p(hop) * self.governor(optional=True))
                     if self.rng.random() < p:
                         self._said_this_turn.add((who, pid))
                         link = {"origin": int((chain or {}).get("origin", speaker)), "hop": hop, "turn": turn, "parent": item.get("stock")}
@@ -1561,7 +1613,8 @@ class VoiceRunner:
         if plan is None:
             self._chain = None
             return
-        p = min(1.0, plan["p"] * self.governor(optional=True))
+        # a question to a seat is answered with certainty, outside the budget (game 48: 8 of 17 hung); the rest roll
+        p = 1.0 if (question and plan["hop"] == 1 and plan["seat"] != "joshua") else min(1.0, plan["p"] * self.governor(optional=True))
         if self.rng.random() >= p:
             self.record("skipped", kind="bark", why=f"dice (chain hop {plan['hop']}, p={p:.2f})", stock=plan["id"],
                         seat=plan["seat"], source="chain")
@@ -1649,7 +1702,8 @@ class VoiceRunner:
             return False
         # an explicit p (the opener's own knob) always applies; otherwise "all" means always, "some" means ARENA_BARKS_P
         chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
-        g = 1.0 if pid in MULL_LINE.values() else self.governor(optional=source in OPTIONAL_SOURCES)   # a mulligan is always worth the breath
+        ungoverned = pid in MULL_LINE.values() or (source == "patter" and p == 1.0)   # a mulligan is always worth the breath; so is breaking a silence
+        g = 1.0 if ungoverned else self.governor(optional=source in OPTIONAL_SOURCES)
         chance = min(1.0, chance * g)
         if self.rng.random() >= chance:
             self.record("skipped", kind="bark", why=f"dice ({source}, p={chance:.2f}, governor {g:.2f})", stock=pid, seat=seat, source=source)
@@ -1793,6 +1847,8 @@ class VoiceRunner:
             return [sp for sp in living if sp != target]
 
         def add(pid, target, w, speakers=None):
+            if target == self.human_seat and pid in QUESTION_LINES:
+                return                                                # the human cannot answer a question (game 48: awkward)
             for sp in (speakers if speakers is not None else others(target)):
                 out.append((sp, pid, target, w / max(1, len(speakers if speakers is not None else others(target)))))
 
@@ -1862,24 +1918,31 @@ class VoiceRunner:
         if self._patter_anchor != self.last_spoken_at:          # a line just played: rearm from its end
             self._patter_anchor = self.last_spoken_at
             self._patter_due = self.last_spoken_at + self._patter_gap_s(human_turn) * mult
-        if now < self._patter_due or now - self._advisor_spoke_at < self.patter_after_advice:
+        floor = SILENCE_FLOOR_S["human" if human_turn else "ai"] / max(0.25, self.chatter) * mult   # an idle table: the floor slows too
+        silent_for = now - self.last_spoken_at
+        breaking = silent_for >= floor and not self.queue
+        if not breaking and (now < self._patter_due or now - self._advisor_spoke_at < self.patter_after_advice):
             return
         living = [int(x) for x in self.seat_libraries if int(x) not in self.eliminated]
         cands = self.patter_candidates(snap, living) if living and snap.get("seats") else []
         self._patter_due = now + self._patter_gap_s(human_turn) * mult   # whatever happens, wait another gap
         if not cands:
             return
-        g = self.governor(optional=True)
-        if self.rng.random() >= g:
-            self.record("skipped", kind="bark", why=f"governor (duty {self.duty():.2f} vs goal {self.duty_goal():.2f}, p={g:.2f})", source="patter")
-            return
+        if breaking:
+            # the silence floor (game 48): the best candidate speaks, whatever the dice and the budget say
+            self.record("skipped", kind="bark", why=f"silence floor ({silent_for:.0f}s quiet >= {floor:.0f}s) — speaking regardless", source="patter")
+        else:
+            g = self.governor(optional=True)
+            if self.rng.random() >= g:
+                self.record("skipped", kind="bark", why=f"governor (duty {self.duty():.2f} vs goal {self.duty_goal():.2f}, p={g:.2f})", source="patter")
+                return
         total = sum(w for *_, w in cands)
         pick = self.rng.random() * total
         for speaker, pid, target, w in cands:
             pick -= w
             if pick <= 0:
                 break
-        self.maybe_bark(speaker, pid, turn=snap.get("turn"), source="patter",
+        self.maybe_bark(speaker, pid, turn=snap.get("turn"), source="patter", p=1.0 if breaking else None,
                         ctx={"targets": [target] if target is not None else []})
 
     # -- the board, as the table sees it
