@@ -10,6 +10,23 @@ channel and the non-verbal atoms; kill all unused raw takes; yes to recommendati
 memory, floor pool logging with anchored preference, turn/seat stamps + event tape + replay mode,
 brain intent for loops + a `say` key). Everything else below is proposed and waits for him.
 
+**Ben's decisions, later the same evening (answers to §9):** (1) purge the raws from the branch
+history before the merge, with a bundle backup kept in the repo directory and gitignored; (2) KEEP the
+advisor's bark tags and KEEP the colour-identity address lines — the system will be distributed to
+people who ingest many decks of their own, and the colour fallback is what speaks for a commander
+nobody rendered; (3) governor as a mean, not a ceiling — rowdy should be rowdy; (4) no agent work
+split: one pair of hands, serially; (5) audio stays WAV — the Windows (winsound / .NET SoundPlayer)
+and Linux (paplay / aplay) backends play WAV only, so AAC would need a new dependency on every
+other machine; (6) the observer fix waits on more context (given in chat); (7) heckles at the player
+are welcome, but the advisor never responds to them: Joshua is a ghost outside the game, the seats
+speak to the player, and the player cannot talk back to the seats yet — so the chain planner's
+"Joshua answers a line aimed at the human" path is removed (A14); deals between seats stay, and a
+player → advisor → seat-brain relay for the human's own deals is a feature-push item, not this
+round; (8) "Player One" stays the human's name in every human game; in a four-player all-AI game
+every seat is named `<Commander>-S<n>` (already the code since `e1e261da125`; unverified live since,
+see A13). The feature push comes after this round; the features Ben is taking are the ones in §4
+plus §5.1 and the heckle family with the rule above.
+
 Ground rules for the work: suite green before every commit; the FULL Maven gate only for Java
 changes and never during a game; message file written before any conditional commit; secrets never
 printed; upstream Forge files untouched.
@@ -37,6 +54,8 @@ Every bug or correction the five reports raised, deduplicated. "Rep." names the 
 | A10 | `human_mulligans` assumes the DRAW snapshot lands after the draw (off-by-one risk) | `:1225-1226`; unverified | Verify on the first observer tape (§4.3); fix if wrong | S(7) | 2 |
 | A11 | Patter pool exhaustion: `PATTER_REPEAT_S` 300 with "named counts as generic" can empty the pool on a quiet board, and the floor then finds nothing | `25e803b19f6`, `c6e266c092c`; no test | Log pool size on every floor tick; when the pool is empty or filler-only the floor spends an atom (§4.5) | P | 1 |
 | A12 | The startup banner prints "chains … max 4" while `chains.json` says `max_hops` 3 | `voice-0.log` up line | Print the loaded value | G | 1 |
+| A13 | All-AI tables: every seat must be `<Commander>-S<n>`; the last archived all-AI games (9/10 morning) predate `e1e261da125` and still show `mailbox-seat0-…` | `GuiPilotMatch.seatName`/`buildRoster` (`:227,308`); `GuiPilotMatchRosterTest` | Verify with the roster test and one all-AI launch; fix if seat 0 is mislabelled | Ben | 2 |
+| A14 | Joshua answers a seat's line aimed at the human (`plan_reply` returns a Joshua quip when the resolved replier is the human seat) — Ben: the advisor never responds to voices speaking to the player | `chains.py:126-129`; `chains.json` note line 876 | Remove the Joshua branch; a line aimed at the human gets no reply until the player can answer | Ben | 1 |
 
 ### 1B. Process, teardown, transport, security
 
@@ -90,8 +109,8 @@ Every bug or correction the five reports raised, deduplicated. "Rep." names the 
 | Two patter clocks (the due clock and the floor) | One scheduler: `due = last_spoken + gap(dial, human, idle)`; candidates ranked anchored (numbers, threat calls, `pass-already` at the active seat) → filler → atom; the governor rolls only filler; quiet ≥ floor skips the dice. The floor's numbers stay as Ben has them until he reports | Yes; the floor becomes a rule inside the clock, not a third clock |
 | `BARK_PRIORITY` five tiers (event/card/procedural 5.5, opener 5.8, recap/advice 8.0, patter 8.5) | Two classes (anchored, optional) plus chain; one `classify()` shared with eviction, governor and hygiene (C2) | Yes; event, card and procedural already share a tier |
 | Three slow-seat mechanisms (`mutter` 8 s, `slow_seats` 20 s, the advisor's `slow-turn` tag) globbing the same inboxes | One inbox scan per step feeding one line family (thinking at 8 s, play-faster at 20 s) | Yes |
-| Advisor bark tags (`[bark:seat:id]`, ~730–790 prompt tokens per advice call and recap; 127 emitted, 18 spoken, the event ring fires the same ids first) | Drop: removes `bark_guide`/`split_bark`/`BARK_WHEN` (~110 lines), the recap/advice bark sources, and `test_advisor_barks.py`. The seats' `say` key (§4.4) replaces model-chosen lines where they belong, in the seat's own decision | Loses model-chosen taunt/respect/slow-turn (14 spoken in twelve games). **Ask** |
-| Colour-identity address lines: 128 ids per voice, 384 baked takes, 46.5 MB, unfireable while every deck has a commander entry | Remove; `arena-add-deck.py` renders the four address lines per new commander at ingest (`table_lines.py --write` is the missing step) | Loses nothing today. **Ask** |
+| Advisor bark tags | **Kept (Ben).** The guide text can still be trimmed for tokens without changing what it offers | — |
+| Colour-identity address lines | **Kept (Ben):** they are the fallback for every commander other people bring; nothing renders per deck on their machines | — |
 | `voice_runner.py` 2,637 lines | Split, behaviour-preserving: `runner/voice/renderer.py` (Player, Renderer, FX — pre-branch, stable), `runner/voice/table.py` (assignment, address, cards, combos, roster — absorbs the D5 duplicates), `runner/voice/scheduler.py` (queue, classify, governor, patter, chains glue), `runner/voice_runner.py` (daemon: scans, events, loop). Tests import the new paths | Yes; the split is Phase 0 so parallel work maps to files |
 | Combo `-online` + `-react` pairs (74 ids, 222 takes, 40 MB; 11 card ids spoken in three games) | Keep; Ben asked for named cards. Revisit after five more games | — |
 | Memory counters that never fired (grudge, again-countered, not-again-sweep, you-promised: 0 in three games) | Keep `_deals` (its opener fires); lower `GRUDGE_EVERY` 3 → 2; leave the rest until a game shows them | — |
@@ -108,7 +127,7 @@ Every bug or correction the five reports raised, deduplicated. "Rep." names the 
 | `_board_fp` on the last event `seq` (A8) | `:2394` | Correctness and cheaper |
 | Cap `logs/cache/voice` (C6) | renderer | 173 MB and growing with no hits |
 | `git gc --prune=now` after the raw purge; remove the stray `tmp_pack` | repo | 4,426 loose objects (425 MB), 5 packs (1.49 GB) |
-| Optional, **ask**: bake to AAC/M4A (afplay decodes natively) with `seconds` stored in the manifests so `wav_seconds()` is no longer needed | renderer, build_stock, manifests | Audio 323 MB → well under 100 MB; small risk: decoder start latency, to be measured once |
+| ~~AAC/M4A~~ **Decided: WAV stays.** afplay decodes AAC, but winsound, .NET SoundPlayer, paplay and aplay play WAV only; ffplay needs ffmpeg installed | — | Revisit only with a portable decoder dependency |
 | Not changing: `VAdvisor.followVoice` 250 ms poll | GUI | It is a stat of one small file and the tab follow's snappiness is a feature Ben likes |
 
 ---
@@ -153,17 +172,17 @@ Every bug or correction the five reports raised, deduplicated. "Rep." names the 
 
 ## 5. Proposed, awaiting Ben
 
-1. **Governor as a mean, not a ceiling** (Grower #1): full chance below the goal (dial boost kept), taper to the floor over [goal, 1.5 × goal]. Removes the asymptote that held the table at ~60 % of the dial. Recommended.
+1. **Governor as a mean, not a ceiling** — **approved (Ben: rowdy should rowdy).** Full chance below the goal (dial boost kept), taper to the floor over [goal, 1.5 × goal]. Phase 1, scheduler.
 2. **Threat memory** (Prototyper #7): a decaying `_threat` pin set by combo-online, game-changer casts and cast flurries, biasing `hit-`/`threat-` targets ahead of the life leader.
-3. **"Waiting on Player One" family** (Grower #9) keyed to the human's priority window being open > 30 s, and the Prototyper's question whether Ben accepts being heckled when idle.
+3. **"Waiting on Player One" family** — **approved (Ben: heckles are great)**, keyed to the human's priority window being open > 30 s; the advisor never answers a heckle (A14). Phase 1, daemon.
 4. **Kill-shot family** (Grower): multi-kill lines for a Reservoir-style ending, instead of one generic Joshua line for three deaths.
 5. **Second wordings for the single-text patter ids** (Grower #5): rank ids by spoken ÷ takes across the archive; render where the ratio is worst (`pass-already`, `board-envy`, `empty-hand`, `what-turn`, `play-slower`, the named `deal-`/`hit-`/`threat-` lines); a named take falls back to its generic when heard in the last five minutes.
-6. **Deals the brains know about** (Prototyper #3): a RUNNER NOTE into the promised seat's next request; a Yes/No for the human in VAdvisor.
-7. **Drop the advisor bark tags** and **remove the colour-identity address lines** (§2).
-8. **Audio format** AAC with manifest durations (§3).
+6. **Deals** — seats may deal among themselves (kept as built). The human's own deals go player → advisor chat → seat brain and back through the seat's voice: the ask channel (`logs/control/ask/`, `VAdvisor` → `advisor_runner._answer_ask`) already carries the human's text to the advisor; a relay would route an ask addressed to a seat into that seat's next request as a note and let the brain answer with a `say`. **Feature push, not this round.**
+7. ~~Drop the advisor bark tags / remove the colour lines~~ — **both kept (Ben).**
+8. ~~Audio format~~ — **WAV stays (portability).**
 9. **`getRegisteredPlayers()` in the observer** (E1): 4.2 or 4.3?
 10. **BL-49** (Executive toggle during an open window): still designed, not built; it touches the human's input, so it stays out until Ben says go.
-11. **"Player One" in the no-advisor launch** (D6): intended, or restore the preference name?
+11. ~~"Player One" in the no-advisor launch~~ — **stays (Ben: the player is the seat in a human game).**
 
 ---
 
@@ -187,7 +206,7 @@ Ben proposes archetype subagents doing the work in their domains. Assessment:
 - **Correctness.** The archetypes partition *judgement* well; they do not partition *files*. All five reports point into `voice_runner.py`, and the floor, governor, guard and eviction interact — five agents editing one 2,600-line file in parallel would merge badly and reason about each other's half-applied semantics. After the Phase 0 split, the natural partition is by module (scheduler, renderer + atoms, daemon + intent, edges), which is what §6 Phase 1 uses. Each agent runs the suite in its own worktree; I integrate; a separate adversarial reviewer reads the combined diff before anything is committed. That is the review-then-verify shape that produced today's findings, applied to the fixes.
 - **Efficiency.** Parallel implementers cut wall-clock by three to four times on Phase 1; token cost is the price (the review cost 1.03 M tokens for reading alone; implementing is heavier). Phase 0 cannot be parallelised and is the critical path. Atoms rendering is serial on ElevenLabs anyway.
 - **Elegance.** The lens metaphor is elegant for analysis because every lens sees the whole; for implementation the module boundary is the elegant unit because the tests and the commits fall out of it. Keep the archetypes as the *brief* each implementer carries (the Sweeper brief for the scheduler agent, the Builder brief for the renderer agent, the Maintainer brief for the daemon agent, the Grower brief for the edges and hygiene agent), not as the unit of assignment.
-- **Recommendation:** four Fable implementers mapped to modules, worktree-isolated, plus one Fable adversarial reviewer at Phase 2 — five agents, which needs Ben's express go under the standing rule. Phase 0 by me, serial, so the foundation is one mind's work.
+- **Decided (Ben): no agent split.** One pair of hands does all of it, serially, in the module order of §6 Phase 1 (scheduler, renderer + atoms, daemon + intent, edges), one commit per item with the suite green. The adversarial pass at Phase 2 is a second read of the whole diff before game 49, not an agent.
 
 ---
 
@@ -202,11 +221,6 @@ Ben proposes archetype subagents doing the work in their domains. Assessment:
 
 ## 9. Open questions for Ben (in the order the plan needs them)
 
-1. Purge the raws from the branch history before the merge (recommended, bundle backup), or tree-only?
-2. Drop the advisor bark tags? Remove the colour-identity address lines and render per commander at ingest?
-3. Governor as a mean (§5.1)?
-4. Four module-mapped Fable implementers plus one Fable reviewer, after I do Phase 0 — go?
-5. Audio format change to AAC in this round, or later?
-6. Observer `getRegisteredPlayers()` in 4.2 (Phase 3 here) or 4.3?
-7. Heckle the human when the window sits open? Deals into the brains' requests?
-8. "Player One" replacing your preference name in the no-advisor launch — intended?
+1–5, 7, 8: answered (see the decisions block at the top).
+6. Observer `getRegisteredPlayers()` in 4.2 (Phase 3 here) or 4.3? Context given in chat on 2026-09-14; Ben to decide.
+9. Go for Phase 0.
