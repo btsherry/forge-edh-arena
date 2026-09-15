@@ -13,6 +13,7 @@ import random
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -211,7 +212,9 @@ def glitch_wav(data: bytes, level: str, seed: int) -> bytes:
 class Player:
     """Blocking playback of a WAV on the default output, via whatever the OS has:
     afplay (macOS), paplay/aplay (Linux), ffplay (anywhere with ffmpeg), or
-    PowerShell's .NET SoundPlayer (Windows, WAV only)."""
+    PowerShell's .NET SoundPlayer (Windows, WAV only). Plus the UNDER channel
+    (2026-09-14, the atoms): a second, quieter playback beneath the main line —
+    one at a time, never blocking, killed together with the main channel."""
 
     def __init__(self, dry_run: bool = False, log=print):
         self.dry_run = dry_run
@@ -235,6 +238,10 @@ class Player:
             # last resort on Windows-like shells: .NET's SoundPlayer from PowerShell
             self.cmd = ["powershell", "-NoProfile", "-Command"]
             self.windows = True
+        self._under: subprocess.Popen | None = None
+        self._under_dry_until = 0.0        # dry run / no player: the under line "plays" for its length
+        self._under_lock = threading.Lock()
+        self._under_warned = False
 
     def play(self, path: Path, should_stop=None) -> None:
         """Play one file. `should_stop()` is polled every 200 ms; when it turns
@@ -251,6 +258,7 @@ class Player:
             while time.time() < end:
                 if should_stop is not None and should_stop():
                     ws.PlaySound(None, ws.SND_PURGE)
+                    self.stop_under()
                     self.log("[voice] playback cut: voice disabled")
                     break
                 time.sleep(0.1)
@@ -267,6 +275,7 @@ class Player:
             while proc.poll() is None and time.time() < deadline:
                 if should_stop is not None and should_stop():
                     proc.kill()
+                    self.stop_under()                     # the atom beneath the line goes with it
                     self.log("[voice] playback cut: voice disabled")
                     break
                 time.sleep(0.2)
@@ -275,6 +284,81 @@ class Player:
         finally:
             try:
                 proc.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+
+    # -- the under channel (the atoms, voicework2 hardening plan 4.5)
+    def _under_argv(self, path: Path, volume: float) -> list[str] | None:
+        """The argv for a quiet second playback, or None when this backend cannot
+        overlap at a volume: afplay -v (0..1), ffplay -volume (0..100 %), paplay
+        --volume (0..65536). aplay has no volume flag; winsound and .NET's
+        SoundPlayer play one file at a time."""
+        if self.cmd is None or self.windows:
+            return None
+        v = max(0.0, min(1.0, float(volume)))
+        tool = self.cmd[0]
+        if tool == "afplay":
+            return ["afplay", "-v", f"{v:.2f}", str(path)]
+        if tool == "ffplay":
+            return self.cmd + ["-volume", str(int(round(v * 100))), str(path)]
+        if tool == "paplay":
+            return ["paplay", f"--volume={int(round(v * 65536))}", str(path)]
+        return None
+
+    def _under_alive(self) -> bool:
+        """Caller holds _under_lock. A finished process is reaped here."""
+        if self._under is not None:
+            if self._under.poll() is None:
+                return True
+            self._under = None
+        return time.time() < self._under_dry_until
+
+    def under_playing(self) -> bool:
+        with self._under_lock:
+            return self._under_alive()
+
+    def play_under(self, path: Path, volume: float = 0.5) -> bool:
+        """Start a second playback BENEATH whatever the main channel is doing and
+        return at once. At most one under-line at a time: False while one plays,
+        False on a backend that cannot overlap at a volume (aplay, winsound,
+        PowerShell — said once), True when the process started (or, dry, was logged)."""
+        with self._under_lock:
+            if self._under_alive():
+                return False
+            if self.dry_run or (self.cmd is None and self.winsound is None):
+                secs = wav_seconds(path)
+                self.log(f"[voice] (dry) under {path.name} {secs:.1f}s")
+                self._under_dry_until = time.time() + secs
+                return True
+            argv = self._under_argv(path, volume)
+            if argv is None:
+                if not self._under_warned:
+                    self._under_warned = True
+                    tool = self.cmd[0] if self.cmd else "winsound"
+                    self.log(f"[voice] under channel off: {tool} cannot overlap at a volume — the atoms need afplay, ffplay or paplay")
+                return False
+            try:
+                self._under = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                               stderr=subprocess.DEVNULL)
+            except OSError as e:
+                self.log(f"[voice] under channel failed: {str(e)[:120]}")
+                return False
+            # reap the child when the take is over instead of leaving a zombie until the next poll
+            reap = threading.Timer(wav_seconds(path) + 0.5, self.under_playing)
+            reap.daemon = True
+            reap.start()
+            return True
+
+    def stop_under(self) -> None:
+        """Kill the under-line, if one is playing. Called with the main channel's
+        kill (mute, advisor pause) and at the game-over lock."""
+        with self._under_lock:
+            self._under_dry_until = 0.0
+            proc, self._under = self._under, None
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.kill()
+                proc.wait(timeout=2)
             except (OSError, subprocess.TimeoutExpired):
                 pass
 

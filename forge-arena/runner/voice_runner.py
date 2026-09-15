@@ -98,13 +98,14 @@ from voice.scheduler import (  # noqa: E402,F401 — re-exported
 from voice.events import (  # noqa: E402,F401 — re-exported
     FIRST_SENTENCE_MAX, ASK_MAX, LOOP_AT, THINK_S, NARRATIONS_PER_TURN, GRUDGE_EVERY, ELIM_SEAT_P, first_sentence,
     EventsMixin)
+from voice.atoms import AtomsMixin
 POLL_S = 0.5
 CHAIN_POLL_S = 0.1          # while an exchange hop is pending: a retort's beat is ~0.5 s, so poll fast
 
 
 # ---- the daemon --------------------------------------------------------------------
 
-class VoiceRunner(SchedulerMixin, EventsMixin):
+class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
     """The daemon: the state every mixin reads, the play step (speak), the loop (step/run).
     Queue policy lives in voice.scheduler.SchedulerMixin, the sources in voice.events.EventsMixin."""
 
@@ -404,6 +405,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin):
                 self._play(bleep)
         secs = wav_seconds(path)
         self.publish_speaking(item, secs)
+        self.start_backchannel(item, secs)              # a listener may murmur under the line (voice/atoms.py)
         self._play(path)
         self.publish_speaking(None, 0.0)
         self.last_spoken_at = self.clock()
@@ -458,6 +460,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin):
     def step(self) -> None:
         self.publish_state()
         if not self.enabled():
+            self.stop_atoms()                            # a pending murmur or an under-line dies with the mute
             if self.queue:
                 self.say(f"[voice] disabled — dropping {len(self.queue)} queued line(s)")
                 self.queue = []
