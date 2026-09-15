@@ -294,6 +294,23 @@ LOOP: dict[str, tuple[str, dict[str, list[str]]]] = {
         "lily": ["[mischievously] Round we go again, dears.", "[warmly] Once more, with feeling.", "[chuckles] And again. Sorry, loves."]}),
 }
 
+# The player's window has sat open a while (Ben, 2026-09-14: "heckles are great, but the advisor
+# should not respond" — the seats speak to the player; Joshua is a ghost outside the game).
+HECKLE: dict[str, tuple[str, dict[str, list[str]]]] = {
+    "waiting-on-you": ("the human's decision window has been open for a while", {
+        "harry": ["[impatient] We're waiting on you.", "[loud] Hello? Your turn!", "[mocking] Take your time. No, really, take it.", "[sighs] Any day now."],
+        "bill": ["[dryly] We are waiting on you.", "[calmly] Player One. Whenever you're ready.", "[dryly] The clock is a suggestion, apparently.", "[sighs] Any day now."],
+        "lily": ["[gently] We're waiting on you, dear.", "[warmly] Take your time. We're not going anywhere.", "[softly] Hello? Still with us?", "[amused] Any day now, sweetheart."]}),
+    "still-waiting": ("the same window, a good deal later", {
+        "harry": ["[annoyed] Still waiting.", "[loud] Did they leave?", "[mocking] I think we lost them.", "[groans] Somebody poke Player One."],
+        "bill": ["[dryly] Still waiting.", "[calmly] Have they stepped away?", "[dryly] We appear to have lost Player One.", "[sighs] Shall we send a search party?"],
+        "lily": ["[gently] Still waiting, dear.", "[softly] Did we lose them?", "[amused] I think they went for tea.", "[warmly] Come back to us, Player One."]}),
+    "there-you-are": ("the human finally acts after a long wait", {
+        "harry": ["[relieved] There you are!", "[mocking] Finally.", "[laughs] Welcome back!", "[loud] Thought we'd lost you."],
+        "bill": ["[dryly] There you are.", "[calmly] Welcome back.", "[dryly] Finally.", "[calmly] Thought we had lost you."],
+        "lily": ["[warmly] There you are, dear.", "[gently] Welcome back.", "[amused] Thought we'd lost you.", "[softly] Ah, finally."]}),
+}
+
 # number lines: (family, template per lib) — {n} = the number in words, {N} capitalised
 NUMBER_TAGS = {
     "harry": lambda n: "[angry]" if n <= 10 else "[exhales]" if n <= 20 else "[smug]",
@@ -357,6 +374,8 @@ def build_manifest(lib: str) -> dict:
         ph[pid] = {"category": "mulligan", "when": when, "text": list(by[lib]), "source": "table-mulligan-2026-09-11"}
     for pid, (when, by) in LOOP.items():
         ph[pid] = {"category": "loop", "when": when, "text": list(by[lib]), "source": "table-loop-2026-09-11"}
+    for pid, (when, by) in HECKLE.items():
+        ph[pid] = {"category": "heckle", "when": when, "text": list(by[lib]), "source": "table-heckle-2026-09-14"}
     for n in LIFE_NUMBERS:
         ph[f"life-{n}"] = {"category": "number", "when": f"announces or answers its life total: {n}", "text": [life_line(lib, n)], "source": "table-2026-09-10"}
     for n in HAND_NUMBERS:
@@ -373,7 +392,14 @@ def write_all() -> None:
     for lib in LIBS:
         d = VOICES / lib / "table"
         d.mkdir(parents=True, exist_ok=True)
-        (d / "manifest.json").write_text(json.dumps(build_manifest(lib), indent=1, ensure_ascii=False) + "\n")
+        m = build_manifest(lib)
+        try:
+            old = json.loads((d / "manifest.json").read_text())
+            if old.get("baked"):
+                m["baked"] = old["baked"]                        # the library's measured gain survives a rewrite
+        except (OSError, ValueError):
+            pass
+        (d / "manifest.json").write_text(json.dumps(m, indent=1, ensure_ascii=False) + "\n")
     addr = {"schema": "arena.voice-address/1",
             "note": ("who a seat may address by name (round 31): a deck's commander slug when the table lines carry it, "
                      "else the deck's colour identity (Ben's chart). The voice runner maps seat -> deck -> who; a missing "

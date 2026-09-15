@@ -463,6 +463,39 @@
    ],
    "source": "table-loop-2026-09-11"
   },
+  "waiting-on-you": {
+   "category": "heckle",
+   "when": "the human's decision window has been open for a while",
+   "text": [
+    "[gently] We're waiting on you, dear.",
+    "[warmly] Take your time. We're not going anywhere.",
+    "[softly] Hello? Still with us?",
+    "[amused] Any day now, sweetheart."
+   ],
+   "source": "table-heckle-2026-09-14"
+  },
+  "still-waiting": {
+   "category": "heckle",
+   "when": "the same window, a good deal later",
+   "text": [
+    "[gently] Still waiting, dear.",
+    "[softly] Did we lose them?",
+    "[amused] I think they went for tea.",
+    "[warmly] Come back to us, Player One."
+   ],
+   "source": "table-heckle-2026-09-14"
+  },
+  "there-you-are": {
+   "category": "heckle",
+   "when": "the human finally acts after a long wait",
+   "text": [
+    "[warmly] There you are, dear.",
+    "[gently] Welcome back.",
+    "[amused] Thought we'd lost you.",
+    "[softly] Ah, finally."
+   ],
+   "source": "table-heckle-2026-09-14"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",
@@ -2225,8 +2258,8 @@
   }
  },
  "baked": {
-  "gain_db": -5.8,
-  "takes": 353,
+  "gain_db": -5.85,
+  "takes": 365,
   "target_lufs": -24.0
  }
 }

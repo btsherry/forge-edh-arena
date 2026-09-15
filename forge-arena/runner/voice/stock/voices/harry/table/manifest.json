@@ -463,6 +463,39 @@
    ],
    "source": "table-loop-2026-09-11"
   },
+  "waiting-on-you": {
+   "category": "heckle",
+   "when": "the human's decision window has been open for a while",
+   "text": [
+    "[impatient] We're waiting on you.",
+    "[loud] Hello? Your turn!",
+    "[mocking] Take your time. No, really, take it.",
+    "[sighs] Any day now."
+   ],
+   "source": "table-heckle-2026-09-14"
+  },
+  "still-waiting": {
+   "category": "heckle",
+   "when": "the same window, a good deal later",
+   "text": [
+    "[annoyed] Still waiting.",
+    "[loud] Did they leave?",
+    "[mocking] I think we lost them.",
+    "[groans] Somebody poke Player One."
+   ],
+   "source": "table-heckle-2026-09-14"
+  },
+  "there-you-are": {
+   "category": "heckle",
+   "when": "the human finally acts after a long wait",
+   "text": [
+    "[relieved] There you are!",
+    "[mocking] Finally.",
+    "[laughs] Welcome back!",
+    "[loud] Thought we'd lost you."
+   ],
+   "source": "table-heckle-2026-09-14"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",
@@ -2225,8 +2258,8 @@
   }
  },
  "baked": {
-  "gain_db": -9.13,
-  "takes": 353,
+  "gain_db": -9.12,
+  "takes": 365,
   "target_lufs": -24.0
  }
 }
