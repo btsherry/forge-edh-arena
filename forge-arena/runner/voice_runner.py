@@ -470,6 +470,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.scan_observer()
         self.scan_game_log()
         self.mutter()
+        self.heckle_human()                          # "we're waiting on you" (Ben: heckles are welcome; Joshua never answers)
         self.patter()
         item = self.next_item()
         if item is not None:
