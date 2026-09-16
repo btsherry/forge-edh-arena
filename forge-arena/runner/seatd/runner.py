@@ -361,6 +361,16 @@ class SeatRunner:
                 name = o.get("commander") or o.get("name")
                 if isinstance(name, str) and name.strip():
                     return name.strip()
+        # the request rarely names a commander (game 50: "seat 3"): the launch roster does
+        try:
+            from voice.table import load_address, seat_decks_from_roster
+            decks = seat_decks_from_roster(os.environ.get("ARENA_HUMAN_DECK"), os.environ.get("ARENA_SEAT_DECKS"))
+            cmd = (load_address().get("commanders") or {}).get(decks.get(n) or "", {})
+            name = cmd.get("name") or cmd.get("say")
+            if isinstance(name, str) and name.strip():
+                return f"{name.strip()} (seat {n})"
+        except Exception:  # noqa: BLE001 — a name is a nicety
+            pass
         return f"seat {n}"
 
     def _other_party(self, note: dict):
@@ -550,7 +560,14 @@ class SeatRunner:
         if clean is None:
             self._say(f"[seat {self.seat}] deal {json.dumps(raw)[:120]} dropped: {why}")
             return None
-        self._pending().pop(clean["offer_id"], None)
+        note = self._pending().pop(clean["offer_id"], None) or {}
+        # the offer's terms and the other party travel with the answer (game 50: without them the ledger
+        # fell back to a one-turn truce for an alliance of two)
+        clean["terms"] = dict(note.get("deal") or {}) or {"kind": "truce", "rounds": 1}
+        try:
+            clean["with"] = int(note.get("from", 0))
+        except (TypeError, ValueError):
+            clean["with"] = 0
         self._say(f"[seat {self.seat}] DEAL {clean['offer_id']} {why}: {json.dumps(clean)}")
         self._record_deal(req, clean)
         return clean

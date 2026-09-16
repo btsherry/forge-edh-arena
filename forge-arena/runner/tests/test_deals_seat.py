@@ -221,10 +221,11 @@ class DealKey(unittest.TestCase):
         rows = deal_rows(r)
         self.assertEqual(len(rows), 1)
         self.assertEqual({k: rows[0][k] for k in ("type", "seat", "turn", "gameId", "deal")},
-                         {"type": "DEAL", "seat": 3, "turn": 5, "gameId": "g1", "deal": {"offer_id": oid, "accept": True}})
+                         {"type": "DEAL", "seat": 3, "turn": 5, "gameId": "g1", "deal": {"offer_id": oid, "accept": True, "terms": {"kind": "truce", "rounds": 1}, "with": 0}},
+                         "the answer carries the offer's terms and the other party (game 50: without them the ledger struck the wrong deal)")
         self.assertIn("ts", rows[0])
         seq, answer, source, k = r.records[-1]
-        self.assertEqual((source, k.get("say"), k.get("deal")), ("model", "take-the-deal", {"offer_id": oid, "accept": True}))
+        self.assertEqual((source, k.get("say"), k.get("deal")), ("model", "take-the-deal", {"offer_id": oid, "accept": True, "terms": {"kind": "truce", "rounds": 1}, "with": 0}))
         self.assertEqual(r._pending(), {})
         r.handle(cast(3))
         self.assertNotIn("DEAL PENDING", r.brain.last_prompt, "answered: the key is gone")
@@ -234,12 +235,12 @@ class DealKey(unittest.TestCase):
         oid = offer(r)
         r.brain.script = [{"chosenId": 1, "deal": {"offer_id": oid, "accept": False}}]
         r.handle(cast(1))
-        self.assertEqual(deal_rows(r)[-1]["deal"], {"offer_id": oid, "accept": False})
+        self.assertEqual(deal_rows(r)[-1]["deal"], {"offer_id": oid, "accept": False, "terms": {"kind": "truce", "rounds": 1}, "with": 0})
         oid2 = offer(r, 1010, "1010-0-3")
         r.brain.script = [{"chosenId": 1, "say": "counter-offer",
                            "deal": {"offer_id": oid2, "accept": False, "counter": {"kind": "no-target", "rounds": 2}}}]
         r.handle(cast(2))
-        self.assertEqual(deal_rows(r)[-1]["deal"], {"offer_id": oid2, "accept": False, "counter": {"kind": "no-target", "rounds": 2}})
+        self.assertEqual(deal_rows(r)[-1]["deal"], {"offer_id": oid2, "accept": False, "counter": {"kind": "no-target", "rounds": 2}, "terms": {"kind": "truce", "rounds": 1}, "with": 0})
         self.assertEqual(r.records[-1][3].get("say"), "counter-offer")
         oid3 = offer(r, 1020, "1020-0-3")
         r.brain.script = [{"chosenId": 1, "deal": {"offer_id": oid3, "accept": False, "counter": {"kind": "alliance", "until_turn": 9}}}]
@@ -257,7 +258,7 @@ class DealKey(unittest.TestCase):
                       r.brain.prompts[0])
         self.assertIn('DEAL PENDING 990-0-2: add "deal": {"offer_id": "990-0-2", "accept": true|false} (a counter now is a refusal).',
                       r.brain.prompts[0], "seat 0 gets the key without a say clause")
-        self.assertEqual(deal_rows(r)[-1]["deal"], {"offer_id": "990-0-2", "accept": False})
+        self.assertEqual(deal_rows(r)[-1]["deal"], {"offer_id": "990-0-2", "accept": False, "terms": {"kind": "truce", "rounds": 2}, "with": 2})
         self.assertTrue(any("a counter to a counter is a refusal" in l for l in r.log_lines))
 
     def test_invalid_deals_are_dropped_and_the_offer_stays_pending(self):
@@ -393,3 +394,28 @@ class FastpathHandoff(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TermsAndNames(unittest.TestCase):
+    def test_an_alliance_of_two_travels_with_the_answer(self):
+        r = make_runner()
+        oid = offer(r, kind="alliance", rounds=2)
+        r.brain.script = [{"chosenId": 1, "deal": {"offer_id": oid, "accept": True}}]
+        r.handle(cast(1))
+        d = deal_rows(r)[-1]["deal"]
+        self.assertEqual((d["terms"], d["with"]), ({"kind": "alliance", "rounds": 2}, 0), "game 50: the ledger must strike what was offered")
+
+    def test_a_party_is_named_from_the_launch_roster_when_the_request_does_not(self):
+        import os
+        r = make_runner()
+        old = {k: os.environ.get(k) for k in ("ARENA_HUMAN_DECK", "ARENA_SEAT_DECKS")}
+        os.environ["ARENA_HUMAN_DECK"] = "selvala-heart-of-the-wilds"
+        os.environ["ARENA_SEAT_DECKS"] = "urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds"
+        try:
+            name = r._party_name(3, {"state": {"opponents": [{"seat": 3, "life": 40}]}})
+        finally:
+            for k, v in old.items():
+                if v is None: os.environ.pop(k, None)
+                else: os.environ[k] = v
+        self.assertIn("Purphoros", name); self.assertIn("(seat 3)", name)
+        self.assertEqual(r._party_name(0), "Player One (seat 0)")
