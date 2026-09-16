@@ -279,7 +279,7 @@ class StockLibrary(unittest.TestCase):
         by_src = {}
         for ph in self.m["phrases"].values():
             by_src[ph["source"]] = by_src.get(ph["source"], 0) + 1
-        self.assertEqual(len(self.m["phrases"]), 63)
+        self.assertEqual(len(self.m["phrases"]), 66, "63 + Joshua's three deal lines (Executive accepts / refuses / counters a seat's offer, 2026-09-16)")
         self.assertEqual(by_src["robocop-1987"], 18)
         self.assertEqual(by_src["hk-47"], 20)
         self.assertEqual(set(ph["category"] for ph in self.m["phrases"].values()), {"reaction", "event", "quote"})
