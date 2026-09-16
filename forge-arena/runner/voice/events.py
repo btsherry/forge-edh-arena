@@ -110,11 +110,41 @@ class EventsMixin:
         except OSError:
             return False
 
+    def _ai_deciding(self) -> bool:
+        """A voiced AI seat has a decision open in its mailbox (mailbox/seat-<n>/inbox/req-*.json),
+        whatever its age — the engine deletes the request the moment the seat answers (seatd/protocol.py),
+        so a request present means the table is waiting on that seat, not on the human."""
+        for seat in self.seat_libraries:
+            if int(seat) in self.eliminated:
+                continue
+            try:
+                if any(True for _ in (self.mailbox / f"seat-{seat}" / "inbox").glob("req-*.json")):
+                    return True
+            except OSError:
+                continue
+        return False
+
+    def _opening_window_open(self, snap: dict) -> bool:
+        """BL-54 (game 49: 292 s of silence while the human chose their keep). Forge asks the mulligans
+        one player at a time in turn order (MulliganService.runPlayerMulligans), and the human's keep is
+        a GUI dialog: no shadow request, activeSeat None, turn 0. So before turn 1, once the hands are
+        dealt, a wait no AI seat owns (no request open in any seat's inbox) is the human's. Who has
+        DECIDED is not the test: the seats after the human in the order are not even asked until the
+        human keeps (game 49: Urza's request came five seconds before turn 1). A table with no human
+        (seat 0 voiced) has nobody to heckle."""
+        if (snap.get("turn") or 0) != 0 or self.library_for_seat(self.human_seat):
+            return False
+        seats = [x for x in snap.get("seats") or [] if isinstance(x, dict)]
+        if len(seats) < 2 or any((x.get("handSize") or 0) < 1 for x in seats):
+            return False                                              # not dealt yet: Forge is still setting the table
+        return not self._ai_deciding()
+
     def heckle_human(self) -> None:
-        """Ben (2026-09-14): "heckles are great" — the board has not changed for HECKLE_S on the
-        human's turn, Executive is off and no AI seat has a decision pending: a seat says "we're
+        """Ben (2026-09-14): "heckles are great" — the board has not changed for HECKLE_S while the wait
+        is the human's, Executive is off and no AI seat has a decision pending: a seat says "we're
         waiting on you"; HECKLE_AGAIN_S later "still waiting"; when the board moves again after
-        a heckle, "there you are". The advisor never answers (Joshua is outside the game)."""
+        a heckle (a land, a keep, the next turn arriving), "there you are". The advisor never
+        answers (Joshua is outside the game)."""
         if self.barks_mode == "off" or self.final_locked or "waiting-on-you" not in self.table_ids:
             return
         snap = self._last_snapshot
@@ -122,19 +152,19 @@ class EventsMixin:
             return
         quiet = self.clock() - self._board_changed_at
         stage = getattr(self, "_heckled", 0)
-        # the wait is the HUMAN's: their turn, or a window put to them on someone else's turn (a block, a
-        # target, the opening keep — the advisor's shadow inbox holds the open request); never while
-        # Executive plays the seat
-        if not (snap.get("activeSeat") == self.human_seat or self._human_window_open()) or self.executive_on():
-            if stage:
-                self._heckled = 0
-            return
         if quiet < HECKLE_S:
-            if stage:                                                 # the board moved: the wait is over
+            if stage:                                                 # the board moved after a heckle: the wait is over, whoever's turn it is now
                 self._heckled = 0
                 by = self.free_to_speak([int(x) for x in self.seat_libraries if int(x) not in self.eliminated])
-                if by:
+                if by and not self.executive_on():
                     self._bark(int(self.rng.choice(by)), "there-you-are", turn=snap.get("turn"), source="event", p=0.6, ctx={"targets": [self.human_seat]})
+            return
+        # the wait is the HUMAN's: their turn (human_turn — the scheduler's memoised "active seat is the human's AND
+        # Executive is off", BL-51), a window put to them on someone else's turn (a block, a target — the advisor's
+        # shadow inbox holds the open request), or the opening keep (BL-54); never while Executive plays the seat
+        if not (self.human_turn() or ((self._human_window_open() or self._opening_window_open(snap)) and not self.executive_on())):
+            if stage:
+                self._heckled = 0
             return
         if self.slow_seats():
             return                                                    # an AI seat is the slow one, not the human

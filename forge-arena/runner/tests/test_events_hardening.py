@@ -427,6 +427,91 @@ class Heckle(_EventsCase):
         self.r.heckle_human()
         self.assertEqual(self._heckles(), [])
 
+    # -- BL-54: the opening keep (game 49: 292 s of silence while the human chose; activeSeat None, turn 0, no shadow request)
+    def _opening(self, hands=(7, 7, 7, 7)):
+        """The table as the observer shows it during the mulligans: turn 0, no phase, no active seat, the hands dealt."""
+        self._write({"turn": 0, "phase": "", "activeSeat": None, "gameOver": False, "events": [],
+                     "seats": [self._seat(i, hand=h) for i, h in enumerate(hands)]})
+        self.r.scan_observer(); self.r.queue.clear()
+        self.r.rng.choice = lambda xs: xs[0]
+        self.assertEqual(self.r._board_changed_at, self.clock.t)
+
+    def _mull_decided(self, *seats, keep=True):
+        for s in seats:
+            self._log(seat=s, turn=0, phase="", type="MULLIGAN", seq=1, answer={"keep": keep})
+        self.r.scan_game_log(); self.r.queue.clear()                                            # the keep-seven lines are not under test
+
+    def _ai_request(self, seat, seq=1):
+        inbox = self.mailbox / f"seat-{seat}" / "inbox"; inbox.mkdir(parents=True, exist_ok=True)
+        f = inbox / f"req-{seq}.json"; f.write_text(json.dumps({"seq": seq, "type": "MULLIGAN"}))
+        return f
+
+    def test_the_opening_keep_is_the_humans_window_once_every_ai_seat_has_decided(self):
+        self._opening()
+        self._mull_decided(1, 2, 3)
+        self.clock.t += ev_mod.HECKLE_S - 1; self.r.heckle_human()
+        self.assertEqual(self._heckles(), [], "29 s into the keep: nothing yet")
+        self.clock.t += 1; self.r.heckle_human()
+        self.assertEqual(self._heckles(), [("waiting-on-you", 1, "event", [0])], "30 s at turn 0 with no AI seat deciding: the wait is the human's")
+        self.assertEqual(self.r._heckled, 1)
+        self.clock.t += ev_mod.HECKLE_AGAIN_S - ev_mod.HECKLE_S; self.r.heckle_human()
+        self.assertEqual(self._heckled(), ["waiting-on-you", "still-waiting"])
+        for _ in range(10):
+            self.clock.t += 30; self.r.heckle_human()
+        self.assertEqual(self._heckled(), ["waiting-on-you", "still-waiting"], "never a third")
+        self.assertEqual([r for r in self._records("queued") if r.get("kind") not in ("bark", "startup")], [], "the seats speak; Joshua never")
+
+    def test_an_ai_seat_still_deciding_its_keep_owns_the_wait(self):
+        self._opening()
+        self._mull_decided(2, 3)
+        f = self._ai_request(1)                                                                 # Urza's mulligan request is open: the table waits on him
+        self.clock.t += ev_mod.HECKLE_AGAIN_S; self.r.heckle_human()
+        self.assertEqual(self._heckles(), [], "an AI seat has the decision, whatever its age")
+        f.unlink()
+        self.r.heckle_human()
+        self.assertEqual(self._heckles(), [("waiting-on-you", 1, "event", [0])], "his answer landed and the board still has not moved: now it is the player")
+
+    def test_game_49s_shape_the_seats_after_the_human_are_not_even_asked_until_the_human_keeps(self):
+        """Forge asks the mulligans one player at a time in turn order (2 -> 3 -> 0 -> 1 in game 49): Urza's
+        request came five seconds before turn 1. Two seats decided, one not yet asked, no request open: the human's."""
+        self._opening()
+        self._mull_decided(2, keep=False); self._mull_decided(3)
+        self.clock.t += ev_mod.HECKLE_S; self.r.heckle_human()
+        self.assertEqual(self._heckles(), [("waiting-on-you", 1, "event", [0])])
+
+    def test_executive_on_means_nobody_to_heckle_in_the_opening_window_either(self):
+        self._opening()
+        self._mull_decided(1, 2, 3)
+        (self.logs / "control").mkdir(exist_ok=True)
+        (self.logs / "control" / "executive.json").write_text(json.dumps({"on": True}))
+        self.clock.t += ev_mod.HECKLE_AGAIN_S; self.r.heckle_human()
+        self.assertEqual(self._heckles(), [])
+        self.assertEqual(getattr(self.r, "_heckled", 0), 0)
+
+    def test_turn_one_arriving_after_an_opening_heckle_earns_there_you_are(self):
+        self._opening()
+        self._mull_decided(1, 2, 3)
+        self.clock.t += ev_mod.HECKLE_S; self.r.heckle_human()
+        self.assertEqual([h[0] for h in self._heckles()], ["waiting-on-you"]); self.r.queue.clear()
+        self.clock.t += 20
+        self._snap(1, 2)                                                                         # turn 1: Giada's — the human kept
+        self.assertEqual(self.r._board_changed_at, self.clock.t)
+        self.r.heckle_human()
+        self.assertEqual(self._heckles(), [("there-you-are", 1, "event", [0])], "turn 1 arriving is the board moving: the wait is over")
+        self.assertEqual(self.r._heckled, 0)
+        self.clock.t += ev_mod.HECKLE_AGAIN_S; self.r.heckle_human()
+        self.assertEqual([h[0] for h in self._heckles()], ["there-you-are"], "turn 1 is an AI seat's: no heckle, however long it takes")
+
+    def test_before_the_deal_and_under_thirty_seconds_the_opening_is_quiet(self):
+        self._opening(hands=(0, 7, 7, 7))                                                        # a hand still empty: Forge is setting the table
+        self._mull_decided(1, 2, 3)
+        self.clock.t += ev_mod.HECKLE_AGAIN_S; self.r.heckle_human()
+        self.assertEqual(self._heckles(), [], "not dealt yet")
+        self._opening()
+        self.clock.t += ev_mod.HECKLE_S - 1; self.r.heckle_human()
+        self.assertEqual(self._heckles(), [], "dealt, 29 s: still thinking")
+        self.assertEqual(getattr(self.r, "_heckled", 0), 0)
+
 
 class AtomsHook(_EventsCase):
     """§4.5 trigger 3: the ring's big moments reach the under channel through _atom, which never
