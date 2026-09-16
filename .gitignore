@@ -118,3 +118,6 @@ forge-gui/tools/build
 # defensive: the doubled-path spool dir if a test ever writes it again
 /forge-arena/forge-arena/
 forge-gui-ios/robovm.properties
+
+# transcript corpus for timing priors (analysis input only; never committed — 2026-09-16)
+/forge-arena/research/corpus/
