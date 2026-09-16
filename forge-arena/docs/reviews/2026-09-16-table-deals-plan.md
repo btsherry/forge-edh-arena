@@ -1,6 +1,6 @@
 # Table deals — the player makes deals through the Advisor chat, and the seats keep or break them knowingly
 
-**Date:** 2026-09-16. **Status:** PLAN, nothing built. **Owner:** Ben. **Branch:** `experimental/voicework2`
+**Date:** 2026-09-16. **Status:** IN EXECUTION (Ben's go, same day; decisions in §11). **Owner:** Ben. **Branch:** `experimental/voicework2`
 (after the hardening round; before or after the 4.2 merge is Ben's call — nothing here touches Java).
 
 Ben: "The seats being able to make deals feels like a huge leap in verisimilitude." Today the seats
@@ -149,3 +149,61 @@ voice), one critic, then me. Estimated one working session.
 4. Should Joshua ever advise you on a deal ("don't trust Purphoros at 40 life")? Proposed: only if you ask him.
 5. Executive holding your seat: may it accept a seat's offer on your behalf, or only relay yours?
 6. Build now on the experimental branch before the merge, or after 4.2 ships?
+
+## 11. Ben's decisions (2026-09-16) and the contract the lanes build to
+
+1. **All three kinds** in v1: `truce`, `no-target`, `alliance`.
+2. **Duration, both forms:** `rounds: N` (N of the SEAT's own turns from the strike — "for one turn"
+   as the table already says it) OR `until_turn: N` (an absolute game turn, inclusive). Exactly one.
+   The ledger stores both resolved: `until_turn` is computed at the strike for a `rounds` deal so the
+   lapse check is one comparison.
+3. **Counter-offers, tried:** a brain may answer `accept: false, counter: {kind, rounds|until_turn}`;
+   the counter reaches the player's panel; the player accepts with `@urza accept` (or refuses by
+   ignoring it — it lapses at the end of the turn). One counter per offer; a counter to a counter is a
+   refusal. Cut if it does not play well.
+4. **Joshua advises on deals under the 70/30 rule:** when a deal is offered to you or struck, the seat's
+   line is the 70 %; Joshua's one-line assessment is the 30 % (the existing colour path, `ARENA_BARKS_OVER_COLOR`
+   split); always when you ask him.
+5. **Executive may accept deals:** while Executive holds seat 0, a seat's offer to the player goes to
+   the seat-0 runner like any seat's, and its `deal` answer is VOICED — in Joshua's voice, since in
+   Executive mode Joshua is the player at the table (Ben: "this preempts Joshua's ghost-like presence").
+   Joshua gets three deal lines rendered (accept / refuse / counter). Executive may not PROPOSE deals
+   (the player's typed offers are still relayed as the player's).
+6. **Build now** on `experimental/voicework2`; this branch is the experimental release (four voices,
+   deals, more AI interactivity), rollback to 4.1 possible on player feedback. After this feature:
+   mine the five-lens reports for every feature suggestion, stack-rank by benefit minus risk/effort
+   with Ben, decide what else ships in the experimental release.
+
+### The contract
+
+**Notes file (advisor/voice → a seat runner):** `mailbox/seat-<n>/notes/<ts_ms>-<kind>.json`, one JSON
+object, consumed (deleted) by the seat runner when it builds the next prompt; kinds and bodies:
+- `deal-offer`: `{"kind":"deal-offer","from":0,"to":n,"deal":{"kind":"truce|no-target|alliance","rounds":1}|{"…","until_turn":12},"offer_id":"<ts>-<from>-<to>","text":"<the player's words>","turn":7}`
+- `deal-counter` (to the player's seat-0 runner only in Executive; else the advisor panel): same + `"counter": true`
+- `deal-struck`: `{"kind":"deal-struck","between":[a,b],"deal":{...,"until_turn":N},"offer_id":…,"turn":…}`
+- `deal-broken`: `{"kind":"deal-broken","between":[a,b],"by":a,"how":"attack|target","turn":…}`
+- `deal-lapsed`: `{"kind":"deal-lapsed","between":[a,b],"turn":…}`
+The seat runner renders each as one RUNNER NOTE sentence (§5 wording) and drops the file.
+
+**Seat answer key:** `"deal": {"offer_id": "...", "accept": true}` | `{"offer_id": "...", "accept": false}` |
+`{"offer_id": "...", "accept": false, "counter": {"kind": "...", "rounds": N} | {"kind": "...", "until_turn": N}}`.
+Validation (rules.py): the offer_id must be a pending offer for this seat; a counter may change kind
+or duration once. Recorded in `game.jsonl` as `"deal": {...}` beside `say`; stripped from the engine
+answer. The seat also adds a `say` (take-the-deal / no-deal / a new `counter-offer` id).
+
+**Ledger (voice runner owns it):** `logs/deals.jsonl`, append-only, records
+`{ts, turn, event: "offer|counter|struck|refused|lapsed|broken|expired", between:[a,b], by, deal:{kind, until_turn, rounds?}, offer_id, seq}`;
+live `_deals: (a,b) -> {"kind","until_turn","struck","offer_id"}` both directions, checkpointed.
+Lapse: at the end of the turn `until_turn` (turn roll to until_turn+1). Break: attack event across a
+truce/alliance; a cast/stack `targets` including the other party across a no-target/alliance.
+
+**Advisor grammar (in the Advisor chat):** `@<commander-or-seat> <words>` — words parsed for a kind
+(`truce|peace|no target|alliance|ally`, default truce), a duration (`N turn(s)|round(s)` → rounds N;
+`until turn N` → until_turn; default rounds 1), or `accept` / `no` for a pending counter. Unparsable →
+Joshua answers it as a normal ask. A dead seat, a seat with an open offer already, or Executive on
+for the target's own offers → a panel line, no note.
+
+**Voice ids (table sub-library, 3 voices × 4):** `deal-with-you`, `no-deal-with-you`, `counter-offer`,
+`deal-over`, `you-broke-it`, `i-broke-it`. **Joshua (stock, 3 wordings each):** `joshua-deal-yes`,
+`joshua-deal-no`, `joshua-deal-counter` (Executive mode only). Chains: `deal-with-you` → bystander `hah`/`tsk`
+atom and `youre-next` at 0.35; `you-broke-it` → bystander `laugh`.
