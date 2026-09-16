@@ -400,11 +400,15 @@
   "oh-no": {
    "text": [
     "[gasps] Oh, no.",
-    "[softly] Well, that's not good."
+    "[softly] Well, that's not good.",
+    "[softly] Oh dear. Oh dear.",
+    "[gasps] Oh, that's not good.",
+    "[gently] Oh, love. No."
    ],
    "when": "a threat lands",
    "category": "reaction",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "wow": {
    "text": [
@@ -461,11 +465,14 @@
    "text": [
     "[mischievously] Someone's full of secrets.",
     "[gently] All those cards, dear. Whatever for?",
-    "[chuckles] Someone's hoarding."
+    "[chuckles] Someone's hoarding.",
+    "[amused] Someone's been saving up.",
+    "[gently] Quite the handful, dear."
    ],
    "when": "a seat holding six or more cards",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "youre-the-threat": {
    "text": [
@@ -490,19 +497,27 @@
   },
   "board-envy": {
    "text": [
-    "[softly] I don't care for your creatures, dear."
+    "[softly] I don't care for your creatures, dear.",
+    "[wry] Aren't we spoiled for creatures.",
+    "[softly] I'd rather those weren't there.",
+    "[gently] Such a crowded board, dear."
    ],
    "when": "at the biggest board",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "empty-hand": {
    "text": [
-    "[gently] Running on empty, love?"
+    "[gently] Running on empty, love?",
+    "[gently] No cards left, dear?",
+    "[softly] Drawing hopefully, I see.",
+    "[warmly] Empty hands, full heart."
    ],
    "when": "a seat with nothing in hand",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "low-life-jab": {
    "text": [
@@ -528,19 +543,26 @@
    "text": [
     "[warmly] Leave me be and I'll leave you, hmm?",
     "[warmly] Let's not fight this turn, hmm?",
-    "[gently] Peace for a turn, dear?"
+    "[gently] Peace for a turn, dear?",
+    "[warmly] A little peace, dear? Just for now.",
+    "[gently] Let's not, this turn. Hmm?"
    ],
    "when": "politics",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "promise": {
    "text": [
-    "[mischievously] Cross my heart, dear."
+    "[mischievously] Cross my heart, dear.",
+    "[warmly] Of course, dear. Cross my heart.",
+    "[mischievously] I promise. For now.",
+    "[softly] You have my word, love."
    ],
    "when": "after a deal",
    "category": "reply",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "play-faster": {
    "text": [
@@ -553,19 +575,27 @@
   },
   "thinking-hard": {
    "text": [
-    "[softly] Someone's scheming."
+    "[softly] Someone's scheming.",
+    "[softly] Someone's plotting.",
+    "[gently] A long think, dear?",
+    "[amused] I can hear the wheels turning."
    ],
    "when": "same, from a bystander",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "play-slower": {
    "text": [
-    "[gently] Slow down, love. Let us see."
+    "[gently] Slow down, love. Let us see.",
+    "[gently] One at a time, love.",
+    "[softly] Slowly, dear. Let us follow.",
+    "[warmly] Goodness, what a rush."
    ],
    "when": "a seat firing off plays",
    "category": "reaction",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "you-suck": {
    "text": [
@@ -613,11 +643,14 @@
    "text": [
     "[gently] Hush, dear.",
     "[softly] Enough, love.",
-    "[gently] Manners, dear."
+    "[gently] Manners, dear.",
+    "[gently] Hush now.",
+    "[softly] That's enough, dear."
    ],
    "when": "light name-calling",
    "category": "reply",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "bite-me": {
    "text": [
@@ -642,39 +675,53 @@
   },
   "pass-already": {
    "text": [
-    "[softly] Pass, dears."
+    "[softly] Pass, dears.",
+    "[gently] Pass along, love.",
+    "[softly] Any time, dear.",
+    "[warmly] We're all waiting, sweetheart."
    ],
    "when": "the active seat is dawdling",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "what-turn": {
    "text": [
-    "[gently] What turn are we on, love?"
+    "[gently] What turn are we on, love?",
+    "[gently] Which turn is it, dears?",
+    "[softly] I've quite lost track.",
+    "[amused] Turn... oh, who's counting?"
    ],
    "when": "filler",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "this-is-fine": {
    "text": [
     "[warmly] It's all going swimmingly.",
     "[warmly] Oh, we're all fine, dears.",
-    "[chuckles] Nothing to worry about. Yet."
+    "[chuckles] Nothing to worry about. Yet.",
+    "[warmly] All is well. Mostly.",
+    "[softly] Nothing to worry about, dears."
    ],
    "when": "filler",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "good-hand": {
    "text": [
     "[mischievously] I've got a nice little hand here.",
     "[mischievously] Such lovely cards. Pity for you.",
-    "[softly] I'm quite happy with my hand, thank you."
+    "[softly] I'm quite happy with my hand, thank you.",
+    "[mischievously] Oh, I like these.",
+    "[warmly] A lovely hand, this."
    ],
    "when": "filler, a bluff",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "game-changer": {
    "text": [
@@ -713,8 +760,8 @@
   "elevenlabs-v3-2026-09-10-gamechangers": "game-changer lines (WotC bracket list, per Scryfall's game_changer flag in each dossier) + more you-cheat wordings (Purphoros repeated it)"
  },
  "baked": {
-  "gain_db": -5.43,
-  "takes": 215,
+  "gain_db": -5.4,
+  "takes": 249,
   "target_lufs": -24.0
  }
 }

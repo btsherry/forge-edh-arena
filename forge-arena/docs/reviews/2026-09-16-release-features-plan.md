@@ -1,6 +1,6 @@
 # Experimental-release features — the build plan for the items Ben took from the stack rank
 
-**Date:** 2026-09-16. **Status:** PLAN, awaiting Ben's final go. **Source:** `2026-09-16-feature-stack-rank.md`
+**Date:** 2026-09-16. **Status:** BUILT 2026-09-16 — steps 1–8 and 10 in one batch commit (tests: tests/test_release_features.py, tests/test_no_elevenlabs.py), step 9 in 73bb24fd756. Acceptance (Appendix B) waits on game 51. **Source:** `2026-09-16-feature-stack-rank.md`
 (Ben: yes to 1, 2, 3, 4, 6, 7 and the three small tunes 10–12; item 5 as a data task with four transcript
 sources). **Branch:** `experimental/voicework2`, tree clean at `4f0dca99332`. **Method (Ben, 2026-09-16 —
 [[token-discipline]]):** all code by hand in the main session, no subagents, no critic; Ben (2026-09-16): the
@@ -168,9 +168,57 @@ unset before the release. Findings go to BUG-LOG; fixes by hand. Sequenced after
 
 ## Appendix A — wording sheet for step 6 (for Ben before rendering)
 
-To be filled in this doc at the start of step 6: eight single-take ids × 3 new wordings × 3 voices, five
-three-take ids × 2 new wordings × 3 voices, each with its eleven_v3 tag, in the voice's register
-(Harry fiery and cocky; Bill dry and elder; Lily warm and wry).
+Rendered 2026-09-16 (102 takes). The new wordings, by id, in each voice (the first wording of each id is the shipped one):
+
+**Harry**
+
+- `pass-already`: [impatient] Pass! Just pass! · [loud] We get it. Pass. · [groans] Passing would be nice.
+- `what-turn`: [confused] Wait, what turn is this? · [loud] Somebody call the turn! · [laughs] I lost count. Turn nine? Ninety?
+- `board-envy`: [jealous] Why do YOU get the good creatures? · [grumbling] Look at that board. Disgusting. · [angry] I want that. All of that.
+- `promise`: [smug] Sure. I promise. Mostly. · [laughs] You have my word. Whatever that's worth. · [cocky] Deal. Trust me.
+- `empty-hand`: [laughs] No cards? Bold. · [mocking] Empty-handed and still talking! · [cocky] Topdeck mode. Love to see it.
+- `play-slower`: [angry] Slow down, I can't keep up! · [loud] One card at a time! · [frustrated] What just happened?!
+- `thinking-hard`: [suspicious] Big think happening over there. · [laughs] Smoke's coming out. · [wary] Nobody thinks that long about nothing.
+- `oh-no`: [panicked] Oh no. Nope. No. · [angry] Not that card. Anything but that. · [groans] Here we go...
+- `cards-in-hand`: [loud] Seven cards?! Play something! · [suspicious] What are you hiding back there?
+- `this-is-fine`: [forced calm] Totally fine. Totally. · [laughs] Nothing to see here.
+- `good-hand`: [smug] Oh, this hand is filthy. · [excited] Ho ho. Yes.
+- `shut-it`: [angry] Zip it! · [loud] Nobody asked you!
+- `deal`: [cocky] Truce? One turn. Maybe. · [laughs] Let's not hit each other. For now.
+
+**Bill**
+
+- `pass-already`: [dryly] The pass button is right there. · [calmly] Pass. Any time now. · [sighs] We are all waiting.
+- `what-turn`: [curious] Remind me of the turn. · [dryly] Turn... something. It hardly matters. · [calmly] Has anyone been counting?
+- `board-envy`: [dryly] Your board offends me. · [calmly] I would like your creatures. Gone. · [dryly] Must you have all of that?
+- `promise`: [dryly] You have my word. Read the fine print. · [calmly] Agreed. For now. · [dryly] A promise, freely given. Loosely kept.
+- `empty-hand`: [dryly] Nothing in hand. How brave. · [calmly] Drawing for answers, are we? · [dryly] The cupboard is bare, I see.
+- `play-slower`: [dryly] Slowly. We are not all machines. · [calmly] Again, and with narration. · [sighs] I missed half of that.
+- `thinking-hard`: [dryly] The gears are turning. · [calmly] A long think. Rarely good news. · [dryly] Contemplation. How ominous.
+- `oh-no`: [sighs] Oh dear. · [calmly] That is unfortunate. · [dryly] Ah. I see. · [sighs] Of course it's that one.
+- `cards-in-hand`: [dryly] A full grip. How thrifty. · [calmly] Are you saving those for a rainy day?
+- `this-is-fine`: [dryly] Perfectly under control. · [calmly] Nothing is on fire. Yet.
+- `good-hand`: [calmly] I am content with these. · [dryly] Serviceable. Quite serviceable.
+- `shut-it`: [dryly] Silence would suit you. · [calmly] Enough.
+- `deal`: [calmly] A ceasefire. Briefly. · [dryly] Shall we not, for a turn?
+
+**Lily**
+
+- `pass-already`: [gently] Pass along, love. · [softly] Any time, dear. · [warmly] We're all waiting, sweetheart.
+- `what-turn`: [gently] Which turn is it, dears? · [softly] I've quite lost track. · [amused] Turn... oh, who's counting?
+- `board-envy`: [wry] Aren't we spoiled for creatures. · [softly] I'd rather those weren't there. · [gently] Such a crowded board, dear.
+- `promise`: [warmly] Of course, dear. Cross my heart. · [mischievously] I promise. For now. · [softly] You have my word, love.
+- `empty-hand`: [gently] No cards left, dear? · [softly] Drawing hopefully, I see. · [warmly] Empty hands, full heart.
+- `play-slower`: [gently] One at a time, love. · [softly] Slowly, dear. Let us follow. · [warmly] Goodness, what a rush.
+- `thinking-hard`: [softly] Someone's plotting. · [gently] A long think, dear? · [amused] I can hear the wheels turning.
+- `oh-no`: [softly] Well, that's not good. · [softly] Oh dear. Oh dear. · [gasps] Oh, that's not good. · [gently] Oh, love. No.
+- `cards-in-hand`: [amused] Someone's been saving up. · [gently] Quite the handful, dear.
+- `this-is-fine`: [warmly] All is well. Mostly. · [softly] Nothing to worry about, dears.
+- `good-hand`: [mischievously] Oh, I like these. · [warmly] A lovely hand, this.
+- `shut-it`: [gently] Hush now. · [softly] That's enough, dear.
+- `deal`: [warmly] A little peace, dear? Just for now. · [gently] Let's not, this turn. Hmm?
+
+Kill-shot (step 7, 24 takes): `table-kill` and `all-of-us`, four wordings per voice, in `runner/voice/table_lines.py` KILLSHOT.
 
 ## Appendix B — acceptance
 

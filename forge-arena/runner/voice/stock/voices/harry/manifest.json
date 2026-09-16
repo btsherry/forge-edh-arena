@@ -399,11 +399,15 @@
   },
   "oh-no": {
    "text": [
-    "[angry] Oh no. Oh no no no."
+    "[angry] Oh no. Oh no no no.",
+    "[panicked] Oh no. Nope. No.",
+    "[angry] Not that card. Anything but that.",
+    "[groans] Here we go..."
    ],
    "when": "a threat lands",
    "category": "reaction",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "wow": {
    "text": [
@@ -460,11 +464,14 @@
    "text": [
     "[angry] How many cards is that?!",
     "[laughs] Save some cards for the rest of us!",
-    "[angry] Play something already, you're holding a whole deck!"
+    "[angry] Play something already, you're holding a whole deck!",
+    "[loud] Seven cards?! Play something!",
+    "[suspicious] What are you hiding back there?"
    ],
    "when": "a seat holding six or more cards",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "youre-the-threat": {
    "text": [
@@ -489,19 +496,27 @@
   },
   "board-envy": {
    "text": [
-    "[angry] I hate your creatures."
+    "[angry] I hate your creatures.",
+    "[jealous] Why do YOU get the good creatures?",
+    "[grumbling] Look at that board. Disgusting.",
+    "[angry] I want that. All of that."
    ],
    "when": "at the biggest board",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "empty-hand": {
    "text": [
-    "[laughs] Playing off the top? Cute."
+    "[laughs] Playing off the top? Cute.",
+    "[laughs] No cards? Bold.",
+    "[mocking] Empty-handed and still talking!",
+    "[cocky] Topdeck mode. Love to see it."
    ],
    "when": "a seat with nothing in hand",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "low-life-jab": {
    "text": [
@@ -527,19 +542,26 @@
    "text": [
     "[laughs] Don't hit me, I don't hit you. Deal?",
     "[laughs] Truce? Just for a turn?",
-    "[smug] Leave me alone and I'll forget you exist."
+    "[smug] Leave me alone and I'll forget you exist.",
+    "[cocky] Truce? One turn. Maybe.",
+    "[laughs] Let's not hit each other. For now."
    ],
    "when": "politics",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "promise": {
    "text": [
-    "[smug] I promise. I promise nothing."
+    "[smug] I promise. I promise nothing.",
+    "[smug] Sure. I promise. Mostly.",
+    "[laughs] You have my word. Whatever that's worth.",
+    "[cocky] Deal. Trust me."
    ],
    "when": "after a deal",
    "category": "reply",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "play-faster": {
    "text": [
@@ -552,19 +574,27 @@
   },
   "thinking-hard": {
    "text": [
-    "[laughs] They're thinking. That's never good."
+    "[laughs] They're thinking. That's never good.",
+    "[suspicious] Big think happening over there.",
+    "[laughs] Smoke's coming out.",
+    "[wary] Nobody thinks that long about nothing."
    ],
    "when": "same, from a bystander",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "play-slower": {
    "text": [
-    "[angry] Slow down! I can't read that fast!"
+    "[angry] Slow down! I can't read that fast!",
+    "[angry] Slow down, I can't keep up!",
+    "[loud] One card at a time!",
+    "[frustrated] What just happened?!"
    ],
    "when": "a seat firing off plays",
    "category": "reaction",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "you-suck": {
    "text": [
@@ -612,11 +642,14 @@
    "text": [
     "[angry] Oh, shut it.",
     "[shouting] Zip it!",
-    "[angry] Nobody asked you!"
+    "[angry] Nobody asked you!",
+    "[angry] Zip it!",
+    "[loud] Nobody asked you!"
    ],
    "when": "light name-calling",
    "category": "reply",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "bite-me": {
    "text": [
@@ -641,39 +674,53 @@
   },
   "pass-already": {
    "text": [
-    "[shouting] Pass already!"
+    "[shouting] Pass already!",
+    "[impatient] Pass! Just pass!",
+    "[loud] We get it. Pass.",
+    "[groans] Passing would be nice."
    ],
    "when": "the active seat is dawdling",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "what-turn": {
    "text": [
-    "[scoffs] What turn is it even?"
+    "[scoffs] What turn is it even?",
+    "[confused] Wait, what turn is this?",
+    "[loud] Somebody call the turn!",
+    "[laughs] I lost count. Turn nine? Ninety?"
    ],
    "when": "filler",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "this-is-fine": {
    "text": [
     "[laughs] This is fine. Everything's fine.",
     "[scoffs] Totally fine. Not worried at all.",
-    "[laughs] Everything's under control. Probably."
+    "[laughs] Everything's under control. Probably.",
+    "[forced calm] Totally fine. Totally.",
+    "[laughs] Nothing to see here."
    ],
    "when": "filler",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "good-hand": {
    "text": [
     "[smug] I like my hand.",
     "[smug] This hand? Oh, this hand is filthy.",
-    "[laughs] You do not want to see what I'm holding."
+    "[laughs] You do not want to see what I'm holding.",
+    "[smug] Oh, this hand is filthy.",
+    "[excited] Ho ho. Yes."
    ],
    "when": "filler, a bluff",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "game-changer": {
    "text": [
@@ -712,8 +759,8 @@
   "elevenlabs-v3-2026-09-10-gamechangers": "game-changer lines (WotC bracket list, per Scryfall's game_changer flag in each dossier) + more you-cheat wordings (Purphoros repeated it)"
  },
  "baked": {
-  "gain_db": -8.83,
-  "takes": 214,
+  "gain_db": -8.77,
+  "takes": 248,
   "target_lufs": -24.0
  }
 }

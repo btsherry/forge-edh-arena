@@ -123,6 +123,9 @@ I_BROKE_IT_P = 0.6        # a seat that breaks its own deal by attacking owns it
 CHAIN_P_OVERRIDE = {"deal-with-you": 0.35}                    # §7: a bystander's jab at the seat that dealt, at 0.35 instead of the table's first hop
 LONG_GAME_TURN = 14
 LETHAL_POWER = 15
+THREAT_MIN = 2.0          # a threat pin this high names the seat ahead of the life leader (plan step 8)
+THREAT_WINNING = 6.0      # ...and this high earns "someone's about to win"
+THREAT_DECAY = 0.5        # per turn roll
 # The floor's pool (plan 4.2, 2026-09-14): the patter candidates ANCHORED to the board — the numbers
 # (a life or hand question, the low-life and empty-hand jabs), the threat calls, a slow seat, the big
 # board, the long game, "pass already" at the active seat, a deal — speak ahead of filler when the
@@ -482,8 +485,37 @@ class SchedulerMixin:
         self._chain = None                                        # the table has had its say; no third round
         return True
 
+    # -- threat memory (plan step 8): the table names the seat that is winning, not the one with the most life
+    def raise_threat(self, seat: int, amount: float, why: str = "") -> None:
+        t = self.__dict__.setdefault("_threat", {})
+        t[int(seat)] = t.get(int(seat), 0.0) + float(amount)
+        self.record("noted", kind="threat", why=f"threat +{amount:g}: {why}", seat=int(seat), level=round(t[int(seat)], 2))
+
+    def decay_threat(self) -> None:
+        t = self.__dict__.setdefault("_threat", {})
+        for k in list(t):
+            t[k] = round(t[k] * THREAT_DECAY, 3)
+            if t[k] < 0.25:
+                t.pop(k)
+
+    def threat_seat(self, exclude=()) -> int | None:
+        """The seat the table should be worried about: the highest threat pin at or above THREAT_MIN among the
+        living, or None (then the callers fall back to the life leader)."""
+        t = self.__dict__.get("_threat", {})
+        best, level = None, THREAT_MIN
+        for sid, v in t.items():
+            if sid in exclude or sid in self.eliminated:
+                continue
+            if v >= level:
+                best, level = int(sid), v
+        return best
+
     def leader_of(self, speaker: int):
-        """The highest-life seat still in the game, other than the speaker and the human."""
+        """The seat the table should be worried about — the threat pin when one is raised, else the
+        highest-life seat still in the game — other than the speaker and the human."""
+        pinned = self.threat_seat(exclude=(speaker, self.human_seat))
+        if pinned is not None:
+            return pinned
         best, best_life = None, -1
         for s in self._last_snapshot.get("seats") or []:
             sid = s.get("seat")
@@ -632,7 +664,10 @@ class SchedulerMixin:
             return False
         # an explicit p (the opener's own number) always applies; otherwise "all" means always, "some" means barks_p (tuning.json)
         chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
-        ungoverned = pid in MULL_LINE.values() or (source == "patter" and p == 1.0)   # a mulligan is always worth the breath; so is breaking a silence
+        ungoverned = pid in MULL_LINE.values() or (source == "patter" and p == 1.0) or source == "procedural"
+        # a mulligan is always worth the breath; so is breaking a silence; so is a seat narrating its own turn
+        # ("land, go", "no blocks" — game 48: thirty of them died to the budget while filler lived; the seat guard,
+        # the once-a-turn rule and table_p still apply)
         g = 1.0 if ungoverned else self.governor(optional=classify_source(source) != "anchored")   # one rule (C2): chain replies stay optional
         chance = min(1.0, chance * g)
         if self.rng.random() >= chance:
@@ -689,6 +724,9 @@ class SchedulerMixin:
         lib = self.library_for_seat(seat)
         if named not in self.table_ids or not lib or not self.renderer.variants(named, f"{lib}/{TABLE_LIB}"):
             return ""
+        heard = self._said_at.get(named)
+        if heard is not None and self.clock() - heard < PATTER_REPEAT_S:
+            return ""                                                # the named take has one wording: heard lately, the generic (more takes) speaks instead
         return named
 
     # -- the deal ledger (plan 2026-09-16 §11): the live map, logs/deals.jsonl, the notes to the brains
@@ -863,7 +901,8 @@ class SchedulerMixin:
                     if parties:
                         who = int(self.rng.choice(parties))
                         other = b if who == a else a
-                        self.maybe_bark(who, "deal-over", turn=t, source="event", p=DEAL_OVER_P, ctx={"targets": [other]})
+                        certain = self.human_seat in (a, b)                  # the player's deal ending is state (Ben, game 50); a seats' deal may pass unremarked
+                        self.maybe_bark(who, "deal-over", turn=t, source="event", p=1.0 if certain else DEAL_OVER_P, ctx={"targets": [other]})
             finally:
                 self._lapsing = False
         return lapsed
@@ -877,6 +916,7 @@ class SchedulerMixin:
             self._said_this_turn = TurnSaid(self.clock)
             self._chain = None                           # a new turn ends any exchange
             self._card_events_turn = {}                  # the loop counters are per turn too
+            self.decay_threat()
         self.lapse_deals(turn)
 
     # -- the patter clock
@@ -908,7 +948,12 @@ class SchedulerMixin:
 
         for slow in self.slow_seats():
             add("play-faster", slow, 3.0); add("thinking-hard", slow, 1.0)
-        if len(by_id) >= 2:
+        pinned = self.threat_seat()
+        if pinned is not None and pinned in by_id:
+            add("youre-the-threat", pinned, 3.0); add("kill-that", pinned, 2.0)          # the table names the real threat first
+            if self.__dict__.get("_threat", {}).get(pinned, 0.0) >= THREAT_WINNING and "someone-wins" in self.table_ids:
+                add("someone-wins", pinned, 2.0)
+        elif len(by_id) >= 2:
             lead = max(by_id.values(), key=lambda x: x.get("life") or 0)
             if [x for x in by_id.values() if (x.get("life") or 0) == (lead.get("life") or 0)] == [lead]:
                 add("youre-the-threat", int(lead["seat"]), 2.0); add("whats-your-life", int(lead["seat"]), 1.0)

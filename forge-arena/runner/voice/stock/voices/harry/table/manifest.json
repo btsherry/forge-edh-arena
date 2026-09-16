@@ -463,6 +463,28 @@
    ],
    "source": "table-loop-2026-09-11"
   },
+  "table-kill": {
+   "category": "killshot",
+   "when": "the killer, after two or more seats fall at once",
+   "text": [
+    "[triumphant] And that's the table!",
+    "[laughs] Everybody. At once. You're welcome.",
+    "[loud] Clean sweep!",
+    "[smug] That's how it's done."
+   ],
+   "source": "table-killshot-2026-09-16"
+  },
+  "all-of-us": {
+   "category": "killshot",
+   "when": "a dying seat, as the table falls together",
+   "text": [
+    "[shocked] All of us? At once?!",
+    "[disbelieving] Wait — everybody?",
+    "[angry] Oh, you have GOT to be kidding.",
+    "[stunned] The whole table..."
+   ],
+   "source": "table-killshot-2026-09-16"
+  },
   "waiting-on-you": {
    "category": "heckle",
    "when": "the human's decision window has been open for a while",
@@ -2324,8 +2346,8 @@
   }
  },
  "baked": {
-  "gain_db": -9.08,
-  "takes": 389,
+  "gain_db": -9.07,
+  "takes": 397,
   "target_lufs": -24.0
  }
 }

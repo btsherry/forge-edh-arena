@@ -1197,6 +1197,8 @@ class SeatRunner:
             self.cycle = None
             return None
         conflict = self._deal_conflict(req, answer)
+        if self._pending() and not conflict:
+            conflict = "answer a pending offer"                        # a pending offer is novelty: the cycle pauses for one model window
         if conflict:
             # table deals §6: a replayed step that would attack/target a deal partner is
             # novelty — a cycle cannot choose betrayal; the model decides with the note
@@ -1890,6 +1892,8 @@ class SeatRunner:
         # arms (or lifts) the §6 hand-off at once; the sentences wait for the next prompt.
         self._ingest_notes(req)
         deal_note = self._deal_guard(req)
+        if self._pending() and not deal_note:
+            deal_note = "an offer is waiting for your answer"          # game 50: Purphoros answered four minutes late — his next window was his own turn
         # Item 12: the engine publishes its wait on every request. It is the
         # one timeout knob; budget from what the engine will actually do
         # rather than from a copy passed through the environment.

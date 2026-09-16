@@ -463,6 +463,28 @@
    ],
    "source": "table-loop-2026-09-11"
   },
+  "table-kill": {
+   "category": "killshot",
+   "when": "the killer, after two or more seats fall at once",
+   "text": [
+    "[dryly] And that is the table.",
+    "[calmly] All of you, in one motion. Elegant.",
+    "[dryly] I did say I would.",
+    "[satisfied] Checkmate, gentlemen."
+   ],
+   "source": "table-killshot-2026-09-16"
+  },
+  "all-of-us": {
+   "category": "killshot",
+   "when": "a dying seat, as the table falls together",
+   "text": [
+    "[dryly] All of us. At once. Noted.",
+    "[calmly] Well. That settles the ranking.",
+    "[sighs] A clean sweep. Of course.",
+    "[dryly] Everyone? How efficient."
+   ],
+   "source": "table-killshot-2026-09-16"
+  },
   "waiting-on-you": {
    "category": "heckle",
    "when": "the human's decision window has been open for a while",
@@ -2324,8 +2346,8 @@
   }
  },
  "baked": {
-  "gain_db": -6.64,
-  "takes": 389,
+  "gain_db": -6.63,
+  "takes": 397,
   "target_lufs": -24.0
  }
 }

@@ -549,6 +549,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             # the turn in progress (seam critic, 2026-09-16): the active seat's lands/casts/narrations, the cast
             # flurry clocks and the advisor requests already answered — a hot swap mid-turn kept none of them
             "turn_start": {str(s): dict(v) for s, v in self._turn_start.items()},
+            "threat": {str(s): round(v, 3) for s, v in getattr(self, "_threat", {}).items()},
             "casts": {str(s): [x for x in v if now - x <= STATE_RECENT_S] for s, v in getattr(self, "_casts", {}).items()},
             "answered": sorted(int(x) for x in self.answered),
             "ring_seq": self._ring_seq,
@@ -692,6 +693,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         cls.update({int(s): str(c) for s, c in get("seat_last_class", dict).items()})
         self._spoken_log = [(t(a), float(b)) for a, b in get("spoken_log", list) if t(a) is not None]
         self._turn_start = {int(s): dict(v) for s, v in get("turn_start", dict).items()}
+        self._threat = {int(s): float(v) for s, v in get("threat", dict).items()}
         self._casts = {int(s): [t(x) for x in v if t(x) is not None] for s, v in get("casts", dict).items()}
         self.answered = {int(x) for x in get("answered", list)}
         self.last_spoken_at = t(state.get("last_spoken_at"), now)
@@ -814,6 +816,9 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
                 body["clock"] = round(self.clock(), 3)
             except Exception:  # noqa: BLE001 — a record never fails for its stamp
                 body["clock"] = None
+        tally = self.__dict__.setdefault("_tally", {})
+        key = f"{event}:{body.get('kind')}:{body.get('source') or ''}"
+        tally[key] = tally.get(key, 0) + 1
         try:
             with self._jsonl.open("a") as f:
                 f.write(json.dumps({"ts": round(getattr(self, "wall", time.time)(), 3), "event": event, **body}, default=str) + "\n")
@@ -892,6 +897,9 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         ctx_seq = (item.get("ctx") or {}).get("seq")
         if ctx_seq is not None:
             extra["seq"] = ctx_seq
+        targets = (item.get("ctx") or {}).get("targets") or []
+        if targets:
+            extra["target"] = int(targets[0])                                # who the line was aimed at (hygiene's grounding score)
         self.record("spoke", kind=item["kind"], text=item["text"][:200], stock=item["stock"], seconds=round(secs, 2),
                     chars_used=self.renderer.chars_used, library=item.get("library") or "", seat=item.get("seat"),
                     file=path.name, duty=round(self.duty(), 2), goal=round(self.duty_goal(), 2), source=item.get("source", ""), **extra)
@@ -963,6 +971,37 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             self.publish_final()                      # spoken or skipped, the sequence has drained
         self.save_state()                             # §4.1: at once when the durable set moved, else every STATE_SAVE_S
 
+    def record_up(self) -> None:
+        """One `up` record per (re)start (plan tune 11): the restart count is the number of earlier `up`
+        records in this game's voice-0.jsonl, so hygiene reads restarts from the runner's own log."""
+        earlier = 0
+        try:
+            for line in self._jsonl.read_text().splitlines():
+                if '"event": "up"' in line:
+                    earlier += 1
+        except OSError:
+            pass
+        tune_sha = ""
+        try:
+            import hashlib
+            tune_sha = hashlib.sha1((VOICES_DIR / "tuning.json").read_bytes()).hexdigest()[:10]
+        except OSError:
+            pass
+        self.record("up", kind="runner", restart=earlier, chatter=self.chatter, tuning=tune_sha, live=bool(self.renderer.live),
+                    libraries=sorted(v["library"] for v in self.seat_libraries.values()))
+
+    def record_summary(self) -> None:
+        """One `summary` record at the final marker (plan tune 11): what the table did, from the runner's own tally."""
+        t = self.__dict__.get("_tally", {})
+        spoke = {k.split(":")[2] or k.split(":")[1]: v for k, v in t.items() if k.startswith("spoke:")}
+        self.record("summary", kind="runner",
+                    spoke=sum(v for k, v in t.items() if k.startswith("spoke:") and ":atom:" not in k),
+                    by_source=spoke, skipped=sum(v for k, v in t.items() if k.startswith("skipped:")),
+                    dropped=sum(v for k, v in t.items() if k.startswith("dropped:")),
+                    atoms=sum(v for k, v in t.items() if k.startswith("spoke:atom")),
+                    duty=round(self.duty(), 2), ring_gaps=sum(v for k, v in t.items() if k.startswith("gap:")),
+                    deals=len({tuple(sorted(k)) for k in self._deals}) if isinstance(self._deals, dict) else 0)
+
     def run(self) -> None:
         self.say(f"[voice] up — chatter={self.chatter:g}, stock {len(self.renderer.manifest.get('phrases', {}))} phrases, "
                  f"live={'on' if self.renderer.live else 'off (no ELEVENLABS_API_KEY)'}, min_gap={self.min_gap}s, "
@@ -981,6 +1020,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
                     pass
                 time.sleep(5.0)
         threading.Thread(target=beat, name="voice-heartbeat", daemon=True).start()
+        self.record_up()
         while True:
             try:
                 self.step()

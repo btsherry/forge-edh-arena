@@ -351,6 +351,7 @@ def table_opponents(own_deck: str, roster: list[str]) -> list[str]:
 # back as panel lines. Three kinds, two durations, one counter per offer.
 DEAL_KINDS = ("truce", "no-target", "alliance")
 DEAL_ROUNDS_MAX = 3
+OFFER_NUDGE_S = 30.0        # an open offer this old earns one panel line saying the seat has had no window yet
 DEAL_COLOR_P = 1.0          # Ben (game 50): a deal you struck or had broken is state you act on — Joshua's read is delivered every time, no dice
 DEAL_PANEL_MAX = 100        # every deal panel line fits one row
 ADDRESS_JSON = Path(__file__).resolve().parent / "voice" / "stock" / "voices" / "address.json"
@@ -1187,7 +1188,8 @@ class AdvisorRunner:
             self._panel("table", f"could not reach {name}'s mailbox ({e.__class__.__name__}) — offer not sent", turn)
             return
         self._offers[offer_id] = {"seat": seat, "who": name, "turn": turn, "deal": deal, "offered": dict(deal), "text": words,
-                                  "status": "open", "counter": None, "until_turn": deal.get("until_turn")}
+                                  "status": "open", "counter": None, "until_turn": deal.get("until_turn"),
+                                  "ts": time.time(), "nudged": False}
         self._panel(f"you → {name}", f"{deal_terms_text(deal)}: \"{words}\"", turn)
         self._record("deal", {"event": "offer", "offer_id": offer_id, "seat": seat, "turn": turn, "deal": deal, "text": words})
 
@@ -1258,6 +1260,9 @@ class AdvisorRunner:
         if now is None:
             return
         for oid, off in self._offers.items():
+            if off["status"] == "open" and not off.get("nudged") and time.time() - float(off.get("ts") or time.time()) > OFFER_NUDGE_S:
+                off["nudged"] = True                                     # game 50: a seat answers at its next window, which may be its own turn
+                self._panel("table", f"{off['who']} hasn't had a decision yet — the answer comes at the next window", now)
             if off["status"] == "countered" and isinstance(off.get("counter_turn"), int) and off["counter_turn"] < now:
                 off["status"] = "counter-lapsed"
                 self._panel("table", f"{off['who']}'s counter lapsed", now)

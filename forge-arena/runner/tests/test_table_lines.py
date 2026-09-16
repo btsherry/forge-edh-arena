@@ -57,6 +57,7 @@ class TableLibraries(unittest.TestCase):
             self.assertEqual(cats["loop"], 2, f"{lib}: loop (the table) and looping (the owner)")
             self.assertEqual(cats["heckle"], 3, f"{lib}: waiting-on-you, still-waiting, there-you-are (Ben, 2026-09-14: heckles at the player)")
             self.assertEqual(cats["deal"], 6, f"{lib}: deal-with-you, no-deal-with-you, counter-offer, deal-over, you-broke-it, i-broke-it (2026-09-16)")
+            self.assertEqual(cats["killshot"], 2, f"{lib}: table-kill, all-of-us (2026-09-16)")
         for n in list(range(1, 41)) + [45, 50, 60, 80, 100]:
             self.assertIn(f"life-{n}", ids)
         for n in range(11):
@@ -129,7 +130,7 @@ class RenderedTable(unittest.TestCase):
                         self.assertTrue(0.4 <= secs <= 6.0, f"{lib}/table/{stem}: {secs:.1f}s")
                     self.assertTrue((REAL_VOICES / lib / "table" / "raw" / f"{stem}.wav").exists(), f"{lib}/table/raw/{stem}.wav")
                     n += 1
-            self.assertEqual(n, 290 + 30 + 27 + 6 + 12 + 24, lib)
+            self.assertEqual(n, 290 + 30 + 27 + 6 + 12 + 24 + 8, lib)
 
 
 class _TableCase(_TreeCase):
@@ -188,17 +189,17 @@ class MemoryAndArc(_TableCase):
         self._snap(3, 1, events=[{"seq": 1, "kind": "cast", "turn": 2, "seat": 1, "spell": "x", "cmc": 1}]); self.r.queue.clear()
         return [{"seq": 1, "kind": "cast", "turn": 2, "seat": 1, "spell": "x", "cmc": 1}]
 
-    def test_the_third_hit_from_the_same_seat_is_a_grudge(self):
+    def test_the_second_hit_from_the_same_seat_is_a_grudge(self):
         ev = self._prime()
         seq = 2
         for turn in (3, 7, 11):
             ev.append({"seq": seq, "kind": "damage", "turn": turn, "seat": 2, "amount": 4, "combat": True, "from": [1]}); seq += 1
             self._snap(turn, 1, events=ev)
             got = self._barks()
-            if turn < 11:
-                self.assertEqual(got, [("take-it", "bill/table", 2)], f"turn {turn}: a plain hit")
+            if turn == 7:
+                self.assertEqual(got, [("grudge", "bill/table", 2)], "the second hit from seat 1: 'you again?!' (GRUDGE_EVERY 2, 2026-09-16)")
             else:
-                self.assertEqual(got, [("grudge", "bill/table", 2)], "the third hit from seat 1: 'you again?!' instead")
+                self.assertEqual(got, [("take-it", "bill/table", 2)], f"turn {turn}: a plain hit")
         self.assertEqual(self.r._hits_from[2][1], 3)
         ev.append({"seq": seq, "kind": "damage", "turn": 12, "seat": 2, "amount": 4, "combat": True, "from": [0, 1]})
         self._snap(12, 0, events=ev)

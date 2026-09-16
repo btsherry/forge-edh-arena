@@ -366,7 +366,7 @@ class FastpathHandoff(unittest.TestCase):
         self.assertIn("your alliance with Player One (seat 0) is in force", r.brain.last_prompt)
         self.assertEqual(r.records[-1][2], "model")
 
-    def test_a_pending_unshown_offer_wakes_the_model_once_past_the_react_memo(self):
+    def test_a_pending_offer_holds_every_window_for_the_model_until_answered(self):
         r = make_runner()
         r.handle(cast(0))                                  # the turn boundary clears the memo: set the turn first
         r.react_seen.add(r._react_signature(react(1)))
@@ -378,7 +378,14 @@ class FastpathHandoff(unittest.TestCase):
         self.assertIn("DEAL PENDING", r.brain.last_prompt)
         r.react_seen.add(r._react_signature(react(3)))
         r.handle(react(3))
-        self.assertEqual(r.records[-1][2], "memo", "shown once: the memo is back")
+        self.assertEqual(r.records[-1][2], "model", "still pending: every window is the model's (release plan step 1a; game 50's four-minute answer)")
+        oid = next(iter(r._pending()))
+        r.brain.script = [{"chosenId": 0, "deal": {"offer_id": oid, "accept": False}, "say": "no-deal"}]
+        r.handle(react(4))
+        self.assertEqual(r._pending(), {}, "answered")
+        r.react_seen.add(r._react_signature(react(5)))
+        r.handle(react(5))
+        self.assertEqual(r.records[-1][2], "memo", "answered: the memo is back")
 
     def test_a_new_game_forgets_deals(self):
         r = make_runner()

@@ -76,6 +76,34 @@ def _p90(sorted_vals):
     return sorted_vals[int(n * 0.9) - 1 if n > 1 else 0]
 
 
+def grounding(d: str, voice: list) -> list[str]:
+    """Plan tune 10: the share of ADDRESSED seat lines (hit/threat/kill-that/youre-the-threat/someone-wins/deal-*,
+    which carry `target` since 2026-09-16) aimed at the eventual winner or at the seat that cast the most
+    spells that turn — how often the table talks about the seat that matters. Winner from the .rated file's
+    first placement group; casts per turn from events.jsonl. Archives without `target` print n/a."""
+    addressed = [v for v in voice if v.get("event") == "spoke" and v.get("kind") == "bark" and v.get("target") is not None
+                 and (str(v.get("stock", "")).startswith(("hit-", "threat-", "deal-")) or v.get("stock") in
+                      ("kill-that", "youre-the-threat", "someone-wins", "deal", "archenemy"))]
+    if not addressed:
+        return []
+    winner = None
+    for f in sorted(glob.glob(os.path.join(d, "*.rated"))):
+        try:
+            groups = json.load(open(f, encoding="utf-8")).get("placementGroups") or []
+            if groups and len(groups[0]) == 1:
+                winner = int(groups[0][0])
+        except (OSError, ValueError, TypeError, IndexError):
+            pass
+    casts: dict = {}
+    for e in rows_of(os.path.join(d, "events.jsonl")):
+        if e.get("kind") == "cast" and e.get("seat") is not None and e.get("turn") is not None:
+            casts.setdefault(int(e["turn"]), collections.Counter())[int(e["seat"])] += 1
+    busiest = {t: c.most_common(1)[0][0] for t, c in casts.items() if c}
+    hits = sum(1 for v in addressed if int(v["target"]) == winner or busiest.get(v.get("turn")) == int(v["target"]))
+    return [f"  grounding: {hits / len(addressed):.0%} of {len(addressed)} addressed lines named the winner or the turn's busiest seat"
+            + (f" (winner seat {winner})" if winner is not None else " (no winner in the ratings)")]
+
+
 def voice_pace(voice: list) -> list[str]:
     """Lines for the voice section: pace and anchored share beside the targets, the
     gap distribution between spoken lines (a gap runs from one line's end to the
@@ -223,6 +251,15 @@ def report(d: str) -> tuple[str, bool]:
                    f"render failures {vc.get('render-failed', 0)} | live paused {vc.get('live-paused', 0)}"
                    f" | barks spoke {bk.get('spoke', 0)} / skipped {bk.get('skipped', 0)} / dropped {bk.get('dropped', 0)}")
         out.extend(voice_pace(voice))
+        out.extend(grounding(d, voice))
+        ups = [v for v in voice if v.get("event") == "up"]
+        summ = [v for v in voice if v.get("event") == "summary"]
+        if ups:
+            counts["restarts"] = max(counts["restarts"], max(int(u.get("restart") or 0) for u in ups))   # the runner's own count (tune 11)
+        if summ:
+            sm = summ[-1]
+            out.append(f"  runner summary: spoke {sm.get('spoke')} | atoms {sm.get('atoms')} | skipped {sm.get('skipped')} | dropped {sm.get('dropped')} | "
+                       f"duty {sm.get('duty')} | ring gaps {sm.get('ring_gaps')} | deals {sm.get('deals')} | restarts {counts['restarts']}")
         if vc.get("live-paused"):
             bad["voice live paused"] = vc["live-paused"]
     adv = rows_of(os.path.join(d, "advisor-0.jsonl"))

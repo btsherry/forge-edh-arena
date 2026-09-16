@@ -296,6 +296,18 @@ LOOP: dict[str, tuple[str, dict[str, list[str]]]] = {
 
 # The player's window has sat open a while (Ben, 2026-09-14: "heckles are great, but the advisor
 # should not respond" — the seats speak to the player; Joshua is a ghost outside the game).
+# The kill-shot (plan step 7, game 48: three players fell in eight seconds to one generic Joshua line).
+KILLSHOT: dict[str, tuple[str, dict[str, list[str]]]] = {
+    "table-kill": ("the killer, after two or more seats fall at once", {
+        "harry": ["[triumphant] And that's the table!", "[laughs] Everybody. At once. You're welcome.", "[loud] Clean sweep!", "[smug] That's how it's done."],
+        "bill": ["[dryly] And that is the table.", "[calmly] All of you, in one motion. Elegant.", "[dryly] I did say I would.", "[satisfied] Checkmate, gentlemen."],
+        "lily": ["[warmly] And that's the table, dears.", "[gently] All at once. I'm almost sorry.", "[amused] Well. That was tidy.", "[softly] Good game, everyone."]}),
+    "all-of-us": ("a dying seat, as the table falls together", {
+        "harry": ["[shocked] All of us? At once?!", "[disbelieving] Wait — everybody?", "[angry] Oh, you have GOT to be kidding.", "[stunned] The whole table..."],
+        "bill": ["[dryly] All of us. At once. Noted.", "[calmly] Well. That settles the ranking.", "[sighs] A clean sweep. Of course.", "[dryly] Everyone? How efficient."],
+        "lily": ["[gasps] All of us, dear?", "[softly] Oh. Everyone at once.", "[amused] Well, that's one way to end it.", "[gently] Together, then."]}),
+}
+
 HECKLE: dict[str, tuple[str, dict[str, list[str]]]] = {
     "waiting-on-you": ("the human's decision window has been open for a while", {
         "harry": ["[impatient] We're waiting on you.", "[loud] Hello? Your turn!", "[mocking] Take your time. No, really, take it.", "[sighs] Any day now."],
@@ -425,6 +437,8 @@ def build_manifest(lib: str) -> dict:
         ph[pid] = {"category": "mulligan", "when": when, "text": list(by[lib]), "source": "table-mulligan-2026-09-11"}
     for pid, (when, by) in LOOP.items():
         ph[pid] = {"category": "loop", "when": when, "text": list(by[lib]), "source": "table-loop-2026-09-11"}
+    for pid, (when, by) in KILLSHOT.items():
+        ph[pid] = {"category": "killshot", "when": when, "text": list(by[lib]), "source": "table-killshot-2026-09-16"}
     for pid, (when, by) in HECKLE.items():
         ph[pid] = {"category": "heckle", "when": when, "text": list(by[lib]), "source": "table-heckle-2026-09-14"}
     for pid, (when, by) in DEALS.items():

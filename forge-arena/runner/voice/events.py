@@ -63,7 +63,7 @@ EVENTS_TAPE = "events.jsonl"                                  # §4.3: every con
 OBSERVER_TAPE = "observer-tape.jsonl"                         # §4.3: every CHANGED snapshot, compacted
 THINK_S = 8.0
 NARRATIONS_PER_TURN = 2
-GRUDGE_EVERY = 3          # the third hit from the same seat (and every third after) earns "you again?!"
+GRUDGE_EVERY = 2          # the second hit from the same seat (and every second after) earns "you again?!" — the memory layer pays out (2026-09-16)
 # An AI seat's elimination is voiced ONCE: by the dying seat itself (its `eliminated`
 # bark, at once) with this probability, else by Joshua's "A player has been eliminated."
 ELIM_SEAT_P = 0.7
@@ -577,6 +577,7 @@ class EventsMixin:
         if self._loop_was_called(seat, turn):
             return False
         self.record("noted", kind="event", why=f"loop called: {why}", seat=seat, turn=turn, source=source)
+        self.raise_threat(seat, 4.0, "a loop called")
         said = False
         if seat != self.human_seat and self.library_for_seat(seat):
             said = self._bark(seat, "looping", turn=turn, source="event", p=1.0, ctx={"targets": []})   # anchored whoever noticed (critic: "brain" was optional)
@@ -773,6 +774,7 @@ class EventsMixin:
                     # the announcement queues behind whatever is pending and survives the flood of piece events that
                     # follows (game 47: Urza's Hullbreaker alarm was queued at 20:36:27 and evicted by the Vault lines)
                     self._bark(int(seat), "engine-online", turn=d.get("turn"), source="event", ctx={"targets": [], **ctx}, gap=0.5, evict=False)
+                    self.raise_threat(int(seat), 3.0, "combo online")
                     self._atom("combo", [int(x) for x in self.seat_libraries if int(x) != int(seat)], actor=int(seat))
                 elif int(seat) == self.human_seat:
                     by = [x for x in self.seat_libraries if int(x) not in self.eliminated]
@@ -898,7 +900,7 @@ class EventsMixin:
                                 line = ""                                          # a recast: the table has met this card
                             else:
                                 line = "gc-react"
-                            self._gc_cast_seen.add((seat, spell))
+                            self._gc_cast_seen.add((seat, spell)); self.raise_threat(int(seat), 2.0, f"{spell} cast")
                             card = {"card": card_slug(spell), "card_kind": "gc"}
                         elif e.get("commander"):
                             line = self.rng.choice(["oh-no", "brace", "read-that"])
@@ -925,7 +927,7 @@ class EventsMixin:
                             if not looping and (seat, spell) not in self._gc_cast_seen:
                                 self._bark(seat, "game-changer", turn=turn, source="event",
                                                 ctx={"targets": [], "card": card_slug(spell), "card_kind": "gc"})
-                            self._gc_cast_seen.add((seat, spell))
+                            self._gc_cast_seen.add((seat, spell)); self.raise_threat(int(seat), 2.0, f"{spell} cast")
                         elif e.get("commander"):
                             self._bark(seat, "commander-cast", turn=turn, source="event",
                                             ctx={"targets": [], "card": self._who.get(seat, ""), "card_kind": "cmd"})
@@ -940,6 +942,8 @@ class EventsMixin:
                     now_t = time.time()
                     recent = [t for t in self._casts.get(seat, []) if now_t - t < 30] + [now_t]
                     self._casts[seat] = recent
+                    if len(recent) == 3:
+                        self.raise_threat(int(seat), 1.0, "a flurry of spells")
                     if len(recent) >= 3 and seat != self.human_seat:
                         by = [x for x in self.seat_libraries if int(x) != seat and int(x) not in self.eliminated]
                         if by:
@@ -1113,6 +1117,13 @@ class EventsMixin:
             for sid in vanished:
                 self.record("noted", kind="event", why="seat gone from the snapshot: eliminated", seat=sid)
             seats = seats + [{"seat": sid, "eliminated": True, "vanished": True} for sid in vanished]
+        dying = [int(s["seat"]) for s in seats if s.get("eliminated") and s.get("seat") not in self.eliminated and s.get("seat") is not None]
+        table_kill = len(dying) >= 2 and self.barks_mode != "off"              # the kill-shot (plan step 7): two or more fall at once
+        if table_kill and "all-of-us" in self.table_ids:
+            voiced_dying = [x for x in dying if x != self.human_seat and self.library_for_seat(x)]
+            if voiced_dying:
+                self.enqueue("event", stock="all-of-us", library=self.lib_for(voiced_dying[0], "all-of-us"), seat=voiced_dying[0], ttl=30.0,
+                             ctx={"targets": []}, evict=False, gap=0.4)     # "all of us? at once?" before the exits
         for s in seats:
             if s.get("eliminated") and s.get("seat") not in self.eliminated:
                 self.eliminated.add(s.get("seat"))
@@ -1137,7 +1148,12 @@ class EventsMixin:
                     if hit and hit[1] == turn:
                         killers = [h for h in hit[0] if h != self.human_seat and self.library_for_seat(h) and h not in self.eliminated]
                         if killers:
-                            self._bark(killers[-1], "kill", turn=turn, source="event", ctx={"targets": []})
+                            if table_kill and "table-kill" in self.table_ids and not getattr(self, "_table_kill_said", False):
+                                self._table_kill_said = True
+                                self.enqueue("event", stock="table-kill", library=self.lib_for(killers[-1], "table-kill"), seat=killers[-1], ttl=30.0,
+                                             ctx={"targets": []}, evict=False, gap=0.6)   # "and that's the table" — the killer, after the exits
+                            elif not table_kill:
+                                self._bark(killers[-1], "kill", turn=turn, source="event", ctx={"targets": []})
                             self._atom("kill", [int(x) for x in self.seat_libraries if int(x) != killers[-1]], actor=killers[-1])
         living = [s.get("seat") for s in seats if s.get("seat") is not None and not s.get("eliminated")]
         if len(living) == 2 and not self._heads_up_said and not d.get("gameOver") and self.barks_mode != "off" and "heads-up" in self.table_ids:
@@ -1259,5 +1275,8 @@ class EventsMixin:
             if not f.exists():
                 f.write_text(json.dumps({"done": round(time.time(), 3)}))
                 self.say("[voice] final sequence done — the table may be torn down")
+                summary = getattr(self, "record_summary", None)
+                if summary is not None:
+                    summary()
         except OSError:
             pass

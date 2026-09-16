@@ -400,11 +400,15 @@
   "oh-no": {
    "text": [
     "[calmly] Ah. That's a problem.",
-    "[sighs] Oh dear."
+    "[sighs] Oh dear.",
+    "[calmly] That is unfortunate.",
+    "[dryly] Ah. I see.",
+    "[sighs] Of course it's that one."
    ],
    "when": "a threat lands",
    "category": "reaction",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "wow": {
    "text": [
@@ -461,11 +465,14 @@
    "text": [
     "[dryly] Quite the hand you're hoarding.",
     "[calmly] A full grip. Suspicious.",
-    "[dryly] That's a lot of cards to be sitting on."
+    "[dryly] That's a lot of cards to be sitting on.",
+    "[dryly] A full grip. How thrifty.",
+    "[calmly] Are you saving those for a rainy day?"
    ],
    "when": "a seat holding six or more cards",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "youre-the-threat": {
    "text": [
@@ -490,19 +497,27 @@
   },
   "board-envy": {
    "text": [
-    "[dryly] I dislike every one of those."
+    "[dryly] I dislike every one of those.",
+    "[dryly] Your board offends me.",
+    "[calmly] I would like your creatures. Gone.",
+    "[dryly] Must you have all of that?"
    ],
    "when": "at the biggest board",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "empty-hand": {
    "text": [
-    "[dryly] Living on draws, I see."
+    "[dryly] Living on draws, I see.",
+    "[dryly] Nothing in hand. How brave.",
+    "[calmly] Drawing for answers, are we?",
+    "[dryly] The cupboard is bare, I see."
    ],
    "when": "a seat with nothing in hand",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "low-life-jab": {
    "text": [
@@ -528,19 +543,26 @@
    "text": [
     "[calmly] A truce. Just this turn.",
     "[calmly] A non-aggression pact. Temporary.",
-    "[dryly] Shall we ignore each other for a turn?"
+    "[dryly] Shall we ignore each other for a turn?",
+    "[calmly] A ceasefire. Briefly.",
+    "[dryly] Shall we not, for a turn?"
    ],
    "when": "politics",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "promise": {
    "text": [
-    "[dryly] My word is my bond. Loosely."
+    "[dryly] My word is my bond. Loosely.",
+    "[dryly] You have my word. Read the fine print.",
+    "[calmly] Agreed. For now.",
+    "[dryly] A promise, freely given. Loosely kept."
    ],
    "when": "after a deal",
    "category": "reply",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "play-faster": {
    "text": [
@@ -553,19 +575,27 @@
   },
   "thinking-hard": {
    "text": [
-    "[dryly] Ominous silence."
+    "[dryly] Ominous silence.",
+    "[dryly] The gears are turning.",
+    "[calmly] A long think. Rarely good news.",
+    "[dryly] Contemplation. How ominous."
    ],
    "when": "same, from a bystander",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "play-slower": {
    "text": [
-    "[dryly] One thing at a time."
+    "[dryly] One thing at a time.",
+    "[dryly] Slowly. We are not all machines.",
+    "[calmly] Again, and with narration.",
+    "[sighs] I missed half of that."
    ],
    "when": "a seat firing off plays",
    "category": "reaction",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "you-suck": {
    "text": [
@@ -613,11 +643,14 @@
    "text": [
     "[calmly] Do be quiet.",
     "[dryly] Spare us.",
-    "[calmly] That will do."
+    "[calmly] That will do.",
+    "[dryly] Silence would suit you.",
+    "[calmly] Enough."
    ],
    "when": "light name-calling",
    "category": "reply",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "bite-me": {
    "text": [
@@ -642,39 +675,53 @@
   },
   "pass-already": {
    "text": [
-    "[calmly] Pass, pass, pass."
+    "[calmly] Pass, pass, pass.",
+    "[dryly] The pass button is right there.",
+    "[calmly] Pass. Any time now.",
+    "[sighs] We are all waiting."
    ],
    "when": "the active seat is dawdling",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "what-turn": {
    "text": [
-    "[curious] Turn what, now?"
+    "[curious] Turn what, now?",
+    "[curious] Remind me of the turn.",
+    "[dryly] Turn... something. It hardly matters.",
+    "[calmly] Has anyone been counting?"
    ],
    "when": "filler",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "this-is-fine": {
    "text": [
     "[dryly] All according to plan. Someone's plan.",
     "[calmly] Nothing to see here.",
-    "[dryly] Proceeding as expected. Allegedly."
+    "[dryly] Proceeding as expected. Allegedly.",
+    "[dryly] Perfectly under control.",
+    "[calmly] Nothing is on fire. Yet."
    ],
    "when": "filler",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "good-hand": {
    "text": [
     "[calmly] My hand is adequate.",
     "[calmly] I'm rather pleased with these.",
-    "[dryly] My hand is sufficient."
+    "[dryly] My hand is sufficient.",
+    "[calmly] I am content with these.",
+    "[dryly] Serviceable. Quite serviceable."
    ],
    "when": "filler, a bluff",
    "category": "patter",
-   "source": "elevenlabs-v3-2026-09-10-patter"
+   "source": "elevenlabs-v3-2026-09-10-patter",
+   "variants_source": "elevenlabs-v3-2026-09-16"
   },
   "game-changer": {
    "text": [
@@ -713,8 +760,8 @@
   "elevenlabs-v3-2026-09-10-gamechangers": "game-changer lines (WotC bracket list, per Scryfall's game_changer flag in each dossier) + more you-cheat wordings (Purphoros repeated it)"
  },
  "baked": {
-  "gain_db": -6.5,
-  "takes": 215,
+  "gain_db": -6.53,
+  "takes": 249,
   "target_lufs": -24.0
  }
 }
