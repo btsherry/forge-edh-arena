@@ -224,3 +224,26 @@ Ben proposes archetype subagents doing the work in their domains. Assessment:
 1–5, 7, 8: answered (see the decisions block at the top).
 6. Observer `getRegisteredPlayers()` in 4.2 (Phase 3 here) or 4.3? Context given in chat on 2026-09-14; Ben to decide.
 9. Go for Phase 0.
+
+---
+
+## 10. Phase 3 — the raw purge (prepared 2026-09-16, NOT executed; runs on Ben's merge go)
+
+Inventory: 2,495 raw takes under `voices/**/raw/` (351 MB) plus 90 Joshua raws under `stock/raw/`
+(the parents' precedent; Ben: "kill all of the unused raw files" — both go). `git filter-repo` is
+not installed (`pip3 install --user git-filter-repo`, or `brew install git-filter-repo`).
+
+Order, one sitting, no game running:
+1. `git bundle create forge-arena/backups/voicework2-pre-purge.bundle experimental/voicework2 pre-hardening-20260914`
+   (≈ 700 MB with the raws) and `echo '/forge-arena/backups/' >> .gitignore`; verify with `git bundle verify`.
+2. Tree: `git rm -r --cached` every `raw/` directory, delete them from disk, commit "audio: the raw
+   takes leave the tree (gain recorded per library in manifest.baked)".
+3. History: `git filter-repo --path-glob 'forge-arena/runner/voice/stock/voices/*/raw/*' --path-glob
+   'forge-arena/runner/voice/stock/voices/*/*/raw/*' --path-glob 'forge-arena/runner/voice/stock/raw/*'
+   --invert-paths --refs experimental/voicework2` — rewrites every commit since the first render
+   (2026-09-10); every hash on the branch changes; BUG-LOG, PATCH-NOTES, note 103 and the memory
+   notes cite the old hashes — write an old→new map (filter-repo emits `commit-map`) into this
+   section and leave the citations as they are with a pointer to the map.
+4. `git reflog expire --expire=now --all && git gc --prune=now --aggressive`; re-measure the package
+   (C4) and write the numbers into the README once.
+5. Re-add the `pre-hardening-20260914` tag on the rewritten history (filter-repo keeps tags it can map).
