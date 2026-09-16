@@ -120,6 +120,12 @@ MULL_SCREW_WORDS = ("land", "mana", "colour", "color", "source")
 MULL_DIG_WORDS = ("dig", "tutor", "combo", "engine", "piece", "fast mana", "stronger", "better seven", "fish")
 RECENT_S = 240.0          # a line said within this window is stale for the patter pick and for replies
 PATTER_REPEAT_S = 300.0   # a patter line said by ANY seat within this window is no candidate at all (game 48: "cards in hand" x4)
+# BL-53 (game 49: Purphoros's turn 10 ran nine minutes — by minute four every optional id had been said, the floor found
+# `pool 0` four times running and the third proposal drew no reply, "already said this turn" ×71): within ONE turn an
+# OPTIONAL line (patter, a chain reply, the advisor's afterthoughts) may be said again by the same seat once this long
+# has passed since that seat said it; an ANCHORED id (event, procedural, opener, brain, card) keeps the strict per-turn
+# rule — a seat narrates "land, go" once a turn whatever the clock. A turn shorter than this behaves exactly as before.
+TURN_REPEAT_S = 180.0
 # Seat barks, the table-talk design (Ben, 2026-09-10 — "playing with the AI should
 # feel like sitting at the table with people"): every turn boundary has ONE owner.
 # The recap of an AI seat's turn belongs to that seat (its retrospective line,
@@ -128,7 +134,8 @@ PATTER_REPEAT_S = 300.0   # a patter line said by ANY seat within this window is
 # reaction. Instant reactions come from the snapshot's public event ring — an
 # attack of barks_swing power, a hit of barks_hit, a countered spell — with no
 # LLM in the loop. The numbers are voices/tuning.json's (2026-09-16). Openers ("my turn") fire mechanically at a seat's turn
-# start, rarely. A (seat, line) already said this turn is never said again.
+# start, rarely. A (seat, line) already said this turn is never said again — an anchored line for the whole
+# turn, an optional one for TURN_REPEAT_S (BL-53: a nine-minute loop turn must not starve the table).
 
 
 CHATTER_LEVELS = {"quiet": 0.5, "normal": 1.0, "lively": 1.5, "rowdy": 2.0}
@@ -157,9 +164,69 @@ def chatter_level(raw: str | None) -> float:
         return 1.0
 
 
+class TurnSaid(dict):
+    """The per-turn no-repeat memory (BL-53): (seat, id) -> the clock when the seat last said it this
+    turn. To every caller that used the old set it still IS one — `(seat, id) in it` is strict membership
+    (the anchored rule), `.add((seat, id))` stamps the clock, iteration yields the pairs (the checkpoint
+    writes `sorted(... for s, p in it)`) — and `said()` is the rule itself: an anchored id is said for
+    the whole turn, an optional id for TURN_REPEAT_S since that seat said it. `optional` is the set-like
+    view chains.plan_reply receives, so chains.py keeps its `(who, reply) in said_this_turn`."""
+    __slots__ = ("clock",)
+
+    def __init__(self, clock, seed=()):
+        super().__init__()
+        self.clock = clock
+        if isinstance(seed, dict):
+            self.update(seed)
+        else:
+            now = clock()
+            for key in seed:                                     # a plain set (a restored checkpoint, a test): stamped now — the conservative reading
+                self[key] = now
+
+    def add(self, key) -> None:
+        self[key] = self.clock()
+
+    def said(self, seat, pid: str, optional: bool, now: float | None = None) -> bool:
+        t = self.get((seat, pid))
+        if t is None:
+            return False
+        if not optional:
+            return True
+        return (self.clock() if now is None else now) - t < TURN_REPEAT_S
+
+    @property
+    def optional(self) -> "_OptionalSaid":
+        return _OptionalSaid(self)
+
+
+class _OptionalSaid:
+    """`(seat, id) in view` applies the optional rule over a TurnSaid — what plan_reply's set-like argument needs."""
+    __slots__ = ("_said",)
+
+    def __init__(self, said: TurnSaid):
+        self._said = said
+
+    def __contains__(self, key) -> bool:
+        seat, pid = key
+        return self._said.said(seat, pid, optional=True)
+
 
 class SchedulerMixin:
     """The queue and its policy; VoiceRunner.__init__ owns every attribute used here."""
+
+    # -- the per-turn no-repeat rule (BL-53)
+    def _turn_said(self) -> TurnSaid:
+        """The turn's memory as a TurnSaid; a plain set (VoiceRunner.__init__, a restored checkpoint, a
+        test that assigned one) is adopted with every entry stamped now."""
+        d = self._said_this_turn
+        if not isinstance(d, TurnSaid):
+            d = self._said_this_turn = TurnSaid(self.clock, d)
+        return d
+
+    def said_this_turn(self, seat, pid: str, optional: bool) -> bool:
+        """Has `seat` said `pid` this turn, for the purpose of saying it again: always yes for an anchored
+        id once said; for an optional id only within TURN_REPEAT_S of the seat saying it."""
+        return self._turn_said().said(int(seat), pid, optional)
 
     def free_to_speak(self, seats: list[int]) -> list[int]:
         """The seats among `seats` outside their own guard (game 47: Bill was asked to
@@ -325,19 +392,19 @@ class SchedulerMixin:
             if self.rng.random() >= PROPOSAL_P:
                 continue
             reply = self.rng.choice(PROPOSAL_REPLIES)
-            if (seat, reply) in self._said_this_turn:
+            if self.said_this_turn(seat, reply, optional=True):             # a yea or nay is banter: back after TURN_REPEAT_S (BL-53)
                 reply = PROPOSAL_REPLIES[1 - PROPOSAL_REPLIES.index(reply)]
-            self._said_this_turn.add((seat, reply))
+            self._turn_said().add((seat, reply))
             link = {"origin": speaker, "hop": 1, "turn": turn, "parent": item.get("stock")}
             self.enqueue("bark", stock=reply, library=self.lib_for(seat, reply), seat=seat, ttl=15.0, gap=0.3,
                          ctx={"targets": [speaker], "aggressor": speaker, "terminal": True}, chain=link, evict=False)
             self.record("queued", kind="bark", stock=reply, seat=seat, source="chain", hop=1, parent=item.get("stock"))
         subject = next((t for t in targets if t in voiced and t != speaker), None)
         if subject is not None and self.rng.random() < PROPOSAL_TARGET_P:
-            options = [r for r in PROPOSAL_TARGET_REPLIES if (subject, r) not in self._said_this_turn]
+            options = [r for r in PROPOSAL_TARGET_REPLIES if not self.said_this_turn(subject, r, optional=True)]
             if options:
                 reply = self.rng.choice(options)
-                self._said_this_turn.add((subject, reply))
+                self._turn_said().add((subject, reply))
                 link = {"origin": speaker, "hop": 1, "turn": turn, "parent": item.get("stock")}
                 self.enqueue("bark", stock=reply, library=self.lib_for(subject, reply), seat=subject, ttl=15.0, gap=0.3,
                              ctx={"targets": [speaker], "aggressor": speaker, "terminal": True}, chain=link, evict=False)
@@ -382,8 +449,8 @@ class SchedulerMixin:
         p_follow = LIFE_FOLLOWUP.get(item.get("stock", ""), 0.0) * self.table_mult
         if p_follow and not (chain and chain.get("followup")):
             pid = life_pid(self._seat_field(speaker, "life"))
-            if pid and pid in self.table_ids and (speaker, pid) not in self._said_this_turn and self.rng.random() < min(1.0, p_follow * self.governor(optional=False)):
-                self._said_this_turn.add((speaker, pid))
+            if pid and pid in self.table_ids and not self.said_this_turn(speaker, pid, optional=True) and self.rng.random() < min(1.0, p_follow * self.governor(optional=False)):
+                self._turn_said().add((speaker, pid))
                 link = {"origin": speaker, "hop": 0, "turn": turn, "parent": item.get("stock"), "followup": True}
                 self.enqueue("bark", stock=pid, library=self.lib_for(speaker, pid), seat=speaker, ttl=15.0, gap=0.3, ctx=dict(item.get("ctx") or {}), chain=link)
                 self.record("queued", kind="bark", stock=pid, seat=speaker, source="chain", hop=0, parent=item.get("stock"))
@@ -405,11 +472,11 @@ class SchedulerMixin:
                 who = tg[0]
                 pid = life_pid(self._seat_field(who, "life")) if kind == "life" else hand_pid(self._seat_field(who, "handSize"))
                 hop = int((chain or {}).get("hop", 0)) + 1
-                if pid and pid in self.table_ids and (who, pid) not in self._said_this_turn and hop <= self.chains.max_hops:
+                if pid and pid in self.table_ids and not self.said_this_turn(who, pid, optional=True) and hop <= self.chains.max_hops:
                     # a question gets its number with certainty (game 48: 8 of 17 questions hung); a jab is rolled
                     p = 1.0 if (question and hop == 1) else min(1.0, self.chains.hop_p(hop) * self.governor(optional=True))
                     if self.rng.random() < p:
-                        self._said_this_turn.add((who, pid))
+                        self._turn_said().add((who, pid))
                         link = {"origin": int((chain or {}).get("origin", speaker)), "hop": hop, "turn": turn, "parent": item.get("stock")}
                         self.enqueue("bark", stock=pid, library=self.lib_for(who, pid), seat=who, ttl=15.0, gap=self.chains.gap_s,
                                      ctx={"targets": [speaker], "aggressor": speaker}, chain=link)
@@ -420,7 +487,8 @@ class SchedulerMixin:
         recent = {k for k, t in self._seat_said_at.items() if now - t < RECENT_S}
         generic = (item.get("ctx") or {}).get("generic")
         planned = dict(item, stock=generic) if generic else item          # a named wording invites what its generic line invites
-        plan = plan_reply(self.chains, planned, chain, voiced, self.human_seat, self.leader_of, self._said_this_turn, self.rng, turn, recent)
+        # the planner's set-like argument is the optional view: a chain reply comes back after TURN_REPEAT_S (BL-53); chains.py is unchanged
+        plan = plan_reply(self.chains, planned, chain, voiced, self.human_seat, self.leader_of, self._turn_said().optional, self.rng, turn, recent)
         if plan is None:
             self._chain = None
             return
@@ -433,14 +501,14 @@ class SchedulerMixin:
             return
         link = {"origin": plan["origin"], "hop": plan["hop"], "turn": turn, "parent": item.get("stock")}
         seat = int(plan["seat"])                         # always a seat: Joshua never answers a seat's line (A14, Ben 2026-09-14)
-        self._said_this_turn.add((seat, plan["id"]))
+        self._turn_said().add((seat, plan["id"]))
         reply = plan["id"]
         rctx = {"targets": [int(item["seat"])], "aggressor": int(item["seat"])}
         parent_ctx = item.get("ctx") or {}
         if parent_ctx.get("card") and plan["hop"] == 1:
             named = self.card_swap(seat, reply, parent_ctx)                # "Rhystic? I'm not paying all game."
             if named:
-                self._said_this_turn.add((seat, named))
+                self._turn_said().add((seat, named))
                 rctx["generic"] = reply
                 reply = named
         self.enqueue("bark", stock=reply, library=self.lib_for(seat, reply), seat=seat, ttl=15.0, gap=self.chains.gap_s, ctx=rctx, chain=link)
@@ -469,9 +537,10 @@ class SchedulerMixin:
             return False
         self._roll_turn(turn)
         # a card's own line is a distinct event (two combos in one turn are two announcements);
-        # everything else repeats by its generic id
+        # everything else repeats by its generic id. An anchored id is said once a turn; an optional one
+        # (patter, the advisor's afterthoughts) comes back after TURN_REPEAT_S in a long turn (BL-53)
         named = self.card_swap(int(seat), pid, ctx)
-        if (int(seat), named or pid) in self._said_this_turn:
+        if self.said_this_turn(seat, named or pid, optional=classify_source(source) != "anchored"):
             self.record("skipped", kind="bark", why="already said this turn", stock=named or pid, seat=seat, source=source)
             return False
         if pid in RARE_REPEATS and self.clock() - self._seat_said_at.get((int(seat), pid), -1e9) < RECENT_S:
@@ -495,10 +564,10 @@ class SchedulerMixin:
         if self.rng.random() >= chance:
             self.record("skipped", kind="bark", why=f"dice ({source}, p={chance:.2f}, governor {g:.2f})", stock=pid, seat=seat, source=source)
             return False
-        self._said_this_turn.add((int(seat), pid))
+        self._turn_said().add((int(seat), pid))
         named = named or self.address_swap(int(seat), pid, ctx)
         if named:
-            self._said_this_turn.add((int(seat), named))
+            self._turn_said().add((int(seat), named))
             ctx = dict(ctx or {}); ctx["generic"] = pid                    # the chain plans from the generic line
             pid = named
         self.enqueue("bark", stock=pid, library=self.lib_for(int(seat), pid), seat=int(seat), ttl=20.0, ctx=ctx,
@@ -561,12 +630,12 @@ class SchedulerMixin:
                 self._deals.pop(pair, None)
 
     def _roll_turn(self, turn) -> None:
-        """The no-repeat set is per game turn."""
+        """The no-repeat memory is per game turn: a new turn clears it whole, whatever the clock (BL-53)."""
         if turn is not None and turn != self._said_turn and (self._said_turn is None or turn >= self._said_turn):
             # a turn only rolls FORWARD: a late record from a past turn (an unmute backlog, a null turn) must not
             # wipe the no-repeat set and the loop counters of the turn in progress (critic, 2026-09-16)
             self._said_turn = turn
-            self._said_this_turn = set()
+            self._said_this_turn = TurnSaid(self.clock)
             self._chain = None                           # a new turn ends any exchange
             self._card_events_turn = {}                  # the loop counters are per turn too
         self._forget_stale_deals(turn)
@@ -642,11 +711,13 @@ class SchedulerMixin:
         if active is not None and int(active) in living:
             add("pass-already", int(active), 0.5)
         now = self.clock()
-        # a line the seat already said this turn is no candidate (game 46: 765 wasted gaps on one jab at turn 0);
-        # a line ANY seat said in the last five minutes is no candidate either (game 48: "cards in hand" x4)
+        said = self._turn_said()
+        # a line the seat already said this turn is no candidate (game 46: 765 wasted gaps on one jab at turn 0) — for
+        # TURN_REPEAT_S, patter being optional (BL-53: a nine-minute turn emptied the pool); a line ANY seat said in
+        # the last five minutes is no candidate either (game 48: "cards in hand" x4) — PATTER_REPEAT_S is untouched
         return [(sp, pid, tgt, w)
                 for sp, pid, tgt, w in out
-                if (int(sp), pid) not in self._said_this_turn and now - self._said_at.get(pid, -1e9) >= PATTER_REPEAT_S]
+                if not said.said(int(sp), pid, True, now) and now - self._said_at.get(pid, -1e9) >= PATTER_REPEAT_S]
 
     def patter(self) -> None:
         if not self.patter_on or self.barks_mode == "off" or self.queue or self.final_locked:

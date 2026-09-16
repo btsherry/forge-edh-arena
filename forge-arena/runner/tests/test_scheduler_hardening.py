@@ -483,5 +483,182 @@ class JoshuaNeverAnswersASeat(_TableCase):
         self.assertEqual([(q["kind"], q["stock"]) for q in r.queue], [("quip", "ouch")])
 
 
+def _sixty_second_turn(case) -> list:
+    """One 60 s turn, the same calls whatever the scheduler: a seat's filler twice, a seat's own "land, go"
+    twice, three "kill that" proposals at the other seat, the advisor's afterthought twice, the filler once
+    more at 59 s, then the pool's size — every result, the queue and the skip/drop records in one trace.
+    LongTurnRelief.test_a_short_turn_is_exactly_as_before runs it and compares with HEAD_TRACE_60S."""
+    r, clock = case.r, case.clock
+    case._snap(3, 1); r.queue.clear(); r._roll_turn(3)
+    r.rng.random = lambda: 0.0; r.rng.shuffle = lambda x: None; r.rng.choice = lambda xs: xs[0]
+    r.duty = lambda window=vr.DUTY_WINDOW_S: 0.0
+    t0 = clock.t
+    kill = {"kind": "bark", "stock": "kill-that", "text": "", "seat": 1, "library": r.lib_for(1, "kill-that"), "ctx": {"targets": [2]}, "chain": None}
+    steps = [
+        (0, lambda: r.maybe_bark(1, "nothing-happening", turn=3, source="patter")),
+        (0, lambda: r.maybe_bark(1, "nothing-happening", turn=3, source="patter")),
+        (5, lambda: r.maybe_bark(2, "land-go", turn=3, source="procedural")),
+        (5, lambda: r.maybe_bark(2, "land-go", turn=3, source="procedural")),
+        (15, lambda: r.after_spoken(dict(kill))),
+        (30, lambda: r.after_spoken(dict(kill))),
+        (30, lambda: r.after_spoken(dict(kill))),
+        (45, lambda: r.maybe_bark(2, "slow-turn", turn=3, source="recap", ctx={"targets": [1]})),
+        (45, lambda: r.maybe_bark(2, "slow-turn", turn=3, source="recap", ctx={"targets": [1]})),
+        (59, lambda: r.maybe_bark(1, "nothing-happening", turn=3, source="patter")),
+        (60, lambda: len(r.patter_candidates(r._last_snapshot, [1, 2]))),
+    ]
+    trace = []
+    for dt, step in steps:
+        clock.t = t0 + dt
+        trace.append(step())
+    trace.append([(q["stock"], q["seat"]) for q in r.queue if q["kind"] == "bark"])
+    trace.append([(x.get("stock"), x.get("seat"), (x.get("why") or "").split(" (")[0])
+                  for x in case._records() if x.get("event") in ("skipped", "dropped", "queued") and x.get("kind") == "bark"])
+    return trace
+
+
+# What HEAD (844e5ba24f8, the per-turn SET) produced for _sixty_second_turn — captured by running the same
+# function with HEAD's SchedulerMixin mixed in ahead of VoiceRunner (git show HEAD:… into a scratch module).
+HEAD_TRACE_60S = [
+    True, False,                                                           # the filler, then "already said this turn"
+    True, False,                                                           # "land, go", then the same
+    None, None, None,                                                      # three proposals: three different retorts from the subject
+    True, False,                                                           # the afterthought, then the same
+    False,                                                                 # 59 s: the filler is still spent
+    10,                                                                    # the pool at 60 s
+    [("land-go", 2), ("im-not-the-threat", 2), ("clapback", 2), ("you-wish", 2), ("slow-turn", 2)],
+    [("nothing-happening", 1, ""), ("nothing-happening", 1, "already said this turn"), ("nothing-happening", 1, "evicted by land-go"),
+     ("land-go", 2, ""), ("land-go", 2, "already said this turn"),
+     ("im-not-the-threat", 2, ""), ("clapback", 2, ""), ("you-wish", 2, ""),
+     ("slow-turn", 2, ""), ("slow-turn", 2, "already said this turn"),
+     ("nothing-happening", 1, "already said this turn")],
+]
+
+
+class LongTurnRelief(_TableCase):
+    """BL-53 (game 49: Purphoros's turn 10 ran nine minutes — by minute four the floor found `pool 0` and the
+    third proposal drew no reply because every retort was in the per-turn set): within one turn an OPTIONAL
+    id (patter, a chain reply, the advisor's afterthoughts) comes back for the same seat TURN_REPEAT_S after
+    it said it; an ANCHORED id (event, procedural, opener, brain, card) is said once a turn whatever the clock.
+    A short turn — Ben: "the patter is sounding good" — behaves exactly as before."""
+
+    def setUp(self):
+        super().setUp()
+        self._snap(3, 1); self.r.queue.clear(); self.r._roll_turn(3)
+        self.r.duty = lambda window=vr.DUTY_WINDOW_S: 0.0                 # the budget is not what these tests are about
+
+    def _why(self):
+        return self._records("skipped", "bark")[-1]["why"]
+
+    def test_an_optional_id_is_refused_at_a_minute_and_back_after_three(self):
+        r = self.r
+        self.assertTrue(r.maybe_bark(1, "nothing-happening", turn=3, source="patter")); r.queue.clear()
+        self.clock.t += 60
+        self.assertFalse(r.maybe_bark(1, "nothing-happening", turn=3, source="patter")); self.assertEqual(self._why(), "already said this turn")
+        self.assertTrue(r.said_this_turn(1, "nothing-happening", optional=True))
+        self.clock.t += 119                                                # 179 s
+        self.assertFalse(r.maybe_bark(1, "nothing-happening", turn=3, source="patter"), "one second short")
+        self.clock.t += 2                                                  # 181 s
+        self.assertFalse(r.said_this_turn(1, "nothing-happening", optional=True))
+        self.assertIn((1, "nothing-happening"), r._said_this_turn, "strict membership still says so (the checkpoint lists it)")
+        self.assertNotIn((1, "nothing-happening"), r._turn_said().optional, "the planner's view applies the rule")
+        self.assertTrue(r.maybe_bark(1, "nothing-happening", turn=3, source="patter"), "the same seat, the same turn, three minutes on")
+        self.assertEqual(r._said_this_turn[(1, "nothing-happening")], self.clock.t, "re-stamped: the next three minutes start now")
+        r.queue.clear()
+        self.assertTrue(r.maybe_bark(2, "slow-turn", turn=3, source="recap", ctx={"targets": [1]})); r.queue.clear()
+        self.clock.t += 179
+        self.assertFalse(r.maybe_bark(2, "slow-turn", turn=3, source="recap", ctx={"targets": [1]}), "the advisor's afterthought is optional too")
+        self.clock.t += 2
+        self.assertTrue(r.maybe_bark(2, "slow-turn", turn=3, source="recap", ctx={"targets": [1]}))
+
+    def test_an_anchored_id_stays_refused_for_the_whole_turn(self):
+        r = self.r
+        self.assertTrue(r.maybe_bark(2, "land-go", turn=3, source="procedural")); r.queue.clear()
+        self.assertTrue(r.maybe_bark(1, "big-swing", turn=3, source="event", ctx={"targets": [2]})); r.queue.clear()
+        for dt in (60, 121, 600, 1800):                                    # 1 min, 3 min 1 s, 13 min, 43 min
+            self.clock.t += dt
+            self.assertFalse(r.maybe_bark(2, "land-go", turn=3, source="procedural"), f"{dt}: a seat narrates 'land, go' once a turn")
+            self.assertEqual(self._why(), "already said this turn", "the per-turn rule, not RARE_REPEATS (nothing was spoken)")
+            self.assertFalse(r.maybe_bark(1, "big-swing", turn=3, source="event", ctx={"targets": [2]}))
+            self.assertEqual(self._why(), "already said this turn")
+            self.assertTrue(r.said_this_turn(2, "land-go", optional=False))
+        self.assertEqual(r.queue, [])
+
+    def test_the_floors_pool_refills_in_a_long_turn(self):
+        r = FloorPool._quiet_table(self)
+        living = [1, 2]
+        cands = r.patter_candidates(r._last_snapshot, living)
+        self.assertGreater(len(cands), 0)
+        for sp, pid, _, _ in cands:
+            r._turn_said().add((sp, pid))                                  # minute four of a loop turn: every seat has said everything it could
+        t0 = self.clock.t
+        r.floor_atom = lambda living: True
+        self.clock.t += 12; r.patter()
+        rec = [x for x in self._records("skipped", "bark") if "silence floor" in (x.get("why") or "")][-1]
+        self.assertEqual((rec["pool"], rec["picked"]), (0, "atom"), "game 49: the floor found the pool empty and spent an atom")
+        self.clock.t = t0 + 60
+        self.assertEqual(r.patter_candidates(r._last_snapshot, living), [], "a minute on: still empty")
+        self.clock.t = t0 + 181
+        pool = r.patter_candidates(r._last_snapshot, living)
+        self.assertGreater(len(pool), 0, "three minutes on: the pool is back")
+        del r.floor_atom
+        r.patter()
+        self.assertEqual(len([q for q in r.queue if q["kind"] == "bark"]), 1, "the floor speaks a line again")
+        rec = [x for x in self._records("skipped", "bark") if "silence floor" in (x.get("why") or "")][-1]
+        self.assertGreater(rec["pool"], 0); self.assertEqual(rec["picked"], "anchored")
+        # Ben's table-wide window is untouched: a line that was SPOKEN by anyone is no candidate for 300 s whatever the turn rule says
+        r.queue.clear(); t1 = self.clock.t
+        for _, pid, _, _ in pool:
+            r._said_at[pid] = t1
+        self.clock.t = t1 + 181
+        self.assertEqual(r.patter_candidates(r._last_snapshot, living), [], "PATTER_REPEAT_S still holds at 181 s")
+        self.clock.t = t1 + 301
+        self.assertGreater(len(r.patter_candidates(r._last_snapshot, living)), 0)
+        self.assertEqual(sch.PATTER_REPEAT_S, 300.0)
+
+    def test_a_proposal_at_minute_four_draws_a_reply_again(self):
+        """Game 49, 11:16:01: seat 2 was eliminated, so 'someone wins' from seat 1 at seat 3 could only draw the
+        subject's retort — all four were in the per-turn set, and the responder left without a word or a record."""
+        r = self.r
+        r.rng.choice = lambda xs: xs[0]
+
+        def propose():
+            r.after_spoken({"kind": "bark", "stock": "someone-wins", "text": "", "seat": 1, "library": r.lib_for(1, "someone-wins"),
+                            "ctx": {"targets": [2]}, "chain": None})
+            out = [(q["stock"], q["seat"]) for q in r.queue if q["kind"] == "bark"]
+            r.queue.clear()
+            return out
+        self.assertEqual([propose() for _ in range(5)],
+                         [[("im-not-the-threat", 2)], [("clapback", 2)], [("you-wish", 2)], [("laugh", 2)], []], "four retorts, then the well is dry")
+        self.clock.t += 60
+        self.assertEqual(propose(), [], "a minute on: dry, as before")
+        self.clock.t += 121
+        self.assertEqual(propose(), [("im-not-the-threat", 2)], "three minutes on: the subject answers again")
+        self.assertEqual(len([x for x in self._records("queued", "bark") if x.get("source") == "chain"]), 5)
+
+    def test_a_new_turn_still_clears_everything_at_once(self):
+        r = self.r
+        self.assertTrue(r.maybe_bark(1, "nothing-happening", turn=3, source="patter"))
+        self.assertTrue(r.maybe_bark(2, "land-go", turn=3, source="procedural")); r.queue.clear()
+        self.clock.t += 5
+        r._roll_turn(4)
+        self.assertIsInstance(r._said_this_turn, sch.TurnSaid); self.assertEqual(r._said_this_turn, {})
+        self.assertTrue(r.maybe_bark(1, "nothing-happening", turn=4, source="patter"), "five seconds on, a new turn: said again")
+        self.assertTrue(r.maybe_bark(2, "land-go", turn=4, source="procedural"), "the anchored id too")
+        self.assertEqual(sorted([int(s), str(p)] for s, p in r._said_this_turn), [[1, "nothing-happening"], [2, "land-go"]], "the checkpoint's shape still reads it")
+        # a restored checkpoint (or a test) hands the runner a plain set: adopted, every entry stamped now — the conservative reading
+        r._said_this_turn = {(1, "nothing-happening"), (2, "land-go")}
+        self.assertTrue(r.said_this_turn(1, "nothing-happening", optional=True)); self.assertTrue(r.said_this_turn(2, "land-go", optional=False))
+        self.assertIsInstance(r._said_this_turn, sch.TurnSaid)
+        self.clock.t += 181
+        self.assertFalse(r.said_this_turn(1, "nothing-happening", optional=True)); self.assertTrue(r.said_this_turn(2, "land-go", optional=False))
+        self.assertEqual(sch.TURN_REPEAT_S, 180.0)
+        self.assertEqual((sch.RECENT_S, sch.PATTER_REPEAT_S, sch.SILENCE_FLOOR_S), (240.0, 300.0, {"ai": 12.0, "human": 24.0}), "Ben's numbers stay")
+        self.assertEqual(sch.RARE_REPEATS, {"come-on-land", "thinking", "holding-mana", "tapped-out", "mana-up", "land-go", "early-game", "long-game", "loop", "looping"})
+
+    def test_a_short_turn_is_exactly_as_before(self):
+        self.assertEqual(_sixty_second_turn(self), HEAD_TRACE_60S, "a 60 s turn: the same results, queue and records as HEAD's set")
+
+
 if __name__ == "__main__":
     unittest.main()
