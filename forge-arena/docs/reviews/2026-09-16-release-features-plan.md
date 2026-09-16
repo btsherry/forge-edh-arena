@@ -3,8 +3,10 @@
 **Date:** 2026-09-16. **Status:** PLAN, awaiting Ben's final go. **Source:** `2026-09-16-feature-stack-rank.md`
 (Ben: yes to 1, 2, 3, 4, 6, 7 and the three small tunes 10–12; item 5 as a data task with four transcript
 sources). **Branch:** `experimental/voicework2`, tree clean at `4f0dca99332`. **Method (Ben, 2026-09-16 —
-[[token-discipline]]):** all code by hand in the main session, no subagents, no critic; one suite run per
-item gated on the exit status; one commit per item; nothing in Java, so no Maven gate.
+[[token-discipline]]):** all code by hand in the main session, no subagents, no critic; Ben (2026-09-16): the
+gates and the commit wait until the END of the batch — one suite run gated on the exit status, one commit
+for steps 1–8 and 10 — all on `experimental/voicework2`; nothing in Java, so no Maven gate. Step 9 (the
+corpus) is a separate sitting with its own commit.
 
 ## Order and estimates
 
