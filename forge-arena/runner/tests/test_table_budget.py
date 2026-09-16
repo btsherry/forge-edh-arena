@@ -46,17 +46,19 @@ class TalkBudget(_TreeCase):
         r = self.r; t = self.clock.t                                   # normal: goal 0.18
         self.assertEqual((r.governor(False), r.governor(True)), (1.0, 1.0), "silence at normal: the knobs as written")
         r._spoken_log = [(t - 30, 5.4)]                                # half the budget spent
-        self.assertAlmostEqual(r.governor(False), 1.0); self.assertAlmostEqual(r.governor(True), 0.15 + 0.85 * 0.5)
-        r._spoken_log = [(t - 30, 11.0)]                               # at the goal
-        self.assertEqual(r.governor(True), 0.15, "patter and banter go nearly silent")
+        self.assertAlmostEqual(r.governor(False), 1.0); self.assertAlmostEqual(r.governor(True), 1.0, msg="below the goal nothing is throttled (a mean, not a ceiling — Ben, 2026-09-14)")
+        r._spoken_log = [(t - 30, 10.8)]                               # at the goal
+        self.assertAlmostEqual(r.governor(True), 1.0, msg="at the goal an optional line still has its whole chance")
         self.assertTrue(0.5 <= r.governor(False) <= 1.0, "an anchored line keeps at least half")
-        r._spoken_log = [(t - 40, 30.0)]                               # far over it
-        self.assertEqual(r.governor(False), 0.5); self.assertEqual(r.governor(True), 0.15)
+        r._spoken_log = [(t - 30, 13.5)]                               # a quarter over it: half way down the taper
+        self.assertAlmostEqual(r.governor(True), 0.575); self.assertAlmostEqual(r.governor(False), 0.8)
+        r._spoken_log = [(t - 40, 30.0)]                               # far over it (past 1.5 × the goal)
+        self.assertEqual(r.governor(False), 0.5); self.assertEqual(r.governor(True), 0.15, "patter and banter go nearly silent")
         os.environ["ARENA_CHATTER"] = "rowdy"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
         self.assertEqual((r.governor(False), r.governor(True)), (2.0, 2.0), "silence at rowdy: the dial's full boost")
         r._spoken_log = [(t - 30, 60 * 0.18)]                          # half of rowdy's 0.36 spent
-        self.assertAlmostEqual(r.governor(False), 1.5); self.assertAlmostEqual(r.governor(True), 1.5 * (0.15 + 0.85 * 0.5))
+        self.assertAlmostEqual(r.governor(False), 1.5); self.assertAlmostEqual(r.governor(True), 1.5, msg="rowdy is rowdy: the dial's boost, undamped")
         r.duty_target = 0.0
         self.assertEqual(r.governor(True), 1.0, "no goal: no governor")
 

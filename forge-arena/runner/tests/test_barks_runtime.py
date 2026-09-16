@@ -697,18 +697,21 @@ class InteractionChains(_TreeCase):
         self.r._roll_turn(5)
         self.assertIsNone(self.r._chain, "a new turn ends any exchange")
 
-    def test_joshua_comments_from_outside_and_is_never_answered(self):
+    def test_a_line_aimed_at_the_human_gets_no_joshua_reply_and_the_seats_still_ignore_him(self):
+        """A14 (Ben, 2026-09-14): Joshua is a ghost outside the game — he never answers a seat's line
+        aimed at the player, and the player cannot talk back yet, so the target role yields nothing and
+        the planner moves on to the next option (a bystander). The seats never answer Joshua either."""
         self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
         self.r.rng.random = lambda: 0.01; self.r.rng.shuffle = lambda x: None
         self._spoken(1, "landed-hit", ctx={"targets": [0], "aggressor": None})   # the seat hit the HUMAN
-        self.assertEqual([(q["kind"], q["stock"], q["gap"]) for q in self.r.queue], [("quip", "ouch", 0.25)], "Joshua's stock quip, at the chain's pace")
-        self.assertIsNone(self.r._chain, "nobody answers Joshua")
+        self.assertEqual([q for q in self.r.queue if q["kind"] == "quip"], [], "no 'ouch' from Joshua")
+        self.assertEqual(self._queued(), [("bark", "pile-on", "bill", 2)], "the target's scoff is skipped (the human); the bystander's option is next")
         self.r.queue.clear()
         self.r.after_spoken({"kind": "quip", "stock": "ouch", "text": "", "seat": None, "library": "", "ctx": {}, "chain": None})
         self.assertEqual(self.r.queue, [], "the seats ignore Joshua")
-        self.r.rng.random = lambda: 0.01
         self._spoken(1, "counter", ctx={"targets": [0]})
-        self.assertEqual([(q["kind"], q["stock"]) for q in self.r.queue], [("quip", "rough-counter")])
+        self.assertEqual(self._queued(), [("bark", "laugh", "bill", 2)], "no 'rough-counter' from Joshua either")
+        self.assertFalse(hasattr(self.r.chains, "joshua"), "the Joshua reply map is gone from the chain table")
 
     def test_human_caused_openers_run_at_half_strength_and_nobody_repeats_or_answers_themselves(self):
         self._observer(3, 1); self.r.scan_observer(); self.r.queue.clear()
@@ -858,7 +861,7 @@ class PatterClock(_TreeCase):
     def test_quiet_on_the_humans_turn_and_never_over_the_advisor(self):
         self._board(active=0)
         self._tick(6)
-        self.assertEqual(self.r.queue, [], "the human's turn: the gap is three times longer")
+        self.assertEqual(self.r.queue, [], "the human's turn: the gap is three times longer (÷ PATTER_HUMAN 0.33, the game-48 rate; the budget's 0.6 is the budget's alone)")
         self._tick(10)
         self.assertEqual(len(self.r.queue), 1)
         self.r.queue.clear(); self._board(active=1, turn=6)          # a new turn: the no-repeat set is fresh

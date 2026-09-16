@@ -68,10 +68,7 @@ class SharedVocabulary(unittest.TestCase):
             if prefix != "note":
                 self.assertIn(generic, table["invites"], f"family {prefix!r} points at an opener without invites")
                 self.assertTrue(any(k.startswith(prefix) for k in ids), f"family {prefix!r} matches no table line")
-        joshua = json.loads((RUNNER / "voice" / "stock" / "manifest.json").read_text())["phrases"]
-        for k, v in table["joshua_replies"].items():
-            if k != "note":
-                self.assertIn(v, joshua, f"Joshua's reply {v!r} is not a stock quip")
+        self.assertNotIn("joshua_replies", table, "A14 (Ben, 2026-09-14): Joshua never answers a seat — the reply map is gone")
         self.assertTrue(0 < table["first_hop_p"] <= 1 and 0 < table["decay"] <= 1 and table["max_hops"] >= 1)
 
     def test_seats_voices_and_render_settings(self):

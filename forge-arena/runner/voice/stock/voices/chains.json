@@ -872,13 +872,6 @@
    }
   ]
  },
- "joshua_replies": {
-  "note": "Joshua is the human's advisor, not a player: he may needle a seat over what it did to the HUMAN (the opener's target is seat 0), with a stock quip; the seats never answer him.",
-  "counter": "rough-counter",
-  "landed-hit": "ouch",
-  "big-swing": "calm-before-engagement",
-  "kill": "harsh-player"
- },
  "families": {
   "note": "a named address line (hit-urza, threat-mono-red, ...) invites what its generic line invites",
   "hit-": "kill-that",

@@ -18,11 +18,44 @@ PRIORITY = {"game_over": 0, "human_out": 0, "startup": 1, "ask": 2, "advice": 3,
 # retort landed on Joshua. Hops rank just below advice; if advice or a question
 # does interrupt, the pending hop is dropped rather than played orphaned.
 CHAIN_HOP_PRIORITY = 3.5
+# ONE classification (plan C2, 2026-09-14): a bark is a CHAIN link (a reply inside an
+# exchange), ANCHORED to something that happened at the table (a board event, a named
+# card, a seat's own procedure, its turn opener, the seat brain's own `say` intent — §4.4:
+# "spoken as an anchored line (source brain)") or OPTIONAL (the advisor's afterthoughts,
+# the patter clock). Eviction (enqueue), the governor (maybe_bark, after_spoken), the seat
+# guard and scripts/arena-hygiene.py's anchored share all read classify()/classify_source();
+# before this each kept its own tuple and Ben's steering figure measured something else.
+ANCHORED_SOURCES = ("event", "card", "procedural", "opener", "brain")
+OPTIONAL_SOURCES = ("recap", "advice", "patter", "chain")     # the complement — kept as a name for the re-export; the rule is classify_source
 # The bark ladder (round 31, 2026-09-10): a reaction to something that just happened
 # on the board plays ahead of Joshua's colour and the "your move" cue; the advisor's
 # tagged afterthoughts and the patter clock come last. Chain hops keep 3.5 (game 44).
-BARK_PRIORITY = {"chain": CHAIN_HOP_PRIORITY, "event": 5.5, "card": 5.5, "procedural": 5.5, "opener": 5.8,
-                 "recap": 8.0, "advice": 8.0, "patter": 8.5}
+# Two optional tiers stay: the optional eviction rule keeps lower-prio peers, so a
+# pending recap outlives fresh filler (8.0 < 8.5). The opener's old 5.8 folded into the
+# anchored tier (C2): an anchored bark evicts every non-follow-on whatever its prio, and
+# no follow-on is ever an opener, so the order between the two never mattered.
+ANCHORED_PRIO, RECAP_PRIO, PATTER_PRIO = 5.5, 8.0, 8.5
+BARK_PRIORITY = {"chain": CHAIN_HOP_PRIORITY, **{s: ANCHORED_PRIO for s in ANCHORED_SOURCES},
+                 "recap": RECAP_PRIO, "advice": RECAP_PRIO, "patter": PATTER_PRIO}
+
+
+def classify_source(source) -> str:
+    """"chain" | "anchored" | "optional" from a bark's source (what a `spoke` record carries)."""
+    if source == "chain":
+        return "chain"
+    return "anchored" if source in ANCHORED_SOURCES else "optional"
+
+
+def classify(item: dict) -> str:
+    """The same three classes from a queue item: a chain link is "chain"; else by its
+    priority (below the recap tier = anchored), falling back to its source or kind when
+    the item carries no prio (test doubles, a bare event item)."""
+    if item.get("chain"):
+        return "chain"
+    prio = item.get("prio")
+    if prio is None:
+        return classify_source(item.get("source") or item.get("kind"))
+    return "anchored" if prio < BARK_PRIORITY["recap"] else "optional"
 # The duty-cycle governor (round 31): five Game Knights tapes run ~190 words/min; game 45
 # at rowdy measured 7.8 lines/min, a 31 % speaking duty — the right density with the wrong
 # mix (53 % banter, 38 % filler, 4 % about the game). The dial now sets a talk BUDGET —
@@ -43,16 +76,18 @@ PROPOSAL_PREFIXES = ("hit-", "threat-")
 PROPOSAL_P, PROPOSAL_TARGET_P = 0.85, 0.5
 PROPOSAL_REPLIES = ("agree", "disagree")
 PROPOSAL_TARGET_REPLIES = ("im-not-the-threat", "clapback", "you-wish", "laugh")
-OPTIONAL_FLOOR = 0.15     # patter and banter at the goal: nearly silent; an anchored line never drops below half
-OPTIONAL_SOURCES = ("patter", "chain")
+OPTIONAL_FLOOR = 0.15     # an optional line past the taper: nearly silent; an anchored line keeps goal/duty (half at twice the goal), scaled by a quiet dial
+GOVERNOR_TAPER_AT = 1.5   # an optional line tapers from 1.0 at the goal to OPTIONAL_FLOOR at this multiple of it (a mean, not a ceiling)
 # game 46 (turns 8-13): "come on, land" four times in seven minutes — these lines are said by a seat at most once in RECENT_S
 RARE_REPEATS = {"come-on-land", "thinking", "holding-mana", "tapped-out", "mana-up", "land-go", "early-game", "long-game", "loop", "looping"}
 # A line a seat says because it just ACTED skips the per-seat guard (game 48: Harry heckled Giada's mulligan
 # and one second later his own "seven, keeping" was silenced by his guard). Reactions, patter and banter keep it.
 OWN_ACTION_LINES = {"keep-seven", "mull-to-six", "mull-to-five", "mull-to-four", "my-turn", "untap-draw", "early-game", "come-on-land",
                     "land-go", "pass", "mana-up", "tapped-out", "cast-creature", "cast-artifact", "cast-enchantment", "cast-instant",
-                    "cast-sorcery", "cast-planeswalker", "cast-big", "in-response", "poke", "attack-you", "big-swing", "game-changer",
+                    "cast-sorcery", "cast-planeswalker", "cast-big", "in-response", "poke", "attack-you", "big-swing", "landed-hit", "game-changer",
                     "commander-cast", "engine-online", "looping", "counter", "removal", "sweep", "kill", "win", "eliminated"}
+# ("landed-hit" is the hitter's own line — events.py speaks it for the seat that hit the human — so its own
+#  "big-swing" two seconds earlier must not hold it as anchored-after-anchored; the guard's class rule (A5) is symmetric.)
 LIFE_FOLLOWUP = {"that-hurt": 0.6, "take-it": 0.5, "low-life": 0.5}          # the speaker announces its total right after
 STATE_ANSWERS = {"whats-your-life": "life", "low-life-jab": "life", "cards-in-hand": "hand", "empty-hand": "hand"}
 ADDRESS_SWAP = {"kill-that": ("hit", "target"), "archenemy": ("hit", "target"), "youre-the-threat": ("threat", "target"),
@@ -60,6 +95,18 @@ ADDRESS_SWAP = {"kill-that": ("hit", "target"), "archenemy": ("hit", "target"), 
 DEAL_TURNS = 8            # a truce is remembered for two rounds
 LONG_GAME_TURN = 14
 LETHAL_POWER = 15
+# The floor's pool (plan 4.2, 2026-09-14): the patter candidates ANCHORED to the board — the numbers
+# (a life or hand question, the low-life and empty-hand jabs), the threat calls, a slow seat, the big
+# board, the long game, "pass already" at the active seat, a deal — speak ahead of filler when the
+# silence floor fires; an empty or filler-only pool spends a non-verbal atom instead (4.5), when the
+# runner has them. An atom re-arms the floor at its full length and at most FLOOR_ATOM_MAX_RUN play in a
+# row: _said_at is table-wide per id and PATTER_REPEAT_S is 300 s, so ~7 lines exhaust the filler pool —
+# a sigh every 0.6 × floor until the board re-seeded a candidate was a tic, not presence (critic, 2026-09-14).
+# A content line (any spoken line) resets the run.
+ANCHORED_PATTER = {"play-faster", "thinking-hard", "youre-the-threat", "whats-your-life", "low-life-jab", "cards-in-hand",
+                   "empty-hand", "kill-that", "someone-wins", "board-envy", "long-game", "pass-already", "deal"}
+FLOOR_ATOM_MAX_RUN = 2
+EXEC_MEMO_S = 1.0         # human_turn() re-reads control/executive.json at most this often (A6; the governor asks several times a step)
 IDLE_S = 150.0            # the board unchanged this long (a human away from the keyboard): the patter clock slows to a third
 IDLE_SLOWDOWN = 3.0       # Ben (2026-09-11): "a little patter during the human turn, especially if I idle, is okay"
 # Mulligans (Ben, 2026-09-11): the seats' keep/mulligan answers land in game.jsonl with the brain's reason;
@@ -114,6 +161,19 @@ class SchedulerMixin:
         free = [s for s in seats if now - self._bark_spoken_at.get(int(s), -1e9) >= self.barks_cooldown]
         return free or list(seats)
 
+    def _seat_last_class(self) -> dict:
+        """seat -> the guard class of the seat's last spoken line (A5): "anchored" or "optional" —
+        a chain reply is banter, so optional. Kept here (after_spoken sees every spoken seat line)
+        because speak(), which stamps _bark_spoken_at, lives in the daemon."""
+        d = getattr(self, "_last_class", None)
+        if d is None:
+            d = self._last_class = {}
+        return d
+
+    @staticmethod
+    def _guard_class(cls: str) -> str:
+        return "optional" if cls == "chain" else cls
+
     # -- the talk budget
     def duty(self, window: float = DUTY_WINDOW_S) -> float:
         """Fraction of the last `window` seconds somebody was speaking."""
@@ -122,25 +182,53 @@ class SchedulerMixin:
         self._spoken_log = [(t, sec) for t, sec in self._spoken_log if t + sec > lo]
         return min(1.0, sum(min(sec, t + sec - lo) for t, sec in self._spoken_log) / window) if window > 0 else 0.0
 
+    def human_turn(self) -> bool:
+        """The ONE "quieter on your turn" predicate (A6): the active seat is the human's AND
+        the Executive is not playing it — game 48 ran 70 seat-0 decisions under the human
+        budget (goal 0.14) while Executive held the seat. The budget, the patter gap and
+        the silence floor all ask this; executive_on lives on VoiceRunner (control/executive.json)
+        and parses the file, so its answer is memoised for EXEC_MEMO_S, dropped when the
+        snapshot's turn or active seat changes — the governor asks several times a step."""
+        snap = self._last_snapshot
+        if snap.get("activeSeat") != self.human_seat:
+            return False
+        executive = getattr(self, "executive_on", None)
+        if not callable(executive):
+            return True
+        now = self.clock()
+        memo = getattr(self, "_exec_memo", None)
+        key = (snap.get("turn"), snap.get("activeSeat"))
+        if memo is None or memo[1] != key or not (0.0 <= now - memo[0] < EXEC_MEMO_S):
+            memo = self._exec_memo = (now, key, bool(executive()))
+        return not memo[2]
+
     def duty_goal(self) -> float:
-        human_turn = self._last_snapshot.get("activeSeat") == self.human_seat
-        return self.duty_target * (self.duty_human if human_turn else 1.0)
+        return self.duty_target * (self.duty_human if self.human_turn() else 1.0)
 
     def governor(self, optional: bool) -> float:
-        """Multiplier on a line's chance from the table's talk budget. Silence and a
-        lively dial boost (up to the dial, like the old pre-scaling); at the goal an
-        optional line (patter, a banter reply) falls to OPTIONAL_FLOOR while a line
-        anchored to a board event keeps at least half its chance."""
+        """Multiplier on a line's chance from the table's talk budget — the goal is a MEAN,
+        not a ceiling (Ben, 2026-09-14: "rowdy should be rowdy"; the Grower measured the old
+        0.15 + 0.85·head factor holding the table at ~60 % of the dial). Below the goal
+        every line gets the dial's full boost, 1 + head·(k − 1) at k > 1 (k itself at quiet).
+        At and above it an optional line (patter, a banter reply, the advisor's afterthoughts)
+        tapers linearly from 1.0 at the goal to OPTIONAL_FLOOR at GOVERNOR_TAPER_AT × the goal,
+        while a line anchored to the board keeps max(0.5, goal / duty); both × min(1, k), so
+        the quiet dial stays quiet past the goal too (at k = 0.5: 0.5 everywhere below and at
+        the goal, 0.2875 / 0.4 at 1.25 × it, 0.075 / 0.333 at 1.5 ×)."""
         goal = self.duty_goal()
         if goal <= 0:
             return 1.0
         d = self.duty()
-        if d >= goal:
-            return OPTIONAL_FLOOR if optional else max(0.5, goal / d)
-        head = (goal - d) / goal                                  # 1 in silence, 0 at the goal
         k = self.chatter
-        boost = 1.0 + head * (k - 1.0) if k > 1.0 else k
-        return boost * (OPTIONAL_FLOOR + (1.0 - OPTIONAL_FLOOR) * head) if optional else boost
+        if d >= goal:
+            # a quiet dial (k < 1) damps this side too, so the curve is continuous at the goal:
+            # without min(1, k) quiet went from k below the goal to 1.0 the instant the table crossed it
+            if not optional:
+                return max(0.5, goal / d) * min(1.0, k)
+            over = min(1.0, (d - goal) / ((GOVERNOR_TAPER_AT - 1.0) * goal))   # 0 at the goal, 1 at the taper's end
+            return (OPTIONAL_FLOOR + (1.0 - OPTIONAL_FLOOR) * (1.0 - over)) * min(1.0, k)
+        head = (goal - d) / goal                                  # 1 in silence, 0 at the goal
+        return 1.0 + head * (k - 1.0) if k > 1.0 else k
 
     # -- queue
     def enqueue(self, kind: str, *, text: str = "", stock: str = "", seq: int | None = None, ttl: float = 25.0,
@@ -182,9 +270,7 @@ class SchedulerMixin:
 
     @staticmethod
     def _bark_class(item: dict) -> str:
-        if item.get("chain"):
-            return "chain"
-        return "anchored" if item["prio"] < BARK_PRIORITY["recap"] else "optional"
+        return classify(item)                                              # the eviction class IS the shared classification (C2)
 
     def next_item(self) -> dict | None:
         now = self.clock()
@@ -236,7 +322,7 @@ class SchedulerMixin:
             self._said_this_turn.add((seat, reply))
             link = {"origin": speaker, "hop": 1, "turn": turn, "parent": item.get("stock")}
             self.enqueue("bark", stock=reply, library=self.lib_for(seat, reply), seat=seat, ttl=15.0, gap=0.3,
-                         ctx={"targets": [speaker], "aggressor": speaker}, chain=link, evict=False)
+                         ctx={"targets": [speaker], "aggressor": speaker, "terminal": True}, chain=link, evict=False)
             self.record("queued", kind="bark", stock=reply, seat=seat, source="chain", hop=1, parent=item.get("stock"))
         subject = next((t for t in targets if t in voiced and t != speaker), None)
         if subject is not None and self.rng.random() < PROPOSAL_TARGET_P:
@@ -246,7 +332,7 @@ class SchedulerMixin:
                 self._said_this_turn.add((subject, reply))
                 link = {"origin": speaker, "hop": 1, "turn": turn, "parent": item.get("stock")}
                 self.enqueue("bark", stock=reply, library=self.lib_for(subject, reply), seat=subject, ttl=15.0, gap=0.3,
-                             ctx={"targets": [speaker], "aggressor": speaker}, chain=link, evict=False)
+                             ctx={"targets": [speaker], "aggressor": speaker, "terminal": True}, chain=link, evict=False)
                 self.record("queued", kind="bark", stock=reply, seat=subject, source="chain", hop=1, parent=item.get("stock"))
         self._chain = None                                        # the table has had its say; no third round
         return True
@@ -265,6 +351,10 @@ class SchedulerMixin:
     def after_spoken(self, item: dict) -> None:
         """A seat's line may invite a reply (chains.py). One reply at most, rolled
         here so the outcome is recorded; a chain dies when the turn changes."""
+        if item.get("seat") is not None and item.get("library"):
+            self._seat_last_class()[int(item["seat"])] = self._guard_class(classify(item))   # for the seat guard (A5), every spoken seat line
+        if (item.get("ctx") or {}).get("terminal"):
+            return                                       # a proposal's yea, nay or retort (A3): the table has had its say, no hop follows
         if self.chains is None or self.barks_mode == "off" or self.final_locked:
             return
         if item.get("seat") is None or not item.get("library"):
@@ -327,19 +417,14 @@ class SchedulerMixin:
             self._chain = None
             return
         # a question to a seat is answered with certainty, outside the budget (game 48: 8 of 17 hung); the rest roll
-        p = 1.0 if (question and plan["hop"] == 1 and plan["seat"] != "joshua") else min(1.0, plan["p"] * self.governor(optional=True))
+        p = 1.0 if (question and plan["hop"] == 1) else min(1.0, plan["p"] * self.governor(optional=True))
         if self.rng.random() >= p:
             self.record("skipped", kind="bark", why=f"dice (chain hop {plan['hop']}, p={p:.2f})", stock=plan["id"],
                         seat=plan["seat"], source="chain")
             self._chain = None
             return
         link = {"origin": plan["origin"], "hop": plan["hop"], "turn": turn, "parent": item.get("stock")}
-        if plan["seat"] == "joshua":
-            self.enqueue("quip", stock=plan["id"], ttl=15.0, gap=self.chains.gap_s)
-            self.record("queued", kind="quip", stock=plan["id"], source="chain", hop=plan["hop"], parent=item.get("stock"))
-            self._chain = None                           # nobody answers Joshua
-            return
-        seat = int(plan["seat"])
+        seat = int(plan["seat"])                         # always a seat: Joshua never answers a seat's line (A14, Ben 2026-09-14)
         self._said_this_turn.add((seat, plan["id"]))
         reply = plan["id"]
         rctx = {"targets": [int(item["seat"])], "aggressor": int(item["seat"])}
@@ -384,14 +469,20 @@ class SchedulerMixin:
         if pid in RARE_REPEATS and self.clock() - self._seat_said_at.get((int(seat), pid), -1e9) < RECENT_S:
             self.record("skipped", kind="bark", why=f"said lately ({pid} within {RECENT_S:.0f}s)", stock=pid, seat=seat, source=source)
             return False
+        # the seat guard holds only between two lines of the SAME class (A5, game 48 14:14:35: Bill's
+        # "nothing happening" silenced his "landed hit" a second later): an anchored line follows the
+        # seat's own filler or banter freely; an unknown last class (the guard stamped without a line) holds
         since = self.clock() - self._bark_spoken_at.get(int(seat), -1e9)
-        if since < self.barks_cooldown and pid not in OWN_ACTION_LINES:
-            self.record("skipped", kind="bark", why=f"seat guard ({since:.0f}s < {self.barks_cooldown:.0f}s)", stock=pid, seat=seat, source=source)
+        cls = self._guard_class(classify_source(source))
+        last = self._seat_last_class().get(int(seat))
+        if since < self.barks_cooldown and pid not in OWN_ACTION_LINES and (last is None or last == cls):
+            self.record("skipped", kind="bark", why=f"seat guard ({since:.0f}s < {self.barks_cooldown:.0f}s, {cls} after {last or 'a line'})",
+                        stock=pid, seat=seat, source=source)
             return False
         # an explicit p (the opener's own knob) always applies; otherwise "all" means always, "some" means ARENA_BARKS_P
         chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
         ungoverned = pid in MULL_LINE.values() or (source == "patter" and p == 1.0)   # a mulligan is always worth the breath; so is breaking a silence
-        g = 1.0 if ungoverned else self.governor(optional=source in OPTIONAL_SOURCES)
+        g = 1.0 if ungoverned else self.governor(optional=classify_source(source) != "anchored")   # one rule (C2): chain replies stay optional
         chance = min(1.0, chance * g)
         if self.rng.random() >= chance:
             self.record("skipped", kind="bark", why=f"dice ({source}, p={chance:.2f}, governor {g:.2f})", stock=pid, seat=seat, source=source)
@@ -463,7 +554,9 @@ class SchedulerMixin:
 
     def _roll_turn(self, turn) -> None:
         """The no-repeat set is per game turn."""
-        if turn is not None and turn != self._said_turn:
+        if turn is not None and turn != self._said_turn and (self._said_turn is None or turn >= self._said_turn):
+            # a turn only rolls FORWARD: a late record from a past turn (an unmute backlog, a null turn) must not
+            # wipe the no-repeat set and the loop counters of the turn in progress (critic, 2026-09-16)
             self._said_turn = turn
             self._said_this_turn = set()
             self._chain = None                           # a new turn ends any exchange
@@ -472,6 +565,10 @@ class SchedulerMixin:
 
     # -- the patter clock
     def _patter_gap_s(self, human_turn: bool) -> float:
+        """The gap to the next patter line; on the human's turn (human_turn(), so not while the
+        Executive plays the seat — A6) it stretches by patter_human (ARENA_VOICE_PATTER_HUMAN, 0.33:
+        a third as often), the rate game 48 ran at. §2 promised the same feel and Ben kept the
+        floor's numbers, so the gap keeps ITS number; duty_human (0.6) is the budget's alone."""
         g = self.rng.uniform(*self.patter_gap)
         return g / self.patter_human if human_turn and self.patter_human > 0 else g
 
@@ -555,24 +652,43 @@ class SchedulerMixin:
         if idle and not self._idle_noted:
             self._idle_noted = True
             self.record("skipped", kind="bark", why=f"idle table ({IDLE_S:.0f}s without a change) — the patter clock slows to a third", source="patter")
-        human_turn = snap.get("activeSeat") == self.human_seat
+        human_turn = self.human_turn()                         # the human's turn WITHOUT the Executive playing it (A6)
         if self._patter_anchor != self.last_spoken_at:          # a line just played: rearm from its end
             self._patter_anchor = self.last_spoken_at
             self._patter_due = self.last_spoken_at + self._patter_gap_s(human_turn) * mult
+            self._floor_atom_run = 0                            # a content line: the atoms may run again
         floor = SILENCE_FLOOR_S["human" if human_turn else "ai"] / max(0.25, self.chatter) * mult   # an idle table: the floor slows too
-        silent_for = now - self.last_spoken_at
+        silent_for = now - max(self.last_spoken_at, getattr(self, "_floor_rearmed_at", -1e9))   # an atom re-arms the floor without a line
         breaking = silent_for >= floor and not self.queue
         if not breaking and (now < self._patter_due or now - self._advisor_spoke_at < self.patter_after_advice):
             return
         living = [int(x) for x in self.seat_libraries if int(x) not in self.eliminated]
         cands = self.patter_candidates(snap, living) if living and snap.get("seats") else []
         self._patter_due = now + self._patter_gap_s(human_turn) * mult   # whatever happens, wait another gap
-        if not cands:
-            return
         if breaking:
-            # the silence floor (game 48): the best candidate speaks, whatever the dice and the budget say
-            self.record("skipped", kind="bark", why=f"silence floor ({silent_for:.0f}s quiet >= {floor:.0f}s) — speaking regardless", source="patter")
+            # the silence floor (game 48): the best candidate speaks, whatever the dice and the budget say —
+            # anchored candidates ahead of filler; an empty or filler-only pool spends an atom when the
+            # runner has them (voice/atoms.py, another lane), and the record says what the pool held (4.2)
+            anchored = [c for c in cands if c[1] in ANCHORED_PATTER]
+            why = f"silence floor ({silent_for:.0f}s quiet >= {floor:.0f}s)"
+            if not anchored:
+                atom = getattr(self, "floor_atom", None)
+                run = getattr(self, "_floor_atom_run", 0)
+                if living and callable(atom) and run < FLOOR_ATOM_MAX_RUN and atom(living):
+                    self._floor_atom_run = run + 1
+                    self._floor_rearmed_at = self.clock()                              # a full floor of quiet AFTER the atom (it plays blocking)
+                    self.record("skipped", kind="bark", why=f"{why} — an atom ({run + 1} of {FLOOR_ATOM_MAX_RUN} in a row); "
+                                f"the pool is {'empty' if not cands else 'filler only'}",
+                                source="patter", pool=len(cands), anchored=0, picked="atom")
+                    return
+            if not cands:
+                return                                            # nothing to say (and the atoms spent, or absent): quiet until the board moves
+            self.record("skipped", kind="bark", why=f"{why} — speaking regardless", source="patter",
+                        pool=len(cands), anchored=len(anchored), picked="anchored" if anchored else "filler")
+            cands = anchored or cands
         else:
+            if not cands:
+                return
             g = self.governor(optional=True)
             if self.rng.random() >= g:
                 self.record("skipped", kind="bark", why=f"governor (duty {self.duty():.2f} vs goal {self.duty_goal():.2f}, p={g:.2f})", source="patter")
@@ -583,5 +699,7 @@ class SchedulerMixin:
             pick -= w
             if pick <= 0:
                 break
-        self.maybe_bark(speaker, pid, turn=snap.get("turn"), source="patter", p=1.0 if breaking else None,
-                        ctx={"targets": [target] if target is not None else []})
+        said = self.maybe_bark(speaker, pid, turn=snap.get("turn"), source="patter", p=1.0 if breaking else None,
+                               ctx={"targets": [target] if target is not None else []})
+        if breaking and not said:
+            self._floor_rearmed_at = now                              # the pick was guard-held: a full floor before the next try, not every poll

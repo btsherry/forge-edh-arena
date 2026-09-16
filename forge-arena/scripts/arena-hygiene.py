@@ -41,11 +41,26 @@ RESTART_LINE = re.compile(r"runner exited")
 SUPERVISOR_OUTS = ("run_table.out", "voice_runner.out", "advisor_runner.out")
 
 
+RUNNER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "runner")
+try:
+    # C2 (2026-09-14): the SAME rule the runner's eviction class, governor and seat guard use, so the
+    # anchored share Ben steers by measures what the scheduler does. `spoke` records carry `source`.
+    sys.path.insert(0, RUNNER_DIR)
+    from voice.scheduler import ANCHORED_SOURCES, classify_source  # noqa: E402
+except Exception:                                                   # a package without the runner beside the script: the same mapping, mirrored
+    ANCHORED_SOURCES = ("event", "card", "procedural", "opener", "brain")   # keep in step with voice/scheduler.py (tested)
+
+    def classify_source(source):
+        if source == "chain":
+            return "chain"
+        return "anchored" if source in ANCHORED_SOURCES else "optional"
+
+
 def anchored(v: dict) -> bool:
-    """A spoken seat line tied to something that happened (not the floor's chatter).
-    ONE named rule here so plan C2 can swap in the shared classify() later; until
-    then the governor and the eviction class keep their own definitions."""
-    return v.get("source") in ("event", "procedural", "card", "opener", "recap", "advice")
+    """A spoken seat line tied to something that happened at the table — the shared
+    classify_source() (voice/scheduler.py) says which sources those are; the advisor's
+    afterthoughts (recap, advice), patter and banter replies are optional."""
+    return classify_source(v.get("source")) == "anchored"
 
 
 # Ben's table-talk targets (round 31): the pace and the anchored share he steers by.
