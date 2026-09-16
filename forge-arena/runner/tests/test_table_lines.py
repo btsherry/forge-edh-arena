@@ -148,7 +148,7 @@ class _TableCase(_TreeCase):
         (vr.VOICES_DIR / "address.json").write_text((REAL_VOICES / "address.json").read_text())
         os.environ["ARENA_HUMAN_DECK"] = "giada-font-of-hope"
         os.environ["ARENA_SEAT_DECKS"] = "urza-lord-high-artificer purphoros-god-of-the-forge selvala-heart-of-the-wilds giada-font-of-hope"
-        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
         self.r.rng.random = lambda: 0.0
         self.r.rng.shuffle = lambda x: None
 
@@ -229,8 +229,8 @@ class MemoryAndArc(_TableCase):
         self.assertEqual(self._barks(), [], "said once")
 
     def test_the_opening_the_grind_and_a_lethal_board(self):
-        os.environ["ARENA_BARKS_OPENER_P"] = "1"
-        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        self.tuning["barks_opener_p"] = 1
+        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
         self.r.rng.random = lambda: 0.0; self.r.rng.shuffle = lambda x: None
         two = lambda i: self._seat(i, lands=((False, False)))  # noqa: E731
         self._snap(1, 0, seats=[two(i) for i in range(4)]); self.r.queue.clear()
@@ -355,7 +355,7 @@ class Mulligans(_TableCase):
         for f in (vr.VOICES_DIR / "bill" / "table").glob("*.wav"):
             (d / "table" / f.name).write_bytes(f.read_bytes())
         os.environ["ARENA_SEAT_DECKS"] = "urza-lord-high-artificer purphoros-god-of-the-forge sythis-harvests-hand giada-font-of-hope"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
         r.rng.random = lambda: 0.0
         r.rng.choice = lambda xs: xs[-1]                                    # would pick the undecided seat 3 without the preference
         self.assertEqual(sorted(r.seat_libraries), [1, 2, 3])
@@ -378,7 +378,7 @@ class Mulligans(_TableCase):
 
     def test_a_restarted_runner_does_not_replay_old_mulligans_and_the_human_is_read_at_turn_one(self):
         self._log(1, 1, False, "Meh.")
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
         r.rng.random = lambda: 0.0
         r._last_snapshot = {"turn": 0, "phase": "", "seats": [self._seat(i) for i in range(4)]}
         r.scan_game_log()
@@ -390,7 +390,7 @@ class Mulligans(_TableCase):
         self.assertEqual(got, [("mull-dig", [0])], "the human kept five: digging, says a seat")
         r.queue.clear(); r.scan_observer()
         self.assertEqual(r.queue, [], "once")
-        r2 = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock); r2.rng.random = lambda: 0.0
+        r2 = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning); r2.rng.random = lambda: 0.0
         seats = [self._seat(0, hand=8), self._seat(1), self._seat(2), self._seat(3)]
         (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 1, "phase": "DRAW", "activeSeat": 0, "gameOver": False, "seats": seats, "events": []}))
         r2.scan_observer()
@@ -424,7 +424,7 @@ class SilenceQuestionsProposals(_TableCase):
         self.assertEqual(r.queue, [], "the human's turn: the floor is twenty-four seconds")
         self.clock.t += 5; r.patter()
         self.assertEqual(len(r.queue), 1)
-        r2 = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r2 = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertEqual(r2.duty_human, 0.6)
 
     def test_a_question_to_a_seat_is_answered_with_certainty_and_never_put_to_the_human(self):
@@ -453,7 +453,7 @@ class SilenceQuestionsProposals(_TableCase):
         for f in (vr.VOICES_DIR / "bill").glob("*.wav"):
             (d / f.name).write_bytes(f.read_bytes())
         os.environ["ARENA_SEAT_DECKS"] = "urza-lord-high-artificer purphoros-god-of-the-forge sythis-harvests-hand giada-font-of-hope"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
         r.rng.random = lambda: 0.0; r.rng.choice = lambda xs: xs[0]
         r._last_snapshot = {"turn": 4, "phase": "MAIN1", "activeSeat": 1, "seats": [self._seat(i) for i in range(4)]}
         r._roll_turn(4)
@@ -479,8 +479,8 @@ class TableRuntime(_TableCase):
         self.assertEqual(vr.card_kind(r.cards_of(1).get("Arcum Dagsson")), "creature")
         self.assertEqual(vr.card_kind(r.cards_of(1).get("Counterspell")), "instant")
         self.assertEqual((r.table_p("land-go"), r.table_p("sure")), (0.6, 0.25))
-        os.environ["ARENA_TABLE_P"] = "0.5"
-        r2 = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.tuning["table_p"] = 0.5
+        r2 = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertAlmostEqual(r2.table_p("land-go"), 0.3); self.assertEqual(r2.table_p("in-response"), 0.35)
 
     def test_casts_are_narrated_by_type_twice_a_turn_and_game_changers_keep_their_own_line(self):
@@ -576,8 +576,8 @@ class TableRuntime(_TableCase):
         self.assertEqual(self._barks(), [], "the human answers for themself")
 
     def test_the_turn_is_summed_up_at_the_boundary_and_the_next_seat_opens(self):
-        os.environ["ARENA_BARKS_OPENER_P"] = "1"
-        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        self.tuning["barks_opener_p"] = 1
+        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
         self.r.rng.random = lambda: 0.0; self.r.rng.shuffle = lambda x: None
         two = lambda i, **kw: self._seat(i, lands=((False, False)), **kw)  # noqa: E731
         self._snap(4, 0, seats=[two(0), two(1), two(2), two(3)]); self.r.queue.clear()
@@ -674,7 +674,7 @@ class TableRuntime(_TableCase):
             for f in (vr.VOICES_DIR / lib / "table").iterdir():
                 f.unlink()
             (vr.VOICES_DIR / lib / "table").rmdir()
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertEqual(r.table_ids, set())
         self.assertEqual(r.lib_for(1, "land-go"), "harry")
         r.rng.random = lambda: 0.0

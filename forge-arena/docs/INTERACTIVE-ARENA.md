@@ -1490,8 +1490,9 @@ Hard-won from two live sessions; read before optimizing anything.
     advisor's `[quip:<id>]` tags (closed vocabulary in `advisor_runner.QUIPS`,
     stripped from the panel text, recorded as `quip`) → stock phrase; observer
     events → startup / your-move / player-eliminated / you-win or strange-game +
-    game-over-gg. Discipline: one utterance at a time, `ARENA_VOICE_MIN_GAP`
-    (8 s) between them except start/end, newest per kind wins, advice whose seq
+    game-over-gg. Discipline: one utterance at a time, the gap (`ARENA_VOICE_MIN_GAP`
+    then; since 2026-09-16 `min_gap_s` in `voices/tuning.json`, 8 s) between them
+    except start/end, newest per kind wins, advice whose seq
     the human already answered (advisor now records `chosen`) is dropped, TTLs
     expire the rest. Mute: `control/voice.json`. Tests:
     `runner/tests/test_voice_runner.py` (12), `test_advisor_quips.py` (4).

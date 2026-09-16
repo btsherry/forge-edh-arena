@@ -1,11 +1,6 @@
 {
  "schema": "arena.voice-chains/1",
  "note": "Interaction chains (Ben, 2026-09-10): a spoken line invites replies from ROLES, each reply an atom from the replier's own library. The runner composes: opener -> hop 1 -> hop 2 ..., one line at a time, rolling first_hop_p * decay^(hop-1); a chain dies at max_hops or when the turn changes. Roles: target = the seat(s) the opener addressed (from the event), aggressor = the seat that caused the opener's grief, bystander = another voiced seat, leader = the highest-life other seat, origin = the chain's first speaker (hops >= 2). Nobody replies to themselves; nobody says the same line twice in a turn. Tuned after game 39: no single reply type may dominate — the bystander scoff was five openers' default and became a tic. Ben (game 41): responses and counter-responses must be tight in wall-clock — gap_s 0.25 from the end of the previous line, and the runner polls every 0.1 s while an exchange is pending — a retort lands in 0.25–0.35 s (Ben, game 42). Patter (2026-09-10): board-state, pace and filler lines are addressed to a target the runner picked, so the same table answers them. Round 31 (game 45 measured: 53 % of lines were banter replies, 4 % were about the game): the reply-to-reply and filler invites are pruned to one or two each so an exchange is short unless a board event started it; 140 invites -> 90. Round 31 table lines: procedural openers (poke, attack-you, in-response, cast-*, land-go, mana-up, ...) invite short acks and the new 'open' role (a defender with no untapped creature says no-blocks); 'families' maps the named address lines to their generic invites. Phase D: grudges, running jokes, heads-up, the shape of the game, and deals kept (take-the-deal/promise are remembered) or broken (you-promised). Mulligans (2026-09-11): the seat's own line and the reaction are sequenced by the runner from game.jsonl; the reaction invites the mulliganer's retort.",
- "first_hop_p": 0.6,
- "decay": 0.5,
- "max_hops": 3,
- "gap_s": 0.25,
- "human_trigger_mult": 0.5,
  "invites": {
   "big-swing": [
    {

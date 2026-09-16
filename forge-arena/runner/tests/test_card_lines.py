@@ -100,7 +100,7 @@ class CardRuntime(_TableCase):
             for pid in ids:
                 (d / f"{pid}.wav").write_bytes(silent_wav())
         (vr.VOICES_DIR / "combos.json").write_text((REAL_VOICES / "combos.json").read_text())
-        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
         self.r.rng.random = lambda: 0.0
         self.r.rng.shuffle = lambda x: None
         self.r.game_changers[1] = {"Rhystic Study", "Mana Vault"}
@@ -233,7 +233,7 @@ class CardRuntime(_TableCase):
             for f in (vr.VOICES_DIR / lib / "cards").iterdir():
                 f.unlink()
             (vr.VOICES_DIR / lib / "cards").rmdir()
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
         self.assertEqual(r.card_ids, set())
         self.assertEqual(r.card_swap(1, "game-changer", {"card": "rhystic-study", "card_kind": "gc"}), "")
         self.assertEqual(r.lib_for(1, "gc-rhystic-study-cast"), "harry")

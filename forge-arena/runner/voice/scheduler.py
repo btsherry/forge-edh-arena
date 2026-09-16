@@ -13,6 +13,9 @@ from chains import plan_reply
 from voice.table import CARD_LIB, CARD_REACTIONS, CARD_SWAP, TABLE_LIB, hand_pid, life_pid
 
 PRIORITY = {"game_over": 0, "human_out": 0, "startup": 1, "ask": 2, "advice": 3, "quip": 4, "event": 5, "color": 6, "your_move": 7, "bark": 8}
+# ("bark": 8 is the fallback for a bare enqueue("bark", ...) with neither prio nor chain — every runner
+#  path passes one (maybe_bark: BARK_PRIORITY; the chain hops: CHAIN_HOP_PRIORITY), the test doubles
+#  do not; D3 of the 2026-09-14 plan called it unreachable, but the suite reaches it, so it stays.)
 # A reply inside an exchange must not be separated from the line it answers: game 44
 # (20:43) Joshua's "your move" cut between Harry's jab and Lily's "shut it", so the
 # retort landed on Joshua. Hops rank just below advice; if advice or a question
@@ -117,15 +120,14 @@ MULL_SCREW_WORDS = ("land", "mana", "colour", "color", "source")
 MULL_DIG_WORDS = ("dig", "tutor", "combo", "engine", "piece", "fast mana", "stronger", "better seven", "fish")
 RECENT_S = 240.0          # a line said within this window is stale for the patter pick and for replies
 PATTER_REPEAT_S = 300.0   # a patter line said by ANY seat within this window is no candidate at all (game 48: "cards in hand" x4)
-RECENT_WEIGHT = 0.15      # its patter weight is multiplied by this
 # Seat barks, the table-talk design (Ben, 2026-09-10 — "playing with the AI should
 # feel like sitting at the table with people"): every turn boundary has ONE owner.
 # The recap of an AI seat's turn belongs to that seat (its retrospective line,
-# authored by the advisor, rolled at ARENA_BARKS_P); the recap of the human's turn
+# authored by the advisor, rolled at barks_p); the recap of the human's turn
 # belongs to Joshua's colour line (its own dice) plus, optionally, one seat's
 # reaction. Instant reactions come from the snapshot's public event ring — an
-# attack of ARENA_BARKS_SWING power, a hit of ARENA_BARKS_HIT, a countered spell —
-# with no LLM in the loop. Openers ("my turn") fire mechanically at a seat's turn
+# attack of barks_swing power, a hit of barks_hit, a countered spell — with no
+# LLM in the loop. The numbers are voices/tuning.json's (2026-09-16). Openers ("my turn") fire mechanically at a seat's turn
 # start, rarely. A (seat, line) already said this turn is never said again.
 
 
@@ -136,10 +138,16 @@ def chatter_level(raw: str | None) -> float:
     """ARENA_CHATTER — one master dial for how much the table talks (Ben,
     2026-09-10: "instead of trying to bake all of this just right anecdotally").
     A name (quiet .5 / normal 1 / lively 1.5 / rowdy 2) or a number; 1 = the
-    knobs as written. Every frequency knob is multiplied by it (capped at 1),
-    the gap between lines divided by it (floor 3 s), the instant-reaction
-    thresholds divided by it (floors 3 power / 4 damage). Advice frequency —
-    model calls — is not chatter and is untouched."""
+    numbers in voices/tuning.json as written. What the dial scales today
+    (VoiceRunner.apply_chatter, round 31): the PACE — the gap between lines
+    (min_gap_s / k, floor 3 s), the seat guard (barks_cooldown_s / k, floor
+    3 s), the instant-reaction thresholds (barks_swing / k, floor 3 power;
+    barks_hit / k, floor 4 damage), the patter clock's gap (patter_gap_s / k,
+    floors 2 / 2.5 s), and one more chain hop at lively and above — plus the
+    talk BUDGET it derives (DUTY_BASE × k, capped .45), which the governor
+    spends at roll time. The probabilities themselves (barks_p, the opener,
+    a recap, "your move", the chains' first hop) are NOT pre-scaled any more.
+    Advice frequency — model calls — is not chatter and is untouched."""
     v = (raw or "normal").strip().lower()
     if v in CHATTER_LEVELS:
         return CHATTER_LEVELS[v]
@@ -479,7 +487,7 @@ class SchedulerMixin:
             self.record("skipped", kind="bark", why=f"seat guard ({since:.0f}s < {self.barks_cooldown:.0f}s, {cls} after {last or 'a line'})",
                         stock=pid, seat=seat, source=source)
             return False
-        # an explicit p (the opener's own knob) always applies; otherwise "all" means always, "some" means ARENA_BARKS_P
+        # an explicit p (the opener's own number) always applies; otherwise "all" means always, "some" means barks_p (tuning.json)
         chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
         ungoverned = pid in MULL_LINE.values() or (source == "patter" and p == 1.0)   # a mulligan is always worth the breath; so is breaking a silence
         g = 1.0 if ungoverned else self.governor(optional=classify_source(source) != "anchored")   # one rule (C2): chain replies stay optional
@@ -566,7 +574,7 @@ class SchedulerMixin:
     # -- the patter clock
     def _patter_gap_s(self, human_turn: bool) -> float:
         """The gap to the next patter line; on the human's turn (human_turn(), so not while the
-        Executive plays the seat — A6) it stretches by patter_human (ARENA_VOICE_PATTER_HUMAN, 0.33:
+        Executive plays the seat — A6) it stretches by patter_human (tuning.json, 0.33:
         a third as often), the rate game 48 ran at. §2 promised the same feel and Ben kept the
         floor's numbers, so the gap keeps ITS number; duty_human (0.6) is the budget's alone."""
         g = self.rng.uniform(*self.patter_gap)

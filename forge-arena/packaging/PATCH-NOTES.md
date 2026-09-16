@@ -24,11 +24,19 @@ The AI seats talk like people at a table. Built in live games 38–46.
   relief), every commander (arrival, reaction, death) and every two- or
   three-card combo in the dossiers, announced when the last piece lands.
 - **The seats react to you:** your big swings, game changers, commander,
-  big spells and spot removal draw a line; `ARENA_BARKS_HUMAN_P`.
+  big spells and spot removal draw a line (`barks_human_p` in the tuning).
 - **One dial, `ARENA_CHATTER`,** now sets a talk budget (speaking fraction of
   the last minute) the runner spends: filler and banter go quiet as it fills,
-  board-anchored lines keep priority, quieter on your turn; `ARENA_VOICE_DUTY`
-  overrides. Nothing before the deal or at an idle table.
+  board-anchored lines keep priority, quieter on your turn; `duty_target` in
+  the tuning overrides. Nothing before the deal or at an idle table.
+- **Five knobs, not thirty-six:** the voice keeps `ARENA_CHATTER`,
+  `ARENA_BARKS`, `ARENA_VOICE_YOUR_MOVE`, `ARENA_VOICE_SFX` and
+  `ARENA_VOICE_FOCUS` (Joshua's render settings and the deck plumbing aside);
+  the 24 `ARENA_BARKS_*`, `ARENA_VOICE_PATTER*`, `ARENA_VOICE_DUTY*`,
+  `ARENA_VOICE_COLOR*`, `ARENA_VOICE_MIN_GAP`, `ARENA_VOICE_YOUR_MOVE_P` and
+  `ARENA_TABLE_P` knobs are retired into one data file,
+  `runner/voice/stock/voices/tuning.json`, at the values they had. Setting a
+  retired variable now does nothing.
 - **No dead air, no hanging questions (game 48):** a silence floor under the
   budget — twelve seconds quiet on an AI turn, twenty-four on yours (slower at
   an idle table), and the patter clock speaks its best line regardless of dice

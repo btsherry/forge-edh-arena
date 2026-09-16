@@ -27,29 +27,37 @@ Pure functions here; the runner supplies state and does the enqueueing.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 
 class ChainTable:
-    def __init__(self, data: dict):
+    def __init__(self, data: dict, tuning: dict | None = None):
         self.invites: dict[str, list[dict]] = data.get("invites") or {}
         # families (round 31): "hit-" -> the invites of kill-that apply to hit-urza, hit-mono-red, ...
         self.families: dict[str, str] = {k: v for k, v in (data.get("families") or {}).items() if k != "note"}
         # an old file's "joshua_replies" key is simply ignored: Joshua never answers a seat (A14)
-        env = os.environ.get
-        self.first_hop_p = float(env("ARENA_BARKS_CHAIN_P", data.get("first_hop_p", 0.6)))
-        self.decay = float(env("ARENA_BARKS_CHAIN_DECAY", data.get("decay", 0.5)))
-        self.max_hops = int(env("ARENA_BARKS_CHAIN_MAX", data.get("max_hops", 3)))
-        self.gap_s = float(env("ARENA_BARKS_CHAIN_GAP", data.get("gap_s", 3.5)))
-        self.human_mult = float(env("ARENA_BARKS_CHAIN_HUMAN_P", data.get("human_trigger_mult", 0.5)))
+        # The numbers (2026-09-16, hardening plan §2): voices/tuning.json (chain_*), which load() reads;
+        # beneath it an old chains.json's own keys, then the values Ben tuned in games 39–42
+        # (the ARENA_BARKS_CHAIN_* knobs are retired — the archives show nobody ever set one).
+        tune = tuning or {}
+        self.first_hop_p = float(tune["chain_p"] if "chain_p" in tune else data.get("first_hop_p", 0.6))
+        self.decay = float(tune["chain_decay"] if "chain_decay" in tune else data.get("decay", 0.5))
+        self.max_hops = int(tune["chain_max_hops"] if "chain_max_hops" in tune else data.get("max_hops", 3))
+        self.gap_s = float(tune["chain_gap_s"] if "chain_gap_s" in tune else data.get("gap_s", 0.25))
+        self.human_mult = float(tune["chain_human_p"] if "chain_human_p" in tune else data.get("human_trigger_mult", 0.5))
 
     @classmethod
-    def load(cls, voices_dir: Path) -> "ChainTable | None":
+    def load(cls, voices_dir: Path, tuning: dict | None = None) -> "ChainTable | None":
+        """The table from voices_dir/chains.json with its numbers from voices/tuning.json (the shipped
+        file, whatever voices_dir is) unless `tuning` is given; None when there is no chains.json."""
         try:
-            return cls(json.loads((voices_dir / "chains.json").read_text()))
+            data = json.loads((voices_dir / "chains.json").read_text())
         except (OSError, ValueError, TypeError):
             return None
+        if tuning is None:
+            from voice.table import load_tuning       # lazy: this module stays importable on its own
+            tuning = load_tuning()
+        return cls(data, tuning)
 
     def invites_for(self, opener: str) -> list[dict]:
         if opener in self.invites:

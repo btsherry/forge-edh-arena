@@ -31,15 +31,15 @@ class TalkBudget(_TreeCase):
 
     def test_goal_follows_the_dial_the_override_and_the_humans_turn(self):
         os.environ["ARENA_CHATTER"] = "lively"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertAlmostEqual(r.duty_target, 0.27); self.assertAlmostEqual(r.duty_goal(), 0.27)
         r._last_snapshot = {"activeSeat": 0}
         self.assertAlmostEqual(r.duty_goal(), 0.27 * 0.6, msg="the human's turn: lower, not hushed (game 48: silences were the bigger issue)")
-        os.environ["ARENA_VOICE_DUTY"] = "0.25"; os.environ["ARENA_VOICE_DUTY_HUMAN"] = "0.5"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.tuning.update({"duty_target": 0.25, "duty_human": 0.5})          # tuning.json's duty_target (null = derived) set
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertEqual((r.duty_target, r.duty_human), (0.25, 0.5), "the override beats the dial")
-        os.environ["ARENA_VOICE_DUTY"] = "bogus"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.tuning["duty_target"] = "bogus"
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertAlmostEqual(r.duty_target, 0.27, msg="a bad override falls back to the dial")
 
     def test_governor_boosts_in_silence_and_throttles_at_the_goal(self):
@@ -55,7 +55,7 @@ class TalkBudget(_TreeCase):
         r._spoken_log = [(t - 40, 30.0)]                               # far over it (past 1.5 × the goal)
         self.assertEqual(r.governor(False), 0.5); self.assertEqual(r.governor(True), 0.15, "patter and banter go nearly silent")
         os.environ["ARENA_CHATTER"] = "rowdy"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertEqual((r.governor(False), r.governor(True)), (2.0, 2.0), "silence at rowdy: the dial's full boost")
         r._spoken_log = [(t - 30, 60 * 0.18)]                          # half of rowdy's 0.36 spent
         self.assertAlmostEqual(r.governor(False), 1.5); self.assertAlmostEqual(r.governor(True), 1.5, msg="rowdy is rowdy: the dial's boost, undamped")
@@ -160,8 +160,8 @@ class ReactToTheHuman(_TreeCase):
         self.assertEqual((last["source"], last["seat"], last["stock"]), ("event", 2, "oh-no"))
 
     def test_human_reaction_probability_is_its_own_knob(self):
-        os.environ["ARENA_BARKS_HUMAN_P"] = "0.4"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        self.tuning["barks_human_p"] = 0.4                                    # its own number in tuning.json
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertEqual(r.barks_human_p, 0.4)
         self.assertEqual(self.r.barks_human_p, 0.7, "default")
         self.r.rng.random = lambda: 0.75                                # >= 0.7: no reaction
@@ -173,7 +173,7 @@ class ReactToTheHuman(_TreeCase):
 
     def test_the_humans_game_changers_come_from_the_launcher_and_the_game_log(self):
         os.environ["ARENA_HUMAN_DECK"] = "giada-font-of-hope"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertIn("Smothering Tithe", r.game_changers[0], "the human's deck from the launcher")
         self.assertNotIn(0, self.r.game_changers, "no launcher env: nothing known about the human")
         with (self.logs / "game.jsonl").open("w") as f:

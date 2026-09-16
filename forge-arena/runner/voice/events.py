@@ -396,10 +396,10 @@ class EventsMixin:
         if self.color_mode == "all" or self.rng.random() < min(1.0, self.color_p * self.governor(optional=False)):
             self.enqueue("color", text=first_sentence(r["text"]), ttl=40.0)
         else:
-            self.record("skipped", kind="color", why="dice (ARENA_VOICE_COLOR=some)", text=r["text"][:80])
+            self.record("skipped", kind="color", why="dice (color_mode=some)", text=r["text"][:80])
 
     def slow_seats(self) -> list[int]:
-        """AI seats with a decision pending in their mailbox longer than ARENA_BARKS_SLOW."""
+        """AI seats with a decision pending in their mailbox longer than barks_slow (tuning.json barks_slow_s)."""
         out = []
         now = time.time()
         for seat in self.seat_libraries:
@@ -850,7 +850,7 @@ class EventsMixin:
         """A battlefield card for the observer tape: its name, and power / toughness /
         tapped only when the snapshot carries them (absent = untapped, no body)."""
         out = {"name": c.get("name")}
-        for k in ("power", "toughness"):
+        for k in ("power", "toughness", "types"):                # types: the replay's `_lands` needs to know a land (seam critic)
             if c.get(k) is not None:
                 out[k] = c[k]
         if c.get("tapped"):
@@ -894,7 +894,7 @@ class EventsMixin:
             self._board_fp, self._board_changed_at, self._idle_noted = fp, self.clock(), False
             self._tape(OBSERVER_TAPE, {
                 "ts": round(time.time(), 3), "clock": round(self.clock(), 3), "gameId": d.get("gameId"), "turn": turn, "phase": d.get("phase"), "activeSeat": active,
-                "gameOver": bool(d.get("gameOver")), "stack": d.get("stack") or [], "seq": last_seq,
+                "gameOver": bool(d.get("gameOver")), "stack": d.get("stack") or [], "stackDetail": d.get("stackDetail") or [], "seq": last_seq,
                 "seats": [{"seat": x.get("seat"), "life": x.get("life"), "handSize": x.get("handSize"), "pool": x.get("pool"),
                            "eliminated": bool(x.get("eliminated")),
                            "battlefield": [self._compact_card(c) for c in x.get("battlefield") or [] if isinstance(c, dict)]} for x in seat_recs]})

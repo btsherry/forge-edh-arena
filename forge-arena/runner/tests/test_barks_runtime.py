@@ -4,7 +4,7 @@ retrospective line; the human's recap -> Joshua's colour line plus at most one
 seat's reaction); instant reactions come from the snapshot's public event ring
 (attack / damage / countered) with no LLM; openers at a seat's turn start are
 rare; a (seat, line) is never said twice in one turn; every bark rolls one
-dice (ARENA_BARKS_P) behind a short per-seat guard; mute or advisor pause
+dice (tuning barks_p) behind a short per-seat guard; mute or advisor pause
 drops everything. Several wordings of a line play from a shuffle bag. An AI
 seat's elimination is voiced once, by the seat itself 70 % of the time.
 
@@ -83,6 +83,7 @@ def build_tree(base: Path, chains: bool = False):
 
 
 class _TreeCase(unittest.TestCase):
+    TUNING = {"min_gap_s": 8, "barks_cooldown_s": 10, "barks_opener_p": 0, "patter": False}
     CHAINS = False
 
     def setUp(self):
@@ -99,13 +100,15 @@ class _TreeCase(unittest.TestCase):
         vr_table.VOICES_DIR = voices
         self._env = dict(os.environ)
         os.environ.pop("ELEVENLABS_API_KEY", None)
-        for k, v in {"ARENA_VOICE_MIN_GAP": "8", "ARENA_VOICE_SFX": "off", "ARENA_VOICE_FX": "off",
-                     "ARENA_BARKS": "all", "ARENA_BARKS_COOLDOWN": "10", "ARENA_VOICE_YOUR_MOVE": "on",
-                     "ARENA_BARKS_OPENER_P": "0", "ARENA_VOICE_PATTER": "off"}.items():
+        # the operator knobs by environment; the numbers (2026-09-16: voices/tuning.json, no longer
+        # ARENA_* knobs) by the runner's `tuning` override — openers and the patter clock are off here
+        # so the barks under test stand alone; a test wanting the shipped defaults constructs without it
+        for k, v in {"ARENA_VOICE_SFX": "off", "ARENA_VOICE_FX": "off", "ARENA_BARKS": "all", "ARENA_VOICE_YOUR_MOVE": "on"}.items():
             os.environ[k] = v
+        self.tuning = dict(self.TUNING)
         self.clock = Clock()
         self.player = FakePlayer()
-        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
 
     def tearDown(self):
         vr.STOCK, vr.VOICES_DIR = self._stock, self._voices
@@ -177,7 +180,7 @@ class BarkRuntime(_TreeCase):
         self.assertEqual(vr.seat_decks_from_roster(None, ""), {}, "all-AI or an old launcher: default seats")
         (Path(vr.VOICES_DIR) / "assign.json").write_text(json.dumps({"by_deck": {"purphoros-god-of-the-forge": "harry", "urza-lord-high-artificer": "bill", "giada-font-of-hope": "lily"}}))
         os.environ["ARENA_HUMAN_DECK"] = "selvala-heart-of-the-wilds"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertEqual({k: v["library"] for k, v in r.seat_libraries.items()}, {1: "bill", 3: "harry"},
                          "before a single card is drawn: Urza is Bill, Purphoros is Harry (no Lily in this tree)")
         # the launcher's default roster is the arena's (arena-config ROSTER)
@@ -479,7 +482,7 @@ class BarkRuntime(_TreeCase):
         # the human wins: no seat line, Joshua's you-win pair only — another game, so its own logs directory (a second
         # runner on the SAME directory now adopts the first one's checkpoint and rightly stays silent after the sign-off; §4.1)
         logs2 = self.logs.parent / "logs2"; logs2.mkdir()
-        r2 = vr.VoiceRunner(logs2, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r2 = vr.VoiceRunner(logs2, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         seats = [{"seat": i, "name": f"s{i}", "eliminated": i != 0, "life": 40 if i == 0 else 0} for i in range(4)]
         (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 9, "activeSeat": 0, "gameOver": True, "winner": "s0", "seats": seats, "events": []}))
         r2.scan_observer()
@@ -614,11 +617,10 @@ class BarkRuntime(_TreeCase):
         spends its headroom at roll time (test_table_budget) — but it still sets the
         mechanical pace and the budget."""
         self.assertEqual([vr.chatter_level(x) for x in ("quiet", "normal", "lively", "rowdy", "1.25", "bogus", None)], [0.5, 1.0, 1.5, 2.0, 1.25, 1.0, 1.0])
-        for k in ("ARENA_BARKS", "ARENA_BARKS_P", "ARENA_BARKS_OPENER_P", "ARENA_VOICE_YOUR_MOVE_P", "ARENA_VOICE_COLOR_P", "ARENA_VOICE_MIN_GAP"):
-            os.environ.pop(k, None)
+        os.environ.pop("ARENA_BARKS", None)                                   # the numbers are tuning.json's: no override here
         os.environ["ARENA_CHATTER"] = "rowdy"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
-        self.assertEqual((r.barks_p, r.barks_opener_p, r.color_p, r.your_move_p), (0.85, 0.35, 0.5, 0.6), "the knobs as written")
+        self.assertEqual((r.barks_p, r.barks_opener_p, r.color_p, r.your_move_p), (0.85, 0.35, 0.5, 0.6), "the numbers as written in tuning.json")
         self.assertEqual((r.min_gap, r.barks_swing, r.barks_hit), (4.0, 3, 4), "gap halved, thresholds halved (floors 3 / 4)")
         self.assertAlmostEqual(r.duty_target, 0.36); self.assertEqual(r.governor(optional=False), 2.0, "silence at rowdy: the old ×2, spent by the governor")
         os.environ["ARENA_CHATTER"] = "quiet"
@@ -629,16 +631,20 @@ class BarkRuntime(_TreeCase):
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
         self.assertEqual((r.barks_p, r.min_gap, r.barks_swing, r.duty_target, r.governor(optional=True)), (0.85, 8.0, 6, 0.18, 1.0))
 
-    def test_defaults_from_the_environment(self):
-        for k in ("ARENA_BARKS", "ARENA_VOICE_YOUR_MOVE", "ARENA_BARKS_P", "ARENA_BARKS_COOLDOWN", "ARENA_VOICE_YOUR_MOVE_P",
-                  "ARENA_BARKS_OPENER_P", "ARENA_BARKS_SWING", "ARENA_BARKS_HIT"):
+    def test_defaults_from_the_environment_and_the_tuning(self):
+        """The two operator switches default by environment; the numbers come from voices/tuning.json
+        (2026-09-16) and a `tuning` override on the runner replaces them one by one."""
+        for k in ("ARENA_BARKS", "ARENA_VOICE_YOUR_MOVE"):
             os.environ.pop(k, None)
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
         self.assertEqual((r.barks_mode, r.barks_p, r.barks_cooldown, r.barks_opener_p, r.barks_swing, r.barks_hit),
                          ("some", 0.85, 10.0, 0.35, 6, 8))
         self.assertEqual((r.your_move_mode, r.your_move_p), ("some", 0.6))
+        self.assertEqual((r.tuning["barks_p"], r.tuning["chain_p"]), (0.85, 0.6), "the whole file rides on the runner")
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning={"barks_p": 0.5, "barks_swing": 9})
+        self.assertEqual((r.barks_p, r.barks_swing, r.barks_hit), (0.5, 9, 8), "an override replaces its key and nothing else")
         os.environ["ARENA_BARKS"] = "bogus"; os.environ["ARENA_VOICE_YOUR_MOVE"] = "bogus"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertEqual((r.barks_mode, r.your_move_mode), ("some", "some"))
 
 
@@ -748,7 +754,7 @@ class InteractionChains(_TreeCase):
 
     def test_chatter_reaches_the_first_hop_through_the_governor(self):
         os.environ["ARENA_CHATTER"] = "rowdy"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertEqual(r.chains.first_hop_p, 0.6, "the table's knob is untouched (round 31)")
         self.assertEqual(r.chains.decay, 0.5, "the decay is not chatter")
         self.assertEqual(r.chains.max_hops, 4)
@@ -803,8 +809,8 @@ class PatterClock(_TreeCase):
 
     def setUp(self):
         super().setUp()
-        os.environ["ARENA_VOICE_PATTER"] = "on"; os.environ["ARENA_VOICE_PATTER_GAP"] = "5-5"
-        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        self.tuning.update({"patter": True, "patter_gap_s": [5, 5]})            # a fixed gap: [n] and [n, n] both mean n
+        self.r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
         self.r.rng.random = lambda: 0.0                     # dice always pass; weighted pick takes the first candidate
         self.r.rng.uniform = lambda a, b: a
 
@@ -820,9 +826,7 @@ class PatterClock(_TreeCase):
         self.clock.t += dt; self.r.patter()
 
     def test_defaults_and_the_dial(self):
-        for k in ("ARENA_VOICE_PATTER", "ARENA_VOICE_PATTER_GAP", "ARENA_VOICE_PATTER_HUMAN", "ARENA_VOICE_PATTER_AFTER_ADVICE", "ARENA_BARKS_SLOW"):
-            os.environ.pop(k, None)
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)          # tuning.json's numbers
         self.assertEqual((r.patter_on, r.patter_gap, r.patter_human, r.patter_after_advice, r.barks_slow), (True, (5.0, 7.0), 0.33, 6.0, 20.0))
         os.environ["ARENA_CHATTER"] = "rowdy"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
@@ -937,7 +941,7 @@ class PatterClock(_TreeCase):
 
     def test_a_restarted_runner_does_not_replay_the_startup_line(self):
         (self.logs / "voice-0.jsonl").write_text(json.dumps({"ts": 1.0, "event": "spoke", "kind": "startup", "stock": "startup"}) + "\n")
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
         self.assertTrue(r.started_said)
         self.assertFalse(self.r.started_said, "a fresh log: the opener plays")
 

@@ -82,7 +82,7 @@ def voice_pace(voice: list) -> list[str]:
     next line's start), and the distinct ids spoken against the ids the seated
     libraries hold (their manifests, when found beside this script)."""
     out = []
-    spoke = sorted((v for v in voice if v.get("event") == "spoke" and isinstance(v.get("ts"), (int, float))),
+    spoke = sorted((v for v in voice if v.get("event") == "spoke" and v.get("kind") != "atom" and isinstance(v.get("ts"), (int, float))),   # an atom is presence, not a line
                    key=lambda v: v["ts"])
     barks = [v for v in spoke if v.get("kind") == "bark"]
     if len(spoke) >= 2:

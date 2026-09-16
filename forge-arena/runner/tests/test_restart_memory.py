@@ -57,7 +57,7 @@ class _RestartCase(_TreeCase):
         """A (re)started runner on the same logs directory, its monotonic clock on another base."""
         clock2, player2 = Clock(), FakePlayer()
         clock2.t = base
-        return vr.VoiceRunner(self.logs, self.mailbox, player=player2, clock=clock2), clock2, player2
+        return vr.VoiceRunner(self.logs, self.mailbox, player=player2, clock=clock2, tuning=self.tuning), clock2, player2
 
     def _half_game(self):
         """The first runner plays half a game: seat 2 dies (its own exit line), seat 1 says "big swing" and a
@@ -273,7 +273,7 @@ class Replay(_TreeCase):
         return base
 
     def test_a_replay_is_deterministic_under_a_seed_and_touches_no_live_log(self):
-        os.environ["ARENA_VOICE_PATTER"] = "on"
+        # the replay's runner takes tuning.json as shipped (patter on); the tree case's override is not passed to it
         archive = self._archive()
         quiet = lambda s: None  # noqa: E731
         a = vr.replay(archive, seed=3, out=quiet)

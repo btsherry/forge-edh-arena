@@ -267,8 +267,8 @@ prompt and the voice settings the runner uses, so a designed voice in the
 same register takes a minute to make. Until a voice is available, live lines
 are simply skipped and the stock lines still play; the log says so once.
 
-Discipline is the point: one utterance at a time, at most one every
-`ARENA_VOICE_MIN_GAP` seconds (default 8), and advice for a window you already
+Discipline is the point: one utterance at a time, at most one every eight
+seconds (`min_gap_s` in `voices/tuning.json`), and advice for a window you already
 answered is dropped, never read late. **The speaker icon in the Advisor tab
 and pausing the advisor both silence the voice completely** — advice, quips,
 colour, "Your move.", eliminations, game over and the bleeps — drop anything
@@ -286,9 +286,9 @@ Knobs: `--no-voice` or `ARENA_VOICE=off`; `ARENA_VOICE_SFX=off` (no bleeps);
 `ARENA_VOICE_FX=off|lite|on` (film processing: off, pure-Python, or ffmpeg
 when present); `ARENA_VOICE_FORMAT` (default `pcm_24000`; `mp3_44100_128` if
 your tier rejects PCM — the runner falls back to MP3 by itself for the run);
-`ARENA_VOICE_GLITCH=off|light|heavy`; `ARENA_VOICE_COLOR=off|some|all` (spoken
-recaps on opponents' turns); `ARENA_VOICE_MAX_CHARS` per game (default 20000,
-then stock only). If ElevenLabs refuses three lines in a row (a spent quota,
+`ARENA_VOICE_GLITCH=off|light|heavy`; `ARENA_VOICE_MAX_CHARS` per game (default 20000,
+then stock only). Spoken recaps on opponents' turns are tuning, not a knob
+(`color_mode` off|some|all and `color_p` in `voices/tuning.json`). If ElevenLabs refuses three lines in a row (a spent quota,
 a bad key, an outage), live lines pause for a minute, then twice as long each
 time up to ten minutes, with one log line per pause; stock phrases keep
 playing and the first successful line afterwards logs the recovery. Mute mid-game with `python3 forge-arena/runner/voice_runner.py
@@ -357,10 +357,12 @@ replies) go quiet as the budget fills, lines anchored to a board event keep
 at least half their chance, and the whole table is quieter on your turn.
 Nothing plays before the deal, or while the board has sat unchanged for a
 couple of minutes, or after Joshua's sign-off at game over. The dial also
-shortens the gaps and lowers the reaction thresholds. Every knob sits in the
-table below (the `ARENA_BARKS_*`, `ARENA_TABLE_P`, `ARENA_VOICE_DUTY*` and
-`ARENA_VOICE_PATTER*` rows); after a game `arena-hygiene.py` prints how many
-seat lines played and what share was anchored to the board.
+shortens the gaps and lowers the reaction thresholds. The dial, `ARENA_BARKS`
+(off | some | all) and `ARENA_VOICE_YOUR_MOVE` are the only switches; every
+number the talk runs on — odds, thresholds, gaps, the chains — is data in
+`runner/voice/stock/voices/tuning.json` (one row in the table below), edited
+there rather than set in the environment. After a game `arena-hygiene.py`
+prints how many seat lines played and what share was anchored to the board.
 
 The audio is about 270 MB of the package. The wordings are written, not
 generated: `runner/voice/table_lines.py` and `card_lines.py` hold them (dev
@@ -522,10 +524,6 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 |---|---|---|
 | `ARENA_VOICE` | `on` | the advisor's voice (arena-play --no-voice = off) |
 | `ARENA_CHATTER` | `normal` | quiet \| normal \| lively \| rowdy (or a number) — one dial for how much the table talks: sets the talk budget (the speaking fraction of the last minute: .09 / .18 / .27 / .36) that the governor spends, shortens the gap, lowers the reaction thresholds; advice frequency is untouched |
-| `ARENA_VOICE_DUTY` | *(empty)* | talk budget override — the fraction of the last minute somebody may be speaking (e.g. `0.25`); empty = derived from `ARENA_CHATTER` |
-| `ARENA_VOICE_DUTY_HUMAN` | `0.6` | the talk budget on your turn, as a multiple of the budget (an AI turn's budget while Executive plays your seat) |
-| `ARENA_TABLE_P` | `1.0` | multiplier on the table lines' odds — self-narration (land-go, pass, cast types, pokes, no blocks, in response), whole-sentence life/hand numbers and named addressing (hit Urza / Giada's the threat / leave me alone, mono-red) |
-| `ARENA_BARKS_HUMAN_P` | `0.7` | chance a seat reacts to the HUMAN's play — a big attack, a game changer, the commander, a big spell, spot removal |
 | `ELEVENLABS_API_KEY` | unset | live spoken advice needs it; stock phrases play without it |
 | `ARENA_VOICE_FORMAT` | `pcm_24000` | ElevenLabs output; PCM needs no decoder |
 | `ARENA_VOICE_FX` | `on` | on = film effects (ffmpeg when present, else the lite chain) | lite | off |
@@ -533,30 +531,11 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_VOICE_ID` | unset | override the voice (id or library name); default from the stock manifest |
 | `ARENA_VOICE_SFX` | `on` | the bleeps before a line |
 | `ARENA_VOICE_YOUR_MOVE` | `some` | on \| some \| off — the 'your move' line at your priority (some = about six turns in ten; four wordings, never the same twice running) |
-| `ARENA_VOICE_YOUR_MOVE_P` | `0.6` | probability 'your move' is spoken on a turn when YOUR_MOVE=some |
-| `ARENA_VOICE_COLOR` | `some` | off | some | all — spoken recaps on opponents' turns |
-| `ARENA_VOICE_COLOR_P` | `0.5` | probability a recap is spoken when COLOR=some |
-| `ARENA_VOICE_MIN_GAP` | `8` | seconds between spoken lines |
 | `ARENA_VOICE_MAX_CHARS` | `20000` | live characters per run before the voice goes stock-only |
 | `ARENA_VOICE_GLITCH` | `light` | off | light | heavy — the radio glitch |
 | `ARENA_VOICE_FOCUS` | `on` | on \| off — the match screen brings a talking seat's field tab forward, then puts your tab back |
 | `ARENA_BARKS` | `some` | off \| some \| all — the AI seats speak in their own voices (Harry, Bill, Lily; by deck via voices/assign.json): openers, reactions, table talk, card lines, exchanges; the advisor must be on and unmuted |
-| `ARENA_BARKS_P` | `0.85` | probability a bark that was called for is spoken when BARKS=some |
-| `ARENA_BARKS_OPENER_P` | `0.35` | probability a seat opens its turn with a line (0 = never) |
-| `ARENA_BARKS_SWING` | `6` | total attacking power that earns an instant 'big swing' (or three attackers) |
-| `ARENA_BARKS_HIT` | `8` | damage to a player in one step that earns an instant reaction |
-| `ARENA_BARKS_COOLDOWN` | `10` | seconds before the same seat speaks again (a guard, not a pacing knob) |
-| `ARENA_BARKS_CHAIN_P` | `0.6` | interaction chains: chance a spoken line gets a reply (the first hop) |
-| `ARENA_BARKS_CHAIN_DECAY` | `0.5` | each further hop multiplies the chance by this |
-| `ARENA_BARKS_CHAIN_MAX` | `3` | most hops in one exchange (reply, counter-reply, last word) |
-| `ARENA_BARKS_CHAIN_GAP` | `0.25` | seconds between the lines of an exchange, a retort's beat (the normal gap is `ARENA_VOICE_MIN_GAP`) |
-| `ARENA_BARKS_CHAIN_HUMAN_P` | `0.5` | multiplier on a chain the human's own play started (so the table doesn't feel like it gangs up) |
-| `ARENA_VOICE_PATTER` | `on` | on \| off — the patter clock: when nothing has played for a while a seat says something about the board, or filler |
-| `ARENA_VOICE_PATTER_GAP` | `5-7` | seconds of silence (a range, drawn each time) before the table fills it |
-| `ARENA_VOICE_PATTER_HUMAN` | `0.33` | patter rate during the human's turn (a third as often; reactions to the human's plays are unaffected) |
-| `ARENA_VOICE_PATTER_AFTER_ADVICE` | `6` | seconds of patter silence after an advisor line, so advice is never talked over |
-| `ARENA_BARKS_SLOW` | `20` | a seat with a decision pending this many seconds gets told to play faster |
-| `ARENA_BARKS_MANA` | `6` | floating this much mana earns an instant 'big mana' line |
+| `runner/voice/stock/voices/tuning.json` | *(a file, not a variable)* | the numbers the talk runs on, as data: the gap between lines (8 s), the odds of a bark (.85), an opener (.35), a reaction to your play (.7), a recap (`some`, .5) or "your move" (.6), the swing (6) and hit (8) thresholds, the seat guard (10 s), the talk budget's human-turn multiple (.6), the patter clock (on, 5–7 s, a third as often on your turn, 6 s after advice), the slow-seat (20 s) and big-mana (6) lines, the chains' first-hop odds (.6), decay (.5), hop cap (3), beat (.25 s) and human-started multiple (.5). Edit the file, not the environment; `ARENA_CHATTER` scales the pace ones. Until v4.2 each was an `ARENA_*` knob |
 
 **Backends (optional, API-billed)**
 

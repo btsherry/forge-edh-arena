@@ -69,7 +69,10 @@ class SharedVocabulary(unittest.TestCase):
                 self.assertIn(generic, table["invites"], f"family {prefix!r} points at an opener without invites")
                 self.assertTrue(any(k.startswith(prefix) for k in ids), f"family {prefix!r} matches no table line")
         self.assertNotIn("joshua_replies", table, "A14 (Ben, 2026-09-14): Joshua never answers a seat — the reply map is gone")
-        self.assertTrue(0 < table["first_hop_p"] <= 1 and 0 < table["decay"] <= 1 and table["max_hops"] >= 1)
+        tune = json.loads((VOICES / "tuning.json").read_text())             # the numbers moved to tuning.json (2026-09-16)
+        self.assertTrue(0 < tune["chain_p"] <= 1 and 0 < tune["chain_decay"] <= 1 and tune["chain_max_hops"] >= 1)
+        for k in ("first_hop_p", "decay", "max_hops", "gap_s", "human_trigger_mult"):
+            self.assertNotIn(k, table, f"chains.json {k!r}: one source for the numbers — voices/tuning.json")
 
     def test_seats_voices_and_render_settings(self):
         seats = set()

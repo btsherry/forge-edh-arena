@@ -13,9 +13,30 @@ from pathlib import Path
 
 from voice.renderer import ARENA, VOICES_DIR
 
+# The tuning (2026-09-16, hardening plan §2 — "36 environment knobs on the voice path" -> five
+# operator knobs): every number the talk runs on that is not an operator's choice lives in
+# voices/tuning.json, loaded once here. The path is bound at import so a test that points
+# VOICES_DIR at a fake tree still reads the shipped numbers; VoiceRunner(tuning={...}) overrides.
+TUNING_FILE = VOICES_DIR / "tuning.json"
+TUNING_SCHEMA = "arena.voice-tuning/1"
+
+
+def load_tuning(path: Path | None = None) -> dict:
+    """voices/tuning.json as a dict (schema and note dropped). A missing or unreadable file is a
+    packaging fault, not a quiet default: the runner cannot pace itself without the numbers."""
+    p = path or TUNING_FILE
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, ValueError) as e:
+        raise RuntimeError(f"voice tuning unreadable: {p} ({e})") from e
+    if not isinstance(data, dict) or data.get("schema") != TUNING_SCHEMA:
+        raise RuntimeError(f"voice tuning {p}: expected schema {TUNING_SCHEMA!r}, got {data.get('schema') if isinstance(data, dict) else type(data).__name__!r}")
+    return {k: v for k, v in data.items() if k not in ("schema", "note")}
+
+
 # The table sub-library (round 31, runner/voice/table_lines.py): procedural self-narration,
 # whole-sentence numbers and named addressing live in voices/<lib>/table/. Per-line odds
-# below are multiplied by ARENA_TABLE_P; the governor treats them as anchored.
+# below are multiplied by tuning.json's table_p; the governor treats them as anchored.
 TABLE_LIB = "table"
 TABLE_P = {"grudge": 0.6, "again-countered": 0.7, "not-again-sweep": 0.7, "heads-up": 0.8, "early-game": 0.3, "you-promised": 0.7,
            "land-go": 0.6, "pass": 0.5, "mana-up": 0.5, "tapped-out": 0.4, "untap-draw": 0.5, "come-on-land": 0.4, "thinking": 0.3,

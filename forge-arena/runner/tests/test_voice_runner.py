@@ -53,8 +53,7 @@ class VoiceRunnerTests(unittest.TestCase):
         self.logs.mkdir(); self.mailbox.mkdir()
         self._env = dict(os.environ)
         os.environ.pop("ELEVENLABS_API_KEY", None)
-        os.environ["ARENA_VOICE_MIN_GAP"] = "8"
-        os.environ["ARENA_VOICE_SFX"] = "off"
+        os.environ["ARENA_VOICE_SFX"] = "off"                 # the gap (8 s) is tuning.json's, not a knob (2026-09-16)
         os.environ["ARENA_VOICE_FX"] = "off"
         # 2026-09-10: these tests pin the ORIGINAL behaviour — every "your move",
         # Joshua announcing eliminations; the dice and the seat barks have their
@@ -242,18 +241,15 @@ class VoiceRunnerTests(unittest.TestCase):
     # ---- colour recaps on opponents' turns
     def test_color_recaps_are_voiced_per_mode(self):
         self.clock.t += 100
-        os.environ["ARENA_VOICE_COLOR"] = "all"
-        r = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock, tuning={"color_mode": "all"})
         self._advisor(kind="color", turn=3, text="Urza pitched a land to Mox Diamond. Three artifacts on turn two.")
         self.clock.t += 10; r.step()                      # A2 (2026-09-14): a fresh runner waits the normal gap before its first line
         self.assertEqual(len(self.player.played), 1, "mode all voices every recap")
-        os.environ["ARENA_VOICE_COLOR"] = "off"
-        r2 = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock)
+        r2 = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock, tuning={"color_mode": "off"})
         self._advisor(kind="color", turn=4, text="Giada played a Plains.")
         self.clock.t += 20; r2.step()
         self.assertEqual(len(self.player.played), 1, "mode off never does")
-        os.environ["ARENA_VOICE_COLOR"] = "some"; os.environ["ARENA_VOICE_COLOR_P"] = "0.5"
-        r3 = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock)
+        r3 = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock, tuning={"color_mode": "some", "color_p": 0.5})
         r3.rng.seed(1)
         spoken = 0
         for n in range(20):

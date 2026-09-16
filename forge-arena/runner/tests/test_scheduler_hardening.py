@@ -173,7 +173,7 @@ class HumanTurnPredicate(_TableCase):
         r.duty_human = 0.01
         self.assertAlmostEqual(r._patter_gap_s(True), 5.0 / 0.33, msg="the budget's multiplier does not touch the gap")
         r.patter_human = 0.5
-        self.assertAlmostEqual(r._patter_gap_s(True), 10.0, msg="ARENA_VOICE_PATTER_HUMAN is the gap's own knob")
+        self.assertAlmostEqual(r._patter_gap_s(True), 10.0, msg="patter_human (tuning.json) is the gap's own number")
         r.duty_human = 0.6
         self.clock.t += 1; self._executive(True)                            # a second on: the memo re-reads the file
         self.assertFalse(r.human_turn(), "Executive on: an AI is playing the seat — an AI turn")
@@ -427,7 +427,7 @@ class ProposalRepliesAreTerminal(_TableCase):
         for f in (vr.VOICES_DIR / "bill").glob("*.wav"):
             (d / f.name).write_bytes(f.read_bytes())
         os.environ["ARENA_SEAT_DECKS"] = "urza-lord-high-artificer purphoros-god-of-the-forge sythis-harvests-hand giada-font-of-hope"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock)
+        r = vr.VoiceRunner(self.logs, self.mailbox, player=self.player, clock=self.clock, tuning=self.tuning)
         r.rng.random = lambda: 0.0; r.rng.shuffle = lambda x: None
         r.rng.choice = lambda xs: xs[1] if "agree" in xs else xs[0]        # "disagree" (invites clapback) and "im-not-the-threat" (invites disagree)
         r._last_snapshot = {"turn": 4, "phase": "MAIN1", "activeSeat": 1, "seats": [self._seat(i) for i in range(4)]}

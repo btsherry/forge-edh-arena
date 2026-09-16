@@ -11,7 +11,9 @@ Usage: arena-config.py [--mode all-ai|human] [--deck SLUG] [--model M] [--effort
                        [--out FILE]
 
 The DEFAULTS table below mirrors the defaults in the code; tests/test_hardening.py
-scans the sources and fails when they drift apart.
+scans the sources and fails when they drift apart. The voice's tuning numbers are
+not knobs: they live in runner/voice/stock/voices/tuning.json (one row below points
+at it; tests/test_tuning.py holds that file to the code).
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ROSTER = "urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds"
+TUNING_FILE = "runner/voice/stock/voices/tuning.json"     # the voice numbers live here, not in the environment (2026-09-16)
 
 # (name, default, one-line meaning). Grouped for the banner.
 KNOBS = {
@@ -50,10 +53,6 @@ KNOBS = {
     "voice": [
         ("ARENA_VOICE", "on", "the advisor's voice (arena-play --no-voice = off)"),
         ("ARENA_CHATTER", "normal", "quiet | normal | lively | rowdy (or a number) — one dial for how much the table talks: sets the talk budget (speaking fraction of the last minute: .09 / .18 / .27 / .36) the governor spends, shortens the gap, lowers the reaction thresholds; advice frequency is untouched"),
-        ("ARENA_VOICE_DUTY", "", "talk budget override: the fraction of the last minute somebody may be speaking (e.g. 0.25); empty = derived from ARENA_CHATTER"),
-        ("ARENA_VOICE_DUTY_HUMAN", "0.6", "the talk budget on the human's turn, as a multiple of the budget (game 48: silences were the bigger issue)"),
-        ("ARENA_TABLE_P", "1.0", "multiplier on the table lines' odds — self-narration (land-go, pass, cast types, pokes, no blocks, in response), whole-sentence life/hand numbers and named addressing (hit Urza / Giada's the threat / leave me alone, mono-red)"),
-        ("ARENA_BARKS_HUMAN_P", "0.7", "chance a seat reacts to the HUMAN's play — a big attack, a game changer, the commander, a big spell, spot removal"),
         ("ELEVENLABS_API_KEY", "", "live spoken advice needs it; stock phrases play without it"),
         ("ARENA_VOICE_FORMAT", "pcm_24000", "ElevenLabs output; PCM needs no decoder"),
         ("ARENA_VOICE_FX", "on", "on = film effects (ffmpeg when present, else the lite chain) | lite | off"),
@@ -61,32 +60,15 @@ KNOBS = {
         ("ARENA_VOICE_ID", "", "override the voice (id or library name); default from the stock manifest"),
         ("ARENA_VOICE_SFX", "on", "the bleeps before a line"),
         ("ARENA_VOICE_YOUR_MOVE", "some", "on | some | off — the 'your move' line at your priority (some = about six turns in ten; four wordings, never the same twice running)"),
-        ("ARENA_VOICE_YOUR_MOVE_P", "0.6", "probability 'your move' is spoken on a turn when YOUR_MOVE=some"),
-        ("ARENA_VOICE_COLOR", "some", "off | some | all — spoken recaps on opponents' turns"),
-        ("ARENA_VOICE_COLOR_P", "0.5", "probability a recap is spoken when COLOR=some"),
-        ("ARENA_VOICE_MIN_GAP", "8", "seconds between spoken lines"),
         ("ARENA_VOICE_MAX_CHARS", "20000", "live characters per run before the voice goes stock-only"),
         ("ARENA_VOICE_GLITCH", "light", "off | light | heavy — the radio glitch"),
         ("ARENA_VOICE_FOCUS", "on", "on | off — the match screen brings a talking seat's field tab forward, then puts your tab back"),
     ],
     "seat barks (the AI seats' voices; advisor on + unmuted)": [
         ("ARENA_BARKS", "some", "off | some | all — the AI seats speak in their own voices (Harry, Bill, Lily; by deck via voices/assign.json): openers, reactions, table talk, card lines, exchanges; the advisor must be on and unmuted"),
-        ("ARENA_BARKS_P", "0.85", "probability a bark that was called for is spoken when BARKS=some"),
-        ("ARENA_BARKS_OPENER_P", "0.35", "probability a seat opens its turn with a line (0 = never)"),
-        ("ARENA_BARKS_SWING", "6", "total attacking power that earns an instant 'big swing' (or three attackers)"),
-        ("ARENA_BARKS_HIT", "8", "damage to a player in one step that earns an instant reaction"),
-        ("ARENA_BARKS_COOLDOWN", "10", "seconds before the same seat speaks again (a guard, not a pacing knob)"),
-        ("ARENA_BARKS_CHAIN_P", "0.6", "interaction chains: chance a spoken line gets a reply (the first hop)"),
-        ("ARENA_BARKS_CHAIN_DECAY", "0.5", "each further hop multiplies the chance by this"),
-        ("ARENA_BARKS_CHAIN_MAX", "3", "most hops in one exchange (reply, counter-reply, last word)"),
-        ("ARENA_BARKS_CHAIN_GAP", "0.25", "seconds between the lines of an exchange, a retort's beat (the normal gap is ARENA_VOICE_MIN_GAP)"),
-        ("ARENA_BARKS_CHAIN_HUMAN_P", "0.5", "multiplier on a chain the human's own play started (so the table doesn't feel like it gangs up)"),
-        ("ARENA_VOICE_PATTER", "on", "on | off — the patter clock: when nothing has played for a while a seat says something about the board, or filler"),
-        ("ARENA_VOICE_PATTER_GAP", "5-7", "seconds of silence (a range, drawn each time) before the table fills it"),
-        ("ARENA_VOICE_PATTER_HUMAN", "0.33", "patter rate during the human's turn (0.33 = a third as often; reactions to the human's plays are unaffected)"),
-        ("ARENA_VOICE_PATTER_AFTER_ADVICE", "6", "seconds of patter silence after an advisor line, so advice is never talked over"),
-        ("ARENA_BARKS_SLOW", "20", "a seat with a decision pending this many seconds gets told to play faster"),
-        ("ARENA_BARKS_MANA", "6", "floating this much mana earns an instant 'big mana' line"),
+        # Not a variable: the file that holds every number the talk runs on (2026-09-16, hardening plan §2 —
+        # the 24 ARENA_BARKS_* / ARENA_VOICE_PATTER* / DUTY / COLOR / MIN_GAP / TABLE_P knobs retired into it).
+        (TUNING_FILE, "", "the numbers the talk runs on, as data — the gap between lines (8 s), the odds of a bark, an opener, a reaction to your play, a recap or 'your move', the swing/hit thresholds, the seat guard, the human-turn budget, the patter clock's gap and rate, the slow-seat and big-mana lines, the chains' odds, decay, hop cap and beat; edit the file, not the environment (ARENA_CHATTER scales the pace ones)"),
     ],
     "backends (optional, API-billed)": [
         ("OPENROUTER_API_KEY", "", "needed by or/ seats"),
@@ -131,6 +113,9 @@ def render(args, env=os.environ) -> str:
     for group, rows in KNOBS.items():
         out.append(f"  -- {group}")
         for name, default, meaning in rows:
+            if "/" in name:                                   # a file the numbers live in, not a variable to set
+                out.append(f"     {name}   {meaning}")
+                continue
             raw = env.get(name)
             if name in SECRET:
                 val = "set" if (raw or "").strip() else "unset"

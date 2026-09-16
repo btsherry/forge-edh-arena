@@ -365,6 +365,10 @@ class Player:
 
 # ---- renderer -------------------------------------------------------------------
 
+CACHE_MAX_BYTES = 200 * 1024 * 1024   # the live-render cache: 200 MB or fourteen days, oldest first (plan C6; 173 MB after one week)
+CACHE_MAX_AGE_S = 14 * 24 * 3600
+
+
 class Renderer:
     """stock → cache → live. Live is ElevenLabs Flash v2.5: PCM back (wrapped in
     our own WAV header, no ffmpeg needed), the film-match effects via ffmpeg when
@@ -422,6 +426,7 @@ class Renderer:
         self.chars_used = 0
         self.fake_tts = fake_tts  # tests: callable(text) -> wav bytes
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._trim_cache()
 
     @property
     def live(self) -> bool:
@@ -473,6 +478,20 @@ class Renderer:
             return None
         p = STOCK / "sfx" / random.choice(names)
         return p if p.exists() else None
+
+    def _trim_cache(self) -> None:
+        """logs/cache/voice grows 3–10 renders a game with a near-zero hit rate (advice sentences are
+        unique): keep it under CACHE_MAX_BYTES and CACHE_MAX_AGE_S, oldest first (plan C6)."""
+        try:
+            files = sorted(self.cache_dir.glob("*.wav"), key=lambda f: f.stat().st_mtime)
+            now = time.time()
+            total = sum(f.stat().st_size for f in files)
+            for f in files:
+                if now - f.stat().st_mtime > CACHE_MAX_AGE_S or total > CACHE_MAX_BYTES:
+                    total -= f.stat().st_size
+                    f.unlink()
+        except OSError:
+            pass
 
     def render(self, text: str) -> Path | None:
         """A WAV for this text: cache hit, else live (if allowed), else None."""

@@ -118,9 +118,11 @@ class Observer(_EventsCase):
         self._assert_wall_ts(last)
         s1 = next(s for s in last["seats"] if s["seat"] == 1)
         self.assertEqual((s1["life"], s1["handSize"], s1["eliminated"]), (40, 3, False))
-        self.assertEqual(s1["battlefield"], [{"name": "Land 0", "tapped": True}, {"name": "Land 1"}, {"name": "Bear", "power": 3, "toughness": 3}],
-                         "names, plus power/toughness/tapped only when they say something")
-        self.assertNotIn("graveyard", s1); self.assertNotIn("types", s1["battlefield"][0])
+        self.assertEqual(s1["battlefield"], [{"name": "Land 0", "types": "Land — Island", "tapped": True}, {"name": "Land 1", "types": "Land — Island"},
+                                             {"name": "Bear", "types": "Creature — Thing", "power": 3, "toughness": 3}],
+                         "names and types (a replay must know a land), plus power/toughness/tapped only when they say something")
+        self.assertIn("stackDetail", last, "a replay sees the stack's targets too")
+        self.assertNotIn("graveyard", s1); self.assertNotIn("exile", s1)                     # zone lists stay off the tape
         self.r.scan_observer(self._board(3, 1, seats=seats, events=ev))
         self.assertEqual(len(self._tape("observer-tape.jsonl")), 2, "the same board again: no change, no tape line")
 

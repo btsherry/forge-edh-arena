@@ -1,27 +1,36 @@
 #!/usr/bin/env python3
-"""Voice runner — the advisor's voice (Joshua / W.O.P.R. register).
+"""Voice runner — the table's one throat: Joshua (the advisor's voice, W.O.P.R.
+register) and the three seat voices (Harry, Bill, Lily) the AI seats speak in.
 
 A stdlib-only daemon on the same one-way file seam as everything else: it
-READS the advisor's structured stream and the engine's observer snapshot,
-decides what deserves a spoken line, and plays it on the Mac's default
-output. It never writes to the mailbox, so the game can never wait on it.
+READS the advisor's structured stream, the engine's observer snapshot (board
+and public event ring), the seat runners' game log and the brains' own `say`
+intents, decides what deserves a spoken line and who says it, and plays it on
+the default output. It never writes to the mailbox, so the game can never wait
+on it.
 
 Sources
   runner/logs/advisor-0.jsonl   advice (first sentence, LIVE), ask answers
                                 (LIVE), quip records the advisor emits
                                 (STOCK phrase by id), colour recaps (LIVE, some
-                                of them — this is what speaks on opponents' turns)
+                                of them — this is what speaks on opponents' turns),
+                                the advisor's [bark:<seat>:<id>] tags
   mailbox/observer-state.json   game start → "startup" stock line; the human's
                                 turn beginning → "your-move" (low priority);
-                                eliminations → "player-eliminated"; the human's own
-                                elimination → one of manifest.human_out; game over →
-                                win: "you-win" + "game-over-gg", loss:
-                                "strange-game" + "game-over-gg"
+                                eliminations → "player-eliminated" or the seat's
+                                own exit line; the human's own elimination → one
+                                of manifest.human_out; game over → the winner's
+                                line, then win: "you-win" + "game-over-gg", loss:
+                                "strange-game" + "game-over-gg", then NOTHING; the
+                                event ring → instant seat reactions (a big swing, a
+                                hit, a counter, a game changer, a combo online)
+  runner/logs/game.jsonl        mulligans, the seat brains' `say` intents, the game id
   runner/logs/control/voice.json  {"enabled": false} mutes (written by
                                 --mute / --unmute or the GUI later)
 
 Rendering
-  STOCK  runner/voice/stock/<id>.wav — shipped, pre-rendered, FX baked in.
+  STOCK  runner/voice/stock/<id>.wav — shipped, pre-rendered, FX baked in;
+         voices/<lib>/… the seat libraries (table/ and cards/ sub-libraries).
   CACHE  runner/logs/cache/voice/<sha1>.wav — every live line is kept, keyed
          by text+voice+model+fx; a repeated line never costs again.
   LIVE   ElevenLabs Flash v2.5 (`eleven_flash_v2_5`) over HTTPS, MP3 in,
@@ -29,22 +38,28 @@ Rendering
          Only with ELEVENLABS_API_KEY set; otherwise the daemon is stock-only.
 
 Discipline (Ben, 2026-09-07): it should not talk constantly — at most one
-utterance per ARENA_VOICE_MIN_GAP seconds (default 8), one at a time, newest
+utterance per min_gap_s (8 s, tuning.json), one at a time, newest
 high-priority item wins, advice for a window the human already answered is
 dropped, a random terminal bleep precedes each line (ARENA_VOICE_SFX=off to
-silence them).
+silence them). The seats (2026-09-10 →): one owner per turn boundary, a
+per-seat guard, a talk budget the chatter dial sets and the governor spends,
+a patter clock with a silence floor, exchanges composed one hop at a time.
 
-Env knobs
-  ELEVENLABS_API_KEY        live rendering on (never logged)
-  ARENA_VOICE_ID            voice to render with (default: the shipped voice id)
-  ARENA_VOICE_MODEL         default eleven_flash_v2_5
-  ARENA_VOICE_MIN_GAP       seconds between utterances (8)
-  ARENA_VOICE_MAX_CHARS     live characters per game before stock-only (20000)
-  ARENA_VOICE_SFX           on|off bleeps (on)
-  ARENA_VOICE_FX            on|off the film FX chain on live lines (on)
-  ARENA_VOICE_GLITCH        off|light|heavy stutters and hitches on every line (light)
-  ARENA_VOICE_YOUR_MOVE     on|off "Your move." at the human's turns (on)
-  ARENA_VOICE_COLOR         off|some|all — voice the per-turn recap (opponents' turns too); some = probability ARENA_VOICE_COLOR_P (0.5)
+Knobs (2026-09-16, hardening plan §2 — five for the operator; the rest is data)
+  ARENA_CHATTER             quiet|normal|lively|rowdy or a number (normal) — the ONE dial:
+                            the pace (gap, guard, thresholds, patter gap) and the talk budget
+  ARENA_BARKS               off|some|all — the seat voices (some)
+  ARENA_VOICE_YOUR_MOVE     on|some|off — "Your move." at the human's turns (some)
+  ARENA_VOICE_SFX           on|off the bleeps (on)
+  ARENA_VOICE_FOCUS         on|off — the GUI brings a talking seat's tab forward (read by the GUI, not here)
+  Joshua's render settings, not tuning: ELEVENLABS_API_KEY (never logged), ARENA_VOICE_ID,
+  ARENA_VOICE_MODEL (eleven_flash_v2_5), ARENA_VOICE_FORMAT (pcm_24000), ARENA_VOICE_MAX_CHARS
+  (20000), ARENA_VOICE_FX (on|lite|off), ARENA_VOICE_GLITCH (off|light|heavy).
+  Launch plumbing: ARENA_HUMAN_DECK, ARENA_SEAT_DECKS (who sits where, so which voice is whose).
+  EVERY OTHER NUMBER — the gap, the odds of a bark / opener / reaction / recap / "your move",
+  the swing and hit thresholds, the seat guard, the human-turn budget, the patter clock, the
+  slow-seat and big-mana lines, the chains — is runner/voice/stock/voices/tuning.json, read once
+  by voice.table.load_tuning() (VoiceRunner(tuning={...}) overrides a value; the tests do).
 
 CLI
   voice_runner.py                       run the daemon
@@ -68,13 +83,22 @@ carries `turn`, `phase`, `active` and `clock` (C1); a spoken line carries the ri
 and its `channel`. A muted runner still reads the snapshot, so a game over publishes final.json at once
 and the teardown watcher never waits on a voice that will not speak (B1).
 
+Tapes and replay (§4.3, C1): every ring event the runner consumed goes to logs/events.jsonl (as-is,
+plus turn and ts) and every CHANGED snapshot it read, compacted, to logs/observer-tape.jsonl (both
+archived with the game; EVENTS_TAPE / OBSERVER_TAPE in voice/events.py). `--replay <archive>` drives
+a fresh runner from that tape under a fake clock and a dry player and prints what it would have said
+— the way a game's talk is re-examined without the game.
+
 Layout (2026-09-14, voicework2 hardening plan Phase 0a) — split with no behaviour change:
   runner/voice/renderer.py    Player, Renderer, the WAV/FX/glitch helpers, STOCK/VOICES_DIR
-  runner/voice/table.py       seat <-> voice assignment, addressing, decks' cards and combos
+  runner/voice/table.py       seat <-> voice assignment, addressing, decks' cards and combos, load_tuning
   runner/voice/scheduler.py   SchedulerMixin — the queue, the governor, the guards, chains, patter
   runner/voice/events.py      EventsMixin — the advisor stream, the snapshot, the event ring, the game log
-  this file                   VoiceRunner (state, the play step, the loop) and the CLI; it
-                              re-exports every public name, so `voice_runner.X` keeps working.
+  runner/voice/atoms.py       AtomsMixin — the non-verbal atoms and the under channel (§4.5)
+  runner/chains.py            ChainTable and the reply planner (pure functions; the runner enqueues)
+  runner/voice/stock/voices/  the seat libraries, assign/address/combos/chains.json, tuning.json
+  this file                   VoiceRunner (state, the checkpoint, the play step, the loop) and the
+                              CLI; it re-exports every public name, so `voice_runner.X` keeps working.
 """
 from __future__ import annotations
 
@@ -95,7 +119,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent          # forge-arena/runner
 sys.path.insert(0, str(HERE))
-from chains import ChainTable, plan_reply  # noqa: E402
+from chains import ChainTable  # noqa: E402
 ARENA = HERE.parent
 from voice.renderer import (  # noqa: E402,F401 — re-exported (voice_runner.X)
     STOCK, VOICES_DIR, DEFAULT_VOICE_ID, cache_key, wav_seconds, GLITCH_LEVELS, pcm_to_wav, lite_fx_wav, glitch_wav,
@@ -104,13 +128,13 @@ from voice.table import (  # noqa: E402,F401 — re-exported
     TABLE_LIB, TABLE_P, LIFE_STEPS, CARD_LIB, CARD_SWAP, CARD_REACTIONS, load_libraries, load_assignments,
     assign_voices, load_seat_libraries, DEFAULT_TABLE, seat_decks_from_roster, game_changers_of, deck_cards_of,
     card_kind, load_address, who_for_deck, card_slug, load_combo_index, deck_combos_of, life_pid, hand_pid,
-    seat_decks_from_game_log)
+    seat_decks_from_game_log, TUNING_FILE, TUNING_SCHEMA, load_tuning)
 from voice.scheduler import (  # noqa: E402,F401 — re-exported
     PRIORITY, CHAIN_HOP_PRIORITY, BARK_PRIORITY, DUTY_BASE, DUTY_WINDOW_S, DUTY_HUMAN_MULT, SILENCE_FLOOR_S,
     QUESTION_LINES, QUESTION_PREFIXES, PROPOSAL_LINES, PROPOSAL_PREFIXES, PROPOSAL_P, PROPOSAL_TARGET_P,
     PROPOSAL_REPLIES, PROPOSAL_TARGET_REPLIES, OPTIONAL_FLOOR, OPTIONAL_SOURCES, RARE_REPEATS, OWN_ACTION_LINES,
     LIFE_FOLLOWUP, STATE_ANSWERS, ADDRESS_SWAP, DEAL_TURNS, LONG_GAME_TURN, LETHAL_POWER, IDLE_S, IDLE_SLOWDOWN,
-    MULL_LINE, MULL_P, MULL_SCREW_WORDS, MULL_DIG_WORDS, RECENT_S, PATTER_REPEAT_S, RECENT_WEIGHT, CHATTER_LEVELS,
+    MULL_LINE, MULL_P, MULL_SCREW_WORDS, MULL_DIG_WORDS, RECENT_S, PATTER_REPEAT_S, CHATTER_LEVELS,
     chatter_level, SchedulerMixin)
 from voice.events import (  # noqa: E402,F401 — re-exported
     FIRST_SENTENCE_MAX, ASK_MAX, LOOP_AT, THINK_S, NARRATIONS_PER_TURN, GRUDGE_EVERY, ELIM_SEAT_P, first_sentence,
@@ -137,7 +161,8 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
     """The daemon: the state every mixin reads, the play step (speak), the loop (step/run).
     Queue policy lives in voice.scheduler.SchedulerMixin, the sources in voice.events.EventsMixin."""
 
-    def __init__(self, logs_dir: Path, mailbox_dir: Path, dry_run: bool = False, fake_tts=None, player=None, clock=time.monotonic):
+    def __init__(self, logs_dir: Path, mailbox_dir: Path, dry_run: bool = False, fake_tts=None, player=None, clock=time.monotonic,
+                 tuning: dict | None = None):
         self.logs = logs_dir
         self.mailbox = mailbox_dir
         self.dry_run = dry_run
@@ -151,37 +176,47 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.renderer = Renderer(logs_dir / "cache" / "voice", log=self.say, fake_tts=fake_tts,
                                  record=self.record, clock=clock, rng=self.rng)
         self.player = player or Player(dry_run=dry_run, log=self.say)
+        # The tuning (2026-09-16, hardening plan §2): every number below that is not an operator's
+        # choice comes from voices/tuning.json — read once, overridable per runner (`tuning`, the tests).
+        # The operator keeps the dial, the two on/some/off switches and the bleeps.
+        self.tuning: dict = load_tuning()
+        if tuning:
+            unknown = set(tuning) - set(self.tuning)
+            if unknown:
+                raise ValueError(f"unknown tuning key(s): {sorted(unknown)} (voices/tuning.json holds {len(self.tuning)})")   # a typo tests nothing (critic)
+            self.tuning.update(tuning)
+        tune = self.tuning
         self.chatter = chatter_level(os.environ.get("ARENA_CHATTER", "normal"))
-        self.min_gap = float(os.environ.get("ARENA_VOICE_MIN_GAP", "8"))
+        self.min_gap = float(tune["min_gap_s"])
         self.sfx_on = os.environ.get("ARENA_VOICE_SFX", "on").lower() != "off"
         # "Your move" (Ben, 2026-09-10: "cool the first time, okay the second, lame
-        # every time after"): on = every turn | some = about YOUR_MOVE_P of turns |
+        # every time after"): on = every turn | some = about your_move_p of turns |
         # off; the wordings come from a shuffle bag either way.
         self.your_move_mode = os.environ.get("ARENA_VOICE_YOUR_MOVE", "some").lower()
         if self.your_move_mode not in ("on", "some", "off"):
             self.your_move_mode = "some"
-        self.your_move_p = float(os.environ.get("ARENA_VOICE_YOUR_MOVE_P", "0.6"))
+        self.your_move_p = float(tune["your_move_p"])
         # Seat barks (2026-09-10): the advisor tags [bark:<seat>:<id>] on its
         # replies; the seat's static voice (voices/<lib>/) says its own wording.
         # Advisor off or muted => nothing (both already silence this runner).
         self.barks_mode = os.environ.get("ARENA_BARKS", "some").lower()
         if self.barks_mode not in ("off", "some", "all"):
             self.barks_mode = "some"
-        self.barks_p = float(os.environ.get("ARENA_BARKS_P", "0.85"))
-        self.barks_cooldown = float(os.environ.get("ARENA_BARKS_COOLDOWN", "10"))
-        self.barks_opener_p = float(os.environ.get("ARENA_BARKS_OPENER_P", "0.35"))
-        self.barks_swing = int(os.environ.get("ARENA_BARKS_SWING", "6"))
-        self.barks_hit = int(os.environ.get("ARENA_BARKS_HIT", "8"))
+        self.barks_p = float(tune["barks_p"])
+        self.barks_cooldown = float(tune["barks_cooldown_s"])
+        self.barks_opener_p = float(tune["barks_opener_p"])
+        self.barks_swing = int(tune["barks_swing"])
+        self.barks_hit = int(tune["barks_hit"])
         # reactions to the HUMAN's plays (round 31: before this the seats ignored every card Ben cast)
-        self.barks_human_p = float(os.environ.get("ARENA_BARKS_HUMAN_P", "0.7"))
-        # the talk budget: ARENA_VOICE_DUTY overrides the dial's derived goal
+        self.barks_human_p = float(tune["barks_human_p"])
+        # the talk budget: a duty_target in the tuning overrides the dial's derived goal (null = derived)
         try:
-            self.duty_target = float(os.environ.get("ARENA_VOICE_DUTY", "") or 0) or min(0.45, DUTY_BASE * self.chatter)
-        except ValueError:
+            self.duty_target = float(tune["duty_target"] or 0) or min(0.45, DUTY_BASE * self.chatter)
+        except (TypeError, ValueError):
             self.duty_target = min(0.45, DUTY_BASE * self.chatter)
-        self.duty_human = float(os.environ.get("ARENA_VOICE_DUTY_HUMAN", str(DUTY_HUMAN_MULT)))
+        self.duty_human = float(tune["duty_human"])
         self._spoken_log: list[tuple[float, float]] = []       # (start, seconds) of every line played
-        self.table_mult = float(os.environ.get("ARENA_TABLE_P", "1.0"))
+        self.table_mult = float(tune["table_p"])
         self._turn_start: dict[int, dict] = {}                 # seat -> {"lands", "casts", "narrations"} for the turn it is playing
         self._prev_snapshot: dict = {}
         self._stack_seen: set[tuple] = set()
@@ -216,16 +251,16 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         # (a slow seat, the leader, a low seat, a big hand, a big board) or filler.
         # Five Game Knights episodes measured ~190 words/min with a silence over 4 s
         # only every ~78 s. Quieter on the human's turn; never over the advisor.
-        self.patter_on = os.environ.get("ARENA_VOICE_PATTER", "on").lower() != "off"
-        lo, _, hi = os.environ.get("ARENA_VOICE_PATTER_GAP", "5-7").partition("-")
-        try:
-            self.patter_gap = (float(lo), float(hi or lo))
-        except ValueError:
-            self.patter_gap = (5.0, 7.0)
-        self.patter_human = float(os.environ.get("ARENA_VOICE_PATTER_HUMAN", "0.33"))     # rate on the human's turn
-        self.patter_after_advice = float(os.environ.get("ARENA_VOICE_PATTER_AFTER_ADVICE", "6"))
-        self.barks_slow = float(os.environ.get("ARENA_BARKS_SLOW", "20"))                  # a seat thinking this long gets told
-        self.barks_mana = int(os.environ.get("ARENA_BARKS_MANA", "6"))                       # floating this much is "big mana"
+        patter_switch = tune["patter"]
+        if not isinstance(patter_switch, bool):
+            raise ValueError(f"tuning.patter must be true/false, not {patter_switch!r}")             # "off" would read as on
+        self.patter_on = patter_switch
+        lo, hi = (list(tune["patter_gap_s"]) + [None])[:2]                                 # [lo, hi] seconds; [n] = fixed
+        self.patter_gap = (float(lo), float(hi if hi is not None else lo))
+        self.patter_human = float(tune["patter_human"])                                     # rate on the human's turn
+        self.patter_after_advice = float(tune["patter_after_advice_s"])
+        self.barks_slow = float(tune["barks_slow_s"])                                       # a seat thinking this long gets told
+        self.barks_mana = int(tune["barks_mana"])                                           # floating this much is "big mana"
         self._last_hit_by: dict[int, tuple[list[int], object]] = {}   # seat -> (hitters, turn) from the ring: kill attribution
         self._casts: dict[int, list[float]] = {}                      # seat -> recent cast times (a flurry earns "play slower")
         self._pool_high: set[int] = set()                             # seats currently over the big-mana line
@@ -236,7 +271,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         # winner's line, then Joshua's pair, then NOTHING — the runner locks.
         self.final_locked = False
         # interaction chains (Ben, 2026-09-10): a spoken line invites replies; see chains.py
-        self.chains = ChainTable.load(VOICES_DIR)
+        self.chains = ChainTable.load(VOICES_DIR, tuning=tune)
         self._chain: dict | None = None      # {"origin": seat, "hop": n, "turn": t} while an exchange is running
         self._last_snapshot: dict = {}
         # the table: from the launcher at startup (ARENA_HUMAN_DECK + the roster), else
@@ -255,11 +290,11 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         # Colour commentary (Ben, 2026-09-07: "it could say a thing during
         # opponents' turns some of the time"): the advisor's per-turn recap
         # arrives after every turn, the opponents' included. off | some | all;
-        # "some" voices each recap with probability ARENA_VOICE_COLOR_P (0.5).
-        self.color_mode = os.environ.get("ARENA_VOICE_COLOR", "some").lower()
+        # "some" voices each recap with probability color_p (0.5). Tuning, not a knob.
+        self.color_mode = str(tune["color_mode"]).lower()
         if self.color_mode not in ("off", "some", "all"):
             self.color_mode = "some"
-        self.color_p = float(os.environ.get("ARENA_VOICE_COLOR_P", "0.5"))
+        self.color_p = float(tune["color_p"])
         self.apply_chatter()
         self.queue: list[dict] = []
         # A2: never -1e9 (the floor read a restart as an astronomical silence and forced a line in 3–6 s):
@@ -276,7 +311,6 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         except OSError:
             pass
         self.answered: set[int] = set()     # advisor request seqs the human already answered
-        self.game_id = None
         self.seen_turn = None
         self.seen_active = None
         self.eliminated: set[int] = set()
@@ -489,6 +523,11 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             "patter_due": self._patter_due, "patter_anchor": self._patter_anchor,
             "floor_rearmed_at": getattr(self, "_floor_rearmed_at", -1e9), "floor_atom_run": int(getattr(self, "_floor_atom_run", 0) or 0),
             "tails": {k: list(v) for k, v in (self._tails or {}).items()},
+            # the turn in progress (seam critic, 2026-09-16): the active seat's lands/casts/narrations, the cast
+            # flurry clocks and the advisor requests already answered — a hot swap mid-turn kept none of them
+            "turn_start": {str(s): dict(v) for s, v in self._turn_start.items()},
+            "casts": {str(s): [x for x in v if now - x <= STATE_RECENT_S] for s, v in getattr(self, "_casts", {}).items()},
+            "answered": sorted(int(x) for x in self.answered),
             "ring_seq": self._ring_seq,
             "atom_seat_at": {str(s): t for s, t in d.get("_atom_seat_at", {}).items()},
             "atom_used": {f"{s}|{stem}": t for (s, stem), t in d.get("_atom_used", {}).items()},
@@ -540,7 +579,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             if same and not ahead:
                 self._restore_state(state, d, age)
                 return
-            self.record("noted", kind="state", why=f"checkpoint from another game ignored (saved for {sgid!r} at turn {state.get('seen_turn')}, "
+            self.record("noted", kind="state", why=f"checkpoint {'ahead of the board' if ahead else 'from another game'} ignored (saved for {sgid!r} at turn {state.get('seen_turn')}, "
                         f"{age:.0f}s ago; this is {gid!r} at turn {turn})")
         if mem_dead and (turn or 0) > 1:
             fresh = sorted(s for s in mem_dead if s not in self.eliminated)
@@ -621,6 +660,9 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         cls.clear()
         cls.update({int(s): str(c) for s, c in get("seat_last_class", dict).items()})
         self._spoken_log = [(t(a), float(b)) for a, b in get("spoken_log", list) if t(a) is not None]
+        self._turn_start = {int(s): dict(v) for s, v in get("turn_start", dict).items()}
+        self._casts = {int(s): [t(x) for x in v if t(x) is not None] for s, v in get("casts", dict).items()}
+        self.answered = {int(x) for x in get("answered", list)}
         self.last_spoken_at = t(state.get("last_spoken_at"), now)
         self._advisor_spoke_at = t(state.get("advisor_spoke_at"), -1e9)
         self._patter_due = t(state.get("patter_due"), now)
@@ -980,7 +1022,8 @@ def _snapshot_from_tape(rec: dict, events: list[dict], lo, hi) -> dict:
               "battlefield": [dict(c) for c in (s.get("battlefield") or []) if isinstance(c, dict)]}
              for s in (rec.get("seats") or []) if isinstance(s, dict)]
     return {"gameId": rec.get("gameId"), "turn": rec.get("turn"), "phase": rec.get("phase"), "activeSeat": rec.get("activeSeat"),
-            "gameOver": bool(rec.get("gameOver")), "stack": rec.get("stack") or [], "events": ring, "seats": seats}
+            "gameOver": bool(rec.get("gameOver")), "stack": rec.get("stack") or [], "stackDetail": rec.get("stackDetail") or [],
+              "events": ring, "seats": seats}
 
 
 def replay(archive: Path, seed: int = 1, out=print) -> list[str]:
