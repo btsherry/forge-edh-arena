@@ -6,8 +6,9 @@ A stdlib-only daemon on the same one-way file seam as everything else: it
 READS the advisor's structured stream, the engine's observer snapshot (board
 and public event ring), the seat runners' game log and the brains' own `say`
 intents, decides what deserves a spoken line and who says it, and plays it on
-the default output. It never writes to the mailbox, so the game can never wait
-on it.
+the default output. It never writes anything the engine waits on: its one mailbox
+output is the deal notes (mailbox/seat-<n>/notes/, below), advisory files a seat
+runner folds into its next prompt.
 
 Sources
   runner/logs/advisor-0.jsonl   advice (first sentence, LIVE), ask answers
@@ -24,9 +25,22 @@ Sources
                                 "strange-game" + "game-over-gg", then NOTHING; the
                                 event ring → instant seat reactions (a big swing, a
                                 hit, a counter, a game changer, a combo online)
-  runner/logs/game.jsonl        mulligans, the seat brains' `say` intents, the game id
+  runner/logs/game.jsonl        mulligans, the seat brains' `say` intents, the game id,
+                                the brains' DEAL answers (accept / refuse / counter)
   runner/logs/control/voice.json  {"enabled": false} mutes (written by
                                 --mute / --unmute or the GUI later)
+  runner/logs/control/deal/     <ts>-accept.json {"offer_id"}: the player accepts a
+                                seat's counter-offer (the advisor writes it; consumed)
+
+Table deals (plan 2026-09-16 §11) — this runner OWNS the deal ledger: the live map (checkpointed), the
+append-only runner/logs/deals.jsonl (struck / refused / counter / lapsed / broken / expired; archived
+by arena-stop) and the notes that tell a seat's brain what was agreed — mailbox/seat-<n>/notes/
+<ts_ms>-deal-struck|deal-broken|deal-lapsed.json, one JSON object each, which the seat runner renders
+as a RUNNER NOTE and deletes (seat 0's only while the Executive plays it). The seat's answer is voiced
+from the table sub-library (deal-with-you / no-deal-with-you / counter-offer; deal-over at a lapse;
+you-broke-it at the human breaking one; i-broke-it when a seat breaks its own); under the Executive a
+seat-0 answer is Joshua's (joshua-deal-yes/no/counter). See voice/scheduler.py (the ledger) and
+voice/events.py (the sources and the break detection).
 
 Rendering
   STOCK  runner/voice/stock/<id>.wav — shipped, pre-rendered, FX baked in;
@@ -135,6 +149,8 @@ from voice.scheduler import (  # noqa: E402,F401 — re-exported
     PROPOSAL_REPLIES, PROPOSAL_TARGET_REPLIES, OPTIONAL_FLOOR, OPTIONAL_SOURCES, RARE_REPEATS, OWN_ACTION_LINES,
     LIFE_FOLLOWUP, STATE_ANSWERS, ADDRESS_SWAP, DEAL_TURNS, LONG_GAME_TURN, LETHAL_POWER, IDLE_S, IDLE_SLOWDOWN,
     MULL_LINE, MULL_P, MULL_SCREW_WORDS, MULL_DIG_WORDS, RECENT_S, PATTER_REPEAT_S, CHATTER_LEVELS,
+    DEAL_KINDS, DEAL_ATTACK_KINDS, DEAL_TARGET_KINDS, DEAL_MAX_ROUNDS, DEALS_LEDGER, DEAL_CONTROL_DIR, DEAL_NOTE_KINDS, DEAL_LINES,
+    DEAL_ANSWER_LINE, JOSHUA_DEAL_LINE, DEAL_OVER_P, I_BROKE_IT_P, CHAIN_P_OVERRIDE, normalize_deal, deal_terms, is_question,
     chatter_level, SchedulerMixin)
 from voice.events import (  # noqa: E402,F401 — re-exported
     FIRST_SENTENCE_MAX, ASK_MAX, LOOP_AT, THINK_S, NARRATIONS_PER_TURN, GRUDGE_EVERY, ELIM_SEAT_P, first_sentence,
@@ -226,7 +242,12 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self._hits_from: dict[int, dict[int, int]] = {}
         self._countered_n: dict[int, int] = {}
         self._sweeps = 0
-        self._deals: dict[tuple[int, int], object] = {}       # (a, b) -> the turn the truce was struck (both directions)
+        # table deals (plan 2026-09-16 §11): (a, b) -> {"kind", "until_turn", "struck", "offer_id"} both directions — the
+        # live half of the ledger (logs/deals.jsonl); the counters a seat made and the player has not yet accepted; the
+        # ledger's record counter. All three are in the checkpoint; an old checkpoint's int (the struck turn) upgrades.
+        self._deals: dict[tuple[int, int], dict] = {}
+        self._deal_counters: dict[str, dict] = {}              # offer_id -> {"between": [seat, other], "deal": terms, "turn": t}
+        self._deal_seq = 0
         self._heads_up_said = False
         self._gc_cast_seen: set[tuple[int, str]] = set()       # (seat, card) game changers already crowed about this game
         self._card_events_turn: dict[tuple[int, str], int] = {}  # (seat, card) -> casts + self-bounces this turn (a loop past LOOP_AT)
@@ -490,7 +511,9 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             "heads_up_said": bool(self._heads_up_said),
             "sweeps": int(self._sweeps),
             "countered_n": {str(s): int(n) for s, n in sorted(self._countered_n.items())},
-            "deals": sorted([int(a), int(b), t] for (a, b), t in self._deals.items()),
+            "deals": sorted(([int(a), int(b), normalize_deal(v)] for (a, b), v in self._deals.items()), key=lambda x: (x[0], x[1])),
+            "deal_counters": {str(k): v for k, v in sorted(self._deal_counters.items())},
+            "deal_seq": int(self._deal_seq or 0),
             "hits_from": {str(v): {str(f): int(n) for f, n in sorted(m.items())} for v, m in sorted(self._hits_from.items())},
             "last_hit_by": {str(s): [[int(h) for h in hs], t] for s, (hs, t) in sorted(self._last_hit_by.items())},
             "mulls": {str(s): int(n) for s, n in sorted(self._mulls.items())},
@@ -622,7 +645,15 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self._heads_up_said = bool(state.get("heads_up_said"))
         self._sweeps = int(state.get("sweeps") or 0)
         self._countered_n = {int(s): int(n) for s, n in get("countered_n", dict).items()}
-        self._deals = {(int(a), int(b)): tn for a, b, tn in get("deals", list)}
+        # the deals: the contract's dict, or an OLD checkpoint's int (the struck turn) upgraded to a truce until struck + DEAL_TURNS
+        self._deals = {}
+        for a, b, v in get("deals", list):
+            deal = normalize_deal(v)
+            if deal is not None:
+                self._deals[(int(a), int(b))] = deal
+        self._deal_counters = {str(k): v for k, v in get("deal_counters", dict).items()
+                               if isinstance(v, dict) and isinstance(v.get("between"), list) and len(v["between"]) == 2}
+        self._deal_seq = int(state.get("deal_seq") or 0)
         self._hits_from = {int(v): {int(f): int(n) for f, n in m.items()} for v, m in get("hits_from", dict).items()}
         self._last_hit_by = {int(s): ([int(h) for h in hs], tn) for s, (hs, tn) in get("last_hit_by", dict).items()}
         self._mulls = {int(s): int(n) for s, n in get("mulls", dict).items()}
@@ -920,6 +951,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.scan_advisor()
         self.scan_observer()
         self.scan_game_log()
+        self.scan_deal_control()                     # the player's acceptance of a seat's counter (logs/control/deal/, §11)
         self.mutter()
         self.heckle_human()                          # "we're waiting on you" (Ben: heckles are welcome; Joshua never answers)
         self.patter()

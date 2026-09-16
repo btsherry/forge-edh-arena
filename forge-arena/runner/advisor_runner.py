@@ -343,6 +343,121 @@ def table_opponents(own_deck: str, roster: list[str]) -> list[str]:
     return [d for d in roster if d != own_deck][:3]
 
 
+# ---- table deals (docs/reviews/2026-09-16-table-deals-plan.md §11) ---------------
+# The player deals through the Advisor chat: `@urza peace for a turn?` or `deal
+# purphoros alliance 2 rounds`. Joshua RELAYS — the message is parsed here, never
+# answered by the brain — as a `deal-offer` note in the seat's mailbox; the seat's
+# `deal` answer (game.jsonl) and the voice runner's ledger (logs/deals.jsonl) come
+# back as panel lines. Three kinds, two durations, one counter per offer.
+DEAL_KINDS = ("truce", "no-target", "alliance")
+DEAL_ROUNDS_MAX = 3
+DEAL_COLOR_P = 0.3          # Ben's decision 4: Joshua's one-line assessment is the 30 %
+DEAL_PANEL_MAX = 100        # every deal panel line fits one row
+ADDRESS_JSON = Path(__file__).resolve().parent / "voice" / "stock" / "voices" / "address.json"
+_DEAL_AT_RE = re.compile(r"^@\s*([A-Za-z0-9][\w'\-]*)[:,]?\s*(.*)$", re.S)
+_DEAL_WORD_RE = re.compile(r"^deal\s+(?:with\s+)?([A-Za-z][\w'\-]*)[:,]?\s*(.*)$", re.I | re.S)
+_DEAL_ACCEPT_RE = re.compile(r"^(accept(?:ed)?|yes|ok|okay|agreed|deal|take it)[.!]*$", re.I)
+_DEAL_REFUSE_RE = re.compile(r"^(no|nope|refuse|decline|reject|pass|no deal)[.!]*$", re.I)
+_DEAL_UNTIL_RE = re.compile(r"\buntil\s+(?:the\s+)?(?:end\s+of\s+)?turn\s+(\d+)", re.I)
+_DEAL_ROUNDS_RE = re.compile(r"\b(\d+|a|an|one|two|three)\s+(?:more\s+|full\s+)?(?:turns?|rounds?)\b", re.I)
+_DEAL_NUMS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3}
+_DEAL_KIND_RES = (("no-target", re.compile(r"\bno[\s-]?targets?\b|\bdon'?t target\b", re.I)),
+                  ("alliance", re.compile(r"\b(alliance|allied|ally|allies|both)\b", re.I)),
+                  ("truce", re.compile(r"\b(truce|peace)\b", re.I)))
+_ADVISOR_NAMES = ("joshua", "advisor", "wopr")
+_DEAL_ASK_RE = re.compile(r"\b(deal|truce|alliance|no[\s-]target|counter[\s-]?offer)\b", re.I)
+
+
+def load_commanders(path: Path = ADDRESS_JSON) -> dict:
+    """address.json `commanders`: deck slug -> {who, say, name}; {} when unreadable."""
+    try:
+        d = json.loads(Path(path).read_text()).get("commanders") or {}
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def deal_table(seat_decks: dict, commanders: dict | None = None) -> tuple[dict, dict, dict]:
+    """(aliases, names, handles) for the seats at the table: `aliases` maps every way the
+    player may type a seat — commander (`urza`), its said name, the deck slug and
+    its first word, `seat1`/`s1`/`1` — to the seat number; `names` maps seat ->
+    the commander as the panel says it ("Urza"); `handles` seat -> the one word
+    the panel tells the player to type (`@urza accept`). A deck address.json does
+    not know is named by its slug's first word, capitalised."""
+    cmd = load_commanders() if commanders is None else commanders
+    aliases: dict[str, int] = {}
+    names: dict[int, str] = {}
+    handles: dict[int, str] = {}
+    for seat, slug in sorted((int(k), str(v)) for k, v in seat_decks.items()):
+        entry = cmd.get(slug) or {}
+        first = slug.split("-")[0]
+        say = str(entry.get("say") or first.capitalize())
+        names[seat] = say
+        handles[seat] = str(entry.get("who") or first).lower()
+        keys = {slug, first, say, str(entry.get("who") or ""), str(entry.get("name") or "").split(",")[0],
+                str(entry.get("name") or "").split("//")[0], f"seat{seat}", f"seat-{seat}", f"s{seat}", str(seat)}
+        for k in keys:
+            k = " ".join(k.lower().split())
+            if k and k not in aliases:
+                aliases[k] = seat
+    return aliases, names, handles
+
+
+def parse_deal(text: str, aliases: dict) -> dict | None:
+    """The Advisor-chat deal grammar. `@<commander-or-seat> <words>` or `deal
+    <commander> <words>`; words -> a kind (truce|peace, no target, alliance|ally|
+    both; default truce) and a duration (`N turn(s)|round(s)` -> rounds 1..3;
+    `until turn N` -> until_turn; default rounds 1), or `accept`/`yes` / `no` for
+    a pending counter. Returns {"to": seat, "action": "offer", "deal": {...},
+    "words": ...} | {"to": seat, "action": "accept"|"refuse", ...} | {"to":
+    "advisor", "words": ...} for `@joshua …` | None when nothing here names a
+    seat — the message is then an ordinary question for the brain."""
+    m = _DEAL_AT_RE.match(text or "") or _DEAL_WORD_RE.match(text or "")
+    if not m:
+        return None
+    name = " ".join(m.group(1).lower().rstrip("?!.,:;").split())
+    words = " ".join(m.group(2).split())
+    if name in _ADVISOR_NAMES:
+        return {"to": "advisor", "words": words}
+    seat = aliases.get(name)
+    if seat is None:
+        return None
+    if _DEAL_ACCEPT_RE.match(words):
+        return {"to": seat, "action": "accept", "words": words}
+    if _DEAL_REFUSE_RE.match(words):
+        return {"to": seat, "action": "refuse", "words": words}
+    kind = "truce"
+    for k, rx in _DEAL_KIND_RES:
+        if rx.search(words):
+            kind = k
+            break
+    deal: dict = {"kind": kind}
+    mu = _DEAL_UNTIL_RE.search(words)
+    if mu:
+        deal["until_turn"] = int(mu.group(1))
+    else:
+        mr = _DEAL_ROUNDS_RE.search(words)
+        n = 1
+        if mr:
+            tok = mr.group(1).lower()
+            n = _DEAL_NUMS.get(tok) or int(tok)
+        deal["rounds"] = max(1, min(DEAL_ROUNDS_MAX, n))
+    return {"to": seat, "action": "offer", "deal": deal, "words": words}
+
+
+def deal_terms_text(deal: dict, name: str | None = None) -> str:
+    """`truce, 1 turn` / `alliance, 2 turns` / `no-target until turn 12`; with a
+    name and both durations resolved: `truce until Urza's turn 9 ends`."""
+    kind = str((deal or {}).get("kind") or "truce")
+    until, rounds = (deal or {}).get("until_turn"), (deal or {}).get("rounds")
+    if until is not None and rounds is not None and name:
+        return f"{kind} until {name}'s turn {until} ends"
+    if until is not None:
+        return f"{kind} until turn {until}"
+    n = int(rounds or 1)
+    return f"{kind}, {n} turn{'s' if n != 1 else ''}"
+
+
 def opponent_deck_sections(own_deck: str, arena_root: Path) -> list[str]:
     """Full oracle text + combo lists for every OTHER deck at the table.
 
@@ -407,6 +522,19 @@ class AdvisorRunner:
         self._asks = log_dir / "control" / "ask"   # questions from the Advisor tab
         self._last_turn = None                      # for the [tN · you] label
         arena_root = Path(__file__).resolve().parent.parent
+        # Table deals (plan §11): the player's offers by offer_id, the seats as the
+        # player may type them, and the cursors into the two files that answer —
+        # game.jsonl (a seat's `deal` answer) and logs/deals.jsonl (the voice
+        # runner's ledger). Both cursors start at the current end: a restarted
+        # advisor never re-prints a finished deal.
+        self._offers: dict[str, dict] = {}
+        self._deal_seen: set = set()
+        self._deal_aliases, self._deal_names, self._deal_handles = deal_table({0: deck, **self._seat_decks})
+        self._ledger = log_dir / "deals.jsonl"
+        self._deal_control = log_dir / "control" / "deal"
+        self._game_pos = self._size_of(log_dir / "game.jsonl")
+        self._ledger_pos = self._size_of(self._ledger)
+        self.deal_rng = random.Random()              # the 70/30 dice, apart from the governor's seeded stream
         # The advisor's ONE tool (Ben, 2026-09-07): the public-state dump.
         # claude -p runs from the package root, so the pattern is root-relative;
         # ARENA_ADVISOR_TOOLS=off takes it away.
@@ -933,12 +1061,22 @@ class AdvisorRunner:
             if not text:
                 self._record("ask_rejected", {"file": p.name})
                 continue
-            self._answer_ask(text[:ASK_MAX_CHARS])
+            text = text[:ASK_MAX_CHARS]
+            # A deal message first (plan §11): `@urza …` / `deal urza …` is relayed
+            # to the seat, never answered; `@joshua …` is a question for the brain.
+            d = parse_deal(text, self._deal_aliases)
+            if d is not None and d.get("to") == "advisor":
+                self._answer_ask(d.get("words") or text, deals=True)
+            elif d is not None:
+                self._handle_deal_message(d, text)
+            else:
+                self._answer_ask(text)
             n += 1
         return n
 
-    def _answer_ask(self, text: str) -> None:
-        turn = self._last_turn if self._last_turn is not None else "?"
+    def _answer_ask(self, text: str, deals: bool = False) -> None:
+        turn = self._turn_now()          # the snapshot's turn, else the feed's (a question before any feed: "t?")
+        turn = turn if turn is not None else "?"
         ctx = ""
         if self.pending_context:
             head = (f"- … {self._context_dropped} earlier line(s) dropped\n"
@@ -946,6 +1084,9 @@ class AdvisorRunner:
             ctx = "SINCE LAST TIME:\n" + head + "\n".join(self.pending_context) + "\n\n"
             self.pending_context = []
             self._context_dropped = 0
+        if deals or _DEAL_ASK_RE.search(text):
+            # Ben's decision 4: asked about a deal, Joshua always assesses — with the facts
+            ctx += "DEALS AT THE TABLE (the runner's ledger, ground truth): " + self._deal_facts() + "\n\n"
         prompt = (f"{ctx}THE HUMAN AT YOUR SEAT ASKS: {text}\n\n"
                   "Answer them directly (1-4 sentences, plain text). Ground it in the "
                   "most recent board state you were shown; if it needs something you "
@@ -958,6 +1099,331 @@ class AdvisorRunner:
                            + "\n")
         self._record("ask", {"turn": self._last_turn, "text": text, "answer": reply,
                              "latency_s": meta.get("latency_s")})
+
+    # ---- table deals (plan §11, 2026-09-16) -----------------------------------------
+    # The relay: a parsed offer becomes a `deal-offer` note in the seat's mailbox;
+    # the seat's `deal` answer (game.jsonl, lane A1) and the voice runner's ledger
+    # (logs/deals.jsonl, lane A2) come back as one panel line each. Counters are
+    # answered through logs/control/deal/<ts>-accept|refuse.json (the voice runner
+    # strikes the deal). Joshua never answers a deal message; he may assess a
+    # struck or broken deal in one colour line (DEAL_COLOR_P), always when asked.
+
+    @staticmethod
+    def _size_of(path: Path) -> int:
+        try:
+            return os.stat(path).st_size
+        except OSError:
+            return 0
+
+    def _turn_now(self):
+        """The table's current turn: the snapshot's, else the last feed turn, else None."""
+        t = self._clock.last.get("turn") if isinstance(self._clock.last, dict) else None
+        if isinstance(t, int) and not isinstance(t, bool):
+            return t
+        return self._last_turn if isinstance(self._last_turn, int) else None
+
+    def _deal_name(self, seat) -> str:
+        try:
+            return self._deal_names.get(int(seat)) or f"seat {seat}"
+        except (TypeError, ValueError):
+            return f"seat {seat}"
+
+    def _seat_dead(self, seat: int) -> bool:
+        seats = self._clock.last.get("seats") if isinstance(self._clock.last, dict) else None
+        for s in seats or []:
+            if isinstance(s, dict) and s.get("seat") == seat:
+                return bool(s.get("eliminated"))
+        return False
+
+    def _panel(self, tag: str, body: str, turn=None) -> None:
+        """One deal line, `[<clock> · <tag>] <body>`, at most DEAL_PANEL_MAX chars."""
+        turn = self._turn_now() if turn is None else turn
+        head = f"[{self._clock.label(turn if turn is not None else '?')} · {tag}] "
+        room = DEAL_PANEL_MAX - len(head)
+        if len(body) > room:
+            body = body[:max(0, room - 1)].rstrip() + "…"
+        self._stream_write(f"\n{head}{body}\n")
+
+    @staticmethod
+    def _write_atomic(path: Path, body: dict) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(body))
+        os.replace(tmp, path)
+
+    def _handle_deal_message(self, d: dict, text: str) -> None:
+        seat, action, words = int(d["to"]), d.get("action"), d.get("words") or text
+        name = self._deal_name(seat)
+        turn = self._turn_now()
+        if action in ("accept", "refuse"):
+            self._answer_counter(seat, action)
+            return
+        deal = dict(d.get("deal") or {"kind": "truce", "rounds": 1})
+        if seat == 0:
+            self._panel("table", "you can't deal with yourself — name a seat (@urza, @giada…)", turn)
+            self._record("deal_rejected", {"turn": turn, "text": text, "why": "self"})
+            return
+        if self._seat_dead(seat):
+            self._panel("table", f"{name} is out of the game — no deal", turn)
+            self._record("deal_rejected", {"turn": turn, "text": text, "why": "dead", "seat": seat})
+            return
+        pending = [o for o in self._offers.values()
+                   if o["seat"] == seat and o["status"] in ("open", "countered") and o["turn"] == turn]
+        if pending:
+            self._panel("table", f"you already offered {name} a deal this turn — wait for the answer", turn)
+            self._record("deal_rejected", {"turn": turn, "text": text, "why": "duplicate", "seat": seat})
+            return
+        if "until_turn" in deal and turn is not None and deal["until_turn"] <= turn:
+            self._panel("table", f"turn {deal['until_turn']} is not ahead of us — say \"until turn {turn + 2}\" or \"2 turns\"", turn)
+            self._record("deal_rejected", {"turn": turn, "text": text, "why": "until_turn_past", "seat": seat})
+            return
+        ts_ms = int(time.time() * 1000)
+        offer_id = f"{ts_ms}-0-{seat}"
+        note = {"kind": "deal-offer", "from": 0, "to": seat, "deal": deal, "offer_id": offer_id,
+                "text": words, "turn": turn}
+        try:
+            self._write_atomic(self._base / f"seat-{seat}" / "notes" / f"{ts_ms}-deal-offer.json", note)
+        except OSError as e:
+            self._panel("table", f"could not reach {name}'s mailbox ({e.__class__.__name__}) — offer not sent", turn)
+            return
+        self._offers[offer_id] = {"seat": seat, "who": name, "turn": turn, "deal": deal, "offered": dict(deal), "text": words,
+                                  "status": "open", "counter": None, "until_turn": deal.get("until_turn")}
+        self._panel(f"you → {name}", f"{deal_terms_text(deal)}: \"{words}\"", turn)
+        self._record("deal", {"event": "offer", "offer_id": offer_id, "seat": seat, "turn": turn, "deal": deal, "text": words})
+
+    def _answer_counter(self, seat: int, action: str) -> None:
+        """`@urza accept` / `@urza no` on a pending counter -> logs/control/deal/<ts>-accept|refuse.json
+        {"offer_id", "counter"}; the voice runner strikes or closes the deal (lane A2)."""
+        name = self._deal_name(seat)
+        turn = self._turn_now()
+        open_ = [(oid, o) for oid, o in self._offers.items() if o["seat"] == seat and o["status"] == "countered"]
+        if not open_:
+            self._panel("table", f"no counter from {name} is pending", turn)
+            return
+        oid, off = open_[-1]
+        body = {"offer_id": oid, "counter": off["counter"]}
+        try:
+            self._write_atomic(self._deal_control / f"{int(time.time() * 1000)}-{action}.json", body)
+        except OSError as e:
+            self._panel("table", f"could not record your answer ({e.__class__.__name__}) — try again", turn)
+            return
+        off["status"] = "counter-accepted" if action == "accept" else "counter-refused"
+        if action == "accept":
+            off["deal"] = dict(off["counter"] or off["deal"])
+            off["until_turn"] = off["deal"].get("until_turn")
+            self._panel(f"you → {name}", f"accept the counter: {deal_terms_text(off['deal'])}", turn)
+        else:
+            self._panel(f"you → {name}", "refuse the counter", turn)
+        self._record("deal", {"event": f"counter-{action}", "offer_id": oid, "seat": seat, "turn": turn, "counter": off["counter"]})
+
+    def _tail_jsonl(self, path: Path, attr: str) -> list[dict]:
+        """New complete JSON lines since the cursor in `attr`; a shrunken file (arena-stop
+        archived it) restarts the cursor; a line caught mid-write waits for the next poll."""
+        pos = getattr(self, attr, 0)
+        size = self._size_of(path)
+        if size < pos:
+            pos = 0
+        if size == pos:
+            return []
+        try:
+            with path.open("rb") as f:
+                f.seek(pos)
+                data = f.read()
+        except OSError:
+            return []
+        end = data.rfind(b"\n")
+        if end < 0:
+            return []
+        setattr(self, attr, pos + end + 1)
+        out = []
+        for raw in data[:end].splitlines():
+            try:
+                r = json.loads(raw)
+            except ValueError:
+                continue
+            if isinstance(r, dict):
+                out.append(r)
+        return out
+
+    def _deal_tick(self) -> None:
+        """Answers and ledger events into panel lines; a counter unanswered by the end
+        of its turn lapses. Called every poll, pause or not — a deal is the player's own request."""
+        for r in self._tail_jsonl(self._log_dir / "game.jsonl", "_game_pos"):
+            deal = r.get("deal")
+            if isinstance(deal, dict) and (r.get("type") == "DEAL" or "offer_id" in deal):
+                self._on_deal_record(r, deal)
+        for r in self._tail_jsonl(self._ledger, "_ledger_pos"):
+            self._on_ledger_record(r)
+        now = self._turn_now()
+        if now is None:
+            return
+        for oid, off in self._offers.items():
+            if off["status"] == "countered" and isinstance(off.get("counter_turn"), int) and off["counter_turn"] < now:
+                off["status"] = "counter-lapsed"
+                self._panel("table", f"{off['who']}'s counter lapsed", now)
+                self._record("deal", {"event": "counter-lapsed", "offer_id": oid, "seat": off["seat"], "turn": now})
+
+    def _on_deal_record(self, r: dict, deal: dict) -> None:
+        """A seat's `deal` answer from game.jsonl (lane A1): accept / refuse / counter."""
+        seat, turn, oid = r.get("seat"), r.get("turn"), deal.get("offer_id")
+        terms = deal.get("terms") if isinstance(deal.get("terms"), dict) else {}
+        counter = deal.get("counter") if isinstance(deal.get("counter"), dict) else None
+        if seat == 0:
+            # Executive (Ben's decision 5): the advisor answered a seat's offer on the player's behalf
+            other = self._deal_name(deal.get("with"))
+            kind = str((counter or terms).get("kind") or "truce")
+            if counter:
+                body = f"counter {other}: {deal_terms_text(counter)}"
+            elif deal.get("accept"):
+                body = f"accept {other}'s {kind}"
+            else:
+                body = f"refuse {other}'s {kind}"
+            self._panel("you (Executive)", body, turn)
+            self._record("deal", {"event": "executive-answer", "offer_id": oid, "with": deal.get("with"), "turn": turn, "accept": bool(deal.get("accept")), "counter": counter})
+            return
+        off = self._offers.get(oid)
+        if off is None and deal.get("with") != 0:
+            return                                  # seat-to-seat: not the player's business
+        if (oid, "answer") in self._deal_seen:
+            return
+        self._deal_seen.add((oid, "answer"))
+        name = off["who"] if off else self._deal_name(seat)
+        if deal.get("accept"):
+            src = dict(off["deal"] if off else {})
+            src.update(terms)
+            body = "accepts: " + deal_terms_text(src, name)
+            if off is not None:
+                off["status"] = "accepted"
+                off["until_turn"] = src.get("until_turn")
+                off["deal"] = src
+        elif counter:
+            handle = self._deal_handles.get(seat, str(seat))
+            body = f"counters: {deal_terms_text(counter)} — type \"@{handle} accept\" or \"@{handle} no\""
+            if off is not None:
+                off["status"] = "countered"
+                off["counter"] = dict(counter)
+                off["counter_turn"] = turn if isinstance(turn, int) else self._turn_now()
+        else:
+            body = "refuses"
+            if off is not None:
+                off["status"] = "refused"
+        self._panel(name, body, turn)
+        self._record("deal", {"event": "answer", "offer_id": oid, "seat": seat, "turn": turn,
+                              "accept": bool(deal.get("accept")), "counter": counter, "terms": terms})
+
+    def _on_ledger_record(self, r: dict) -> None:
+        """The voice runner's ledger (lane A2): struck / refused / expired / lapsed / broken
+        between the player and a seat. Answers the DEAL record already showed are not repeated."""
+        ev = str(r.get("event") or "")
+        between = r.get("between") or []
+        try:
+            between = [int(b) for b in between]
+        except (TypeError, ValueError):
+            return
+        if 0 not in between or len(between) != 2:
+            return
+        other = between[0] if between[1] == 0 else between[1]
+        oid, turn = r.get("offer_id"), r.get("turn")
+        off = self._offers.get(oid) if oid else None
+        name = off["who"] if off else self._deal_name(other)
+        deal = r.get("deal") if isinstance(r.get("deal"), dict) else {}
+        kind = str(deal.get("kind") or (off or {}).get("deal", {}).get("kind") or "truce")
+        key = (oid or f"{other}:{turn}", ev)
+        if key in self._deal_seen:
+            return
+        self._deal_seen.add(key)
+        if ev == "struck":
+            until = deal.get("until_turn")
+            if off is not None:
+                off["status"] = "struck"
+                already = off.get("until_turn")
+                off["until_turn"] = until if until is not None else already
+                if (oid, "answer") in self._deal_seen and already is not None:
+                    pass                            # the accept line already said when it ends
+                elif until is not None:
+                    self._panel("table", f"your {kind} with {name} is on until turn {until} ends", turn)
+                else:
+                    self._panel("table", f"your {kind} with {name} is on", turn)
+            else:
+                self._panel("table", f"{kind} with {name} struck" + (f" — until turn {until} ends" if until is not None else ""), turn)
+            self._assess_deal(f"a {kind} between you and {name} was STRUCK" + (f" (until turn {until} ends)" if until is not None else ""), turn)
+        elif ev == "broken":
+            by, how = r.get("by"), str(r.get("how") or "attack")
+            verb = "targeted" if how == "target" else "attacked"
+            if by == 0:
+                self._panel("table", f"you broke your {kind} with {name}", turn)
+            else:
+                self._panel("table", f"{name} broke your {kind} ({verb} you)", turn)
+            if off is not None:
+                off["status"] = "broken"
+            self._assess_deal(f"your {kind} with {name} was BROKEN by {'you' if by == 0 else name} ({verb})", turn)
+        elif ev == "lapsed":
+            self._panel("table", f"your {kind} with {name} has ended", turn)
+            if off is not None:
+                off["status"] = "lapsed"
+        elif ev == "expired":
+            self._panel("table", f"{name} did not answer", turn)
+            if off is not None and off["status"] == "open":
+                off["status"] = "expired"
+        elif ev == "refused":
+            if (oid, "answer") not in self._deal_seen:
+                self._panel(name, "refuses", turn)
+                if off is not None:
+                    off["status"] = "refused"
+        elif ev == "counter" and (oid, "answer") not in self._deal_seen and deal:
+            self._deal_seen.add((oid, "answer"))
+            handle = self._deal_handles.get(other, str(other))
+            self._panel(name, f"counters: {deal_terms_text(deal)} — type \"@{handle} accept\" or \"@{handle} no\"", turn)
+            if off is not None:
+                off["status"], off["counter"] = "countered", dict(deal)
+                off["counter_turn"] = turn if isinstance(turn, int) else self._turn_now()
+        self._record("deal", {"event": f"ledger-{ev}", "offer_id": oid, "seat": other, "turn": turn, "by": r.get("by"), "deal": deal})
+
+    def _deal_facts(self) -> str:
+        if not self._offers:
+            return "no deals offered or struck so far."
+        parts = []
+        for oid, off in list(self._offers.items())[-6:]:
+            s = f"{deal_terms_text(off.get('offered') or off['deal'])} with {off['who']} (offered turn {off['turn']}): {off['status']}"
+            if off.get("counter") and off["status"] == "countered":
+                s += f", their counter {deal_terms_text(off['counter'])}"
+            if off.get("until_turn") is not None and off["status"] in ("accepted", "struck"):
+                s += f", until turn {off['until_turn']} ends"
+            parts.append(s)
+        return "; ".join(parts) + "."
+
+    def _board_brief(self) -> str:
+        seats = self._clock.last.get("seats") if isinstance(self._clock.last, dict) else None
+        out = []
+        for s in seats or []:
+            if not isinstance(s, dict) or s.get("seat") is None:
+                continue
+            who = self._deal_name(s["seat"]) if s.get("seat") != 0 else "you"
+            out.append(f"{who}: life {s.get('life')}, hand {s.get('handSize')}, {len(s.get('battlefield') or [])} permanents"
+                       + (", ELIMINATED" if s.get("eliminated") else ""))
+        return "; ".join(out)
+
+    def _assess_deal(self, facts: str, turn) -> None:
+        """Ben's decision 4: on a struck or broken deal Joshua adds ONE assessment line
+        with probability DEAL_COLOR_P, through the colour path (a `color` record the
+        voice runner speaks). Never for the offer itself — that is relayed, not answered."""
+        if self.deal_rng.random() >= DEAL_COLOR_P:
+            return
+        board = self._board_brief()
+        prompt = (f"TABLE DEAL: {facts}. Deals at the table: {self._deal_facts()}"
+                  + (f" BOARD: {board}." if board else "")
+                  + "\n\nOne sentence: was this a good deal for the human, and what to watch (plain text).")
+        answer, meta = self.brain.decide(prompt, min(self.timeout, 45.0))
+        text, quip = split_quip((meta.get("raw") or "").strip(), log=self._say)
+        text, _bark = split_bark(text, log=self._say)   # a bark never rides an assessment
+        if not text:
+            return
+        turn = self._turn_now() if turn is None else turn
+        self._stream_write(f"\n[{self._clock.label(turn if turn is not None else '?')} · color] {text}\n")
+        self._record("color", {"seq": None, "turn": turn, "owner": None, "text": text, "deal": facts,
+                               "latency_s": meta.get("latency_s")})
+        if quip:
+            self._record("quip", {"id": quip, "turn": turn, "with": "color", "seq": None})
 
     # ---- main loop ---------------------------------------------------------------
 
@@ -988,6 +1454,7 @@ class AdvisorRunner:
             self._maybe_rotate()
             self._clock.observe()   # the turn's active seat, before its first line is written
             self._handle_asks()   # questions first, pause or not (see docstring)
+            self._deal_tick()     # the seats' deal answers and the ledger, into the panel
             # In-game on/off toggle (plan 13b): the Advisor tab's button writes
             # logs/control/advisor.json; disabled = no scanning, no model calls
             # (the engine's one-way feed keeps writing, harmlessly). arena-stop

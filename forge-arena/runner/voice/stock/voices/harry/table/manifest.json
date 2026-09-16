@@ -496,6 +496,72 @@
    ],
    "source": "table-heckle-2026-09-14"
   },
+  "deal-with-you": {
+   "category": "deal",
+   "when": "accepts the player's offer of a deal (addressed to Player One)",
+   "text": [
+    "[laughs] Deal, Player One. One turn. Then you're mine.",
+    "[smug] Fine, Player One. We have a deal.",
+    "[laughs] Alright, Player One. Truce. Don't push it.",
+    "[excited] Deal! You and me, Player One. For now."
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "no-deal-with-you": {
+   "category": "deal",
+   "when": "refuses the player's offer of a deal (addressed to Player One)",
+   "text": [
+    "[laughs] No deal, Player One! You're the threat!",
+    "[scoffs] A deal? With you, Player One? Never.",
+    "[shouting] No truce, Player One! Not with that board!",
+    "[angry] No, Player One. I don't do deals."
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "counter-offer": {
+   "category": "deal",
+   "when": "answers the player's offer with different terms (addressed to Player One; the terms reach the panel)",
+   "text": [
+    "[laughs] Not that deal, Player One. Try mine.",
+    "[smug] Counter, Player One. My terms, not yours.",
+    "[mischievously] Close, Player One. Here's my offer.",
+    "[laughs] No. But here's a deal, Player One."
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "deal-over": {
+   "category": "deal",
+   "when": "its deal has run its course (the lapse)",
+   "text": [
+    "[laughs] Our truce is done. Watch yourself.",
+    "[smug] Deal's over. Gloves off.",
+    "[excited] Time's up! No more truce!",
+    "[mischievously] That deal? Expired. Sorry."
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "you-broke-it": {
+   "category": "deal",
+   "when": "the player attacked or targeted it across their deal (addressed to Player One, angry)",
+   "text": [
+    "[angry] You broke it, Player One! Liar!",
+    "[shouting] We had a deal, Player One!",
+    "[frustrated] Your word, Player One? Worthless!",
+    "[angry] You promised, Player One! You promised!"
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "i-broke-it": {
+   "category": "deal",
+   "when": "breaks its own deal by attacking or targeting the other party — it chose, and owns it",
+   "text": [
+    "[laughs] I know what I promised. I lied.",
+    "[smug] Deal's off. My call.",
+    "[laughs] Yeah, I promised. Yeah, I'm attacking.",
+    "[mischievously] Truce? What truce?"
+   ],
+   "source": "table-deal-2026-09-16"
+  },
   "life-1": {
    "category": "number",
    "when": "announces or answers its life total: 1",
@@ -2258,8 +2324,8 @@
   }
  },
  "baked": {
-  "gain_db": -9.12,
-  "takes": 365,
+  "gain_db": -9.08,
+  "takes": 389,
   "target_lufs": -24.0
  }
 }

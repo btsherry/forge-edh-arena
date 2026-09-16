@@ -146,7 +146,10 @@ class Builder(unittest.TestCase):
         self.assertEqual(J["phrases"]["your-move"]["text"][0], "Your move.", "wording 1 is the shipped file")
         self.assertEqual(J["phrases"]["startup"]["text"][0], "Would you like to play a game?", "Ben's own take stays wording 1")
         others = [pid for pid, ph in J["phrases"].items() if pid not in nine]
-        self.assertTrue(all(isinstance(J["phrases"][p]["text"], str) for p in others), "the other 54 lines are unchanged")
+        deals = {p for p in others if J["phrases"][p].get("source") == "deals-2026-09-16"}
+        self.assertEqual(deals, {"joshua-deal-yes", "joshua-deal-no", "joshua-deal-counter"}, "Executive's three deal answers (2026-09-16)")
+        self.assertTrue(all(len(J["phrases"][p]["text"]) == 3 for p in deals), "three wordings each")
+        self.assertTrue(all(isinstance(J["phrases"][p]["text"], str) for p in others if p not in deals), "the other 54 lines are unchanged")
 
     def test_joshua_defaults_are_the_original_settings(self):
         """The shipped manifest carries no render/bake block; the defaults must

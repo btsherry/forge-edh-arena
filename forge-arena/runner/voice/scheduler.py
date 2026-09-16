@@ -9,6 +9,9 @@ behaviour change; voice_runner re-exports every public name here. This module ne
 imports voice_runner."""
 from __future__ import annotations
 
+import json
+import os
+
 from chains import plan_reply
 from voice.table import CARD_LIB, CARD_REACTIONS, CARD_SWAP, TABLE_LIB, hand_pid, life_pid
 
@@ -95,7 +98,29 @@ LIFE_FOLLOWUP = {"that-hurt": 0.6, "take-it": 0.5, "low-life": 0.5}          # t
 STATE_ANSWERS = {"whats-your-life": "life", "low-life-jab": "life", "cards-in-hand": "hand", "empty-hand": "hand"}
 ADDRESS_SWAP = {"kill-that": ("hit", "target"), "archenemy": ("hit", "target"), "youre-the-threat": ("threat", "target"),
                 "deal": ("deal", "target"), "why-me": ("leave-me", "aggressor")}
-DEAL_TURNS = 8            # a truce is remembered for two rounds
+# Table deals (plan 2026-09-16, §11 — the contract). The voice runner OWNS the deal ledger: the live map
+# `_deals: (a, b) -> {"kind", "until_turn", "struck", "offer_id"}` (both directions, checkpointed), the
+# append-only logs/deals.jsonl, and the notes files that tell a seat's brain what was agreed
+# (mailbox/seat-<n>/notes/<ts_ms>-deal-struck|broken|lapsed.json — the seat runner reads and drops them).
+# A deal is struck (i) by a seat brain's DEAL record in game.jsonl accepting the player's offer, (ii) by the
+# player's control file accepting a seat's counter, (iii) by the voice chain deal -> promise/take-the-deal
+# between two AI seats (the old path: kind truce, one round). It lapses at the roll to until_turn + 1;
+# an attack across a truce/alliance or a spell/ability targeting the other party across a no-target/alliance
+# breaks it. The runner never enforces a deal — it tells the brains, records what happens, lets the table react.
+DEAL_KINDS = ("truce", "no-target", "alliance")
+DEAL_ATTACK_KINDS = frozenset({"truce", "alliance"})          # broken by combat (an attack event across it)
+DEAL_TARGET_KINDS = frozenset({"no-target", "alliance"})      # broken by a spell or ability targeting the other party
+DEAL_MAX_ROUNDS = 3                                           # §2: "for one turn" up to three of the seat's own turns
+DEAL_TURNS = 8            # the OLD memory (a truce remembered for two rounds): an int in an old checkpoint upgrades to struck + DEAL_TURNS
+DEALS_LEDGER = "deals.jsonl"                                  # logs/deals.jsonl, archived by scripts/arena-stop.sh
+DEAL_CONTROL_DIR = "deal"                                     # logs/control/deal/<ts>-accept.json {"offer_id"} — the player accepts a seat's counter (the advisor writes it)
+DEAL_NOTE_KINDS = ("deal-struck", "deal-broken", "deal-lapsed")
+DEAL_LINES = frozenset({"deal-with-you", "no-deal-with-you", "counter-offer", "deal-over", "you-broke-it", "i-broke-it"})
+DEAL_ANSWER_LINE = {"accept": "deal-with-you", "refuse": "no-deal-with-you", "counter": "counter-offer"}      # the seat, to the player (table sub-library)
+JOSHUA_DEAL_LINE = {"accept": "joshua-deal-yes", "refuse": "joshua-deal-no", "counter": "joshua-deal-counter"}   # Executive: Joshua is the player at the table
+DEAL_OVER_P = 0.5         # a party remarks that the deal has run out
+I_BROKE_IT_P = 0.6        # a seat that breaks its own deal by attacking owns it ("I know what I promised. I lied.")
+CHAIN_P_OVERRIDE = {"deal-with-you": 0.35}                    # §7: a bystander's jab at the seat that dealt, at 0.35 instead of the table's first hop
 LONG_GAME_TURN = 14
 LETHAL_POWER = 15
 # The floor's pool (plan 4.2, 2026-09-14): the patter candidates ANCHORED to the board — the numbers
@@ -162,6 +187,51 @@ def chatter_level(raw: str | None) -> float:
         return max(0.0, min(4.0, float(v)))
     except ValueError:
         return 1.0
+
+
+def is_question(pid: str) -> bool:
+    """A line that asks something of a seat (answered with certainty, never put to the human). The
+    "deal-" prefix covers the named offers (deal-urza, deal-azorius); the six deal ids are statements."""
+    return pid in QUESTION_LINES or (pid.startswith(QUESTION_PREFIXES) and pid not in DEAL_LINES)
+
+
+def normalize_deal(v, struck_default=None) -> dict | None:
+    """A `_deals` value as the contract's dict, or None for junk. An int (the old shape — the turn the
+    truce was struck, remembered for DEAL_TURNS) upgrades to a truce until struck + DEAL_TURNS."""
+    if isinstance(v, dict):
+        try:
+            kind = str(v.get("kind") or "truce")
+            struck = int(v.get("struck") if v.get("struck") is not None else (struck_default if struck_default is not None else 0))
+            until = int(v.get("until_turn") if v.get("until_turn") is not None else struck + DEAL_TURNS)
+        except (TypeError, ValueError):
+            return None
+        oid = v.get("offer_id")
+        return {"kind": kind if kind in DEAL_KINDS else "truce", "until_turn": until, "struck": struck, "offer_id": str(oid) if oid is not None else None}
+    try:
+        struck = int(v)
+    except (TypeError, ValueError):
+        return None
+    return {"kind": "truce", "until_turn": struck + DEAL_TURNS, "struck": struck, "offer_id": None}
+
+
+def deal_terms(terms, default_kind: str = "truce") -> dict:
+    """The contract's terms — {"kind", "rounds"} | {"kind", "until_turn"} — cleaned: an unknown kind is a
+    truce, rounds are clamped to 1..DEAL_MAX_ROUNDS, exactly one duration (until_turn wins when both)."""
+    t = terms if isinstance(terms, dict) else {}
+    kind = str(t.get("kind") or default_kind)
+    out: dict = {"kind": kind if kind in DEAL_KINDS else "truce"}
+    if t.get("until_turn") is not None:
+        try:
+            out["until_turn"] = int(t["until_turn"])
+            return out
+        except (TypeError, ValueError):
+            pass
+    try:
+        rounds = int(t.get("rounds") or 1)
+    except (TypeError, ValueError):
+        rounds = 1
+    out["rounds"] = max(1, min(DEAL_MAX_ROUNDS, rounds))
+    return out
 
 
 class TurnSaid(dict):
@@ -442,9 +512,11 @@ class SchedulerMixin:
         link0 = item.get("chain") or {}
         parent = str(link0.get("parent") or "")
         if item.get("stock") in ("promise", "take-the-deal") and (parent == "deal" or parent.startswith("deal-")) and link0.get("origin") is not None:
-            # a truce struck: remembered both ways, for DEAL_TURNS turns; an attack across it earns "you promised!"
+            # the seats' own small-talk truce (kind truce, one round — "Deal. For one turn."): struck in the ledger like any
+            # other, so both brains are told (§4 source ii); an attack across it earns "you promised!"
             a, b = int(link0["origin"]), speaker
-            self._deals[(a, b)] = self._deals[(b, a)] = turn if turn is not None else self._last_snapshot.get("turn")
+            if a != b:
+                self.strike_deal(a, b, "truce", turn if turn is not None else self._last_snapshot.get("turn"), by=speaker, rounds=1, source="voice")
         # a hit is followed by the total ("Take five. I'm at sixteen." — every table does it)
         p_follow = LIFE_FOLLOWUP.get(item.get("stock", ""), 0.0) * self.table_mult
         if p_follow and not (chain and chain.get("followup")):
@@ -461,7 +533,7 @@ class SchedulerMixin:
             item = dict(item, stock=chain.get("parent") or item["stock"])
             chain = None
         opener_id = (item.get("ctx") or {}).get("generic") or item.get("stock", "")
-        question = opener_id in QUESTION_LINES or opener_id.startswith(QUESTION_PREFIXES)
+        question = is_question(opener_id)
         if self._respond_to_proposal(item, opener_id, voiced, turn):
             return
         # a question about a seat's state gets the true number back (whole-sentence lines)
@@ -492,8 +564,10 @@ class SchedulerMixin:
         if plan is None:
             self._chain = None
             return
-        # a question to a seat is answered with certainty, outside the budget (game 48: 8 of 17 hung); the rest roll
-        p = 1.0 if (question and plan["hop"] == 1) else min(1.0, plan["p"] * self.governor(optional=True))
+        # a question to a seat is answered with certainty, outside the budget (game 48: 8 of 17 hung); the rest roll —
+        # a few openers set their own first-hop chance (CHAIN_P_OVERRIDE: the jab at a seat that dealt with the player, §7)
+        base_p = CHAIN_P_OVERRIDE.get(opener_id, plan["p"]) if plan["hop"] == 1 else plan["p"]
+        p = 1.0 if (question and plan["hop"] == 1) else min(1.0, base_p * self.governor(optional=True))
         if self.rng.random() >= p:
             self.record("skipped", kind="bark", why=f"dice (chain hop {plan['hop']}, p={p:.2f})", stock=plan["id"],
                         seat=plan["seat"], source="chain")
@@ -617,17 +691,182 @@ class SchedulerMixin:
             return ""
         return named
 
-    def _forget_stale_deals(self, turn) -> None:
+    # -- the deal ledger (plan 2026-09-16 §11): the live map, logs/deals.jsonl, the notes to the brains
+    def _turn_int(self, turn) -> int:
+        """`turn` as an int, else the snapshot's, else 0."""
+        for v in (turn, self._last_snapshot.get("turn")):
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                continue
+        return 0
+
+    def _living_count(self) -> int:
+        """Seats still in the game — the length of one round, for a `rounds` deal's until_turn."""
+        seats = [x for x in (self._last_snapshot.get("seats") or []) if isinstance(x, dict) and x.get("seat") is not None]
+        n = len([x for x in seats if not x.get("eliminated") and int(x["seat"]) not in self.eliminated])
+        return n if n >= 2 else max(2, 4 - len(self.eliminated))
+
+    def deal_between(self, a, b) -> dict | None:
+        """The live deal between two seats (either direction), normalised, or None."""
+        return normalize_deal(self._deals.get((int(a), int(b))))
+
+    def deal_forbids(self, actor, other, how: str) -> bool:
+        """Does the deal between `actor` and `other` forbid `how` ("attack" | "target")?"""
+        deal = self.deal_between(actor, other)
+        if not deal:
+            return False
+        return deal["kind"] in (DEAL_ATTACK_KINDS if how == "attack" else DEAL_TARGET_KINDS)
+
+    def _deal_counters_map(self) -> dict:
+        d = getattr(self, "_deal_counters", None)
+        if d is None:
+            d = self._deal_counters = {}
+        return d
+
+    def _ledger(self, event: str, between, by=None, deal: dict | None = None, offer_id=None, turn=None, **extra) -> dict:
+        """One record appended to logs/deals.jsonl: {ts, turn, event, between: [a, b], by, deal: {kind, until_turn,
+        rounds?}, offer_id, seq} (+ `how` for a break). Errors are swallowed — the ledger never costs the table a
+        line; the same fact goes to voice-0.jsonl as a `noted` deal record, which is what the tests and the
+        panel's fallback read."""
+        self._deal_seq = int(getattr(self, "_deal_seq", 0) or 0) + 1
+        a, b = between
+        rec = {"ts": round(self.wall(), 3), "turn": self._turn_int(turn),
+               "event": event, "between": [int(a), int(b)], "by": int(by) if by is not None else None,
+               "deal": dict(deal) if deal else None, "offer_id": str(offer_id) if offer_id is not None else None, "seq": self._deal_seq, **extra}
+        try:
+            self.logs.mkdir(parents=True, exist_ok=True)
+            with (self.logs / DEALS_LEDGER).open("a") as f:
+                f.write(json.dumps(rec) + "\n")
+        except (OSError, TypeError, ValueError):
+            pass
+        self.record("noted", kind="deal", why=f"deal {event}: {a}<->{b}" + (f" by {by}" if by is not None else ""),
+                    deal=rec["deal"], between=rec["between"], offer_id=rec["offer_id"], by=rec["by"], seq=self._deal_seq, **extra)
+        return rec
+
+    def _deal_note_eligible(self, seat: int) -> bool:
+        """A note goes to a seat RUNNER: every AI seat (voiced or not — the brain, not the voice, reads it);
+        seat 0 only while the Executive plays it (then the seat-0 runner is a party like any other)."""
+        if int(seat) != self.human_seat:
+            return True
+        executive = getattr(self, "executive_on", None)
+        return bool(callable(executive) and executive())
+
+    def _deal_note(self, seat: int, body: dict) -> bool:
+        """mailbox/seat-<n>/notes/<ts_ms>-<kind>.json, one JSON object, written atomically (tmp + os.replace);
+        the seat runner renders it as one RUNNER NOTE and deletes it. False when the seat gets none."""
+        if not self._deal_note_eligible(seat):
+            return False
+        kind = str(body.get("kind") or "deal")
+        try:
+            d = self.mailbox / f"seat-{int(seat)}" / "notes"
+            d.mkdir(parents=True, exist_ok=True)
+            ts_ms = int(float(self.wall()) * 1000)
+            path = d / f"{ts_ms}-{kind}.json"
+            while path.exists():
+                ts_ms += 1                                                        # two notes in one millisecond: the next millisecond
+                path = d / f"{ts_ms}-{kind}.json"
+            tmp = d / f".{ts_ms}-{kind}.json.tmp"
+            tmp.write_text(json.dumps(body))
+            os.replace(tmp, path)
+            return True
+        except (OSError, TypeError, ValueError) as e:
+            self.record("noted", kind="deal", why=f"note {kind} for seat {seat} not written ({str(e)[:80]})")
+            return False
+
+    def strike_deal(self, a, b, kind: str, turn, by, rounds=None, until_turn=None, offer_id=None, source: str = "") -> dict:
+        """A deal struck between `a` and `b`: the live map both ways, a `struck` ledger record and a deal-struck
+        note to both parties (the eligible ones). `rounds` N = N of the seat's own turns from the strike, resolved
+        here to an absolute until_turn (turn + N x the living seats) so the lapse check is one comparison;
+        `until_turn` given wins. Returns the live deal."""
+        a, b = int(a), int(b)
+        t = self._turn_int(turn)
+        kind = kind if kind in DEAL_KINDS else "truce"
+        terms: dict = {"kind": kind}
+        if until_turn is not None:
+            try:
+                until = int(until_turn)
+            except (TypeError, ValueError):
+                until = None
+        else:
+            until = None
+        if until is None:
+            try:
+                n = max(1, min(DEAL_MAX_ROUNDS, int(rounds or 1)))
+            except (TypeError, ValueError):
+                n = 1
+            until = t + n * self._living_count()
+            terms["rounds"] = n
+        terms["until_turn"] = until
+        deal = {"kind": kind, "until_turn": until, "struck": t, "offer_id": str(offer_id) if offer_id is not None else None}
+        self._deals[(a, b)] = self._deals[(b, a)] = deal
+        self._ledger("struck", (a, b), by=by, deal=terms, offer_id=offer_id, turn=t, source=source or None)
+        for s in (a, b):
+            self._deal_note(s, {"kind": "deal-struck", "between": [a, b], "deal": dict(terms), "offer_id": deal["offer_id"], "turn": t})
+        return deal
+
+    def break_deal(self, breaker, victim, how: str, turn) -> dict | None:
+        """`breaker` attacked or targeted `victim` across their deal: forgotten both ways, a `broken` ledger
+        record (by = the breaker, how = attack | target) and a deal-broken note to the wronged party only —
+        the breaker chose (§5). None when there was no deal."""
+        breaker, victim = int(breaker), int(victim)
+        deal = normalize_deal(self._deals.pop((breaker, victim), None))
+        self._deals.pop((victim, breaker), None)
+        if deal is None:
+            return None
+        t = self._turn_int(turn)
+        self._ledger("broken", (breaker, victim), by=breaker, deal={"kind": deal["kind"], "until_turn": deal["until_turn"]},
+                     offer_id=deal["offer_id"], turn=t, how=how)
+        self._deal_note(victim, {"kind": "deal-broken", "between": [breaker, victim], "by": breaker, "how": how, "turn": t})
+        return deal
+
+    def lapse_deals(self, turn) -> list[tuple[int, int]]:
+        """At the roll to until_turn + 1 a deal has run its course: forgotten, a `lapsed` record, a deal-lapsed
+        note to both parties, and one party (a voiced AI seat) may say "our truce is done" (DEAL_OVER_P). A
+        counter nobody accepted expires at the end of its turn (`expired`). Junk in the map is dropped."""
         try:
             t = int(turn)
         except (TypeError, ValueError):
-            return
-        for pair, struck in list(self._deals.items()):
-            try:
-                if t - int(struck) > DEAL_TURNS:
-                    self._deals.pop(pair, None)
-            except (TypeError, ValueError):
+            return []
+        if getattr(self, "_lapsing", False):
+            return []                                                # the deal-over line rolls the turn too: no re-entry
+        lapsed: list[tuple[int, int]] = []
+        for pair, v in list(self._deals.items()):
+            if pair not in self._deals:
+                continue
+            a, b = pair
+            deal = normalize_deal(v)
+            if deal is None:
                 self._deals.pop(pair, None)
+                continue
+            if t > deal["until_turn"]:
+                self._deals.pop((a, b), None)
+                self._deals.pop((b, a), None)
+                lapsed.append((int(a), int(b)))
+                self._ledger("lapsed", (a, b), deal={"kind": deal["kind"], "until_turn": deal["until_turn"]}, offer_id=deal["offer_id"], turn=t)
+                for s in (a, b):
+                    self._deal_note(s, {"kind": "deal-lapsed", "between": [int(a), int(b)], "turn": t})
+        for oid, c in list(self._deal_counters_map().items()):
+            try:
+                if t > int(c.get("turn", t)):
+                    self._deal_counters_map().pop(oid, None)
+                    a, b = c.get("between") or (None, None)
+                    if a is not None and b is not None:
+                        self._ledger("expired", (a, b), by=a, deal=c.get("deal"), offer_id=oid, turn=t)
+            except (TypeError, ValueError):
+                self._deal_counters_map().pop(oid, None)
+        if lapsed and "deal-over" in self.table_ids:
+            self._lapsing = True
+            try:
+                for a, b in lapsed:
+                    parties = [s for s in (a, b) if s != self.human_seat and self.library_for_seat(s) and s not in self.eliminated]
+                    if parties:
+                        who = int(self.rng.choice(parties))
+                        other = b if who == a else a
+                        self.maybe_bark(who, "deal-over", turn=t, source="event", p=DEAL_OVER_P, ctx={"targets": [other]})
+            finally:
+                self._lapsing = False
+        return lapsed
 
     def _roll_turn(self, turn) -> None:
         """The no-repeat memory is per game turn: a new turn clears it whole, whatever the clock (BL-53)."""
@@ -638,7 +877,7 @@ class SchedulerMixin:
             self._said_this_turn = TurnSaid(self.clock)
             self._chain = None                           # a new turn ends any exchange
             self._card_events_turn = {}                  # the loop counters are per turn too
-        self._forget_stale_deals(turn)
+        self.lapse_deals(turn)
 
     # -- the patter clock
     def _patter_gap_s(self, human_turn: bool) -> float:

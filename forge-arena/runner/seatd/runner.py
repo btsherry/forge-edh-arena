@@ -41,6 +41,10 @@ class SeatRunner:
     _mono_color = None
     _tap_pass = None
     _yielded = None   # dict once the first yield is noted (never a shared class dict)
+    # Table deals (plan 2026-09-16 §11): lazily-built dicts, never shared class dicts.
+    _pending_offers = None   # offer_id -> the deal-offer/deal-counter note the brain must answer
+    _deals_in_force = None   # other seat -> {"kind", "until_turn", "offer_id", "struck"} from deal-struck notes
+    _deal_notes = None       # rendered RUNNER NOTE sentences waiting for the next prompt (≤ 3)
     def __init__(self, seat: int, deck: str, base, model: str = "sonnet",
                  effort: str = "low", timeout_s: float = 90.0, log_dir=None,
                  autopass: tuple[str, ...] = DEFAULT_AUTOPASS,
@@ -318,9 +322,255 @@ class SeatRunner:
             return None
         return sid
 
+    # ---- table deals (docs/reviews/2026-09-16-table-deals-plan.md §5, §6, §11) ------------
+    # The advisor runner writes the player's offer, the voice runner writes struck/lapsed/
+    # broken, as notes files under this seat's mailbox dir; this runner renders each as one
+    # RUNNER NOTE sentence, deletes the file, and keeps two small maps: the offers the brain
+    # owes an answer, and the deals in force (for the fastpath hand-off). The runner never
+    # overrides a model answer: a deal is honoured or broken by the brain, on purpose.
+
+    NOTE_KINDS = ("deal-offer", "deal-counter", "deal-struck", "deal-broken", "deal-lapsed")
+    NOTES_PER_PROMPT = 3
+    TARGET_WINDOWS = ("CHOOSE_ENTITY", "CHOOSE_ENTITIES", "CHOOSE_CARD", "CHOOSE_CARDS")
+    _SEAT_IN_LABEL = re.compile(r"\(seat (\d+)\)")
+
+    def _pending(self) -> dict:
+        if self._pending_offers is None:
+            self._pending_offers = {}
+        return self._pending_offers
+
+    def _deals(self) -> dict:
+        if self._deals_in_force is None:
+            self._deals_in_force = {}
+        return self._deals_in_force
+
+    def _notes_dir(self) -> Path:
+        """mailbox/seat-<n>/notes — a sibling of inbox/ (the mailbox's own root when it has one)."""
+        return Path(getattr(self.mb, "dir", None) or Path(self.mb.inbox).parent) / "notes"
+
+    def _party_name(self, seat, req: dict | None = None) -> str:
+        """Player One (seat 0); a seat by its commander when the request names one, else 'seat n'."""
+        try:
+            n = int(seat)
+        except (TypeError, ValueError):
+            return f"seat {seat}"
+        if n == 0:
+            return "Player One (seat 0)"
+        for o in ((req or {}).get("state") or {}).get("opponents") or []:
+            if isinstance(o, dict) and o.get("seat") == n:
+                name = o.get("commander") or o.get("name")
+                if isinstance(name, str) and name.strip():
+                    return name.strip()
+        return f"seat {n}"
+
+    def _other_party(self, note: dict):
+        between = note.get("between")
+        if isinstance(between, list) and len(between) == 2:
+            a, b = between
+            return b if a == self.seat else a
+        return note.get("from")
+
+    @staticmethod
+    def _kind_word(kind: str, loud: bool = False) -> str:
+        k = kind if kind in rules.DEAL_KINDS else "truce"
+        if loud:
+            word = {"truce": "TRUCE", "no-target": "NO-TARGET deal", "alliance": "ALLIANCE"}[k]
+        else:
+            word = {"truce": "truce", "no-target": "no-target deal", "alliance": "alliance"}[k]
+        return ("an " if word[0].lower() in "aeiou" else "a ") + word
+
+    def _render_note(self, note: dict, req: dict) -> str | None:
+        """One RUNNER NOTE sentence per §5, applying the note to the runner's deal maps.
+        Returns None for a note the brain is not told about (a break it caused itself)."""
+        kind = note.get("kind")
+        deal = note.get("deal") if isinstance(note.get("deal"), dict) else {}
+        dk = deal.get("kind") if deal.get("kind") in rules.DEAL_KINDS else "truce"
+        if kind in ("deal-offer", "deal-counter"):
+            oid = note.get("offer_id")
+            if not isinstance(oid, str) or not oid:
+                raise ValueError("offer without offer_id")
+            self._pending()[oid] = note
+            who = self._party_name(note.get("from"), req)
+            terms, dur = rules.DEAL_TERMS[dk], rules.deal_duration(deal)
+            grammar = (f'Answer with "deal": {{"offer_id": "{oid}", "accept": true}} or "accept": false'
+                       + (' (a counter to a counter is a refusal)' if note.get("counter") else ' (you may counter once)')
+                       + (', and a "say" (take-the-deal / no-deal / counter-offer).' if self.seat in (1, 2, 3) else '.'))
+            if note.get("counter"):
+                return (f"{who} counters your offer: {self._kind_word(dk, True)} {dur}: {terms}. {grammar}")
+            said = str(note.get("text") or "").strip()
+            said = f' They said: "{said[:100]}".' if said else ""
+            return (f"{who} offers {self._kind_word(dk, True)} {dur}: {terms}.{said} {grammar} "
+                    f"Decide as this deck would: {self._kind_word(dk)} with the threat is a mistake; "
+                    f"one with the weakest seat buys tempo.")
+        other = self._other_party(note)
+        if other is None or other == self.seat:
+            raise ValueError("no other party")
+        who = self._party_name(other, req)
+        if kind == "deal-struck":
+            self._deals()[int(other)] = {"kind": dk, "until_turn": deal.get("until_turn"), "rounds": deal.get("rounds"),
+                                         "offer_id": note.get("offer_id"), "struck": note.get("turn")}
+            self._pending().pop(note.get("offer_id"), None)   # answered on the other side
+            return (f"you have {self._kind_word(dk, True)} with {who} {rules.deal_duration(deal)}: "
+                    f"{rules.DEAL_DUTY[dk]}. Breaking it is a choice the table will remember.")
+        was = self._deals().pop(int(other), None) or {}
+        word = self._kind_word(was.get("kind") or dk).split(" ", 1)[1]   # no article: "your truce"
+        if kind == "deal-broken":
+            if note.get("by") == self.seat:
+                return None                                    # it chose; nothing to tell it
+            how = "targeted you" if note.get("how") == "target" else "attacked you"
+            turn = f" turn {note.get('turn')}" if note.get("turn") is not None else ""
+            return f"{who} broke your {word} ({how}{turn}). You owe them nothing."
+        if kind == "deal-lapsed":
+            return f"your {word} with {who} has ended."
+        raise ValueError(f"unknown kind {kind!r}")
+
+    def _ingest_notes(self, req: dict) -> None:
+        """Read notes files oldest first, up to NOTES_PER_PROMPT sentences waiting for the next
+        prompt (the rest stay on disk); every file read is deleted — a note is consumed once.
+        Malformed or unknown-kind files are deleted with a seat-log line."""
+        if self._deal_notes is None:
+            self._deal_notes = []
+        d = self._notes_dir()
+        try:
+            if not d.is_dir():
+                return
+            files = sorted(p for p in d.iterdir() if p.suffix == ".json")
+        except OSError:
+            return
+        for p in files:
+            if len(self._deal_notes) >= self.NOTES_PER_PROMPT:
+                break
+            try:
+                note = json.loads(p.read_text())
+                if not isinstance(note, dict):
+                    raise ValueError("not an object")
+                if note.get("kind") not in self.NOTE_KINDS:
+                    self._say(f"[seat {self.seat}] note {p.name} dropped: unknown kind {note.get('kind')!r}")
+                    continue
+                text = self._render_note(note, req)
+                if text is not None:
+                    self._deal_notes.append(text)
+                    self._say(f"[seat {self.seat}] note {p.name}: {text[:120]}")
+            except (OSError, ValueError, TypeError) as e:
+                self._say(f"[seat {self.seat}] note {p.name} dropped: malformed ({e})")
+            finally:
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+
+    def _deal_partner_in(self, req: dict, kinds: tuple, where: str):
+        """The first deal partner (seat, deal) whose player or permanents this window offers as a
+        `where` ('defenders' | 'options') pick, for deals of the given kinds; else None."""
+        st = req.get("state") or {}
+        for other, deal in self._deals().items():
+            if deal.get("kind") not in kinds:
+                continue
+            perms = {c.get("id") for o in (st.get("opponents") or []) if isinstance(o, dict) and o.get("seat") == other
+                     for c in (o.get("battlefield") or []) if isinstance(c, dict)}
+            for e in (st.get(where) if where == "defenders" else req.get("options")) or []:
+                if not isinstance(e, dict):
+                    continue
+                m = self._SEAT_IN_LABEL.search(str(e.get("label", "")))
+                if (m and int(m.group(1)) == other) or (where == "options" and e.get("id") in perms):
+                    return other, deal
+        return None
+
+    def _deal_note_text(self, other, deal: dict, req: dict) -> str:
+        who = self._party_name(other, req)
+        k = deal.get("kind")
+        if k == "no-target":
+            return f"your no-target deal with {who} is in force — targeting them or their permanents breaks it"
+        if k == "alliance":
+            return f"your alliance with {who} is in force — attacking or targeting them breaks it"
+        return f"your truce with {who} is in force — attacking them breaks it"
+
+    def _deal_guard(self, req: dict) -> str | None:
+        """§6: while a deal with a party is in force, an attack window that offers them as a
+        defender, or a target window that offers them or their permanents, is never answered
+        by a fastpath — it goes to the model with this note. A fastpath cannot choose betrayal."""
+        if not self._deals():
+            return None
+        dtype = req.get("decisionType")
+        hit = None
+        if dtype == "DECLARE_ATTACKERS":
+            hit = self._deal_partner_in(req, ("truce", "alliance"), "defenders")
+        elif dtype in self.TARGET_WINDOWS:
+            hit = self._deal_partner_in(req, ("no-target", "alliance"), "options")
+        return self._deal_note_text(hit[0], hit[1], req) if hit else None
+
+    def _deal_conflict(self, req: dict, answer: dict) -> str | None:
+        """Would this concrete answer attack / target a deal partner across a deal in force?
+        Returns 'attack <who>' | 'target <who>' or None. Used to break a replayed cycle out
+        to the model (a cycle cannot choose betrayal either); never applied to a model answer."""
+        if not self._deals() or not isinstance(answer, dict):
+            return None
+        st = req.get("state") or {}
+        dtype = req.get("decisionType")
+        if dtype == "DECLARE_ATTACKERS":
+            labels = {d.get("id"): str(d.get("label", "")) for d in (st.get("defenders") or []) if isinstance(d, dict)}
+            for e in answer.get("attackers") or []:
+                m = self._SEAT_IN_LABEL.search(labels.get((e or {}).get("defender"), "")) if isinstance(e, dict) else None
+                if m and self._deals().get(int(m.group(1)), {}).get("kind") in ("truce", "alliance"):
+                    return f"attack {self._party_name(int(m.group(1)), req)}"
+            return None
+        if dtype in self.TARGET_WINDOWS:
+            chosen = answer.get("chosen") if "chosen" in answer else [answer.get("chosenId")]
+            opts = {o.get("id"): o for o in (req.get("options") or []) if isinstance(o, dict)}
+            for other, deal in self._deals().items():
+                if deal.get("kind") not in ("no-target", "alliance"):
+                    continue
+                perms = {c.get("id") for o in (st.get("opponents") or []) if isinstance(o, dict) and o.get("seat") == other
+                         for c in (o.get("battlefield") or []) if isinstance(c, dict)}
+                for cid in chosen or []:
+                    m = self._SEAT_IN_LABEL.search(str((opts.get(cid) or {}).get("label", "")))
+                    if cid in perms or (m and int(m.group(1)) == other):
+                        return f"target {self._party_name(other, req)}"
+        return None
+
+    def _record_deal(self, req: dict, deal: dict) -> None:
+        """Its own game.jsonl record, so the voice runner's tail sees a deal without parsing
+        decisions: {"type": "DEAL", "seat", "turn", "deal": {...}} (+ ts, gameId)."""
+        rec = {"ts": time.time(), "type": "DEAL", "seat": self.seat, "gameId": req.get("gameId"),
+               "turn": req.get("turn"), "deal": deal}
+        if getattr(self, "_game_log", None) is None:
+            return                                   # a runner built without __init__ (offline tests)
+        try:
+            line = json.dumps(rec) + "\n"
+            for gp in self._game_log_paths(req.get("gameId")):
+                with gp.open("a") as f:
+                    f.write(line)
+        except OSError:
+            pass
+
+    def _deal_key(self, req: dict, raw) -> dict | None:
+        """The brain's "deal" answer: validated against the pending offers, recorded as its own
+        DEAL record and returned for the decision record; invalid -> dropped with a log line."""
+        clean, why = rules.validate_deal(raw, self._pending(), req.get("turn"))
+        if clean is None:
+            self._say(f"[seat {self.seat}] deal {json.dumps(raw)[:120]} dropped: {why}")
+            return None
+        self._pending().pop(clean["offer_id"], None)
+        self._say(f"[seat {self.seat}] DEAL {clean['offer_id']} {why}: {json.dumps(clean)}")
+        self._record_deal(req, clean)
+        return clean
+
+    def _lapse_offers(self, req: dict) -> None:
+        """The turn changed without an answer: every pending offer lapses, with a record."""
+        for oid in list(self._pending()):
+            self._pending().pop(oid, None)
+            self._say(f"[seat {self.seat}] deal offer {oid} lapsed: no answer before the turn changed")
+            self._record_deal(req, {"offer_id": oid, "accept": None, "why": "no answer"})
+
+    def _deal_offer_lines(self) -> str | None:
+        """The prompt line(s) offered ONLY while an offer is pending (rules.deal_offer_line)."""
+        lines = [rules.deal_offer_line(oid, can_counter=not (n or {}).get("counter"), say=self.seat in (1, 2, 3))
+                 for oid, n in list(self._pending().items())[:2]]
+        return "\n".join(lines) if lines else None
+
     def _record(self, req: dict, answer: dict, source: str, meta=None,
                 why: str | None = None, consumed: bool = True,
-                say: str | None = None) -> None:
+                say: str | None = None, deal: dict | None = None) -> None:
         stamp = self.board_stamp(req)
         rec = {"ts": time.time(), "seat": self.seat, "gameId": req.get("gameId"),
                "seq": req.get("seq"),
@@ -348,6 +598,8 @@ class SeatRunner:
             rec["deviation"] = dev
         if say:
             rec["say"] = say                     # §4.4: the seat's table line, for the voice runner
+        if deal:
+            rec["deal"] = deal                   # table deals §11: the brain's answer to an offer
         if self.turn_intent and source == "model":
             rec["turn_intent"] = self.turn_intent
         cum = dict(self.brain.totals)  # burn since instantiation
@@ -385,6 +637,8 @@ class SeatRunner:
                 "latency_s": rec.get("latency_s"), "board": stamp}
             if say:
                 shared["say"] = say
+            if deal:
+                shared["deal"] = deal
             line = json.dumps(shared) + "\n"
             for gp in self._game_log_paths(req.get("gameId")):
                 with gp.open("a") as f:
@@ -924,6 +1178,15 @@ class SeatRunner:
             self._say(f"[seat {self.seat}] CYCLE broken: recorded answer no "
                       f"longer binds/validates — model resumes")
             self.cycle = None
+            return None
+        conflict = self._deal_conflict(req, answer)
+        if conflict:
+            # table deals §6: a replayed step that would attack/target a deal partner is
+            # novelty — a cycle cannot choose betrayal; the model decides with the note
+            self._say(f"[seat {self.seat}] CYCLE broken: the next step would {conflict} "
+                      f"across a deal in force — model decides")
+            self.cycle = None
+            self._parked = None
             return None
         self.cycle["ptr"] += 1
         note = (f"cycle {self.cycle['total'] - self.cycle['rounds'] + 1}"
@@ -1578,6 +1841,7 @@ class SeatRunner:
             self._tap_pass = None
             self._yielded = {}
             self._publish_yields()
+            self._pending_offers, self._deals_in_force, self._deal_notes = {}, {}, []   # deals die with the game
         if req.get("gameId"):
             self._game_id = req.get("gameId")
         new_turn = self._last_turn != req.get("turn")
@@ -1602,8 +1866,13 @@ class SeatRunner:
             self._casts_turn = 0
             self._runner_note = None
             self._offer_for = None
+            self._lapse_offers(req)   # table deals: an offer unanswered when the turn changes lapses
 
         seq, dtype = req.get("seq"), req.get("decisionType")
+        # Table deals: read the notes files BEFORE any fastpath so a deal-struck/broken note
+        # arms (or lifts) the §6 hand-off at once; the sentences wait for the next prompt.
+        self._ingest_notes(req)
+        deal_note = self._deal_guard(req)
         # Item 12: the engine publishes its wait on every request. It is the
         # one timeout knob; budget from what the engine will actually do
         # rather than from a copy passed through the environment.
@@ -1647,7 +1916,12 @@ class SeatRunner:
                 self._hist_push(cyc_sig, dtype, self._cycle_shape(req, answer))
                 return
 
-        fast = self._fastpath(req)
+        # §6 hand-off: a window that could attack/target a deal partner, or the first
+        # table-talk window after an offer arrived, is the model's — no fastpath answers it.
+        unshown = rules.say_offer(req) and any(not n.get("_shown") for n in self._pending().values())
+        if deal_note:
+            self._say(f"[seat {self.seat}] seq={seq} {dtype} held for the model: {deal_note}")
+        fast = None if (deal_note or unshown) else self._fastpath(req)
         if fast:
             answer, source = fast
             why = ("all options on the no-op allowlist" if source == "autopass"
@@ -1664,7 +1938,7 @@ class SeatRunner:
         # Guards #1-3: consume an executable plan step for a CAST_SPELL window,
         # locally, no model call. Any failed consumption is a divergence -> drop
         # the whole plan and fall through to the model for this req.
-        if (self.speculative and self.plan and dtype == "CAST_SPELL"
+        if (self.speculative and self.plan and dtype == "CAST_SPELL" and not deal_note
                 and self.plan.get("turn") == req.get("turn")
                 and self.plan["idx"] < len(self.plan["steps"])):
             step = self.plan["steps"][self.plan["idx"]]
@@ -1697,7 +1971,7 @@ class SeatRunner:
             mtime = time.time()
         deadline = mtime + 0.8 * self.timeout_s
         budget = 0.0 if vanished else deadline - time.time()
-        answer, source, meta, why, say = None, "punt", None, None, None
+        answer, source, meta, why, say, deal = None, "punt", None, None, None, None
         if budget > 5.0:
             # Advisory: remaining planned cards (if a plan survives) fed as text.
             plan_text = None
@@ -1714,13 +1988,19 @@ class SeatRunner:
                 armed_note = (f"LOOP ARMED: your loop (until {self.cycle['until_text']}; {self.cycle['done']} round(s) done, "
                               f"{self.cycle['rounds']} left) is waiting; this window is outside its pattern. Answer it; add "
                               f"\"stop_loop\": true if the loop should end.")
-            notes = [x for x in (self._runner_note, armed_note, self._loop_offer(req, cyc_sig)) if x]
+            # table deals: the rendered notes (≤ 3, consumed here), then the §6 hand-off note
+            deal_notes = list(self._deal_notes or [])
+            self._deal_notes = []
+            for n in self._pending().values():
+                n["_shown"] = True                    # delivered: the key is on this prompt
+            notes = [x for x in (self._runner_note, armed_note, self._loop_offer(req, cyc_sig), *deal_notes, deal_note) if x]
             self._runner_note = None
             prompt = rules.build_user_prompt(
                 req, plan=plan_text, observer=self.mb.read_observer(),
                 speculative=self.speculative, react_hold=self.react_hold,
                 combo_status=rules.combo_status_line(self.combos, req),
-                runner_note=" ".join(notes) if notes else None, seat=self.seat)
+                runner_note="\nRUNNER NOTE: ".join(notes) if notes else None, seat=self.seat,
+                deal_offer=self._deal_offer_lines())
             # Item 2: the brain gets the DEADLINE, not a duration — init and
             # the decision call each spend only what remains of it (the old
             # min(budget, 240) handed the same budget to both, so a lazy
@@ -1767,6 +2047,8 @@ class SeatRunner:
                 why = out["why"][:200]
             if isinstance(out, dict) and out.get("say") is not None:
                 say = self._say_key(req, out.get("say"))     # §4.4: validated, logged, never sent
+            if clean is not None and isinstance(out, dict) and out.get("deal") is not None:
+                deal = self._deal_key(req, out.get("deal"))  # table deals: validated, recorded, never sent
             # Capture stated intent (normal mode) and surface deviations
             # LOUDLY: a plan the brain wanted but could not execute is the
             # single most useful line in a play-quality review.
@@ -1869,7 +2151,8 @@ class SeatRunner:
                   f"{('  # ' + why) if why else ''}"
                   f"{'' if ok else ' WINDOW LOST'}")
         self._record(req, answer, source, meta, why=why, consumed=ok,
-                     say=say if source == "model" else None)   # a punted answer's line is not spoken
+                     say=say if source == "model" else None,   # a punted answer's line is not spoken
+                     deal=deal if source == "model" else None)
         if source == "punt" and getattr(self.brain, "stalls", 0) >= 2:
             # B3 / W-18 (plan 2026-09-14): the resident process timed out twice running
             # with no answer between — re-resuming the same session only waits for

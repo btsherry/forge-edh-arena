@@ -56,6 +56,7 @@ class TableLibraries(unittest.TestCase):
             self.assertEqual(cats["mulligan"], 9, f"{lib}: keep-seven, mull-to-six/five/four, pity, dig, screw, risky, gloat")
             self.assertEqual(cats["loop"], 2, f"{lib}: loop (the table) and looping (the owner)")
             self.assertEqual(cats["heckle"], 3, f"{lib}: waiting-on-you, still-waiting, there-you-are (Ben, 2026-09-14: heckles at the player)")
+            self.assertEqual(cats["deal"], 6, f"{lib}: deal-with-you, no-deal-with-you, counter-offer, deal-over, you-broke-it, i-broke-it (2026-09-16)")
         for n in list(range(1, 41)) + [45, 50, 60, 80, 100]:
             self.assertIn(f"life-{n}", ids)
         for n in range(11):
@@ -128,7 +129,7 @@ class RenderedTable(unittest.TestCase):
                         self.assertTrue(0.4 <= secs <= 6.0, f"{lib}/table/{stem}: {secs:.1f}s")
                     self.assertTrue((REAL_VOICES / lib / "table" / "raw" / f"{stem}.wav").exists(), f"{lib}/table/raw/{stem}.wav")
                     n += 1
-            self.assertEqual(n, 290 + 30 + 27 + 6 + 12, lib)
+            self.assertEqual(n, 290 + 30 + 27 + 6 + 12 + 24, lib)
 
 
 class _TableCase(_TreeCase):
@@ -253,17 +254,23 @@ class MemoryAndArc(_TableCase):
         self.assertEqual((q["stock"], q["library"]), ("promise", "bill"), "the first reply on the table (promise; take-the-deal and no-deal are the others)")
         self.r.queue.clear()
         self._spoken(2, "promise", ctx=q["ctx"], chain=q["chain"])
-        self.assertEqual(self.r._deals[(1, 2)], 3); self.assertEqual(self.r._deals[(2, 1)], 3)
+        # 2026-09-16 (table deals §11): the live map holds the contract's dict — a one-round truce struck at turn 3, four living
+        # seats, so until the end of turn 7 — both ways; the old "= struck turn" int upgrades on restore (test_deals_voice)
+        struck = {"kind": "truce", "until_turn": 7, "struck": 3, "offer_id": None}
+        self.assertEqual(self.r._deals[(1, 2)], struck); self.assertEqual(self.r._deals[(2, 1)], struck)
         self.r.queue.clear()
         ev = [{"seq": 1, "kind": "cast", "turn": 2, "seat": 1, "spell": "x", "cmc": 1}]
         self._snap(3, 1, events=ev); self.r.queue.clear()
         ev.append({"seq": 2, "kind": "attack", "turn": 5, "seat": 1, "attackers": 1, "power": 2, "defenders": [2]})
         self._snap(5, 1, events=ev)
-        self.assertEqual(self._barks(), [("you-promised", "bill/table", 2)], "seat 1 attacks the seat it promised")
+        self.assertEqual(self._barks(), [("you-promised", "bill/table", 2), ("i-broke-it", "harry/table", 1)],
+                         "seat 1 attacks the seat it promised — and owns it (deals, 2026-09-16)")
         self.assertNotIn((1, 2), self.r._deals, "the broken deal is forgotten")
-        self.r._deals[(1, 2)] = self.r._deals[(2, 1)] = 3
+        self.r._deals[(1, 2)] = self.r._deals[(2, 1)] = {"kind": "truce", "until_turn": 11, "struck": 3, "offer_id": None}
+        self.r._roll_turn(11)
+        self.assertIn((1, 2), self.r._deals, "until_turn is inclusive")
         self.r._roll_turn(12)
-        self.assertEqual(self.r._deals, {}, "a truce is forgotten after eight turns")
+        self.assertEqual(self.r._deals, {}, "a truce lapses at the roll to until_turn + 1")
         # the human strikes a deal via a seat's promise? the human has no voice: only seat-seat truces are recorded
         self.assertEqual(len([p for p in self.r._deals if 0 in p]), 0)
 

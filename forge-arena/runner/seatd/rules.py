@@ -116,7 +116,83 @@ REACT_HOLD_HINT = (
 # (validate() strips it) and records it beside "why" for the voice runner to tail.
 SAY_MENU = ("taunt", "respect", "nice-play", "kill-that", "youre-the-threat", "im-not-the-threat",
             "deal", "no-deal", "promise", "looping", "big-swing", "that-hurt", "gg", "heads-up",
-            "nothing-happening", "this-is-fine")
+            "nothing-happening", "this-is-fine", "take-the-deal", "counter-offer")
+
+# Table deals (docs/reviews/2026-09-16-table-deals-plan.md §11): the player offers a deal through
+# the Advisor chat; the offer reaches this seat as a notes file; the brain answers with a "deal"
+# key beside "say". The runner validates it here, keeps it out of the engine answer (validate()
+# strips it like "say") and records it in game.jsonl for the voice runner's ledger.
+DEAL_KINDS = ("truce", "no-target", "alliance")
+DEAL_MAX_ROUNDS = 3
+DEAL_TERMS = {"truce": "neither of you attacks the other",
+              "no-target": "neither of you targets the other or their permanents",
+              "alliance": "neither of you attacks or targets the other"}
+DEAL_DUTY = {"truce": "do not attack them",
+             "no-target": "do not target them or their permanents",
+             "alliance": "do not attack or target them"}
+
+
+def deal_duration(deal: dict) -> str:
+    """'for 2 of your turns' | 'until the end of turn 12' — the two forms of §11.2."""
+    if _is_int(deal.get("until_turn")):
+        return f"until the end of turn {deal['until_turn']}"
+    n = deal.get("rounds")
+    n = n if _is_int(n) else 1
+    return f"for {n} of your turns"           # §5 wording: "for 1 of your turns"
+
+
+def deal_offer_line(offer_id: str, can_counter: bool = True, say: bool = True) -> str:
+    """The one prompt line offered ONLY while an offer is pending for this seat (≤ 60 tokens).
+    A counter is allowed once per offer; on a counter (or after one) it is a refusal."""
+    line = f'DEAL PENDING {offer_id}: add "deal": {{"offer_id": "{offer_id}", "accept": true|false}}'
+    if can_counter:
+        line += ('; to counter once add "counter": {"kind": "truce|no-target|alliance", '
+                 '"rounds": 1-3} or {..., "until_turn": N}')
+    else:
+        line += " (a counter now is a refusal)"
+    if say:
+        line += '; plus "say": take-the-deal / no-deal' + (" / counter-offer" if can_counter else "")
+    return line + "."
+
+
+def validate_deal(raw, pending: dict, turn) -> tuple[dict | None, str]:
+    """The brain's "deal" answer against the offers pending for this seat.
+    Returns (clean, why): clean is {"offer_id", "accept"} or {"offer_id", "accept": False,
+    "counter": {...}}; None when dropped (why says what was wrong). A counter to a counter
+    (the pending note is itself a counter) is a refusal; a malformed counter drops the answer
+    rather than inventing terms; rounds 1..DEAL_MAX_ROUNDS; until_turn strictly after this turn."""
+    if not isinstance(raw, dict):
+        return None, "not an object"
+    oid = raw.get("offer_id")
+    if not isinstance(oid, str) or oid not in (pending or {}):
+        return None, f"offer_id {oid!r} is not pending for this seat"
+    accept = raw.get("accept")
+    if not isinstance(accept, bool):
+        return None, "accept must be true or false"
+    if accept:
+        return {"offer_id": oid, "accept": True}, "accepted"
+    counter = raw.get("counter")
+    if counter is None:
+        return {"offer_id": oid, "accept": False}, "refused"
+    if (pending.get(oid) or {}).get("counter"):
+        return {"offer_id": oid, "accept": False}, "a counter to a counter is a refusal"
+    if not isinstance(counter, dict):
+        return None, "counter must be an object"
+    kind = counter.get("kind")
+    if kind not in DEAL_KINDS:
+        return None, f"counter kind {kind!r} not one of {'/'.join(DEAL_KINDS)}"
+    rounds, until = counter.get("rounds"), counter.get("until_turn")
+    if (rounds is None) == (until is None):
+        return None, "counter needs exactly one of rounds / until_turn"
+    if rounds is not None:
+        if not _is_int(rounds) or not (1 <= rounds <= DEAL_MAX_ROUNDS):
+            return None, f"counter rounds must be 1..{DEAL_MAX_ROUNDS}"
+        clean = {"kind": kind, "rounds": rounds}
+    else:
+        if not _is_int(until) or not _is_int(turn) or until <= turn:
+            return None, f"counter until_turn must be after turn {turn}"
+        clean = {"kind": kind, "until_turn": until}
+    return {"offer_id": oid, "accept": False, "counter": clean}, "countered"
 # Windows the offer goes on: casts, reactions (counters), attacks, blocks and target picks.
 # A mulligan, a mode/number/colour pick, a confirm or a pay-unless is procedural.
 SAY_WINDOWS = ("CAST_SPELL", "REACT", "DECLARE_ATTACKERS", "DECLARE_BLOCKERS", "CHOOSE_ENTITY", "CHOOSE_ENTITIES")
@@ -374,7 +450,8 @@ def build_user_prompt(req: dict, plan: str | None = None,
                       observer: dict | None = None,
                       speculative: bool = False, react_hold: bool = False,
                       combo_status: str | None = None,
-                      runner_note: str | None = None, seat: int | None = None) -> str:
+                      runner_note: str | None = None, seat: int | None = None,
+                      deal_offer: str | None = None) -> str:
     """Per-decision prompt for the seat's model session (dossier already lives
     in the session's first message — this carries only the fresh decision).
 
@@ -417,6 +494,8 @@ def build_user_prompt(req: dict, plan: str | None = None,
         tail += "\n" + PLAN_KEY_INSTRUCTION
     if say_offer(req, seat):
         tail += "\n" + SAY_OFFER
+    if deal_offer:
+        tail += "\n" + deal_offer       # table deals: only while an offer is pending (deal_offer_line)
     parts.append(tail)
     return "\n".join(parts)
 

@@ -21,15 +21,27 @@ ways — a game changer recast or self-bounced (LOOP_AT), the same card cast
 LOOP_CASTS times in one turn, or the seat brain's own intent from game.jsonl
 (`source: cycle`, `say: looping`) — once per turn per seat (A4, §4.4); a valid
 `say` id from the brain is spoken as the seat's line with source "brain" (§4.4).
+
+Table deals (plan 2026-09-16 §11): a seat brain's `DEAL` record in game.jsonl ({"type": "DEAL", "seat",
+"turn", "deal": {"offer_id", "accept", "counter"?, "terms"?, "with"?}}) strikes, refuses or counters the
+player's offer — the ledger and the notes are the scheduler's (strike_deal & co.); here the record is read,
+the seat's answer voiced (deal-with-you / no-deal-with-you / counter-offer, anchored, source "brain"; from
+seat 0 under the Executive: Joshua's joshua-deal-yes/no/counter), the player's acceptance of a counter
+consumed from logs/control/deal/<ts>-accept.json, and a break detected: an attack across a truce/alliance
+(the ring's attack event), a stack item targeting the other party across a no-target/alliance (stackDetail;
+the ring's cast event carries no targets). A break by the human earns the wronged seat's you-broke-it; by a
+seat, the victim's you-promised and the breaker's own i-broke-it.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from pathlib import Path
 
-from voice.scheduler import MULL_DIG_WORDS, MULL_LINE, MULL_P, MULL_SCREW_WORDS, PRIORITY
+from voice.scheduler import (DEAL_ANSWER_LINE, DEAL_CONTROL_DIR, I_BROKE_IT_P, JOSHUA_DEAL_LINE, MULL_DIG_WORDS, MULL_LINE, MULL_P,
+                             MULL_SCREW_WORDS, PRIORITY, deal_terms)
 from voice.table import card_kind, card_slug
 
 FIRST_SENTENCE_MAX = 220
@@ -42,8 +54,11 @@ HECKLE_AGAIN_S = 90.0     # ...and this long: "still waiting"
 # §4.4: the seat brain's optional "say" key — the seat runner validates it against seatd.rules.SAY_MENU before it lands in
 # game.jsonl; this copy is pinned equal by test_events_hardening so the two cannot drift. Three of the ids address someone.
 SAY_MENU = ("taunt", "respect", "nice-play", "kill-that", "youre-the-threat", "im-not-the-threat", "deal", "no-deal", "promise",
-            "looping", "big-swing", "that-hurt", "gg", "heads-up", "nothing-happening", "this-is-fine")
+            "looping", "big-swing", "that-hurt", "gg", "heads-up", "nothing-happening", "this-is-fine", "take-the-deal", "counter-offer")
 SAY_TARGETED = ("deal", "kill-that", "youre-the-threat")     # spoken to the life leader among the OTHER seats, else not at all
+# §11: a brain answering the player's offer adds a `say` beside its DEAL record; the DEAL record voices the addressed line
+# (deal-with-you / no-deal-with-you / counter-offer). Whichever record is read first speaks; the twin is then "said this turn".
+DEAL_SAY_TWINS = {"take-the-deal": "deal-with-you", "promise": "deal-with-you", "no-deal": "no-deal-with-you", "counter-offer": "counter-offer"}
 EVENTS_TAPE = "events.jsonl"                                  # §4.3: every consumed ring event, as-is, plus turn and ts
 OBSERVER_TAPE = "observer-tape.jsonl"                         # §4.3: every CHANGED snapshot, compacted
 THINK_S = 8.0
@@ -235,18 +250,22 @@ class EventsMixin:
         """New records in the seat runners' shared game log, read by complete lines
         (`_tail`): a MULLIGAN is voiced by the seat and answered by the table; any
         other record is read for the brain's intent — a `cycle` replay or a `say`
-        key (§4.4). A voiced AI seat's records only; the human has none."""
-        if self.barks_mode == "off" or self.final_locked:
-            return
+        key (§4.4). A voiced AI seat's records only; the human has none — except a DEAL record
+        (§11), which is read from every seat (seat 0's under the Executive) and whatever the barks
+        knob says: the ledger and the notes to the brains are not voice."""
+        voice = not (self.barks_mode == "off" or self.final_locked)
         for raw in self._tail(self.logs / "game.jsonl", "game"):
             try:
                 r = json.loads(raw)
                 seat = int(r["seat"])
             except (ValueError, TypeError, KeyError):
                 continue
-            if seat == self.human_seat:
-                continue
             turn = r.get("turn") or 0
+            if r.get("type") == "DEAL":
+                self.deal_answer(r, seat, turn)
+                continue
+            if not voice or seat == self.human_seat:
+                continue
             if not self.library_for_seat(seat):
                 if r.get("source") == "cycle":
                     self.brain_intent(r, seat, turn)                  # the table may still react; the staleness gate applies (critic)
@@ -311,6 +330,10 @@ class EventsMixin:
         if say not in SAY_MENU:
             self.record("skipped", kind="bark", why="say id not on the menu", stock=say, seat=seat, source="brain")
             return
+        twin = DEAL_SAY_TWINS.get(say)
+        if twin and twin != say and self.said_this_turn(seat, twin, optional=False):
+            self.record("skipped", kind="bark", why=f"the DEAL answer already spoke ({twin})", stock=say, seat=seat, source="brain")
+            return
         ctx: dict = {"targets": []}
         if say in SAY_TARGETED:
             leader = getattr(self, "leader_of", None)
@@ -320,6 +343,155 @@ class EventsMixin:
                 return
             ctx = {"targets": [int(target)]}
         self._bark(seat, say, turn=turn, source="brain", p=1.0, ctx=ctx)
+
+    # -- table deals (§11): the seat's answer, the player's acceptance of a counter, a break
+    def deal_answer(self, r: dict, seat: int, turn) -> None:
+        """A seat brain's DEAL record: `deal` = {"offer_id", "accept", "counter"?: {kind, rounds|until_turn},
+        "terms"?: {kind, rounds|until_turn} (the offer's terms, copied by the seat runner; absent = a one-round
+        truce), "with"?: the other party (absent = the player)}. accept -> struck (the scheduler writes the
+        ledger and both notes) and the seat's deal-with-you, addressed to the player; a counter -> remembered
+        until the player accepts it (scan_deal_control) or the turn ends, `counter` in the ledger, counter-offer;
+        else `refused`, no-deal-with-you. The fact is always recorded; the line is spoken only when the record
+        is fresh (INTENT_MAX_AGE_S, not a past turn — a mute backlog is history). From seat 0 (the Executive
+        playing the player) the answer is Joshua's: he IS the player at the table (Ben, §11.5)."""
+        deal = r.get("deal") if isinstance(r.get("deal"), dict) else None
+        if deal is None and isinstance(r.get("answer"), dict) and isinstance(r["answer"].get("deal"), dict):
+            deal = r["answer"]["deal"]
+        if not isinstance(deal, dict):
+            return
+        offer_id = str(deal.get("offer_id")) if deal.get("offer_id") is not None else None
+        try:
+            other = int(deal.get("with", self.human_seat))
+        except (TypeError, ValueError):
+            other = self.human_seat
+        if other == seat:
+            self.record("skipped", kind="deal", why="a deal with oneself", seat=seat, offer_id=offer_id)
+            return
+        terms = deal_terms(deal.get("terms"))
+        t = self._turn_int(turn)
+        counter = deal.get("counter") if isinstance(deal.get("counter"), dict) else None
+        if deal.get("accept"):
+            self.strike_deal(seat, other, terms["kind"], t, by=seat, rounds=terms.get("rounds"), until_turn=terms.get("until_turn"),
+                             offer_id=offer_id, source="brain")
+            what = "accept"
+        elif counter:
+            cterms = deal_terms(counter, default_kind=terms["kind"])
+            key = offer_id or f"{seat}-{other}-{t}"
+            self._deal_counters_map()[key] = {"between": [seat, other], "deal": cterms, "turn": t}
+            self._ledger("counter", (seat, other), by=seat, deal=cterms, offer_id=key, turn=t)
+            what = "counter"
+        else:
+            self._ledger("refused", (seat, other), by=seat, deal=terms, offer_id=offer_id, turn=t)
+            what = "refuse"
+        snap_turn = self._last_snapshot.get("turn")
+        age = time.time() - float(r.get("ts") or time.time())
+        line = DEAL_ANSWER_LINE[what]
+        if (snap_turn is not None and t and t < snap_turn) or age > INTENT_MAX_AGE_S:
+            self.record("skipped", kind="bark", why=f"stale deal answer (turn {t} vs {snap_turn}, {age:.0f}s old)", stock=line, seat=seat, source="brain")
+            return
+        if seat == self.human_seat:
+            stock = JOSHUA_DEAL_LINE[what]
+            self.enqueue("quip", stock=stock, ttl=20.0, source="brain")           # Joshua's stock library, like his quips
+            self.record("queued", kind="quip", stock=stock, seat=seat, source="brain", offer_id=offer_id)
+        elif self.library_for_seat(seat):
+            self._roll_turn(t)
+            twins = [s for s, tw in DEAL_SAY_TWINS.items() if tw == line and s != line]
+            if any(self.said_this_turn(seat, s, optional=False) for s in twins):
+                self.record("skipped", kind="bark", why="the seat's say already spoke for this answer", stock=line, seat=seat, source="brain")
+                return
+            if self._bark(seat, line, turn=t, source="brain", p=1.0, ctx={"targets": [other]}):
+                for s in twins:
+                    self._turn_said().add((seat, s))                                # a `say` twin read later stays quiet
+
+    def scan_deal_control(self) -> None:
+        """logs/control/deal/<ts>-accept.json {"offer_id"} — the advisor relays the player's `@urza accept` of a
+        seat's counter. The counter's terms are the runner's own memory (deal_answer, checkpointed); a match
+        strikes the deal (by = the player) and the seat confirms it aloud (deal-with-you); an unknown or expired
+        offer is noted. Every file is consumed; one caught mid-write (unparseable, under two seconds old) waits."""
+        d = self.logs / "control" / DEAL_CONTROL_DIR
+        try:
+            files = sorted(d.glob("*-accept.json"))
+        except OSError:
+            return
+        for f in files:
+            try:
+                body = json.loads(f.read_text())
+            except ValueError:
+                try:
+                    if time.time() - f.stat().st_mtime < 2.0:
+                        continue
+                except OSError:
+                    continue
+                body = None
+            except OSError:
+                continue
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+            if not isinstance(body, dict):
+                self.record("noted", kind="deal", why=f"unreadable accept file {f.name}: dropped")
+                continue
+            oid = str(body.get("offer_id") or "")
+            c = self._deal_counters_map().pop(oid, None)
+            turn = self._last_snapshot.get("turn")
+            if not c:
+                self.record("noted", kind="deal", why=f"accept for an unknown or expired counter: {oid or '(no offer_id)'}", offer_id=oid or None)
+                continue
+            a, b = (int(x) for x in c["between"])
+            terms = c.get("deal") or {}
+            self.strike_deal(a, b, terms.get("kind", "truce"), turn, by=self.human_seat, rounds=terms.get("rounds"),
+                             until_turn=terms.get("until_turn"), offer_id=oid, source="player")
+            if a != self.human_seat and self.library_for_seat(a) and self.barks_mode != "off" and not self.final_locked:
+                self._bark(a, DEAL_ANSWER_LINE["accept"], turn=turn, source="brain", p=1.0, ctx={"targets": [b]})
+
+    def _deal_broken(self, breaker: int, victims: list[int], how: str, turn) -> None:
+        """`breaker` broke its deal with each of `victims` (how = attack | target): the scheduler forgets it,
+        writes `broken` and the wronged party's note; then the table: the human breaking -> the wronged seat's
+        you-broke-it (anchored, certain); a seat breaking -> a wronged voiced seat's you-promised (its usual
+        odds) and the breaker's own i-broke-it (I_BROKE_IT_P), behind the objection when there is one."""
+        breaker = int(breaker)
+        for v in victims:
+            self.break_deal(breaker, v, how, turn)
+        voiced = [int(v) for v in victims if int(v) != self.human_seat and self.library_for_seat(int(v)) and int(v) not in self.eliminated]
+        said = False
+        if voiced:
+            who = int(self.rng.choice(voiced))
+            if breaker == self.human_seat:
+                if "you-broke-it" in self.table_ids:
+                    said = self._bark(who, "you-broke-it", turn=turn, source="event", p=1.0,
+                                      ctx={"targets": [], "aggressor": breaker, "human_cause": True})
+            elif "you-promised" in self.table_ids:
+                said = self._bark(who, "you-promised", turn=turn, source="event", p=self.table_p("you-promised"),
+                                  ctx={"targets": [], "aggressor": breaker, "human_cause": False})
+        if breaker != self.human_seat and self.library_for_seat(breaker) and breaker not in self.eliminated and "i-broke-it" in self.table_ids:
+            self._bark(breaker, "i-broke-it", turn=turn, source="event", p=I_BROKE_IT_P, ctx={"targets": [int(v) for v in victims]},
+                       gap=0.4 if said else None, evict=not said)
+
+    def _target_seats(self, targets: list[str], d: dict, permanents_only: bool = False) -> list[int]:
+        """The seats a stack item's `targets` point at, in order, once each: "seat N" is the player, a name
+        is the permanent's controller (found on a battlefield); "X (on the stack)" is a spell, which a
+        no-target deal does not cover (permanents_only) — for hold-on it is looked up as before."""
+        out: list[int] = []
+        for t in targets:
+            t = str(t)
+            victim = None
+            if t.startswith("seat "):
+                try:
+                    victim = int(t[5:])
+                except ValueError:
+                    victim = None
+            elif t.endswith(" (on the stack)") and permanents_only:
+                continue
+            else:
+                name = t.replace(" (on the stack)", "")
+                for x in d.get("seats") or []:
+                    if any(isinstance(c, dict) and c.get("name") == name for c in x.get("battlefield") or []):
+                        victim = x.get("seat")
+                        break
+            if victim is not None and int(victim) not in out:
+                out.append(int(victim))
+        return out
 
     def human_mulligans(self, d: dict) -> None:
         """The human's keep is not in the game log; the first snapshot of turn one shows the
@@ -545,8 +717,7 @@ class EventsMixin:
         if not detail:
             self._stack_seen.clear()
             return
-        if not self.table_ids or "hold-on" not in self.table_ids:
-            return
+        hold_on = bool(self.table_ids) and "hold-on" in self.table_ids
         turn = d.get("turn")
         for si in detail:
             if not isinstance(si, dict):
@@ -557,20 +728,20 @@ class EventsMixin:
                 continue
             self._stack_seen.add(key)
             owner = si.get("owner")
-            for t in targets:
-                victim = None
-                if t.startswith("seat "):
-                    try:
-                        victim = int(t[5:])
-                    except ValueError:
-                        victim = None
-                else:
-                    name = t.replace(" (on the stack)", "")
-                    for x in d.get("seats") or []:
-                        if any(isinstance(c, dict) and c.get("name") == name for c in x.get("battlefield") or []):
-                            victim = x.get("seat")
-                            break
-                if victim is None or victim == owner or victim == self.human_seat or not self.library_for_seat(int(victim)):
+            if owner is not None and self._deals:
+                # §11: a spell or ability targeting the other party (its player or a permanent it controls) across a
+                # no-target or alliance breaks the deal — the ring's cast event carries no targets; the stack does
+                try:
+                    broken = [v for v in self._target_seats(targets, d, permanents_only=True) if v != int(owner) and self.deal_forbids(int(owner), v, "target")]
+                except (TypeError, ValueError):
+                    broken = []
+                if broken:
+                    self._deal_broken(int(owner), broken, "target", turn)
+                    continue                                          # the objection IS "hold on, that's mine" — and outranks it
+            if not hold_on:
+                continue
+            for victim in self._target_seats(targets, d):
+                if victim == owner or victim == self.human_seat or not self.library_for_seat(int(victim)):
                     continue
                 self._bark(int(victim), "hold-on", turn=turn, source="procedural", p=self.table_p("hold-on"),
                                 ctx={"targets": [], "aggressor": owner, "human_cause": owner == self.human_seat})
@@ -663,14 +834,11 @@ class EventsMixin:
                     defenders = [int(x) for x in (e.get("defenders") or [])]
                     open_ = [x for x in defenders if x != self.human_seat and self.library_for_seat(x) and self._open_to_attack(self._seat_rec(x, d))]
                     power = int(e.get("power", 0))
-                    betrayed = [x for x in defenders if (seat, x) in self._deals and x != self.human_seat and self.library_for_seat(x)]
-                    if betrayed and "you-promised" in self.table_ids:
-                        # a truce broken: the promised seat objects (and the deal is forgotten)
-                        who = int(self.rng.choice(betrayed))
-                        for pair in ((seat, who), (who, seat)):
-                            self._deals.pop(pair, None)
-                        self._bark(who, "you-promised", turn=turn, source="event", p=self.table_p("you-promised"),
-                                        ctx={"targets": [], "aggressor": seat, "human_cause": seat == self.human_seat})
+                    betrayed = [x for x in defenders if x != seat and self.deal_forbids(seat, x, "attack")]
+                    if betrayed:
+                        # a truce or alliance broken by combat (§11): the ledger, the wronged party's note, and the
+                        # table — "you promised!" / "you broke it, Player One" / the breaker's own "I lied"
+                        self._deal_broken(seat, betrayed, "attack", turn)
                     elif seat != self.human_seat and big:
                         self._bark(seat, "big-swing", turn=turn, source="event",
                                         ctx={"targets": defenders, "aggressor": None, "open": open_})
@@ -991,6 +1159,7 @@ class EventsMixin:
             elif pool < self.barks_mana:
                 self._pool_high.discard(sid)
         if turn is not None and (turn, active) != (self.seen_turn, self.seen_active):
+            self.lapse_deals(turn)                       # §11: a deal ends at the roll to until_turn + 1, whether or not a bark rolls the turn
             if active == self.human_seat and self.your_move_mode != "off" and self.seen_turn is not None and not self.executive_on():
                 if self.your_move_mode == "on" or self.rng.random() < self.your_move_p:
                     self.enqueue("your_move", stock="your-move", ttl=12.0)   # not while the advisor plays the seat

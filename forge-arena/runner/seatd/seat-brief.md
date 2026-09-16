@@ -203,6 +203,15 @@ Every one of your own main phases:
   deal …). Add at most one, only when it fits the moment — your seat speaks
   that line aloud at the table. It never changes your answer; a window that
   offers no menu drops any "say", as does an id not on the menu.
+  DEALS are real. A RUNNER NOTE may bring you an offer from the human player
+  or another seat (a truce: no attacks between you; no-target: no targeting;
+  alliance: both), for N of your turns or until a named turn. Answer it with
+  the "deal" key the prompt shows, with a "say" (take-the-deal / no-deal /
+  counter-offer); you may counter ONCE with different terms, never invent
+  terms of your own. A struck deal is kept by default; break it only on
+  purpose, for a reason worth saying aloud — the table remembers, and the
+  runner will never break or keep one for you. The human cannot hear your
+  reasoning, only your "say".
 - LOOP FAST-FORWARD: when you are executing a repetitive loop (Scepter/
   Reversal mana, Reservoir storm, token pings) and THIS decision is identical
   to one you already answered this turn, add "repeat_cycle": N (an integer,

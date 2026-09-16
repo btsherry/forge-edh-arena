@@ -311,6 +311,57 @@ HECKLE: dict[str, tuple[str, dict[str, list[str]]]] = {
         "lily": ["[warmly] There you are, dear.", "[gently] Welcome back.", "[amused] Thought we'd lost you.", "[softly] Ah, finally."]}),
 }
 
+# Table deals (plan 2026-09-16 §7, §11): the player deals through the Advisor chat; the seat answers in its own
+# voice and MEANS it. These are fixed "Player One" lines (the {say}/{voc} fills are for commanders — the player
+# has no commander name at the table): the seat's answer to the player's offer (accept / refuse / counter), the
+# lapse, the human breaking a deal (the seat, angry), and a seat breaking its own (it chose — it owns it). The
+# generic take-the-deal / no-deal / promise / you-promised keep serving seat-to-seat.
+DEALS: dict[str, tuple[str, dict[str, list[str]]]] = {
+    "deal-with-you": ("accepts the player's offer of a deal (addressed to Player One)", {
+        "harry": ["[laughs] Deal, Player One. One turn. Then you're mine.", "[smug] Fine, Player One. We have a deal.",
+                  "[laughs] Alright, Player One. Truce. Don't push it.", "[excited] Deal! You and me, Player One. For now."],
+        "bill": ["[calmly] Agreed, Player One. We have terms.", "[dryly] Very well, Player One. I'll hold you to it.",
+                 "[calmly] Deal, Player One. This turn only.", "[calmly] Accepted, Player One. Do keep your word."],
+        "lily": ["[warmly] Deal, Player One. Be good, dear.", "[gently] Peace it is, Player One.",
+                 "[softly] Agreed, Player One. For now, love.", "[warmly] You have a deal, Player One."]}),
+    "no-deal-with-you": ("refuses the player's offer of a deal (addressed to Player One)", {
+        "harry": ["[laughs] No deal, Player One! You're the threat!", "[scoffs] A deal? With you, Player One? Never.",
+                  "[shouting] No truce, Player One! Not with that board!", "[angry] No, Player One. I don't do deals."],
+        "bill": ["[calmly] No, Player One. Your board says otherwise.", "[dryly] Declined, Player One. Politely.",
+                 "[calmly] I think not, Player One. Not today.", "[dryly] No deal, Player One. Nothing personal."],
+        "lily": ["[gently] I'm afraid not, Player One.", "[chuckles] No deal, Player One. Not this time.",
+                 "[softly] I'd rather not, Player One. Sorry.", "[gently] No, dear Player One. Not today."]}),
+    "counter-offer": ("answers the player's offer with different terms (addressed to Player One; the terms reach the panel)", {
+        "harry": ["[laughs] Not that deal, Player One. Try mine.", "[smug] Counter, Player One. My terms, not yours.",
+                  "[mischievously] Close, Player One. Here's my offer.", "[laughs] No. But here's a deal, Player One."],
+        "bill": ["[calmly] Not those terms, Player One. Consider mine.", "[dryly] A counter-offer, Player One. Read it.",
+                 "[calmly] Almost, Player One. Different terms.", "[calmly] I propose an amendment, Player One."],
+        "lily": ["[gently] Not quite, Player One. How about this?", "[warmly] Let me counter, Player One, dear.",
+                 "[softly] Different terms, Player One. Hear me out.", "[mischievously] Close, love. Try my offer, Player One."]}),
+    "deal-over": ("its deal has run its course (the lapse)", {
+        "harry": ["[laughs] Our truce is done. Watch yourself.", "[smug] Deal's over. Gloves off.",
+                  "[excited] Time's up! No more truce!", "[mischievously] That deal? Expired. Sorry."],
+        "bill": ["[calmly] Our truce has ended.", "[dryly] The deal has expired. Noted.",
+                 "[calmly] Terms concluded. We proceed as before.", "[dryly] Our arrangement is over."],
+        "lily": ["[gently] Our truce is done, dear.", "[softly] The deal's over, love. No hard feelings.",
+                 "[warmly] Time's up on our little pact.", "[gently] Our peace has ended, dears."]}),
+    "you-broke-it": ("the player attacked or targeted it across their deal (addressed to Player One, angry)", {
+        "harry": ["[angry] You broke it, Player One! Liar!", "[shouting] We had a deal, Player One!",
+                  "[frustrated] Your word, Player One? Worthless!", "[angry] You promised, Player One! You promised!"],
+        "bill": ["[dryly] We had an agreement, Player One.", "[calmly] So much for your word, Player One.",
+                 "[sighs] A deal broken, Player One. I'll remember.", "[dryly] Noted, Player One. Your promises are decorative."],
+        "lily": ["[gasps] You promised, Player One!", "[gently] We had a deal, Player One. Shame.",
+                 "[softly] Oh, Player One. So much for our truce.", "[sighs] You broke it, Player One. I trusted you."]}),
+    "i-broke-it": ("breaks its own deal by attacking or targeting the other party — it chose, and owns it", {
+        "harry": ["[laughs] I know what I promised. I lied.", "[smug] Deal's off. My call.",
+                  "[laughs] Yeah, I promised. Yeah, I'm attacking.", "[mischievously] Truce? What truce?"],
+        "bill": ["[calmly] I am aware of what I promised.", "[dryly] The deal was useful. It no longer is.",
+                 "[calmly] I promised. I reconsidered.", "[dryly] Consider our arrangement terminated."],
+        "lily": ["[softly] I know what I promised, dear. Sorry.", "[gently] Forgive me, love. Needs must.",
+                 "[mischievously] I did promise. And yet.", "[softly] A promise, broken. I know."]}),
+}
+DEALS_ADDRESSED = ("deal-with-you", "no-deal-with-you", "counter-offer", "you-broke-it")     # every wording names Player One
+
 # number lines: (family, template per lib) — {n} = the number in words, {N} capitalised
 NUMBER_TAGS = {
     "harry": lambda n: "[angry]" if n <= 10 else "[exhales]" if n <= 20 else "[smug]",
@@ -376,6 +427,8 @@ def build_manifest(lib: str) -> dict:
         ph[pid] = {"category": "loop", "when": when, "text": list(by[lib]), "source": "table-loop-2026-09-11"}
     for pid, (when, by) in HECKLE.items():
         ph[pid] = {"category": "heckle", "when": when, "text": list(by[lib]), "source": "table-heckle-2026-09-14"}
+    for pid, (when, by) in DEALS.items():
+        ph[pid] = {"category": "deal", "when": when, "text": list(by[lib]), "source": "table-deal-2026-09-16"}
     for n in LIFE_NUMBERS:
         ph[f"life-{n}"] = {"category": "number", "when": f"announces or answers its life total: {n}", "text": [life_line(lib, n)], "source": "table-2026-09-10"}
     for n in HAND_NUMBERS:
