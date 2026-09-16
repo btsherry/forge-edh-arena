@@ -161,9 +161,10 @@ voice), one critic, then me. Estimated one working session.
    the counter reaches the player's panel; the player accepts with `@urza accept` (or refuses by
    ignoring it — it lapses at the end of the turn). One counter per offer; a counter to a counter is a
    refusal. Cut if it does not play well.
-4. **Joshua advises on deals under the 70/30 rule:** when a deal is offered to you or struck, the seat's
-   line is the 70 %; Joshua's one-line assessment is the 30 % (the existing colour path, `ARENA_BARKS_OVER_COLOR`
-   split); always when you ask him.
+4. **Joshua advises on every deal you strike or have broken** — Ben revised this after game 50 (the 30 %
+   roll left the advisor silent at the moment the player acts on his read: "it sounds more like critical
+   state information that needs to be delivered"). One line through the colour path, every time; the
+   offer itself is relayed, never answered; always when you ask him.
 5. **Executive may accept deals:** while Executive holds seat 0, a seat's offer to the player goes to
    the seat-0 runner like any seat's, and its `deal` answer is VOICED — in Joshua's voice, since in
    Executive mode Joshua is the player at the table (Ben: "this preempts Joshua's ghost-like presence").

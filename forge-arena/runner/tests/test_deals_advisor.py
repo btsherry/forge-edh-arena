@@ -3,7 +3,7 @@ player's `@urza peace for a turn?` in the Advisor chat is parsed FIRST in _handl
 relayed as a `deal-offer` note in the seat's mailbox and never answered by the brain;
 the seat's `deal` answer (game.jsonl) and the voice runner's ledger (logs/deals.jsonl)
 come back as one panel line each; `@urza accept` on a counter writes
-logs/control/deal/<ts>-accept.json; Joshua assesses a struck or broken deal at 0.3.
+logs/control/deal/<ts>-accept.json; Joshua assesses every deal the player strikes or has broken (no dice, Ben game 50).
 Run: python3 -m unittest discover -s tests"""
 import json
 import os
@@ -242,7 +242,7 @@ class DealTests(unittest.TestCase):
         self.assertEqual([l for l in self.panel().splitlines() if l.startswith("[") and len(l) > ar.DEAL_PANEL_MAX], [])
 
     def test_ledger_struck_lapsed_broken_and_expired(self):
-        self.r.deal_rng.random = lambda: 0.9            # Joshua stays quiet in this test
+        self.r.brain.reply = "Noted."                        # Joshua assesses every strike and break now (Ben, game 50)
         oid = self.offer()
         self.game_line(seat=1, turn=7, type="DEAL", deal={"offer_id": oid, "accept": True, "with": 0})
         self.r._deal_tick()
@@ -272,7 +272,7 @@ class DealTests(unittest.TestCase):
         self.assertIn(f"\n[{self.lbl(10)} · table] Purphoros did not answer\n", self.panel())
         self.assertIn(f"\n[{self.lbl(10)} · Purphoros] refuses\n", self.panel())
         self.assertEqual(self.panel().count("refuses"), 1)
-        self.assertEqual(self.r.brain.prompts, [])
+        self.assertTrue(all(q.startswith("TABLE DEAL") for q in self.r.brain.prompts), "only assessments, never an answer to the offer")
         for line in self.panel().splitlines():
             if line.startswith("["):
                 self.assertLessEqual(len(line), ar.DEAL_PANEL_MAX, line)
@@ -327,30 +327,31 @@ class DealTests(unittest.TestCase):
         self.assertEqual([r["event"] for r in self.records("deal")], ["executive-answer"] * 3)
 
     # ---- Joshua's 30 %
-    def test_joshua_assesses_a_struck_or_broken_deal_at_thirty_percent_never_the_offer(self):
-        self.assertEqual(ar.DEAL_COLOR_P, 0.3)
+    def test_joshua_assesses_every_struck_or_broken_deal_never_the_offer(self):
+        self.assertEqual(ar.DEAL_COLOR_P, 1.0, "Ben (game 50): a deal is state you act on — no dice on the advisor's read")
         oid = self.offer()
         self.assertEqual(self.r.brain.prompts, [], "the offer itself is never answered")
-        self.r.deal_rng.random = lambda: 0.31          # the dice miss
+        self.r.deal_rng.random = lambda: 0.99          # the worst roll changes nothing
+        self.r.brain.reply = "A fair truce: Urza's board is the smaller threat this turn."
         self.ledger_line(turn=7, event="struck", between=[0, 1], by=1, offer_id=oid, deal={"kind": "truce", "rounds": 1, "until_turn": 9})
         self.r._deal_tick()
-        self.assertEqual(self.r.brain.prompts, [])
-        self.assertEqual(self.records("color"), [])
-        self.r.deal_rng.random = lambda: 0.29          # the dice hit
+        self.assertEqual(len(self.r.brain.prompts), 1, "the strike is assessed, every time")
+        self.assertIn("was STRUCK", self.r.brain.prompts[0])
+        self.assertEqual(len(self.records("color")), 1)
         self.r.brain.reply = "Cheap peace: Urza has nothing that flies, so watch his mana instead. [quip:calculating] [bark:1:taunt]"
         self.ledger_line(turn=8, event="broken", between=[0, 1], by=1, how="attack", offer_id=oid, deal={"kind": "truce"})
         self.r._deal_tick()
-        self.assertEqual(len(self.r.brain.prompts), 1)
-        p = self.r.brain.prompts[0]
+        self.assertTrue(any("was STRUCK" in q for q in self.r.brain.prompts))
+        p = next(q for q in self.r.brain.prompts if "BROKEN" in q)
         self.assertIn("TABLE DEAL: your truce with Urza was BROKEN by Urza (attacked)", p)
         self.assertIn("One sentence: was this a good deal for the human, and what to watch", p)
         self.assertIn("BOARD: you: life 30", p); self.assertIn("Urza: life 27", p)
         self.assertIn("Deals at the table: truce, 1 turn with Urza (offered turn 7): broken", p)
         c = self.records("color")
-        self.assertEqual(len(c), 1)
-        self.assertEqual(c[0]["text"], "Cheap peace: Urza has nothing that flies, so watch his mana instead.")
-        self.assertEqual((c[0]["turn"], c[0]["owner"]), (8, None))
-        self.assertIn("BROKEN", c[0]["deal"])
+        self.assertGreaterEqual(len(c), 2, "the strike and the break are both assessed")
+        self.assertEqual(c[-1]["text"], "Cheap peace: Urza has nothing that flies, so watch his mana instead.")
+        self.assertEqual((c[-1]["turn"], c[-1]["owner"]), (8, None))
+        self.assertIn("BROKEN", c[-1]["deal"])
         self.assertEqual(self.records("quip")[0]["id"], "calculating")
         self.assertEqual(self.records("bark"), [], "a bark never rides an assessment")
         self.assertIn(f"\n[{self.lbl(8)} · color] Cheap peace:", self.panel())

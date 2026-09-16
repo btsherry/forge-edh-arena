@@ -351,7 +351,7 @@ def table_opponents(own_deck: str, roster: list[str]) -> list[str]:
 # back as panel lines. Three kinds, two durations, one counter per offer.
 DEAL_KINDS = ("truce", "no-target", "alliance")
 DEAL_ROUNDS_MAX = 3
-DEAL_COLOR_P = 0.3          # Ben's decision 4: Joshua's one-line assessment is the 30 %
+DEAL_COLOR_P = 1.0          # Ben (game 50): a deal you struck or had broken is state you act on — Joshua's read is delivered every time, no dice
 DEAL_PANEL_MAX = 100        # every deal panel line fits one row
 ADDRESS_JSON = Path(__file__).resolve().parent / "voice" / "stock" / "voices" / "address.json"
 _DEAL_AT_RE = re.compile(r"^@\s*([A-Za-z0-9][\w'\-]*)[:,]?\s*(.*)$", re.S)
@@ -1106,7 +1106,7 @@ class AdvisorRunner:
     # (logs/deals.jsonl, lane A2) come back as one panel line each. Counters are
     # answered through logs/control/deal/<ts>-accept|refuse.json (the voice runner
     # strikes the deal). Joshua never answers a deal message; he may assess a
-    # struck or broken deal in one colour line (DEAL_COLOR_P), always when asked.
+    # struck or broken deal in one colour line, every time (Ben, game 50: "critical state"), and when asked.
 
     @staticmethod
     def _size_of(path: Path) -> int:
@@ -1404,10 +1404,11 @@ class AdvisorRunner:
         return "; ".join(out)
 
     def _assess_deal(self, facts: str, turn) -> None:
-        """Ben's decision 4: on a struck or broken deal Joshua adds ONE assessment line
-        with probability DEAL_COLOR_P, through the colour path (a `color` record the
-        voice runner speaks). Never for the offer itself — that is relayed, not answered."""
-        if self.deal_rng.random() >= DEAL_COLOR_P:
+        """On a deal the player struck or had broken, Joshua adds ONE assessment line through the
+        colour path (a `color` record the voice runner speaks) — every time (Ben, game 50: the
+        dice made the advisor absent at the moment the player acts on his read; DEAL_COLOR_P is
+        1.0 and kept only as the knob). Never for the offer itself — that is relayed, not answered."""
+        if DEAL_COLOR_P < 1.0 and self.deal_rng.random() >= DEAL_COLOR_P:
             return
         board = self._board_brief()
         prompt = (f"TABLE DEAL: {facts}. Deals at the table: {self._deal_facts()}"
