@@ -149,6 +149,21 @@ No agents.
 
 ---
 
+## Step 10 (parked by Ben, 2026-09-16) — the table without ElevenLabs
+
+Ben: "test with ElevenLabs API access being down ... make sure we don't hang, or get unhandled errors
+around Joshua's behavior in particular, and all the seats in general. Everything needs to run, bark, and
+react correctly without ElevenLabs access." Two conditions to cover: (a) no key at all (the distributed
+case — every seat line, atom, heckle and deal line is a baked take and must play; Joshua's advice, colour
+and asks fall to stock phrases or silence with a record, never a hang); (b) key present but the API down
+or slow (`tts_request` retries with backoff — the live render must fail fast enough that the queue does
+not stall behind it, the failure is recorded once and the line falls back to stock). Plan: a dry harness
+run of a synthetic game with `ELEVENLABS_API_KEY` unset; the same with the key set and the endpoint
+pointed at a black-hole address (`ARENA_VOICE_ENDPOINT` or a monkeypatched `urlopen` raising/timing out);
+measure the longest `step()` and confirm no line waits on a render; read every `render failed` /
+`skipped … no audio` record; the advisor's `[voice] live=off` banner path; one live game with the key
+unset before the release. Findings go to BUG-LOG; fixes by hand. Sequenced after step 8, before game 51.
+
 ## Appendix A — wording sheet for step 6 (for Ben before rendering)
 
 To be filled in this doc at the start of step 6: eight single-take ids × 3 new wordings × 3 voices, five
