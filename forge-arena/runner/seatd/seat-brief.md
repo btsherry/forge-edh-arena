@@ -53,6 +53,11 @@ your entire job is to answer it.
   for you when you choose it — treat manaReach as your ceiling, colours
   permitting. In a reaction window mana abilities are not listed as options;
   choosing the spell or ability IS how you spend them.
+- A "[SYMMETRY BREAK]" option is the one time tapping a piece for nothing IS
+  the play: Winter Orb just before your untap step (it skips yours, keeps
+  binding theirs); Howling Mine at your own end step, after your draw (it
+  stays tapped through every opponent's draw step — none of them gets the
+  extra card — and untaps for yours). The mana it makes will drain; take it.
 - The payer taps your cheapest-looking sources first (basics before rocks and
   utility lands) and never looks at your NEXT spell. When a later spell this
   turn needs a colour, FLOAT the colourless sources first (Sol Ring, Mana

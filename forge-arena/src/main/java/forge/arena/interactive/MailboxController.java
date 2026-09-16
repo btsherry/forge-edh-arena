@@ -403,6 +403,36 @@ public final class MailboxController extends PlayerControllerAi
      * (Paradise Druid class) is deliberately NOT a symmetry piece: tapping
      * those hurts their controller.
      */
+    /**
+     * The Howling Mine class (game 52, 2026-09-16, Ben: "he should tap it at the end of his turn and
+     * leave it tapped during our turns"): a TRIGGERED symmetric piece — a Phase trigger on every
+     * player's draw step that only fires while the piece is untapped. The play is the mirror of the
+     * Winter Orb class: tap it at your OWN end step, after your draw, so it stays tapped through every
+     * opponent's draw step and untaps in your untap step before yours. Detected from the script's
+     * trigger parameters, never by name.
+     */
+    static List<Card> drawSymmetryPieces(Player owner) {
+        List<Card> out = new ArrayList<>();
+        for (Card c : owner.getCardsIn(ZoneType.Battlefield)) {
+            for (forge.game.trigger.Trigger t : c.getTriggers()) {
+                String phase = t.getParam("Phase");
+                String who = t.getParam("ValidPlayer");
+                String present = t.getParam("IsPresent");
+                String presentDefined = t.getParam("PresentDefined");
+                boolean untappedGate = present != null && present.contains("untapped")
+                        && (present.contains("Card.Self") || "Self".equals(presentDefined));
+                if (t.getMode() == forge.game.trigger.TriggerType.Phase
+                        && phase != null && phase.contains("Draw")
+                        && who != null && who.contains("Player")
+                        && untappedGate) {
+                    out.add(c);
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
     static List<Card> symmetryPieces(Player owner) {
         List<Card> out = new ArrayList<>();
         for (Card c : owner.getCardsIn(ZoneType.Battlefield)) {
@@ -590,7 +620,9 @@ public final class MailboxController extends PlayerControllerAi
         // SYMMETRY BREAK offers (game 7, 2026-08-17): if the seat controls an
         // untapped symmetry piece (a Continuous static active only while the
         // piece is untapped, affecting Players — Winter Orb class) and the
-        // seat's untap step is the NEXT one to happen, offer tapping the
+        // seat's untap step is the NEXT one to happen — or (game 52, 2026-09-16)
+        // a draw-step trigger gated on the piece being untapped (Howling Mine
+        // class) at the seat's OWN end step — offer tapping the
         // piece through any activatable outlet whose CostTapType it can pay
         // (Urza's "tap an untapped artifact", Clock of Omens, the piece's own
         // tap ability...). This is the one case where a mana ability IS the
@@ -598,9 +630,21 @@ public final class MailboxController extends PlayerControllerAi
         // the piece is pre-selected as the tap payment via TapCostPreference.
         List<Object[]> symOffers = new ArrayList<>(); // {SpellAbility, Card piece, String label}
         try {
-            if (game.getPhaseHandler().getPlayerTurn() != me
-                    && game.getPhaseHandler().getNextTurn() == me) {
-                List<Card> pieces = symmetryPieces(me);
+            boolean ourUntapNext = game.getPhaseHandler().getPlayerTurn() != me
+                    && game.getPhaseHandler().getNextTurn() == me;
+            boolean ourEndStep = game.getPhaseHandler().getPlayerTurn() == me
+                    && game.getPhaseHandler().getPhase() == PhaseType.END_OF_TURN;
+            List<Card> pieces = new ArrayList<>();
+            java.util.Set<Card> drawClass = new java.util.HashSet<>();
+            if (ourUntapNext) {
+                pieces.addAll(symmetryPieces(me));            // Winter Orb class: tap it before OUR untap
+            }
+            if (ourEndStep) {
+                List<Card> mines = drawSymmetryPieces(me);   // Howling Mine class: tap it after OUR draw
+                pieces.addAll(mines);
+                drawClass.addAll(mines);
+            }
+            if (!pieces.isEmpty()) {
                 for (Card piece : pieces) {
                     if (!piece.isUntapped()) {
                         continue;
@@ -646,13 +690,18 @@ public final class MailboxController extends PlayerControllerAi
                         if (!usable) {
                             continue;
                         }
+                        String why = drawClass.contains(piece)
+                                ? "your draw is DONE: with " + piece.getName()
+                                  + " tapped it stays tapped through EVERY opponent's "
+                                  + "draw step (no extra card for any of them), then "
+                                  + "untaps in your untap step before your own draw. "
+                                : "your untap step is NEXT: with " + piece.getName()
+                                  + " tapped, its 'while untapped' restriction skips "
+                                  + "YOUR untap, then it untaps during your untap "
+                                  + "step and keeps restricting the other players. ";
                         String label = "[SYMMETRY BREAK] Tap " + piece.getName()
                                 + " via " + oHost.getName() + " ("
-                                + osa.getPayCosts().toSimpleString() + ") — your "
-                                + "untap step is NEXT: with " + piece.getName()
-                                + " tapped, its 'while untapped' restriction skips "
-                                + "YOUR untap, then it untaps during your untap "
-                                + "step and keeps restricting the other players. "
+                                + osa.getPayCosts().toSimpleString() + ") — " + why
                                 + (osa.isManaAbility()
                                     ? "Mana produced now will drain unspent — the "
                                       + "point is the tap, not the mana."

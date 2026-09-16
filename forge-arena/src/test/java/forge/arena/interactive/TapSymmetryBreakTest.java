@@ -96,6 +96,23 @@ public class TapSymmetryBreakTest {
             game.getPhaseHandler().onStackResolved();
         }
 
+        void startAtSeatEndStep() {
+            game.getPhaseHandler().devModeSet(PhaseType.END_OF_TURN, seat);
+            game.getPhaseHandler().onStackResolved();
+        }
+
+        /** Step the game until `who` is in `phase`, or the step cap. */
+        void runUntil(Player who, PhaseType phase) {
+            int steps = 0;
+            while (steps++ < 400 && !game.isGameOver()) {
+                game.getPhaseHandler().mainLoopStep();
+                if (game.getPhaseHandler().getPlayerTurn() == who
+                        && game.getPhaseHandler().getPhase() == phase) {
+                    break;
+                }
+            }
+        }
+
         /** Answer loop for the seat; routes by content. */
         Thread startBrain() {
             Path inbox = base.resolve("seat-" + seat.getId()).resolve("inbox");
@@ -200,6 +217,36 @@ public class TapSymmetryBreakTest {
                 + "restriction applied to the seat's own untap step)");
         Assert.assertTrue(orb.isUntapped(),
                 "Winter Orb should untap during the seat's own untap step (re-armed)");
+    }
+
+    /** Game 52 (2026-09-16, Ben): Urza let everyone draw off Howling Mine. The Mine is a TRIGGERED
+     *  symmetric piece — the mirror of Winter Orb — so the offer comes at the seat's OWN end step: tap
+     *  it via Urza after the seat's draw, it stays tapped through the opponent's draw step (they draw
+     *  one, not two), and it untaps in the seat's untap step before the seat's own draw (two cards). */
+    @Test(timeOut = 240_000)
+    public void howlingMineTappedViaUrzaAtOwnEndStepDeniesTheOpponentsExtraDraw() throws Exception {
+        Fixture fx = new Fixture();
+        Card mine = put("Howling Mine", fx.seat, ZoneType.Battlefield);
+        put("Urza, Lord High Artificer", fx.seat, ZoneType.Battlefield);
+        for (int i = 0; i < 6; i++) put("Island", fx.seat, ZoneType.Library);
+        for (int i = 0; i < 6; i++) put("Plains", fx.opp, ZoneType.Library);
+        fx.startAtSeatEndStep();
+        fx.startBrain();
+        fx.runUntil(fx.opp, PhaseType.MAIN1);
+        boolean offered = fx.seen.stream().anyMatch(s -> s.contains("[SYMMETRY BREAK]")
+                && s.contains("Howling Mine") && s.contains("Urza") && s.contains("your draw is DONE"));
+        int oppLibraryAfterDraw = fx.opp.getCardsIn(ZoneType.Library).size();
+        boolean tappedThroughTheirDraw = mine.isTapped();
+        fx.runUntil(fx.seat, PhaseType.MAIN1);
+        int seatLibraryAfterDraw = fx.seat.getCardsIn(ZoneType.Library).size();
+        System.out.println("SYM-MINE: offered=" + offered + " oppLib=" + oppLibraryAfterDraw
+                + " mineTappedOnTheirTurn=" + tappedThroughTheirDraw + " seatLib=" + seatLibraryAfterDraw
+                + " mineUntappedNow=" + mine.isUntapped());
+        Assert.assertTrue(offered, "the seat's own end step never offered tapping Howling Mine via Urza");
+        Assert.assertTrue(tappedThroughTheirDraw, "Howling Mine should be tapped during the opponent's turn");
+        Assert.assertEquals(oppLibraryAfterDraw, 5, "the opponent drew ONE card: the Mine was tapped at their draw step");
+        Assert.assertEquals(seatLibraryAfterDraw, 4, "the seat drew TWO: the Mine untapped in the seat's untap step before its draw");
+        Assert.assertTrue(mine.isUntapped(), "re-armed for the seat's own draw");
     }
 
     @Test(timeOut = 240_000)
