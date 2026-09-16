@@ -476,8 +476,10 @@ class BarkRuntime(_TreeCase):
         self.r.enqueue("color", text="A last word.")
         self.assertEqual(self.r.queue, [], "nothing after the sign-off")
         self.assertTrue(any(r.get("why") == "game over — nothing after the sign-off" for r in self._records("dropped")))
-        # the human wins: no seat line, Joshua's you-win pair only
-        r2 = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
+        # the human wins: no seat line, Joshua's you-win pair only — another game, so its own logs directory (a second
+        # runner on the SAME directory now adopts the first one's checkpoint and rightly stays silent after the sign-off; §4.1)
+        logs2 = self.logs.parent / "logs2"; logs2.mkdir()
+        r2 = vr.VoiceRunner(logs2, self.mailbox, player=FakePlayer(), clock=self.clock)
         seats = [{"seat": i, "name": f"s{i}", "eliminated": i != 0, "life": 40 if i == 0 else 0} for i in range(4)]
         (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 9, "activeSeat": 0, "gameOver": True, "winner": "s0", "seats": seats, "events": []}))
         r2.scan_observer()

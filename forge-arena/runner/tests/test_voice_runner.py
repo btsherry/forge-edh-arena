@@ -245,7 +245,7 @@ class VoiceRunnerTests(unittest.TestCase):
         os.environ["ARENA_VOICE_COLOR"] = "all"
         r = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock)
         self._advisor(kind="color", turn=3, text="Urza pitched a land to Mox Diamond. Three artifacts on turn two.")
-        r.step()
+        self.clock.t += 10; r.step()                      # A2 (2026-09-14): a fresh runner waits the normal gap before its first line
         self.assertEqual(len(self.player.played), 1, "mode all voices every recap")
         os.environ["ARENA_VOICE_COLOR"] = "off"
         r2 = vr.VoiceRunner(self.logs, self.mailbox, fake_tts=lambda t: silent_wav(0.5), player=self.player, clock=self.clock)

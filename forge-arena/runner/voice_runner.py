@@ -52,6 +52,21 @@ CLI
   voice_runner.py --say "text"          render (cache/live) + play one line, exit
   voice_runner.py --mute | --unmute     flip control/voice.json
   voice_runner.py --dry-run             log what would be spoken, play nothing
+  voice_runner.py --replay <archive>    drive the runner from an archived observer tape (fake clock, dry
+                                        player, temp logs); print every line it would have said and a
+                                        summary; --seed N (1) makes two runs identical
+
+Restart memory (2026-09-14, hardening plan §4.1, A1/A2 — Ben: "a hot-swapped runner is normal and must
+not forget"): logs/voice-state.json is a checkpoint of everything durable (the dead, the combos announced,
+the game changers seen, the deals, the grudges, the turn's no-repeat set) and recent (what was said and
+when, the seat guards, the patter clock, the tail cursors), written atomically on every change of the
+durable set and at most every STATE_SAVE_S otherwise. A (re)started runner adopts it at its first snapshot
+when the game is the same one (the snapshot's gameId, else the seat runners' gameId in game.jsonl) and
+resumes as if it had never stopped — the first line comes when the clock says so, never at once. Without
+a checkpoint it rebuilds what it can from the last LOG_MEMORY_S of its own voice-0.jsonl. Every record
+carries `turn`, `phase`, `active` and `clock` (C1); a spoken line carries the ring `seq` that caused it
+and its `channel`. A muted runner still reads the snapshot, so a game over publishes final.json at once
+and the teardown watcher never waits on a voice that will not speak (B1).
 
 Layout (2026-09-14, voicework2 hardening plan Phase 0a) — split with no behaviour change:
   runner/voice/renderer.py    Player, Renderer, the WAV/FX/glitch helpers, STOCK/VOICES_DIR
@@ -69,7 +84,9 @@ import os
 import random
 import shutil        # kept importable as voice_runner.shutil / .subprocess / .urllib: the tests patch
 import subprocess    # the stdlib modules through these attributes (the renderer sees the same objects)
+import statistics
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -97,10 +114,21 @@ from voice.scheduler import (  # noqa: E402,F401 — re-exported
     chatter_level, SchedulerMixin)
 from voice.events import (  # noqa: E402,F401 — re-exported
     FIRST_SENTENCE_MAX, ASK_MAX, LOOP_AT, THINK_S, NARRATIONS_PER_TURN, GRUDGE_EVERY, ELIM_SEAT_P, first_sentence,
-    EventsMixin)
+    EVENTS_TAPE, OBSERVER_TAPE, EventsMixin)
+from voice import events as _events        # the replay swaps its wall clock (events.py stamps time.time() on tapes and intents)
 from voice.atoms import AtomsMixin
 POLL_S = 0.5
 CHAIN_POLL_S = 0.1          # while an exchange hop is pending: a retort's beat is ~0.5 s, so poll fast
+# Restart memory (§4.1, A1/A2)
+STATE_FILE = "voice-state.json"     # the checkpoint, in the logs directory beside voice-0.jsonl
+STATE_SCHEMA = "arena.voice-state/1"
+STATE_SAVE_S = 5.0                  # the recency maps are saved at most this often; a change of the durable set saves at once
+STATE_RECENT_S = 300.0              # said_at / seat_said_at entries younger than this travel in the checkpoint
+STATE_STALE_S = 900.0               # with no game id on either side, a checkpoint older than this is not trusted
+STATE_SPOKEN_LOG_S = 60.0           # the duty window's samples: the last minute
+LOG_MEMORY_S = 600.0                # no checkpoint: rebuild recency and eliminations from this much of voice-0.jsonl
+RESTART_RING_MAX = 10               # ring events a restart catches up on at most; more = it was down too long: prime instead
+REPLAY_TICK_S = 1.0                 # --replay: the clock steps between two tape snapshots, so the patter clock and the floor run as live
 
 
 # ---- the daemon --------------------------------------------------------------------
@@ -114,6 +142,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.mailbox = mailbox_dir
         self.dry_run = dry_run
         self.clock = clock
+        self.wall = time.time                                  # wall time for records and the checkpoint; --replay swaps it
         self.human_seat = 0
         self._log_path = logs_dir / "voice-0.log"
         self._jsonl = logs_dir / "voice-0.jsonl"
@@ -233,7 +262,10 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.color_p = float(os.environ.get("ARENA_VOICE_COLOR_P", "0.5"))
         self.apply_chatter()
         self.queue: list[dict] = []
-        self.last_spoken_at = -1e9
+        # A2: never -1e9 (the floor read a restart as an astronomical silence and forced a line in 3–6 s):
+        # the clock starts at "a line just played", so the first line waits the normal gap. The log memory
+        # and the checkpoint below may move it — to a real recent value, never to one past the floor.
+        self.last_spoken_at = self.clock()
         # Start at the END of the advisor's stream: a (re)started runner speaks
         # new lines only — replaying history re-said the last quip after the
         # 2026-09-07 mid-game restart. A brand-new game's file is empty anyway.
@@ -250,9 +282,28 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.eliminated: set[int] = set()
         self._seen_seats: set[int] = set()                    # every seat the snapshot has ever listed
         self.game_over_said = False
-        self.started_said = self._startup_already_spoken()   # a restart never replays "would you like to play a game?"
         self._state_published = None
         self._live_published = None
+        self._step_enabled = True                              # step()'s one enabled() answer; react_atom reads it (B1)
+        # Restart memory (§4.1). First the runner's own log: the opener never replays ("would you like to
+        # play a game?" after the 2026-09-07 restart), and the last LOG_MEMORY_S of lines and deaths are
+        # the fallback when no checkpoint exists (a crash before the first save). Then the checkpoint,
+        # held until the first snapshot names the game (_adopt_state) — it overrides the log memory.
+        mem = self._log_memory()
+        self.started_said = mem["started_said"]              # a restart never replays "would you like to play a game?"
+        self._said_at.update(mem["said_at"])
+        self._seat_said_at.update(mem["seat_said_at"])
+        self._bark_spoken_at.update(mem["bark_spoken_at"])
+        self._spoken_log = mem["spoken_log"]
+        if mem["last_spoken_at"] is not None:
+            self.last_spoken_at = mem["last_spoken_at"]
+        self._log_eliminated: set[int] | None = mem["eliminated"]     # applied at the first snapshot, when the game is past turn 1
+        self._state_path = logs_dir / STATE_FILE
+        self._state_sig: str | None = None
+        self._state_saved_at = -1e9
+        self._state_warned = False
+        self._gid_cache: tuple[int, str | None] = (-1, None)
+        self._pending_state: dict | None = self.load_state()
 
     def apply_chatter(self) -> None:
         """The chatter dial sets the mechanical pace — the gap, the seat guard, the
@@ -277,12 +328,343 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         except OSError:
             return 0
 
-    def _startup_already_spoken(self) -> bool:
+    # -- restart memory (§4.1, A1/A2)
+    def _silence_floor(self) -> float:
+        """The shorter (AI-turn) silence floor as the patter clock computes it — the yardstick for "was
+        the last line long enough ago that the floor would fire the moment we start"."""
+        return SILENCE_FLOOR_S["ai"] / max(0.25, self.chatter)
+
+    def _settle_clock(self, d: dict) -> None:
+        """A2 — at the first snapshot, whatever memory set last_spoken_at, a (re)start never reads as a
+        long silence: a value older than the floor (or in the future: another clock base) is clamped to
+        now - min_gap, so a real event may speak after the normal gap, but the floor re-arms from now and
+        the patter clock is due one normal gap from now — the gap of the turn's owner, which is why this
+        waits for the snapshot. A fresh start that reads its first snapshot within the floor keeps
+        last_spoken_at at its construction time."""
+        now = self.clock()
+        if now - self.last_spoken_at > self._silence_floor() or self.last_spoken_at > now:
+            self.last_spoken_at = now - self.min_gap
+        self._floor_rearmed_at = now
+        self._patter_anchor = self.last_spoken_at
+        human_turn = d.get("activeSeat") == self.human_seat and not self.executive_on()
+        self._patter_due = now + self._patter_gap_s(human_turn)
+
+    def _log_memory(self) -> dict:
+        """The runner's own voice-0.jsonl, read once at start (_startup_already_spoken generalised):
+        whether the opener was ever spoken (any `spoke` of stock startup, however old) and, from the
+        last LOG_MEMORY_S by wall time, the recency maps (`spoke` -> said_at / seat_said_at /
+        bark_spoken_at / last_spoken_at / the duty samples) and the seats that left (`noted` "gone
+        from the snapshot", a seat's `eliminated` line, the human's `human_out`). Every record carries
+        `ts` (wall), so its clock value is now - age whatever the old process's monotonic base was.
+        The fallback when no checkpoint exists (a crash before the first save)."""
+        out: dict = {"started_said": False, "said_at": {}, "seat_said_at": {}, "bark_spoken_at": {}, "spoken_log": [],
+                     "last_spoken_at": None, "eliminated": set()}
         try:
-            with self._jsonl.open("rb") as f:
-                return any(b'"event": "spoke"' in line and b'"stock": "startup"' in line for line in f)
+            raw = self._jsonl.read_bytes()
         except OSError:
+            return out
+        now_c, now_w = self.clock(), self.wall()
+        for line in raw.splitlines():
+            if b'"spoke"' not in line and b'"noted"' not in line:
+                continue
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            ev = r.get("event")
+            if ev == "spoke" and r.get("stock") == "startup":
+                out["started_said"] = True
+            try:
+                age = now_w - float(r.get("ts"))
+            except (TypeError, ValueError):
+                continue
+            if age > LOG_MEMORY_S:
+                continue
+            t = now_c - max(0.0, age)
+            seat = r.get("seat")
+            if ev == "noted":
+                if seat is not None and "gone from the snapshot" in str(r.get("why") or ""):
+                    out["eliminated"].add(int(seat))
+                continue
+            if ev != "spoke" or r.get("kind") == "atom":
+                continue                                                   # an atom is presence, not a line
+            stock = str(r.get("stock") or "")
+            if r.get("kind") == "human_out":
+                out["eliminated"].add(self.human_seat)
+            elif stock == "eliminated" and seat is not None:
+                out["eliminated"].add(int(seat))
+            if out["last_spoken_at"] is None or t > out["last_spoken_at"]:
+                out["last_spoken_at"] = t
+            secs = float(r.get("seconds") or 0.0)
+            if age <= STATE_SPOKEN_LOG_S:
+                out["spoken_log"].append((t - secs, secs))
+            if seat is not None and r.get("library"):
+                out["bark_spoken_at"][int(seat)] = max(t, out["bark_spoken_at"].get(int(seat), -1e9))
+                if stock:
+                    out["said_at"][stock] = max(t, out["said_at"].get(stock, -1e9))
+                    out["seat_said_at"][(int(seat), stock)] = max(t, out["seat_said_at"].get((int(seat), stock), -1e9))
+        out["spoken_log"].sort()
+        return out
+
+    def _game_id(self, snap: dict | None = None):
+        """The game's id: the snapshot's, else the seat runners' (the last game.jsonl record that
+        carries one — the engine stamps gameId on every request; the observer does not)."""
+        gid = (snap if snap is not None else self._last_snapshot).get("gameId")
+        if gid:
+            return str(gid)
+        path = self.logs / "game.jsonl"
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return None
+        if self._gid_cache[0] == size:
+            return self._gid_cache[1]
+        gid = None
+        try:
+            with path.open("rb") as f:
+                f.seek(max(0, size - 16384))
+                chunk = f.read()
+            for line in reversed(chunk.splitlines()):
+                try:
+                    g = json.loads(line).get("gameId")
+                except (ValueError, AttributeError):
+                    continue
+                if g:
+                    gid = str(g)
+                    break
+        except OSError:
+            pass
+        self._gid_cache = (size, gid)
+        return gid
+
+    def load_state(self) -> dict | None:
+        """The checkpoint, parsed, or None; adopted only at the first snapshot (_adopt_state)."""
+        try:
+            st = json.loads(self._state_path.read_text())
+        except (OSError, ValueError):
+            return None
+        return st if isinstance(st, dict) and st.get("schema") == STATE_SCHEMA else None
+
+    def _durable_state(self) -> dict:
+        """The part of the checkpoint whose change saves at once: what the table must never forget."""
+        return {
+            "eliminated": sorted(int(s) for s in self.eliminated),
+            "seen_seats": sorted(int(s) for s in self._seen_seats),
+            "combos_done": {str(s): sorted(sorted(str(p) for p in fs) for fs in sets) for s, sets in sorted(self._combos_done.items())},
+            "gc_cast_seen": sorted([int(s), str(c)] for s, c in self._gc_cast_seen),
+            "card_events_turn": sorted([int(s), str(c), int(n)] for (s, c), n in self._card_events_turn.items()),
+            "heads_up_said": bool(self._heads_up_said),
+            "sweeps": int(self._sweeps),
+            "countered_n": {str(s): int(n) for s, n in sorted(self._countered_n.items())},
+            "deals": sorted([int(a), int(b), t] for (a, b), t in self._deals.items()),
+            "hits_from": {str(v): {str(f): int(n) for f, n in sorted(m.items())} for v, m in sorted(self._hits_from.items())},
+            "last_hit_by": {str(s): [[int(h) for h in hs], t] for s, (hs, t) in sorted(self._last_hit_by.items())},
+            "mulls": {str(s): int(n) for s, n in sorted(self._mulls.items())},
+            "kept_seven": [int(s) for s in self._kept_seven],
+            "human_mull_done": bool(self._human_mull_done),
+            "pool_high": sorted(int(s) for s in self._pool_high),
+            "thought": sorted(self._thought),
+            "said_turn": self._said_turn,
+            "said_this_turn": sorted([int(s), str(p)] for s, p in self._said_this_turn),
+            "chain": self._chain,
+            "seen_turn": self.seen_turn, "seen_active": self.seen_active,
+            "started_said": bool(self.started_said), "game_over_said": bool(self.game_over_said), "final_locked": bool(self.final_locked),
+            "event_seq": self._event_seq,
+            "loop_called": {str(s): t for s, t in sorted((self._loop_called or {}).items())},
+            "heckled": int(getattr(self, "_heckled", 0) or 0),
+            "last_spoken_at": self.last_spoken_at,                 # a spoken line is a checkpoint too
+        }
+
+    def _recency_state(self) -> dict:
+        """The part saved at most every STATE_SAVE_S: what was said lately and the clocks."""
+        now = self.clock()
+        d = self.__dict__
+        return {
+            "said_at": {k: v for k, v in self._said_at.items() if now - v <= STATE_RECENT_S},
+            "seat_said_at": {f"{s}|{pid}": v for (s, pid), v in self._seat_said_at.items() if now - v <= STATE_RECENT_S},
+            "bark_spoken_at": {str(s): v for s, v in self._bark_spoken_at.items()},
+            "seat_last_class": {str(s): c for s, c in self._seat_last_class().items()},
+            "spoken_log": [[t, sec] for t, sec in self._spoken_log if t + sec > now - STATE_SPOKEN_LOG_S],
+            "advisor_spoke_at": self._advisor_spoke_at,
+            "patter_due": self._patter_due, "patter_anchor": self._patter_anchor,
+            "floor_rearmed_at": getattr(self, "_floor_rearmed_at", -1e9), "floor_atom_run": int(getattr(self, "_floor_atom_run", 0) or 0),
+            "tails": {k: list(v) for k, v in (self._tails or {}).items()},
+            "ring_seq": self._ring_seq,
+            "atom_seat_at": {str(s): t for s, t in d.get("_atom_seat_at", {}).items()},
+            "atom_used": {f"{s}|{stem}": t for (s, stem), t in d.get("_atom_used", {}).items()},
+        }
+
+    def save_state(self, force: bool = False) -> bool:
+        """logs/voice-state.json, atomically (tmp + os.replace): at once when the durable set changed
+        (its JSON is the signature — a few hundred bytes a step), else at most every STATE_SAVE_S for
+        the recency maps; `force` for game over. Clock values are stored raw beside `clock` and
+        `saved_at` (wall), so adoption can rebase them onto a new monotonic base."""
+        durable = self._durable_state()
+        sig = json.dumps(durable, sort_keys=True, default=str)
+        now = self.clock()
+        if not force and sig == self._state_sig and 0.0 <= now - self._state_saved_at < STATE_SAVE_S:
             return False
+        state = {"schema": STATE_SCHEMA, "gameId": self._game_id(), "saved_at": self.wall(), "clock": now, **durable, **self._recency_state()}
+        try:
+            tmp = self._state_path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(state, default=str))
+            os.replace(tmp, self._state_path)
+        except (OSError, TypeError, ValueError) as e:
+            if not self._state_warned:
+                self._state_warned = True
+                self.say(f"[voice] checkpoint not written ({str(e)[:80]}) — a restart will forget")
+            return False
+        self._state_sig, self._state_saved_at = sig, now
+        return True
+
+    def _adopt_state(self, d: dict) -> None:
+        """The first snapshot: adopt the checkpoint when it is this game's — same gameId (the
+        snapshot's, else game.jsonl's), or neither side has one and the checkpoint is younger than
+        STATE_STALE_S and its turn is not ahead of the board (turns never go backwards). Else it
+        is ignored with a record, and the log memory's eliminations stand in on a game past turn 1."""
+        state, self._pending_state = self._pending_state, None
+        mem_dead, self._log_eliminated = self._log_eliminated, None
+        gid = self._game_id(d)
+        turn = d.get("turn")
+        if state is not None:
+            sgid = state.get("gameId")
+            try:
+                age = self.wall() - float(state.get("saved_at") or 0.0)
+            except (TypeError, ValueError):
+                age = float("inf")
+            try:
+                ahead = turn is not None and state.get("seen_turn") is not None and int(turn) < int(state["seen_turn"]) - 1
+            except (TypeError, ValueError):
+                ahead = False
+            same = (sgid is not None and gid is not None and str(sgid) == str(gid)) or (sgid is None and gid is None and age <= STATE_STALE_S)
+            if same and not ahead:
+                self._restore_state(state, d, age)
+                return
+            self.record("noted", kind="state", why=f"checkpoint from another game ignored (saved for {sgid!r} at turn {state.get('seen_turn')}, "
+                        f"{age:.0f}s ago; this is {gid!r} at turn {turn})")
+        if mem_dead and (turn or 0) > 1:
+            fresh = sorted(s for s in mem_dead if s not in self.eliminated)
+            self.eliminated |= set(mem_dead)
+            self._seen_seats |= set(mem_dead)
+            self.record("noted", kind="state", why=f"no checkpoint: {len(fresh)} dead seat(s) rebuilt from voice-0.jsonl", seats=fresh)
+        self._settle_clock(d)                                  # A2, for the fresh start and the log memory alike
+
+    def _restore_state(self, state: dict, d: dict, age: float) -> None:
+        """Every field back, tuples and sets decoded, clocks rebased by
+        shift = now - saved clock - (wall now - wall saved) — the seconds that passed while down,
+        seen from the new monotonic base — then _settle_clock, so nothing is forced at once (A2)."""
+        now = self.clock()
+        try:
+            shift = now - float(state["clock"]) - (self.wall() - float(state["saved_at"]))
+        except (KeyError, TypeError, ValueError):
+            shift = 0.0
+
+        def t(v, default=None):
+            if v is None:
+                return default
+            try:
+                v = float(v)
+            except (TypeError, ValueError):
+                return default
+            return v + shift if v > -1e8 else -1e9
+
+        def ints(xs):
+            return {int(x) for x in (xs or [])}
+
+        def get(key, kind):
+            v = state.get(key)
+            return v if isinstance(v, kind) else kind()
+        # durable
+        self.eliminated = ints(get("eliminated", list))
+        self._seen_seats = ints(get("seen_seats", list)) | self.eliminated
+        self._combos_done = {int(s): {frozenset(str(p) for p in fs) for fs in sets} for s, sets in get("combos_done", dict).items()}
+        self._gc_cast_seen = {(int(s), str(c)) for s, c in get("gc_cast_seen", list)}
+        self._card_events_turn = {(int(s), str(c)): int(n) for s, c, n in get("card_events_turn", list)}
+        self._heads_up_said = bool(state.get("heads_up_said"))
+        self._sweeps = int(state.get("sweeps") or 0)
+        self._countered_n = {int(s): int(n) for s, n in get("countered_n", dict).items()}
+        self._deals = {(int(a), int(b)): tn for a, b, tn in get("deals", list)}
+        self._hits_from = {int(v): {int(f): int(n) for f, n in m.items()} for v, m in get("hits_from", dict).items()}
+        self._last_hit_by = {int(s): ([int(h) for h in hs], tn) for s, (hs, tn) in get("last_hit_by", dict).items()}
+        self._mulls = {int(s): int(n) for s, n in get("mulls", dict).items()}
+        self._kept_seven = [int(s) for s in get("kept_seven", list)]
+        self._human_mull_done = bool(state.get("human_mull_done"))
+        self._pool_high = ints(get("pool_high", list))
+        self._thought = set(str(x) for x in get("thought", list))
+        self._said_turn = state.get("said_turn")
+        self._said_this_turn = {(int(s), str(p)) for s, p in get("said_this_turn", list)}
+        self._chain = state.get("chain") if isinstance(state.get("chain"), dict) else None
+        self.seen_turn, self.seen_active = state.get("seen_turn"), state.get("seen_active")
+        self.started_said = True
+        self.game_over_said = bool(state.get("game_over_said"))
+        self.final_locked = bool(state.get("final_locked"))
+        self._loop_called = {int(s): tn for s, tn in get("loop_called", dict).items()}
+        self._heckled = 0                                     # the wait restarts from this snapshot: no "there you are" for a move nobody made
+        # the ring: catch up on what passed while down, unless too much of it rolled by
+        saved_seq = state.get("event_seq")
+        if saved_seq is not None:
+            seqs = [int(e.get("seq", 0)) for e in (d.get("events") or []) if isinstance(e, dict)]
+            top = max(seqs, default=int(saved_seq))
+            if top - int(saved_seq) <= RESTART_RING_MAX:
+                self._event_seq = int(saved_seq)
+            else:
+                self.record("noted", kind="state", why=f"{top - int(saved_seq)} ring events passed while down — not replayed")
+        # recency, rebased
+        self._said_at = {str(k): t(v) for k, v in get("said_at", dict).items() if t(v) is not None}
+        self._seat_said_at = {}
+        for key, v in get("seat_said_at", dict).items():
+            seat, _, pid = str(key).partition("|")
+            if pid and t(v) is not None:
+                self._seat_said_at[(int(seat), pid)] = t(v)
+        self._bark_spoken_at = {int(s): t(v) for s, v in get("bark_spoken_at", dict).items() if t(v) is not None}
+        cls = self._seat_last_class()
+        cls.clear()
+        cls.update({int(s): str(c) for s, c in get("seat_last_class", dict).items()})
+        self._spoken_log = [(t(a), float(b)) for a, b in get("spoken_log", list) if t(a) is not None]
+        self.last_spoken_at = t(state.get("last_spoken_at"), now)
+        self._advisor_spoke_at = t(state.get("advisor_spoke_at"), -1e9)
+        self._patter_due = t(state.get("patter_due"), now)
+        self._patter_anchor = t(state.get("patter_anchor"))
+        self._floor_rearmed_at = t(state.get("floor_rearmed_at"), -1e9)
+        self._floor_atom_run = int(state.get("floor_atom_run") or 0)
+        tails = get("tails", dict)
+        self._tails = {str(k): [v[0], int(v[1])] for k, v in tails.items() if isinstance(v, list) and len(v) == 2}
+        atom_seat_at, atom_used = get("atom_seat_at", dict), get("atom_used", dict)
+        if atom_seat_at or atom_used:
+            self._atoms_init()
+            self._atom_seat_at.update({int(s): t(v) for s, v in atom_seat_at.items() if t(v) is not None})
+            for key, v in atom_used.items():
+                seat, _, stem = str(key).partition("|")
+                if stem and t(v) is not None:
+                    self._atom_used[(int(seat), stem)] = t(v)
+        self._settle_clock(d)
+        recent = sum(1 for v in self._said_at.values() if now - v <= STATE_RECENT_S)
+        self.record("noted", kind="state", why=f"checkpoint adopted: {len(self.eliminated)} dead, {sum(len(s) for s in self._combos_done.values())} combos, "
+                    f"{recent} recent lines ({age:.0f}s old, clock shift {shift:+.1f}s)")
+
+    def scan_observer(self, d: dict | None = None) -> None:
+        """The mixin's, with the restart memory in front: the first snapshot that names the game
+        adopts the checkpoint (or the log memory's dead) BEFORE the mixin reads it. The file is read
+        here for that one snapshot (the mixin's stat signature is kept current); the mixin stays as it is."""
+        if self._pending_state is None and self._log_eliminated is None:
+            return super().scan_observer(d)
+        if d is None:
+            path = self.mailbox / "observer-state.json"
+            try:
+                st = path.stat()
+                d = json.loads(path.read_text())
+            except (OSError, ValueError):
+                return
+            self._snap_sig = (st.st_mtime_ns, st.st_size)
+        if not isinstance(d, dict):
+            return
+        self._adopt_state(d)
+        super().scan_observer(d)
+
+    def react_atom(self, *args, **kw) -> bool:
+        if not self._step_enabled:
+            return False                                   # B1: a muted table gasps at nothing
+        return super().react_atom(*args, **kw)
 
     def _table_who(self) -> dict[int, str]:
         out = {k: who_for_deck(self.address, v) for k, v in self._seat_decks.items()}
@@ -347,10 +729,21 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             pass
 
     def record(self, event: str, **body) -> None:
-        """voice-0.jsonl: {"event": spoke|dropped|skipped, "kind": <item kind>, …}."""
+        """voice-0.jsonl: {"ts", "event": spoke|dropped|skipped|queued|noted|gap, "kind": <item kind>, …},
+        every record stamped with the board it was written against (C1): `turn`, `phase`, `active`
+        (None until a snapshot was read) and `clock`; a caller's own values stand."""
+        snap = getattr(self, "_last_snapshot", None) or {}
+        body.setdefault("turn", snap.get("turn"))
+        body.setdefault("phase", snap.get("phase"))
+        body.setdefault("active", snap.get("activeSeat"))
+        if "clock" not in body:
+            try:
+                body["clock"] = round(self.clock(), 3)
+            except Exception:  # noqa: BLE001 — a record never fails for its stamp
+                body["clock"] = None
         try:
             with self._jsonl.open("a") as f:
-                f.write(json.dumps({"ts": round(time.time(), 3), "event": event, **body}) + "\n")
+                f.write(json.dumps({"ts": round(getattr(self, "wall", time.time)(), 3), "event": event, **body}, default=str) + "\n")
         except OSError:
             pass
 
@@ -422,9 +815,13 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             if generic:                                             # "deal-urza" was a "deal": the recency memory knows both
                 self._said_at[generic] = self.clock()
                 self._seat_said_at[(int(item["seat"]), generic)] = self.clock()
+        extra: dict = {"channel": "main"}                            # C1: the ring event that caused a bark, and the channel (atoms say "under")
+        ctx_seq = (item.get("ctx") or {}).get("seq")
+        if ctx_seq is not None:
+            extra["seq"] = ctx_seq
         self.record("spoke", kind=item["kind"], text=item["text"][:200], stock=item["stock"], seconds=round(secs, 2),
                     chars_used=self.renderer.chars_used, library=item.get("library") or "", seat=item.get("seat"),
-                    file=path.name, duty=round(self.duty(), 2), goal=round(self.duty_goal(), 2), source=item.get("source", ""))
+                    file=path.name, duty=round(self.duty(), 2), goal=round(self.duty_goal(), 2), source=item.get("source", ""), **extra)
         who = f" seat {item['seat']} ({item['library']})" if item.get("library") else ""
         hop = f" (chain hop {item['chain']['hop']})" if item.get("chain") else ""
         self.say(f"[voice] {item['kind']}{who}{hop}: {item['stock'] or item['text'][:90]}" + (f" [{path.name}]" if item["stock"] and path.name != f"{item['stock']}.wav" else ""))
@@ -459,11 +856,23 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
     # -- loop
     def step(self) -> None:
         self.publish_state()
-        if not self.enabled():
+        self._step_enabled = on = self.enabled()
+        if not on:
+            # B1: a muted runner still READS the snapshot — game over sets the lock and the teardown watcher
+            # gets its final.json at once instead of after LINGER; every queued line is dropped with a
+            # record; nothing plays (the queue is emptied here, react_atom is gated, the backchannel is armed
+            # only by speak). The advisor stream and the game log wait for the unmute, as before.
             self.stop_atoms()                            # a pending murmur or an under-line dies with the mute
+            self.scan_observer()
             if self.queue:
+                for q in self.queue:
+                    self.record("dropped", kind=q["kind"], why="voice disabled", stock=q.get("stock", ""), seat=q.get("seat"),
+                                text=(q.get("text") or "")[:60])
                 self.say(f"[voice] disabled — dropping {len(self.queue)} queued line(s)")
                 self.queue = []
+            if self.final_locked:
+                self.publish_final()
+            self.save_state()
             return
         self.learn_table()
         self.scan_advisor()
@@ -474,9 +883,11 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.patter()
         item = self.next_item()
         if item is not None:
-            self.speak(item)
+            self.save_state(force=True)               # the cursors past this line BEFORE it plays: a kill mid-line
+            self.speak(item)                          # loses the line rather than repeating it (2026-09-07; critic 09-16)
         if self.final_locked and not self.queue:
             self.publish_final()                      # spoken or skipped, the sequence has drained
+        self.save_state()                             # §4.1: at once when the durable set moved, else every STATE_SAVE_S
 
     def run(self) -> None:
         self.say(f"[voice] up — chatter={self.chatter:g}, stock {len(self.renderer.manifest.get('phrases', {}))} phrases, "
@@ -504,6 +915,174 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             time.sleep(CHAIN_POLL_S if any(q.get("chain") for q in self.queue) else POLL_S)
 
 
+# ---- replay (§4.3) ------------------------------------------------------------------
+
+class _ReplayClock:
+    """The fake monotonic clock a replay drives; set to each tape record's `clock`."""
+
+    def __init__(self, t: float = 0.0):
+        self.t = t
+
+    def __call__(self) -> float:
+        return self.t
+
+
+class _ReplayTime:
+    """Stands in for the `time` module inside voice.events during a replay: time() is the tape's
+    wall clock (intent staleness, the cast flurry, the tapes' ts), everything else the real module's."""
+
+    def __init__(self, get):
+        self._get = get
+
+    def time(self) -> float:
+        return self._get()
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    out = []
+    try:
+        for line in path.read_text().splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(r, dict):
+                out.append(r)
+    except OSError:
+        pass
+    return out
+
+
+def _read_stamped(path: Path) -> list[tuple[float, str]]:
+    """(ts, raw line) for every record of an archived log that carries a wall `ts`, in file order."""
+    out = []
+    try:
+        for line in path.read_text().splitlines():
+            try:
+                ts = float(json.loads(line).get("ts"))
+            except (ValueError, TypeError, AttributeError):
+                continue
+            out.append((ts, line))
+    except OSError:
+        pass
+    return out
+
+
+def _snapshot_from_tape(rec: dict, events: list[dict], lo, hi) -> dict:
+    """A live-shaped snapshot from a compacted observer-tape record: the seats with their
+    battlefield entries as dicts, the ring = the archived events with lo < seq <= hi."""
+    ring = [] if hi is None else [e for e in events if isinstance(e.get("seq"), int) and (lo is None or e["seq"] > lo) and e["seq"] <= hi]
+    seats = [{"seat": s.get("seat"), "name": f"seat {s.get('seat')}", "life": s.get("life"), "handSize": s.get("handSize"),
+              "pool": s.get("pool"), "eliminated": bool(s.get("eliminated")),
+              "battlefield": [dict(c) for c in (s.get("battlefield") or []) if isinstance(c, dict)]}
+             for s in (rec.get("seats") or []) if isinstance(s, dict)]
+    return {"gameId": rec.get("gameId"), "turn": rec.get("turn"), "phase": rec.get("phase"), "activeSeat": rec.get("activeSeat"),
+            "gameOver": bool(rec.get("gameOver")), "stack": rec.get("stack") or [], "events": ring, "seats": seats}
+
+
+def replay(archive: Path, seed: int = 1, out=print) -> list[str]:
+    """Drive a VoiceRunner from an archive's observer-tape.jsonl (+ events.jsonl, game.jsonl,
+    advisor-0.jsonl) with a fake clock and a dry player, logging into a temp directory that is
+    removed afterwards — the live logs are never touched. Between two tape snapshots the clock
+    steps REPLAY_TICK_S at a time so the patter clock and the floor run as they did live. Prints
+    every line it would have said as `[t+MM:SS turn N] seat S <stock> (source)` and ends with
+    lines/min, the share by source and the gap median / p90 / max; deterministic under `seed`
+    (the backchannel timers are off — a real-time thread would race the dice). Returns the lines."""
+    archive = Path(archive)
+    tape = _read_jsonl(archive / _events.OBSERVER_TAPE)
+    if not tape:
+        raise SystemExit(f"[voice] no {_events.OBSERVER_TAPE} under {archive}")
+    events = _read_jsonl(archive / _events.EVENTS_TAPE)
+    game_lines, adv_lines = _read_stamped(archive / "game.jsonl"), _read_stamped(archive / "advisor-0.jsonl")
+    tmp = Path(tempfile.mkdtemp(prefix="voice-replay-"))
+    logs, mailbox = tmp / "logs", tmp / "mailbox"
+    logs.mkdir()
+    mailbox.mkdir()
+    first = tape[0]
+    wall = {"t": float(first.get("ts") or 0.0)}
+    clock = _ReplayClock(float(first["clock"]) if first.get("clock") is not None else wall["t"])
+    clock0 = clock.t
+    saved_time = _events.time
+    _events.time = _ReplayTime(lambda: wall["t"])
+    report: list[str] = []
+    try:
+        vr = VoiceRunner(logs, mailbox, dry_run=True, clock=clock)
+        vr.wall = lambda: wall["t"]
+        vr.rng.seed(seed)
+        vr.start_backchannel = lambda item, seconds=None: False        # no real-time timers in a replay
+        seqs = [e["seq"] for e in events if isinstance(e.get("seq"), int)]
+        prev_seq = first.get("seq") if first.get("seq") is not None else (min(seqs) - 1 if seqs else None)
+        vr._event_seq = prev_seq                                       # the live runner primed here; the tape holds what followed
+        cursors = {"game": 0, "advisor": 0}
+        spoken: list[tuple[float, dict]] = []
+
+        def feed(name: str, lines: list[tuple[float, str]]) -> None:
+            i = cursors[name]
+            due = []
+            while i < len(lines) and lines[i][0] <= wall["t"]:
+                due.append(lines[i][1])
+                i += 1
+            if due:
+                with (logs / ("game.jsonl" if name == "game" else "advisor-0.jsonl")).open("a") as f:
+                    f.write("\n".join(due) + "\n")
+            cursors[name] = i
+
+        def tick() -> None:
+            feed("game", game_lines)
+            feed("advisor", adv_lines)
+            vr.learn_table()
+            vr.scan_game_log()
+            vr.scan_advisor()
+            vr.mutter()
+            vr.heckle_human()
+            vr.patter()
+            item = vr.next_item()
+            if item is not None and vr.speak(item):
+                spoken.append((clock.t, item))
+                el = int(clock.t - clock0)
+                line = (f"[t+{el // 60:02d}:{el % 60:02d} turn {vr._last_snapshot.get('turn')}] seat {item.get('seat') if item.get('seat') is not None else 'J'} "
+                        f"<{item.get('stock') or (item.get('text') or '')[:60]}> ({item.get('source') or item.get('kind')})")
+                report.append(line)
+                out(line)
+            if vr.final_locked and not vr.queue:
+                vr.publish_final()
+
+        for rec in tape:
+            target_c = float(rec["clock"]) if rec.get("clock") is not None else (float(rec["ts"]) if rec.get("ts") is not None else clock.t)
+            target_w = float(rec["ts"]) if rec.get("ts") is not None else wall["t"]
+            while clock.t + REPLAY_TICK_S < target_c:
+                clock.t += REPLAY_TICK_S
+                wall["t"] += REPLAY_TICK_S
+                tick()
+            clock.t, wall["t"] = max(clock.t, target_c), max(wall["t"], target_w)
+            hi = rec.get("seq") if isinstance(rec.get("seq"), int) else None
+            vr.scan_observer(_snapshot_from_tape(rec, events, prev_seq, hi))
+            if hi is not None:
+                prev_seq = hi
+            tick()
+        span = max(1e-9, clock.t - clock0)
+        report.append(f"-- {len(spoken)} lines in {span / 60:.1f} min = {len(spoken) / (span / 60):.2f} lines/min (seed {seed})")
+        by_src: dict[str, int] = {}
+        for _, item in spoken:
+            src = str(item.get("source") or item.get("kind"))
+            by_src[src] = by_src.get(src, 0) + 1
+        for src, n in sorted(by_src.items(), key=lambda kv: (-kv[1], kv[0])):
+            report.append(f"   {src}: {n} ({100 * n / len(spoken):.0f}%)")
+        gaps = [b - a for (a, _), (b, _) in zip(spoken, spoken[1:])]
+        if gaps:
+            gaps_sorted = sorted(gaps)
+            report.append(f"   gap median {statistics.median(gaps):.1f}s, p90 {gaps_sorted[int(0.9 * (len(gaps) - 1))]:.1f}s, max {gaps_sorted[-1]:.1f}s")
+        for line in report[len(spoken):]:
+            out(line)
+    finally:
+        _events.time = saved_time
+        shutil.rmtree(tmp, ignore_errors=True)
+    return report
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--logs", default=str(HERE / "logs"))
@@ -513,7 +1092,12 @@ def main() -> None:
     ap.add_argument("--mute", action="store_true")
     ap.add_argument("--unmute", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--replay", metavar="ARCHIVE_DIR", help="drive the runner from an archived observer tape (fake clock, dry player, temp logs)")
+    ap.add_argument("--seed", type=int, default=1, help="the dice for --replay (1): the same seed gives the same run")
     a = ap.parse_args()
+    if a.replay:
+        replay(Path(a.replay), seed=a.seed)
+        return
     vr = VoiceRunner(Path(a.logs), Path(a.mailbox), dry_run=a.dry_run)
     if a.mute or a.unmute:
         vr._control.parent.mkdir(parents=True, exist_ok=True)
