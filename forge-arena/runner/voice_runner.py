@@ -151,7 +151,7 @@ from voice.scheduler import (  # noqa: E402,F401 — re-exported
     MULL_LINE, MULL_P, MULL_SCREW_WORDS, MULL_DIG_WORDS, RECENT_S, PATTER_REPEAT_S, CHATTER_LEVELS,
     DEAL_KINDS, DEAL_ATTACK_KINDS, DEAL_TARGET_KINDS, DEAL_MAX_ROUNDS, DEALS_LEDGER, DEAL_CONTROL_DIR, DEAL_NOTE_KINDS, DEAL_LINES,
     DEAL_ANSWER_LINE, JOSHUA_DEAL_LINE, DEAL_OVER_P, I_BROKE_IT_P, CHAIN_P_OVERRIDE, normalize_deal, deal_terms, is_question,
-    chatter_level, SchedulerMixin)
+    chatter_level, SchedulerMixin, classify)
 from voice.events import (  # noqa: E402,F401 — re-exported
     FIRST_SENTENCE_MAX, ASK_MAX, LOOP_AT, THINK_S, NARRATIONS_PER_TURN, GRUDGE_EVERY, ELIM_SEAT_P, first_sentence,
     EVENTS_TAPE, OBSERVER_TAPE, EventsMixin)
@@ -875,7 +875,12 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             if bleep is not None:
                 self._play(bleep)
         secs = wav_seconds(path)
-        self.publish_speaking(item, secs)
+        # The match screen follows a seat only for a line worth looking at (Ben, game 51): a reaction, a
+        # narration, a retort, the advisor's tag, a jab aimed at someone — never untargeted filler from the
+        # patter clock, and never an atom (atoms do not pass through here). Afterwards it shows the active
+        # player's field.
+        meaningful = item.get("source") != "patter" or bool((item.get("ctx") or {}).get("targets"))
+        self.publish_speaking(item if meaningful else None, secs)
         self.start_backchannel(item, secs)              # a listener may murmur under the line (voice/atoms.py)
         self._play(path)
         self.publish_speaking(None, 0.0)

@@ -1222,17 +1222,21 @@ class EventsMixin:
             self.say("[voice] game over — final sequence queued, everything else is silenced")
 
     def publish_speaking(self, item: dict | None, seconds: float) -> None:
-        """logs/voice-speaking.json — {"seat": N, "until": epoch_ms} while one of
-        the SEATS is talking, {} otherwise. The match screen (VAdvisor) brings
-        that seat's field tab forward for the line and puts the old tab back
-        (Ben, 2026-09-10). Joshua and the human never move the tabs."""
+        """logs/voice-speaking.json — {"seat": N, "until": epoch_ms, "active": A} while one of
+        the SEATS says something worth looking at, {"active": A} otherwise. The match screen
+        (VAdvisor) brings that seat's field tab forward for the line and afterwards shows the
+        ACTIVE player's field (Ben, 2026-09-16; before: the tab the player had been on). Joshua,
+        the human and the atoms never move the tabs."""
         try:
             f = self.logs / "voice-speaking.json"
+            active = (self._last_snapshot or {}).get("activeSeat")       # the field the screen returns to (Ben, game 51)
             if item is not None and item.get("seat") is not None and item.get("library"):
                 body = {"seat": int(item["seat"]), "library": item["library"], "stock": item.get("stock", ""),
                         "until": int((time.time() + seconds) * 1000)}
             else:
                 body = {}
+            if active is not None:
+                body["active"] = int(active)
             tmp = f.with_suffix(".json.tmp")
             tmp.write_text(json.dumps(body))
             tmp.replace(f)

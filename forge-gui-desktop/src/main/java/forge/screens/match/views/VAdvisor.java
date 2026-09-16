@@ -285,10 +285,13 @@ public class VAdvisor implements IVDoc<CAdvisor> {
      *  clicked another tab in the meantime. Never touches keyboard focus. */
     private void followVoice() {
         long[] speaking = new long[] {-1, 0};
+        int active = -1;
         try {
             final java.io.File f = new java.io.File(forge.arena.interactive.AiControlFile.logsDir(), "voice-speaking.json");
             if (f.isFile()) {
-                speaking = VoiceFocus.parseSpeaking(java.nio.file.Files.readString(f.toPath()));
+                final String json = java.nio.file.Files.readString(f.toPath());
+                speaking = VoiceFocus.parseSpeaking(json);
+                active = VoiceFocus.parseActive(json);
             }
         } catch (final java.io.IOException | RuntimeException e) {
             speaking = new long[] {-1, 0};
@@ -328,7 +331,10 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         try {
             final VField last = fieldForSeat(focusSeat);
             if (focusCell != null && focusCell.getSelected() == last && focusRestore.getParentCell() == focusCell) {
-                SDisplayUtil.showTab(focusRestore);        // only if nobody clicked elsewhere meanwhile
+                // Ben (2026-09-16): back to the ACTIVE player's board, not to wherever the player had been; the
+                // remembered tab is the fallback when the runner did not say who is active
+                final VField home = active >= 0 ? fieldForActive(active) : null;
+                SDisplayUtil.showTab(home != null && home.getParentCell() == focusCell ? home : focusRestore);   // only if nobody clicked elsewhere meanwhile
             }
         } catch (final RuntimeException ignored) {
             // a tab that moved cells or a closed match: nothing to restore
@@ -337,6 +343,25 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         focusCell = null;
         focusSeat = -1;
         focusQuietSince = 0;
+    }
+
+    /** The active player's field: a mailbox seat's field by its title, or — for the human, whose tab carries no
+     *  seat suffix — the first field that names no seat. */
+    private VField fieldForActive(final int seat) {
+        final VField named = fieldForSeat(seat);
+        if (named != null) {
+            return named;
+        }
+        try {
+            for (final VField f : controller.getMatchUI().getFieldViews()) {
+                if (f.getTabLabel() != null && VoiceFocus.seatOfTab(f.getTabLabel().getText()) == -1) {
+                    return f;
+                }
+            }
+        } catch (final RuntimeException ignored) {
+            // no match yet
+        }
+        return null;
     }
 
     /** The field whose tab title names this mailbox seat, or null. */

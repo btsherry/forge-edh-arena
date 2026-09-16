@@ -19,6 +19,11 @@ public class VoiceFocusTest {
         Assert.assertEquals(VoiceFocus.seatOfTab("Player One Field"), -1, "the human's field is never followed");
         Assert.assertEquals(VoiceFocus.seatOfTab("Human Field"), -1);
         Assert.assertEquals(VoiceFocus.seatOfTab(null), -1);
+        Assert.assertEquals(VoiceFocus.parseActive("{\"seat\": 3, \"until\": 1789099999123, \"active\": 2}"), 2, "the active seat rides along");
+        Assert.assertEquals(VoiceFocus.parseActive("{\"active\": 0}"), 0, "nobody talking, the human is active: the screen goes home");
+        Assert.assertEquals(VoiceFocus.parseSpeaking("{\"active\": 0}"), new long[] {-1, 0}, "an active-only record is not a speaker");
+        Assert.assertEquals(VoiceFocus.parseActive("{}"), -1);
+        Assert.assertEquals(VoiceFocus.parseActive(null), -1);
     }
 
     @Test(groups = "extended", timeOut = 30_000)

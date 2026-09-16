@@ -302,14 +302,39 @@ class BarkRuntime(_TreeCase):
             seen.append(json.loads((self.logs / "voice-speaking.json").read_text()))
             real_play(path, should_stop)
         self.player.play = spy
+        self._observer(4, 2); self.r.scan_observer()                          # seat 2's turn: the board the screen returns to
         self._advisor(kind="bark", seat=1, id="big-swing", turn=4)
         self._step()
         self.assertEqual((seen[0]["seat"], seen[0]["library"], seen[0]["stock"]), (1, "harry", "big-swing"))
         self.assertGreater(seen[0]["until"], 0)
-        self.assertEqual(json.loads((self.logs / "voice-speaking.json").read_text()), {}, "cleared when the line ends")
+        cleared = json.loads((self.logs / "voice-speaking.json").read_text())
+        self.assertNotIn("seat", cleared, "cleared when the line ends")
+        self.assertEqual(cleared.get("active"), 2, "...but the active player's seat stays in the file: the screen goes back to their board (Ben, 2026-09-16)")
         seen.clear()
         self._observer(5, 0); self.r.seen_turn, self.r.seen_active = 4, 3; self.r.scan_observer(); self._step()
-        self.assertEqual(seen[-1], {}, "Joshua's 'your move' never moves the tabs")
+        self.assertNotIn("seat", seen[-1], "Joshua's 'your move' never moves the tabs")
+
+    def test_only_a_meaningful_line_moves_the_tabs(self):
+        """Ben (game 51): the tabs flip for something worth looking at — never for filler or a murmur."""
+        seen = []
+        real_play = self.player.play
+        def spy(path, should_stop=None):
+            seen.append(json.loads((self.logs / "voice-speaking.json").read_text()))
+            real_play(path, should_stop)
+        self.player.play = spy
+        self._observer(4, 2); self.r.scan_observer(); self.r.queue.clear()
+        self.r.rng.random = lambda: 0.0
+        self.r.maybe_bark(1, "nothing-happening", turn=4, source="patter", p=1.0, ctx={"targets": []})   # filler, aimed at nobody
+        self._step()
+        self.assertNotIn("seat", seen[-1], "filler never moves the tabs")
+        self.clock.t += 12                                                                                  # past seat 1's guard
+        self.r.maybe_bark(1, "kill-that", turn=4, source="patter", p=1.0, ctx={"targets": [3]})           # aimed at someone: worth a look
+        self._step()          # _step adds nine seconds itself: past the gap and guard, inside the line's life
+        self.assertEqual(seen[-1].get("seat"), 1)
+        self.clock.t += 12
+        self.r.maybe_bark(2, "big-swing", turn=4, source="event", p=1.0, ctx={"targets": []})   # seat 3 has no voice in this fixture              # anchored to the board
+        self._step()          # _step adds nine seconds itself: past the gap and guard, inside the line's life
+        self.assertEqual(seen[-1].get("seat"), 2)
 
     def test_mute_or_advisor_pause_drops_a_queued_bark(self):
         self._advisor(kind="bark", seat=1, id="big-swing", turn=4)

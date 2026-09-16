@@ -43,6 +43,7 @@ class TableBatch(_TableCase):
         r = self.r
         self._snap(4, 1); r.queue.clear()
         r.rng.random = lambda: 0.99                                       # the dice miss everything optional
+        r.duty = lambda window=sch.DUTY_WINDOW_S: 1.0                     # and the table is over budget (game 51: p=0.93 lost the lapse)
         r.strike_deal(0, 1, "truce", 4, by=1, until_turn=5)
         r.strike_deal(2, 3, "truce", 4, by=3, until_turn=5)
         r.lapse_deals(6)

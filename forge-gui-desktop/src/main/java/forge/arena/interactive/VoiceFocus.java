@@ -8,11 +8,11 @@ import java.util.regex.Pattern;
  * upper three tabs change as the voices activate and then return to whatever
  * it was on?"). The voice runner writes {@code logs/voice-speaking.json} —
  * {@code {"seat": N, "until": epochMillis, ...}} while one of the AI seats is
- * talking, {@code {}} otherwise. {@code VAdvisor} polls it four times a second,
- * brings that seat's field tab forward, and once the table has been quiet for
- * {@link #QUIET_MS} puts the tab the player had been looking at back — unless
- * they clicked elsewhere in the meantime. Joshua and the human never move the
- * tabs (the runner writes nothing for them). This class holds the parsing so it
+ * saying something worth looking at, {@code {"active": A}} otherwise (the runner
+ * writes nothing for filler, atoms, Joshua or the human). {@code VAdvisor} polls
+ * it four times a second, brings that seat's field tab forward, and once the
+ * table has been quiet for {@link #QUIET_MS} shows the ACTIVE player's field
+ * (Ben, 2026-09-16) — unless the player clicked elsewhere in the meantime. This class holds the parsing so it
  * can be tested without Swing; the tab work lives in the panel.
  */
 public final class VoiceFocus {
@@ -24,6 +24,7 @@ public final class VoiceFocus {
 
     private static final Pattern SEAT = Pattern.compile("\"seat\"\\s*:\\s*(\\d+)");
     private static final Pattern UNTIL = Pattern.compile("\"until\"\\s*:\\s*(\\d+)");
+    private static final Pattern ACTIVE = Pattern.compile("\"active\"\\s*:\\s*(\\d+)");
     /** A seat's field tab reads "Purphoros, God of the Forge-S3 Field" (2026-09-10 naming);
      *  the older "mailbox-seat3-…" form is still recognised. */
     private static final Pattern TAB_SEAT = Pattern.compile("-S(\\d)\\b");
@@ -46,6 +47,21 @@ public final class VoiceFocus {
             return new long[] {Long.parseLong(s.group(1)), u.find() ? Long.parseLong(u.group(1)) : 0};
         } catch (final NumberFormatException e) {
             return new long[] {-1, 0};
+        }
+    }
+
+    /** The active player's seat from the speaking file ({@code "active": N}, written whether or not anyone
+     *  is talking — Ben, 2026-09-16: the screen goes back to the active player's board, not to wherever the
+     *  player had been), or -1 when the file does not say. */
+    public static int parseActive(final String json) {
+        if (json == null) {
+            return -1;
+        }
+        final Matcher a = ACTIVE.matcher(json);
+        try {
+            return a.find() ? Integer.parseInt(a.group(1)) : -1;
+        } catch (final NumberFormatException e) {
+            return -1;
         }
     }
 
