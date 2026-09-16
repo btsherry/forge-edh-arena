@@ -437,12 +437,26 @@ class SeatRunner:
                             for o in req.get("options", []) if o.get("id") != 0))
         # Game 25 (2026-09-07): Ben's Staff/Selvala loop changed HIS life on
         # every activation, so no two of the seats' windows matched and the
-        # memo never fired (0 of 84 windows in one turn). Own life stays
-        # exact; an opponent's life is exact at 10 or below (kill range) and
-        # bucketed by 5 above it — replayed on games 24-25: +14 passes, 0 of
-        # them a window the model had acted on.
-        lives = (st.get("life"),) + tuple(self._life_bucket(o.get("life"))
-                                          for o in st.get("opponents", []) or [])
+        # memo never fired (0 of 84 windows in one turn). An opponent's life
+        # is exact at 10 or below (kill range) and bucketed by 5 above it —
+        # replayed on games 24-25: +14 passes, 0 of them a window the model
+        # had acted on. Own life stayed exact then — game 25's loop moved the
+        # LOOPER's life, not the bystanders'.
+        # BL-52 (game 49, 2026-09-16): Agate Instigator pinged the BYSTANDER
+        # one life per Ignus recast, so own life moved on every window and
+        # 136 of Giada's 137 REACT windows that turn went to the model to say
+        # "pass". Own life now gets the same rule as everyone else's: exact
+        # at or below 10 (in kill range the decision may change with every
+        # point), bucketed by 5 above it. Everything else in the signature —
+        # stack multiset + targets, options, phase, combat, pool, the
+        # opponents' buckets — must still match a window the model already
+        # passed THIS turn; the memo only ever replays a real model pass, and
+        # the turn boundary still clears it. Replayed on game 49's tape:
+        # 58 of 137 memoised, 0 at ten or below; the memo stops at own life
+        # 20 because Urza (pinged in lockstep from 35) is in kill range from
+        # there, and his exact life then moves on every window.
+        lives = tuple(self._life_bucket(p.get("life"))
+                      for p in (st, *(st.get("opponents", []) or [])))
         pool = st.get("manaPool")
         # Wave-2 (2026-08-28 audit finding 1): the signature was blind to
         # phase, combat and stack TARGETS — one correct pass at "beginning of

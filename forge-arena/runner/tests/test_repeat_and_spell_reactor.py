@@ -167,7 +167,9 @@ class LifeBucketMemoTests(unittest.TestCase):
         c = r._react_signature(react(RING, opp_life=(34, 3, 40)))
         self.assertNotEqual(a, c, "an opponent at 4 -> 3 is exact (kill range)")
         d = r._react_signature(react(RING, opp_life=(34, 4, 40), life=20))
-        self.assertNotEqual(a, d, "own life is exact")
+        self.assertEqual(a, d, "BL-52: own life 21 -> 20 stays in one bucket, like an opponent's")
+        d10 = r._react_signature(react(RING, opp_life=(34, 4, 40), life=10))
+        self.assertNotEqual(a, d10, "own life at ten or below is exact (kill range)")
         e = r._react_signature(react(RING, opp_life=(29, 4, 40)))
         self.assertNotEqual(a, e, "crossing a bucket boundary re-opens the window")
 
