@@ -8,8 +8,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Multiset;
@@ -17,12 +20,21 @@ import com.google.common.eventbus.Subscribe;
 
 import forge.game.Game;
 import forge.game.GameOutcome;
+import forge.game.GameStage;
 import forge.game.card.Card;
 import forge.game.card.CounterType;
 import forge.game.event.GameEvent;
 import forge.game.event.EventValueChangeType;
 import forge.game.event.GameEventAttackersDeclared;
+import forge.game.event.GameEventCardAttachment;
+import forge.game.event.GameEventCardChangeZone;
+import forge.game.event.GameEventCardCounters;
+import forge.game.event.GameEventCardPhased;
+import forge.game.event.GameEventCardStatsChanged;
+import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventGameOutcome;
+import forge.game.event.GameEventPlayerCounters;
+import forge.game.event.GameEventPlayerPoisoned;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventZone;
 import forge.game.spellability.StackItemView;
@@ -37,15 +49,16 @@ import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.SpellAbilityStackInstance;
+import forge.game.zone.MagicStack;
 import forge.game.zone.ZoneType;
 
 /**
  * A continuously-updated, PUBLIC observer snapshot of the game, written for the
  * human operator watching an interactive mailbox match. Unlike the per-seat
  * mailbox requests (which only exist while a mailbox seat has a pending
- * decision), this snapshot is refreshed on every game event — so the dashboard
- * is never blind, including during the HUMAN's turn when no mailbox request is
- * pending.
+ * decision), this snapshot follows every game event (at most one write a
+ * second, see below) — so the dashboard is never blind, including during the
+ * HUMAN's turn when no mailbox request is pending.
  *
  * <p>It registers itself on the game's Guava event bus via
  * {@link Game#subscribeToEvents(Object)} (Game.java:1024, which delegates to a
@@ -65,11 +78,31 @@ import forge.game.zone.ZoneType;
  * renders this file for the advisor.
  *
  * <p><b>Robustness:</b> the handler never throws — a snapshot failure must never
- * disrupt the game — and writes are atomic (temp file + rename). BL-07
- * (2026-09-04): no debounce timer; every event serializes the snapshot and a
- * write happens only when the state (timestamp aside) differs from the last
- * write, so the last event of a burst is never lost and an event that changes
- * nothing visible costs no I/O. The game-outcome event always forces a write.
+ * disrupt the game — and writes are atomic (temp file + rename).
+ *
+ * <p><b>Cadence (2026-09-14, Ben: "at most one write a second — something
+ * cheap that is mostly right"):</b> an event costs a cheap {@link #fingerprint}
+ * (turn, phase, active seat, stack ids, last ring seq, and per seat life, hand
+ * size, floating mana, battlefield size, eliminated — plus a per-game
+ * {@link #mutationTick} that the handler bumps for the events that change a
+ * SERIALIZED field the key itself does not read: a tap, a counter, a P/T or
+ * type change, an attachment, poison, a zone move; see {@link #mutates}). A
+ * write happens when the fingerprint differs from the last write's AND at least
+ * {@link #DEFAULT_INTERVAL_MS} (property {@link #INTERVAL_PROPERTY}) has passed
+ * since it; a change inside the window schedules ONE deferred write for when
+ * the window expires, on a per-game daemon timer thread, so the last change of a
+ * burst always lands. The first snapshot of a game and the game-outcome event
+ * always write at once. The fingerprint is taken again AFTER the snapshot is
+ * built: the timer thread builds against live zone lists the game thread may
+ * be mutating, so a build whose key moved is filed as nothing ("rebuilt",
+ * counted) and a deferred write is left pending for the settled board. The ring
+ * keeps accumulating between writes; only more than {@link #EVENT_RING} ring
+ * entries inside one window lose the oldest (an "overrun", counted). Before this (BL-07, 2026-09-04) every event serialized
+ * the whole snapshot and wrote whenever a byte differed — a tap, a counter, a
+ * phase step — which ran to many writes a second on an AI turn. Per-game
+ * counters (writes, deferred, skipped, failures, ring entries by kind, overruns,
+ * swallowed exceptions) print as one {@code [arena] observer:} line on stderr at
+ * game over.
  *
  * <p><b>Recent events (2026-09-10, seat barks):</b> besides the state, the
  * snapshot carries a short ring of PUBLIC notable events — {@code attack}
@@ -89,33 +122,64 @@ public final class ObserverSnapshot {
     /** Ring size for {@code events}; the voice runner reads by {@code seq}. */
     static final int EVENT_RING = 30;
 
-    /** BL-07 (2026-09-04): no debounce timer. Every event serializes the
-     *  snapshot and writes it only when the state (timestamp aside) differs
-     *  from the last write — so the last event of a burst is never lost and a
-     *  22-trigger loop that changes nothing visible costs one write. */
-    static final java.util.concurrent.atomic.AtomicInteger WRITES =
-            new java.util.concurrent.atomic.AtomicInteger();
+    /** System property naming the write window in milliseconds (default
+     *  {@link #DEFAULT_INTERVAL_MS}); {@code 0} writes every change at once. */
+    static final String INTERVAL_PROPERTY = "arena.observer.ms";
+
+    /** The write window: a changed fingerprint writes only this long after the
+     *  previous write (the first snapshot and game over excepted). */
+    static final long DEFAULT_INTERVAL_MS = 1000L;
+
+    /** Total writes across every game in this JVM (the tests read it); the
+     *  per-game counters live on the instance and print at game over. */
+    static final AtomicInteger WRITES = new AtomicInteger();
+
+    /** Names the per-game timer threads. */
+    private static final AtomicInteger TIMERS = new AtomicInteger();
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /**
      * Guard against double-registration: at most one ObserverSnapshot is
      * registered per Game instance, keyed by Game identity. A WeakHashMap lets
-     * finished games be collected. Guarded by its own monitor.
+     * finished games be collected; the value is weak too, because the observer
+     * holds its game and a strong value would pin the key. Guarded by its own
+     * monitor.
      */
-    private static final Set<Game> REGISTERED =
-            java.util.Collections.newSetFromMap(new WeakHashMap<>());
+    private static final Map<Game, java.lang.ref.WeakReference<ObserverSnapshot>> REGISTERED =
+            new WeakHashMap<>();
 
     private final Game game;
     private final Path outputFile;
-    private byte[] lastKey;  // last written snapshot, timestamp removed
+    private final long intervalNanos;
+    private final long startedNanos = System.nanoTime();
     private final java.util.ArrayDeque<Map<String, Object>> events = new java.util.ArrayDeque<>();
     private long eventSeq;
+    private long mutationTick;   // bumped per fingerprint-invariant mutation event; folded into the key
     private int lastResolvedId = -1;   // TrackableObject id of the last SpellAbilityView that RESOLVED
+
+    // ---- cadence state (guarded by this) ------------------------------------
+    private String lastWrittenFp;                // fingerprint of the last successful write
+    private long lastWriteNanos;
+    private boolean everWritten;
+    private boolean finished;                    // the outcome event has been seen
+    private long lastWrittenSeq;                 // highest ring seq on disk
+    private ScheduledThreadPoolExecutor timer;   // lazy; one daemon thread; down at game over
+    private ScheduledFuture<?> pending;          // the one deferred write, if any
+    private int consecutiveFailures;
+
+    // ---- per-game counters (E2; guarded by this; one line at game over) ------
+    private int eventsSeen, writes, deferred, skippedUnchanged, writeFailures, handlerFailures;
+    private int ringOverruns, merged, rebuilt;
+    private final Map<String, Integer> ringByKind = new LinkedHashMap<>();
+    private int swallowedNote, swallowedResolving, swallowedCmc, swallowedPool, swallowedFingerprint;
+    private String lastFailure;   // the most recent swallowed write/fingerprint exception, for the summary
 
     private ObserverSnapshot(Game game, Path outputFile) {
         this.game = game;
         this.outputFile = outputFile;
+        this.intervalNanos = TimeUnit.MILLISECONDS.toNanos(
+                Math.max(0L, Long.getLong(INTERVAL_PROPERTY, DEFAULT_INTERVAL_MS)));
     }
 
     /**
@@ -129,20 +193,23 @@ public final class ObserverSnapshot {
             return;
         }
         synchronized (REGISTERED) {
-            if (REGISTERED.contains(game)) {
+            if (REGISTERED.containsKey(game)) {
                 return;
             }
-            REGISTERED.add(game);
+            REGISTERED.put(game, null);
         }
         try {
             Path base = baseDir != null ? baseDir : MailboxProtocol.baseDir();
             Path out = base.resolve("observer-state.json");
             Files.createDirectories(out.getParent());
             ObserverSnapshot obs = new ObserverSnapshot(game, out);
+            synchronized (REGISTERED) {
+                REGISTERED.put(game, new java.lang.ref.WeakReference<>(obs));
+            }
             game.subscribeToEvents(obs);
             // Write an initial snapshot immediately so the dashboard has state
             // even before the first event fires.
-            obs.write(true);
+            obs.writeInitial();
         } catch (RuntimeException | IOException e) {
             // registration failed — drop the guard so a later attempt can retry,
             // and never propagate.
@@ -153,6 +220,26 @@ public final class ObserverSnapshot {
         }
     }
 
+    /** The observer registered for {@code game}, or null (the tests read the
+     *  per-game counters through it; {@link #WRITES} is JVM-wide and another
+     *  game's timer can move it). */
+    static ObserverSnapshot of(Game game) {
+        synchronized (REGISTERED) {
+            java.lang.ref.WeakReference<ObserverSnapshot> ref = REGISTERED.get(game);
+            return ref != null ? ref.get() : null;
+        }
+    }
+
+    /** This game's successful writes so far. */
+    synchronized int writes() {
+        return writes;
+    }
+
+    /** This game's deferred writes scheduled so far. */
+    synchronized int deferredWrites() {
+        return deferred;
+    }
+
     /**
      * Bus entry point. Guava dispatches this because the game bus is a
      * {@code com.google.common.eventbus.EventBus} and this method is annotated
@@ -161,17 +248,25 @@ public final class ObserverSnapshot {
      */
     @Subscribe
     public void onGameEvent(GameEvent ev) {
-        try {
-            // Force a write on the game-over event regardless of debounce so the
-            // final board is always captured.
-            boolean force = ev != null
-                    && ev.getClass().getSimpleName().contains("GameOutcome");
-            synchronized (this) {
+        synchronized (this) {
+            try {
+                eventsSeen++;
+                if (mutates(ev)) {
+                    mutationTick++;
+                }
                 noteEvent(ev);
-                write(force);
+                // Game over writes at once, window or not, so the final board is
+                // always captured; everything else goes through the cadence.
+                if (ev instanceof GameEventGameOutcome
+                        || (ev != null && ev.getClass().getSimpleName().contains("GameOutcome"))) {
+                    finish();
+                } else {
+                    maybeWrite();
+                }
+            } catch (Throwable t) {
+                // absolutely never let a snapshot failure escape into the game loop
+                handlerFailures++;
             }
-        } catch (Throwable t) {
-            // absolutely never let a snapshot failure escape into the game loop
         }
     }
 
@@ -198,6 +293,7 @@ public final class ObserverSnapshot {
             }
         } catch (RuntimeException ignored) {
             // an event we could not read is not worth a snapshot failure
+            swallowedNote++;
         }
     }
 
@@ -213,8 +309,12 @@ public final class ObserverSnapshot {
 
     private void push(Map<String, Object> e) {
         events.addLast(e);
+        ringByKind.merge((String) e.get("kind"), 1, Integer::sum);
         while (events.size() > EVENT_RING) {
-            events.removeFirst();
+            Map<String, Object> dropped = events.removeFirst();
+            if (((Long) dropped.get("seq")) > lastWrittenSeq) {
+                ringOverruns++;   // fell off the ring before any write carried it
+            }
         }
     }
 
@@ -272,6 +372,7 @@ public final class ObserverSnapshot {
             if (source != null && !from.contains(source)) {
                 from.add(source);
             }
+            merged++;
             return;
         }
         Map<String, Object> e = newEvent("damage");
@@ -296,6 +397,7 @@ public final class ObserverSnapshot {
             }
         } catch (RuntimeException ignored) {
             // no stack access: unknown
+            swallowedResolving++;
         }
         return null;
     }
@@ -317,6 +419,7 @@ public final class ObserverSnapshot {
             }
         } catch (RuntimeException ignored) {
             cmc = 0;
+            swallowedCmc++;
         }
         e.put("cmc", cmc);
         push(e);
@@ -348,6 +451,7 @@ public final class ObserverSnapshot {
             }
             last.put("n", cards.size());
             last.put("tokens", ((Integer) last.get("tokens")) + (card.isToken() ? 1 : 0));
+            merged++;
             return;
         }
         Map<String, Object> e = newEvent("left");
@@ -395,23 +499,241 @@ public final class ObserverSnapshot {
         push(e);
     }
 
-    /** Build the snapshot; write it when it differs from the last write (or
-     *  when forced). Synchronized: game events can arrive from more than one
-     *  thread and a torn pair of writes is the one thing this must never do. */
-    private synchronized void write(boolean force) {
+    // ---- cadence: fingerprint + window + one deferred write -----------------
+
+    /** The events that change what {@link #buildSnapshot} serializes WITHOUT
+     *  moving any field {@link #fingerprint} reads directly — each bumps
+     *  {@link #mutationTick}, which is in the key, so the change writes at the
+     *  next window instead of waiting for an unrelated one (2026-09-16: an
+     *  ability that tapped a permanent and resolved inside one window left the
+     *  untapped board on disk for a whole main phase). Per class, the field it
+     *  protects: tapped -> {@code tapped}; counters -> {@code counters};
+     *  stats/state changed (animate, clone, transform, control change — a plain P/T
+     *  boost from a resolved effect fires no event and rides on the next change,
+     *  static-ability layer) -> {@code power}/{@code toughness}/{@code types}/
+     *  {@code name}/{@code sick}; attachment -> {@code auras}; player counters
+     *  and poisoned -> {@code poison}; zone (any zone, any mode) and change-zone
+     *  -> {@code graveyard}/{@code exile}/{@code commandZone}/{@code librarySize}/
+     *  {@code imprinted}/{@code exiledWith} and a same-size battlefield swap;
+     *  phased -> the battlefield list when one permanent phases in as another
+     *  phases out. Floating mana is already read by the key ({@link #pool}),
+     *  life, hand size and elimination too; card damage is not serialized. */
+    private static boolean mutates(GameEvent ev) {
+        return ev instanceof GameEventCardTapped
+                || ev instanceof GameEventCardCounters
+                || ev instanceof GameEventCardStatsChanged
+                || ev instanceof GameEventCardAttachment
+                || ev instanceof GameEventPlayerCounters
+                || ev instanceof GameEventPlayerPoisoned
+                || ev instanceof GameEventZone
+                || ev instanceof GameEventCardChangeZone
+                || ev instanceof GameEventCardPhased;
+    }
+
+    /** The cheap "did anything the readers care about change" key: turn, phase,
+     *  active seat, game over, last ring seq, the mutation tick, the stack's
+     *  instance ids, and per seat life / hand size / floating mana / battlefield
+     *  size / eliminated. A tap or a counter is not READ here — it reaches the
+     *  key through {@link #mutationTick} ("mostly right", cheaply). Caller holds
+     *  the monitor. Never throws: an unreadable state counts as changed. */
+    private String fingerprint() {
         try {
-            Map<String, Object> snap = buildSnapshot();
-            Object ts = snap.remove("timestamp");
-            byte[] key = MAPPER.writeValueAsBytes(snap);
-            if (!force && lastKey != null && java.util.Arrays.equals(lastKey, key)) {
+            StringBuilder sb = new StringBuilder(128);
+            PhaseHandler ph = game.getPhaseHandler();
+            Player active = ph != null ? ph.getPlayerTurn() : null;
+            sb.append(ph != null ? ph.getTurn() : 0).append('|')
+              .append(ph != null && ph.getPhase() != null ? ph.getPhase().ordinal() : -1).append('|')
+              .append(active != null ? active.getId() : -1).append('|')
+              .append(game.getAge() == GameStage.GameOver ? 1 : 0).append('|')
+              .append(eventSeq).append('|')
+              .append(mutationTick).append('|');
+            MagicStack st = game.getStack();   // null while the Game constructor is still building the players
+            if (st != null) {
+                for (SpellAbilityStackInstance si : st) {
+                    sb.append(si.getId()).append(',');
+                }
+            }
+            sb.append('|');
+            for (Player p : game.getPlayers()) {
+                sb.append(p.getId()).append(':').append(p.getLife()).append(',')
+                  .append(p.getCardsIn(ZoneType.Hand).size()).append(',')
+                  .append(pool(p)).append(',')
+                  .append(p.getCardsIn(ZoneType.Battlefield).size()).append(',')
+                  .append(p.hasLost() ? 1 : 0).append(';');
+            }
+            return sb.toString();
+        } catch (RuntimeException e) {
+            swallowedFingerprint++;
+            lastFailure = "fingerprint: " + e;
+            return "?" + System.nanoTime();
+        }
+    }
+
+    /** After an event: unchanged fingerprint = no write; changed and the window
+     *  has passed (or nothing written yet, or the game is over) = write now;
+     *  changed inside the window = one deferred write when it expires. Caller
+     *  holds the monitor. */
+    private void maybeWrite() {
+        String fp = fingerprint();
+        if (fp.equals(lastWrittenFp)) {
+            skippedUnchanged++;
+            return;
+        }
+        long since = System.nanoTime() - lastWriteNanos;
+        if (!everWritten || finished || since >= intervalNanos) {
+            writeNow(fp);
+            return;
+        }
+        if (pending == null) {
+            schedule(intervalNanos - since);
+        }
+    }
+
+    private void schedule(long delayNanos) {
+        try {
+            pending = timer().schedule(this::flushDeferred, Math.max(1L, delayNanos), TimeUnit.NANOSECONDS);
+            deferred++;
+        } catch (RuntimeException rejected) {
+            pending = null;   // the next event writes: its window has passed by then
+            writeFailures++;
+        }
+    }
+
+    /** The deferred write, on the timer thread: re-key the state and write if it
+     *  still differs from the disk. A failed write (the game thread was mutating
+     *  a zone under us) retries once per window, three times at most; an event
+     *  meanwhile writes at once because the window has passed. */
+    private void flushDeferred() {
+        synchronized (this) {
+            pending = null;
+            if (finished) {
                 return;
             }
-            lastKey = key;
-            snap.put("timestamp", ts);
-            writeAtomic(outputFile, MAPPER.writeValueAsBytes(snap));
+            String fp = fingerprint();
+            if (fp.equals(lastWrittenFp)) {
+                skippedUnchanged++;
+                return;
+            }
+            if (!writeNow(fp) && consecutiveFailures <= 3) {
+                schedule(intervalNanos);
+            }
+        }
+    }
+
+    /** Build and write the snapshot now; on success the clock and the counters
+     *  move. The fingerprint is taken AGAIN once the bytes exist: only if it still
+     *  equals {@code fp} (the key the caller decided on, before the build) is it
+     *  committed as {@link #lastWrittenFp}. The game thread mutates live zone
+     *  lists without the monitor (a fail-fast iterator throws and is retried
+     *  below; a non-throwing torn build does not), so a build whose key moved
+     *  may hold neither the before nor the after state: it is filed under NO key
+     *  ("rebuilt", counted) and, unless the game is over, one deferred write is
+     *  left pending so the settled board lands at the next window. Synchronized
+     *  (re-entrant from the callers above): game events can arrive from more than
+     *  one thread, the deferred write runs on the timer thread, and a torn pair
+     *  of writes is the one thing this must never do. Never throws. */
+    private synchronized boolean writeNow(String fp) {
+        try {
+            byte[] bytes = MAPPER.writeValueAsBytes(buildSnapshot());
+            String after = fingerprint();
+            writeAtomic(outputFile, bytes);
+            lastWriteNanos = System.nanoTime();
+            everWritten = true;
+            lastWrittenSeq = eventSeq;
+            consecutiveFailures = 0;
+            writes++;
             WRITES.incrementAndGet();
+            if (after.equals(fp)) {
+                lastWrittenFp = fp;
+            } else {
+                lastWrittenFp = null;   // matches nothing: the next key always differs
+                rebuilt++;
+                if (!finished && pending == null) {
+                    schedule(intervalNanos);
+                }
+            }
+            return true;
         } catch (Throwable t) {
             // best effort; a failed snapshot must not disturb the game
+            writeFailures++;
+            consecutiveFailures++;
+            lastFailure = "write: " + t;
+            return false;
+        }
+    }
+
+    /** The first snapshot of the game, at registration: always immediate. */
+    private synchronized void writeInitial() {
+        writeNow(fingerprint());
+    }
+
+    private ScheduledThreadPoolExecutor timer() {
+        if (timer == null) {
+            ScheduledThreadPoolExecutor t = new ScheduledThreadPoolExecutor(1, r -> {
+                Thread th = new Thread(r, "arena-observer-" + TIMERS.incrementAndGet());
+                th.setDaemon(true);
+                return th;
+            });
+            t.setRemoveOnCancelPolicy(true);
+            t.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+            // an idle thread dies on its own, so a game that never reaches its
+            // outcome event (a closed table, the test kit) leaks nothing
+            t.setKeepAliveTime(30, TimeUnit.SECONDS);
+            t.allowCoreThreadTimeOut(true);
+            timer = t;
+        }
+        return timer;
+    }
+
+    /** Game over: the final board writes at once, the timer goes down, and the
+     *  game's one summary line goes to stderr. Caller holds the monitor. */
+    private void finish() {
+        if (finished) {
+            maybeWrite();   // a second outcome event: its ring entry lands, the line stays one
+            return;
+        }
+        finished = true;
+        if (pending != null) {
+            pending.cancel(false);
+            pending = null;
+        }
+        if (writeNow(fingerprint()) && lastWrittenFp == null) {
+            writeNow(fingerprint());   // the final board moved under the build: once more, nothing else will
+        }
+        if (timer != null) {
+            timer.shutdownNow();
+            timer = null;
+        }
+        System.err.println(summary());
+    }
+
+    /** One line (E2): the game's write cadence, ring traffic and swallowed failures. */
+    private String summary() {
+        PhaseHandler ph = game.getPhaseHandler();
+        long secs = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - startedNanos);
+        StringBuilder ring = new StringBuilder();
+        for (Map.Entry<String, Integer> e : ringByKind.entrySet()) {
+            ring.append(ring.length() == 0 ? "" : ", ").append(e.getKey()).append(' ').append(e.getValue());
+        }
+        return "[arena] observer: game over turn " + (ph != null ? ph.getTurn() : 0) + ", " + secs + " s"
+                + "; writes " + writes + " (deferred " + deferred + ", skipped " + skippedUnchanged
+                + ", rebuilt " + rebuilt + ", failed " + writeFailures + ", handler " + handlerFailures
+                + ") from " + eventsSeen
+                + " events; ring " + eventSeq + " (" + ring + "; merged " + merged + "), overruns " + ringOverruns
+                + "; swallowed note " + swallowedNote + ", resolving " + swallowedResolving
+                + ", cmc " + swallowedCmc + ", pool " + swallowedPool + ", fingerprint " + swallowedFingerprint
+                + "; window " + TimeUnit.NANOSECONDS.toMillis(intervalNanos) + " ms"
+                + (lastFailure != null ? "; last failure " + lastFailure : "");
+    }
+
+    /** A seat's floating mana (public). Read on every event for the
+     *  fingerprint, so an unreadable pool is counted, not thrown. */
+    private int pool(Player p) {
+        try {
+            return p.getManaPool() != null ? p.getManaPool().totalMana() : 0;
+        } catch (RuntimeException ignored) {
+            swallowedPool++;
+            return 0;
         }
     }
 
@@ -429,7 +751,11 @@ public final class ObserverSnapshot {
         snap.put("turn", turn);
         snap.put("activeSeat", active != null ? active.getId() : null);
         snap.put("phase", phase != null ? phase.name() : "");
-        snap.put("gameOver", game.isGameOver());
+        // getAge(), not isGameOver(): the latter is synchronized on the Game, and
+        // the deferred write runs on the timer thread while the game thread may
+        // be inside the synchronized setGameOver posting the outcome event — the
+        // Game monitor under the observer's would invert the lock order.
+        snap.put("gameOver", game.getAge() == GameStage.GameOver);
 
         GameOutcome outcome = game.getOutcome();
         if (outcome != null && outcome.getWinningLobbyPlayer() != null) {
@@ -448,11 +774,7 @@ public final class ObserverSnapshot {
             s.put("poison", p.getPoisonCounters());
             s.put("handSize", p.getCardsIn(ZoneType.Hand).size());
             s.put("librarySize", p.getCardsIn(ZoneType.Library).size());
-            try {
-                s.put("pool", p.getManaPool() != null ? p.getManaPool().totalMana() : 0);   // floating mana is public
-            } catch (RuntimeException ignored) {
-                s.put("pool", 0);
-            }
+            s.put("pool", pool(p));   // floating mana is public
             // item 12: liveness of this seat's brain from its heartbeat file
             // (true fresh / false stale / null no runner) — a dead seat reads
             // as dead on the dashboard instead of as a slow game
@@ -479,7 +801,12 @@ public final class ObserverSnapshot {
         // public once an item is on the stack, CR 601.2c).
         List<String> stack = new ArrayList<>();
         List<Map<String, Object>> detail = new ArrayList<>();
-        for (SpellAbilityStackInstance si : game.getStack()) {
+        // The first mailbox seat registers the observer from inside the Game
+        // constructor (createIngamePlayer), before the stack exists: the
+        // registration snapshot used to NPE here and be swallowed, so the
+        // dashboard's "initial snapshot" was in fact the first event's.
+        MagicStack st = game.getStack();
+        for (SpellAbilityStackInstance si : st != null ? st : java.util.List.<SpellAbilityStackInstance>of()) {
             SpellAbility sa = si.getSpellAbility();
             Card host = sa != null ? sa.getHostCard() : null;
             String name = host != null ? host.getName() : String.valueOf(si);
@@ -510,6 +837,9 @@ public final class ObserverSnapshot {
         }
         snap.put("stack", stack);
         snap.put("stackDetail", detail);
+        // "seq" (2026-09-14): the last ring entry's seq at top level, so a reader
+        // can tell "new events" from "same events, new board" without walking the ring
+        snap.put("seq", eventSeq);
         snap.put("events", new ArrayList<>(events));
         return snap;
     }
