@@ -61,6 +61,15 @@ class TableBatch(_TableCase):
         self.assertFalse(r.maybe_bark(2, "nothing-happening", turn=4, source="patter", p=0.9, ctx={"targets": []}),
                          "filler still answers to the governor")
 
+    def test_a_seats_answer_to_a_deal_is_never_rolled(self):
+        r = self.r
+        self._snap(6, 2); r.queue.clear()
+        r.duty = lambda window=sch.DUTY_WINDOW_S: 1.0                     # far over budget
+        r.rng.random = lambda: 0.97                                       # game 51: "dice (brain, p=0.96)" lost Giada's "Deal, Player One"
+        for pid in ("deal-with-you", "no-deal-with-you", "counter-offer"):
+            r.queue.clear()
+            self.assertTrue(r.maybe_bark(2, pid, turn=6, source="brain", p=1.0, ctx={"targets": [0]}), pid)
+
     def test_a_named_line_heard_lately_falls_back_to_its_generic(self):
         r = self.r
         self._snap(4, 1); r.queue.clear()

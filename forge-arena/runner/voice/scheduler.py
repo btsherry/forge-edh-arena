@@ -664,7 +664,8 @@ class SchedulerMixin:
             return False
         # an explicit p (the opener's own number) always applies; otherwise "all" means always, "some" means barks_p (tuning.json)
         chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
-        ungoverned = pid in MULL_LINE.values() or (source == "patter" and p == 1.0) or source == "procedural"
+        ungoverned = (pid in MULL_LINE.values() or (source == "patter" and p == 1.0) or source == "procedural"
+                      or pid in DEAL_ANSWER_LINE.values() or pid in JOSHUA_DEAL_LINE.values())   # a deal's answer is state (game 51: a 4 % miss)
         # a mulligan is always worth the breath; so is breaking a silence; so is a seat narrating its own turn
         # ("land, go", "no blocks" — game 48: thirty of them died to the budget while filler lived; the seat guard,
         # the once-a-turn rule and table_p still apply)
