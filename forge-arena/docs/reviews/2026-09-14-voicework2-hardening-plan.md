@@ -1,6 +1,6 @@
 # voicework2 hardening plan — mined from the five-lens review
 
-**Date:** 2026-09-14 (evening). **Status:** PLAN, nothing executed. **Inputs:** the five analysts'
+**Date:** 2026-09-14 (evening). **Status:** IN EXECUTION 2026-09-14 → 16 (commits 10abb2b2837 … c2d24c52c25 on the branch; each lane critic-reviewed before landing; see the memory note and the commit messages for what each fixed). **Inputs:** the five analysts'
 reports in `docs/research/ai-native-roles-review-2026-09-14.md`, spot-checked against the code at
 `1b99b0d56d2`. **Branch:** `experimental/voicework2` (never pushed; no commits to `arena`).
 

@@ -41,6 +41,21 @@ The AI seats talk like people at a table. Built in live games 38–46.
   snapshot has left the game — Forge drops a loser from its player list before
   most polls can see the flag — so the human's own line, each AI seat's exit and
   the killer's line play even when three players fall in eight seconds.
+- **The hardening round (2026-09-14 → 16, from a five-lens review):** a second
+  "under" channel where a listener murmurs beneath a line — a gasp at a big hit,
+  a chuckle under a jab, a hmm under a proposal — and a quiet table sighs instead
+  of repeating filler (24 non-verbal atoms, four-plus takes each, per voice); the
+  seats heckle a player whose window sits open ("we're waiting on you", "still
+  waiting", "there you are") and the advisor never answers them; loops are called
+  when a card is cast four times in a turn or when the seat's own brain declares
+  one, not only for listed game changers; a question is answered with certainty;
+  the talk budget is a mean, not a ceiling, so rowdy is rowdy; the runner reads
+  the board only when it changed, the observer writes it at most once a second,
+  the advisor polls once a second; a seat that stalls twice gets a fresh session;
+  the seats and the advisor start without the voice key; every line carries its
+  turn and the event that caused it, and two small tapes (events, board) make any
+  game replayable offline; the seats may add one table line of their own to a
+  decision (`say`). Repo: raw ElevenLabs takes leave the tree.
 - **Seats are named for their commander** ("Purphoros, God of the Forge-S3"),
   the human is "Player One"; the "AI can't play these cards" boxes at launch
   are gone; each AI seat's process starts at its base effort and the effort
