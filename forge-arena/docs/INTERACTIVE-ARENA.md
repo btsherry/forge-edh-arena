@@ -2070,6 +2070,22 @@ Hard-won from two live sessions; read before optimizing anything.
     tracebacks. Shipped with `packaging/ship-release.sh`: dated + `-latest`,
     both byte-exact. Tag `v4.1` = 7ed30c62210.
 
+104. **v4.2 EXPERIMENTAL SHIPPED (2026-09-17 ~16:3x PDT).** Built from `c1d1dd1bcdc (arena)`
+    after the fast-forward of `experimental/voicework2` (110 commits; revert tag
+    `pre-voicework2-ff-20260917` = 3e037fdc9a9): the table's voices, card lines, deals both
+    ways with the offer pane, the four-voice all-AI table, the 16-bit sound fix, two hygiene
+    passes. 54,508 entries, 823 MB unpacked, **500,028,865 bytes**, sha256
+    `995a6be5688046c6ce8c1a4fe6c104e3c4142f17eeaaf43d88d4e34d5f4c77f3`. Gate 481/481 on
+    JDK 17, Python suite 715. Checks: one fat jar (2.0.15), no home paths, no key shapes, ten
+    decks, four voice libraries, preflight OK from the package root. Acceptance: game 59
+    from the repo tree (human, rowdy; 645 decisions, 0 punts/timeouts/tracebacks). Published
+    as the DATED object only — `-latest` stays at v4.1 (Ben: the voices and deals graduate
+    later). The 477 MiB tarball exceeded the 300 MiB ceiling of both the Cloudflare REST API
+    (HTTP 413) and wrangler; shipped over the S3 API with multipart (boto3; R2 S3 credentials
+    on lines 3–4 of the cloudflare hello file), downloaded back byte-exact. Same day the
+    bucket lost its ten pre-v3.4 builds (Ben: local copies + git are the history) — 14 objects
+    / 1.6 GB → 5 / 967 MB. Tag `v4.2-experimental` = c1d1dd1bcdc.
+
 103. **The table's voices (2026-09-10 → 09-11, Ben; branch `experimental/voicework2`,
     games 38–46).** Three ElevenLabs stock voices (Harry / Bill / Lily, eleven_v3
     with delivery tags at stability 0.0/0.5, pcm_24000 raws baked to 22.05 kHz
