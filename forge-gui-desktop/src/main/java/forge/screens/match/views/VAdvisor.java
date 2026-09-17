@@ -188,6 +188,11 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     /** The question file until the runner deletes it (= picked up). */
     private java.io.File pendingAsk;
     private long pendingSince;
+    // The offer pane (plan 2026-09-16-offer-dialog-plan.md): one per question file the advisor runner
+    // publishes under logs/control/deal/questions/, oldest first; closed with the file, or dismissed by
+    // the player ("later" — the offer stays open in the panel for a typed answer).
+    private forge.arena.interactive.VDealOffer offerPane;
+    private final java.util.Set<String> offerDismissed = new java.util.HashSet<>();
     private static final long ASK_PICKUP_MS = 20_000;
 
     private void sendAsk() {
@@ -234,6 +239,66 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         }
         askButton.setEnabled(pendingAsk == null);
         askButton.setText(pendingAsk == null ? "Chat" : "Sending…");
+    }
+
+    private void syncOffers() {
+        final java.util.List<forge.arena.interactive.DealQuestion> qs =
+                forge.arena.interactive.DealQuestion.list(forge.arena.interactive.DealQuestion.dir());
+        final java.util.Set<String> live = new java.util.HashSet<>();
+        for (final forge.arena.interactive.DealQuestion q : qs) {
+            live.add(q.offerId);
+        }
+        offerDismissed.retainAll(live);                       // a file that went away frees its id
+        if (offerPane != null) {
+            forge.arena.interactive.DealQuestion cur = null;
+            for (final forge.arena.interactive.DealQuestion q : qs) {
+                if (q.offerId.equals(offerPane.offerId())) {
+                    cur = q;
+                }
+            }
+            if (cur != null && offerPane.isVisible()) {
+                offerPane.refresh(cur);                       // Joshua's assessment may have landed
+                return;
+            }
+            if (cur != null) {
+                offerDismissed.add(cur.offerId);              // closed by the player: later, not no
+            }
+            offerPane.dispose();
+            offerPane = null;
+        }
+        for (final forge.arena.interactive.DealQuestion q : qs) {
+            if (!offerDismissed.contains(q.offerId)) {
+                openOffer(q);
+                return;
+            }
+        }
+    }
+
+    private void openOffer(final forge.arena.interactive.DealQuestion q) {
+        offerPane = new forge.arena.interactive.VDealOffer(q,
+                () -> answerOffer(q.acceptAsk()),
+                () -> answerOffer(q.refuseAsk()),
+                () -> counterOffer(q));
+        offerPane.showBottomRight();
+    }
+
+    /** The click sends exactly the chat message the player would type; the runner answers as it does a typed one. */
+    private void answerOffer(final String ask) {
+        if (forge.arena.interactive.AiControlFile.askAdvisor(ask) == null) {
+            text.append("\n[advisor] could not send your answer — the runner logs directory is not writable.\n");
+        }
+        releaseFocus();
+    }
+
+    private void counterOffer(final forge.arena.interactive.DealQuestion q) {
+        if (offerPane != null) {
+            offerDismissed.add(q.offerId);
+            offerPane.dispose();
+            offerPane = null;
+        }
+        askField.setText(q.counterPrefix());
+        askField.requestFocusInWindow();
+        askField.setCaretPosition(askField.getText().length());
     }
 
     private void syncToggle() {
@@ -383,6 +448,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         syncExecutive();
         syncMute();
         syncAsk();
+        syncOffers();
         final String fresh = tail.readNew();
         if (!fresh.isEmpty()) {
             text.append(fresh);

@@ -533,6 +533,8 @@ class AdvisorRunner:
         self._deal_aliases, self._deal_names, self._deal_handles = deal_table({0: deck, **self._seat_decks})
         self._ledger = log_dir / "deals.jsonl"
         self._deal_control = log_dir / "control" / "deal"
+        self._questions = self._deal_control / "questions"     # the offer pane's files (plan 2026-09-16-offer-dialog-plan.md)
+        self._clear_questions()                                  # a fresh runner: no pane from a past game
         self._game_pos = self._size_of(log_dir / "game.jsonl")
         self._ledger_pos = self._size_of(self._ledger)
         self.deal_rng = random.Random()              # the 70/30 dice, apart from the governor's seeded stream
@@ -741,6 +743,7 @@ class AdvisorRunner:
                 pass
             self.brain.note(self.EXEC_HANDOFF, timeout_s=min(60.0, self.timeout))
             self._say("[advisor] EXECUTIVE ON — playing seat 0 through the mailbox")
+            self._clear_questions()                    # the seat-0 runner answers the notes itself; no pane
             self._stream_write("\n[advisor] EXECUTIVE ON — I am playing your seat now. Click again to take it back.\n")
         elif not want and self._exec is not None:
             try:
@@ -1212,6 +1215,7 @@ class AdvisorRunner:
             return
         what = "offer" if proposal else "counter"
         off["status"] = f"{what}-accepted" if action == "accept" else f"{what}-refused"
+        self._question_drop(oid)
         if action == "accept":
             off["deal"] = dict(off["counter"] or off["deal"])
             off["until_turn"] = off["deal"].get("until_turn")
@@ -1258,6 +1262,8 @@ class AdvisorRunner:
                 self._on_deal_record(r, deal)
         for r in self._tail_jsonl(self._ledger, "_ledger_pos"):
             self._on_ledger_record(r)
+        if isinstance(self._clock.last, dict) and self._clock.last.get("gameOver"):
+            self._clear_questions()
         now = self._turn_now()
         if now is None:
             return
@@ -1268,6 +1274,7 @@ class AdvisorRunner:
             if off["status"] in ("countered", "proposed") and isinstance(off.get("counter_turn"), int) and off["counter_turn"] < now:
                 what = "offer" if off["status"] == "proposed" else "counter"
                 off["status"] = f"{what}-lapsed"
+                self._question_drop(oid)
                 self._panel("table", f"{off['who']}'s {what} lapsed", now)
                 self._record("deal", {"event": f"{what}-lapsed", "offer_id": oid, "seat": off["seat"], "turn": now})
 
@@ -1322,6 +1329,29 @@ class AdvisorRunner:
         self._record("deal", {"event": "answer", "offer_id": oid, "seat": seat, "turn": turn,
                               "accept": bool(deal.get("accept")), "counter": counter, "terms": terms})
 
+    # ---- the offer pane's files: one per open offer to the player, gone with the offer ------------------
+    def _question_write(self, oid: str, off: dict, assessment: str | None = None) -> None:
+        body = {"offer_id": oid, "seat": off["seat"], "who": off["who"], "handle": self._deal_handles.get(off["seat"], str(off["seat"])),
+                "terms": deal_terms_text(off["deal"]), "text": off.get("text") or "", "turn": off["turn"],
+                "lapses_after_turn": off.get("counter_turn"), "assessment": assessment, "ts": off.get("ts") or time.time()}
+        try:
+            self._write_atomic(self._questions / f"{oid}.json", body)
+        except OSError as e:
+            self._say(f"[advisor] offer pane file not written ({e.__class__.__name__})")
+
+    def _question_drop(self, oid) -> None:
+        try:
+            os.remove(self._questions / f"{oid}.json")
+        except OSError:
+            pass
+
+    def _clear_questions(self) -> None:
+        try:
+            for p in self._questions.glob("*.json"):
+                p.unlink()
+        except OSError:
+            pass
+
     def _on_seat_offer(self, r: dict, deal: dict, seat, turn, oid, terms: dict) -> None:
         """A seat's OWN offer (Ben, 2026-09-16), from its DEAL record. To another seat: one panel line, the table's
         business. To the player: the panel line with the typed answer, remembered like a counter (`@urza accept` /
@@ -1353,7 +1383,8 @@ class AdvisorRunner:
                              "until_turn": terms.get("until_turn"), "ts": time.time(), "nudged": True}
         self._panel(name, f"offers you {deal_terms_text(terms)}{said} (@{handle} accept/no)", turn)
         self._record("deal", {"event": "seat-offer", "offer_id": oid, "seat": seat, "to": 0, "turn": turn, "deal": terms, "text": text})
-        self._assess_deal(f"{name} OFFERS you {deal_terms_text(terms)} (unanswered — you accept or refuse in the chat)", turn)
+        self._question_write(oid, self._offers[oid])
+        self._assess_deal(f"{name} OFFERS you {deal_terms_text(terms)} (unanswered — you accept or refuse in the chat)", turn, offer_id=oid)
 
     def _on_ledger_record(self, r: dict) -> None:
         """The voice runner's ledger (lane A2): struck / refused / expired / lapsed / broken
@@ -1451,7 +1482,7 @@ class AdvisorRunner:
                        + (", ELIMINATED" if s.get("eliminated") else ""))
         return "; ".join(out)
 
-    def _assess_deal(self, facts: str, turn) -> None:
+    def _assess_deal(self, facts: str, turn, offer_id: str | None = None) -> None:
         """On a deal the player struck or had broken, Joshua adds ONE assessment line through the
         colour path (a `color` record the voice runner speaks) — every time (Ben, game 50: the
         dice made the advisor absent at the moment the player acts on his read; DEAL_COLOR_P is
@@ -1474,6 +1505,8 @@ class AdvisorRunner:
                                "latency_s": meta.get("latency_s")})
         if quip:
             self._record("quip", {"id": quip, "turn": turn, "with": "color", "seq": None})
+        if offer_id and offer_id in self._offers and (self._questions / f"{offer_id}.json").exists():
+            self._question_write(offer_id, self._offers[offer_id], assessment=text)   # the pane shows Joshua's read
 
     # ---- main loop ---------------------------------------------------------------
 

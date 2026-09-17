@@ -286,7 +286,7 @@ class DealTests(unittest.TestCase):
                                                           "counter": {"kind": "alliance", "rounds": 2}})
         self.r._deal_tick()
         self.ask("@urza accept")
-        files = sorted(self.r._deal_control.iterdir())
+        files = sorted(f for f in self.r._deal_control.iterdir() if f.is_file())
         self.assertEqual(len(files), 1); self.assertTrue(files[0].name.endswith("-accept.json"), files[0].name)
         self.assertEqual(json.loads(files[0].read_text()), {"offer_id": oid, "counter": {"kind": "alliance", "rounds": 2}})
         self.assertIn("\n[r2-t7 · you → Urza] accept the counter: alliance, 2 turns\n", self.panel())
@@ -299,7 +299,7 @@ class DealTests(unittest.TestCase):
                                                           "counter": {"kind": "truce", "until_turn": 11}})
         self.r._deal_tick()
         self.ask("@purphoros no")
-        files = sorted(self.r._deal_control.iterdir())
+        files = sorted(f for f in self.r._deal_control.iterdir() if f.is_file())
         self.assertEqual(len(files), 2); self.assertTrue(files[-1].name.endswith("-refuse.json"), files[-1].name)
         self.assertEqual(json.loads(files[-1].read_text()), {"offer_id": oid2, "counter": {"kind": "truce", "until_turn": 11}})
         self.assertIn(f"\n[{self.lbl(8)} · you → Purphoros] refuse the counter\n", self.panel())
@@ -431,7 +431,7 @@ class SeatOffers(unittest.TestCase):
         self.assertIn("TABLE DEAL: Purphoros OFFERS you alliance until turn 10 (unanswered", self.r.brain.prompts[-1], "Joshua assesses the offer: state, no dice")
         self.assertIn("[r2-t7 · color] Take it:", self.panel())
         self.ask("@purphoros accept")
-        files = sorted(self.r._deal_control.iterdir())
+        files = sorted(f for f in self.r._deal_control.iterdir() if f.is_file())
         self.assertEqual([f.name.endswith("-accept.json") for f in files], [True])
         self.assertEqual(json.loads(files[0].read_text()), {"offer_id": "p-2-0", "counter": {"kind": "alliance", "until_turn": 10}})
         self.assertIn("\n[r2-t7 · you → Purphoros] accept the offer: alliance until turn 10\n", self.panel())
@@ -441,10 +441,37 @@ class SeatOffers(unittest.TestCase):
         self._propose(1, 0, {"kind": "truce", "rounds": 1}, "p-1-0")
         self.ask("@urza no")
         self.assertIn("\n[r2-t7 · you → Urza] refuse the offer\n", self.panel())
-        self.assertEqual([f.name.endswith("-refuse.json") for f in sorted(self.r._deal_control.iterdir())][-1], True)
+        self.assertEqual([f.name.endswith("-refuse.json") for f in sorted(f for f in self.r._deal_control.iterdir() if f.is_file())][-1], True)
         self.ledger_line(turn=7, event="refused", between=[1, 0], by=0, offer_id="p-1-0", deal={"kind": "truce", "rounds": 1})
         self.r._deal_tick()
         self.assertNotIn("Urza] refuses", self.panel())
+
+    def test_the_offer_pane_file_lives_exactly_as_long_as_the_offer(self):
+        qd = self.r._questions
+        self.r.brain.reply = "Take it: Purphoros cannot race you."
+        self._propose(2, 0, {"kind": "alliance", "until_turn": 10}, "p-2-0", text="Urza is the threat")
+        f = qd / "p-2-0.json"
+        self.assertTrue(f.exists(), "a seat's offer to the player: one question file for the pane")
+        q = json.loads(f.read_text())
+        self.assertEqual({k: q[k] for k in ("offer_id", "seat", "who", "handle", "terms", "text", "turn", "lapses_after_turn")},
+                         {"offer_id": "p-2-0", "seat": 2, "who": "Purphoros", "handle": "purphoros", "terms": "alliance until turn 10",
+                          "text": "Urza is the threat", "turn": 7, "lapses_after_turn": 8})
+        self.assertEqual(q["assessment"], "Take it: Purphoros cannot race you.", "rewritten once Joshua's read landed")
+        self.assertIsInstance(q["ts"], float)
+        self.ask("@purphoros accept")
+        self.assertFalse(f.exists(), "answered: the pane closes with the file")
+        self._propose(1, 0, {"kind": "truce", "rounds": 1}, "p-1-0")
+        self.assertTrue((qd / "p-1-0.json").exists())
+        self.snapshot(9, 3); self.r._deal_tick()
+        self.assertFalse((qd / "p-1-0.json").exists(), "lapsed: gone")
+        self._propose(3, 0, {"kind": "truce", "rounds": 1}, "p-3-0", turn=9)
+        self.assertTrue((qd / "p-3-0.json").exists())
+        self.r._clear_questions()
+        self.assertEqual(sorted(qd.glob("*.json")), [], "Executive on / game over / a fresh runner: cleared")
+        self.r._exec_file.parent.mkdir(parents=True, exist_ok=True)
+        self.r._exec_file.write_text(json.dumps({"on": True}))
+        self._propose(2, 0, {"kind": "truce", "rounds": 1}, "p-2-0b", turn=9)
+        self.assertFalse((qd / "p-2-0b.json").exists(), "Executive holds the seat: no pane")
 
     def test_an_unanswered_offer_lapses_a_turn_later_and_the_executive_answers_its_own(self):
         self.r.brain.reply = "Noted."
