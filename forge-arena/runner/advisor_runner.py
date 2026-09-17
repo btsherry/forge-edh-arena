@@ -947,6 +947,7 @@ class AdvisorRunner:
         self.last_seq = 0
         self.gov_turn = -1
         self.gov_budget = 0
+        self._talk_hinted = False                 # the "make it an offer" hint is once a GAME (hygiene pass, 2026-09-17)
 
     def _maybe_new_game(self, body: dict, n: int, kind: str) -> bool:
         """Engine-stamped feeds: reset on a gameId CHANGE, never on numbering
@@ -1314,7 +1315,9 @@ class AdvisorRunner:
         of its turn lapses. Called every poll, pause or not — a deal is the player's own request."""
         for r in self._tail_jsonl(self._log_dir / "game.jsonl", "_game_pos"):
             deal = r.get("deal")
-            if isinstance(deal, dict) and (r.get("type") == "DEAL" or "offer_id" in deal):
+            # only the DEAL record: the seat also attaches the same answer to its decision record (narrative context),
+            # and the Executive branch below has no dedupe — reading both showed the player's answer twice (hygiene pass)
+            if isinstance(deal, dict) and r.get("type") == "DEAL":
                 self._on_deal_record(r, deal)
         for r in self._tail_jsonl(self._ledger, "_ledger_pos"):
             self._on_ledger_record(r)

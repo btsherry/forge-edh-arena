@@ -126,19 +126,43 @@ class EventsMixin:
         except OSError:
             return False
 
+    def _inbox_files(self) -> dict[int, list[tuple[Path, float]]]:
+        """{seat: [(request file, mtime)]} for the living voiced seats. An inbox is re-globbed only when its
+        directory changed (the mtime moves on every add or remove) — mutter, slow_seats and _ai_deciding each
+        scanned every inbox twice a second (hygiene pass, 2026-09-17)."""
+        cache = self.__dict__.setdefault("_inbox_cache", {})
+        out: dict[int, list[tuple[Path, float]]] = {}
+        for seat in self.seat_libraries:
+            s = int(seat)
+            if s in self.eliminated:
+                continue
+            inbox = self.mailbox / f"seat-{seat}" / "inbox"
+            try:
+                sig = inbox.stat().st_mtime_ns
+            except OSError:
+                cache.pop(s, None)
+                out[s] = []
+                continue
+            hit = cache.get(s)
+            if hit is None or hit[0] != sig:
+                files = []
+                try:
+                    for f in inbox.glob("req-*.json"):
+                        try:
+                            files.append((f, f.stat().st_mtime))
+                        except OSError:
+                            continue
+                except OSError:
+                    pass
+                hit = cache[s] = (sig, files)
+            out[s] = hit[1]
+        return out
+
     def _ai_deciding(self) -> bool:
         """A voiced AI seat has a decision open in its mailbox (mailbox/seat-<n>/inbox/req-*.json),
         whatever its age — the engine deletes the request the moment the seat answers (seatd/protocol.py),
         so a request present means the table is waiting on that seat, not on the human."""
-        for seat in self.seat_libraries:
-            if int(seat) in self.eliminated:
-                continue
-            try:
-                if any(True for _ in (self.mailbox / f"seat-{seat}" / "inbox").glob("req-*.json")):
-                    return True
-            except OSError:
-                continue
-        return False
+        return any(files for files in self._inbox_files().values())
 
     def _opening_window_open(self, snap: dict) -> bool:
         """BL-54 (game 49: 292 s of silence while the human chose their keep). Forge asks the mulligans
@@ -647,19 +671,8 @@ class EventsMixin:
 
     def slow_seats(self) -> list[int]:
         """AI seats with a decision pending in their mailbox longer than barks_slow (tuning.json barks_slow_s)."""
-        out = []
         now = time.time()
-        for seat in self.seat_libraries:
-            if int(seat) in self.eliminated:
-                continue
-            try:
-                inbox = self.mailbox / f"seat-{seat}" / "inbox"
-                ages = [now - f.stat().st_mtime for f in inbox.glob("req-*.json")]
-            except OSError:
-                ages = []
-            if ages and max(ages) >= self.barks_slow:
-                out.append(int(seat))
-        return out
+        return [s for s, files in self._inbox_files().items() if files and max(now - mt for _, mt in files) >= self.barks_slow]
 
     # -- the board, as the table sees it
     def _seat_field(self, seat: int, key: str, snap: dict | None = None):
@@ -690,7 +703,7 @@ class EventsMixin:
         """The caster says what kind of thing it just cast (a type, "a big one", "in
         response") — at most NARRATIONS_PER_TURN a turn. Game changers and the
         commander have their own lines and never come here."""
-        st = self._turn_start.get(int(seat)) or {"narrations": 0}
+        st = self._turn_start.setdefault(int(seat), {"lands": 0, "casts": 0, "narrations": 0})   # off-turn casts count too
         if st["narrations"] >= NARRATIONS_PER_TURN or not self.table_ids:
             return False
         kind = card_kind(self.cards_of(seat).get(spell))
@@ -831,19 +844,10 @@ class EventsMixin:
         if not self.table_ids or "thinking" not in self.table_ids or self.barks_mode == "off" or self.final_locked:
             return
         now = time.time()
-        for seat in self.seat_libraries:
-            if int(seat) in self.eliminated:
-                continue
-            try:
-                files = list((self.mailbox / f"seat-{seat}" / "inbox").glob("req-*.json"))
-            except OSError:
-                files = []
-            for f in files:
+        for seat, files in self._inbox_files().items():
+            for f, mt in files:
                 key = f"{seat}/{f.name}"
-                try:
-                    age = now - f.stat().st_mtime
-                except OSError:
-                    continue
+                age = now - mt
                 if age >= THINK_S and key not in self._thought:
                     self._thought.add(key)
                     self._bark(int(seat), "thinking", turn=self._last_snapshot.get("turn"), source="procedural", p=self.table_p("thinking"))
@@ -983,7 +987,7 @@ class EventsMixin:
                                 line = "wow" if int(e.get("cmc", 0)) >= 7 else self.rng.choice(["nice-play", "read-that", "oh-no"])
                                 self._bark(int(self.rng.choice(by)), line, turn=turn, source="event", ctx={"targets": [seat]})
                     # a flurry — three spells inside thirty seconds — earns "slow down" from someone else
-                    now_t = time.time()
+                    now_t = self.clock()                        # the runner's clock, like every other stamp the checkpoint rebases
                     recent = [t for t in self._casts.get(seat, []) if now_t - t < 30] + [now_t]
                     self._casts[seat] = recent
                     if len(recent) == 3:
@@ -1057,7 +1061,8 @@ class EventsMixin:
                         self._bark(int(victim), "got-countered", turn=turn, source="event",
                                         ctx={"targets": [], "aggressor": int(by) if by is not None else None,
                                              "human_cause": by is not None and int(by) == self.human_seat})
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as ex:
+                self.record("skipped", kind="event", why=f"malformed ring event: {str(ex)[:80]}", seq=seq, event_kind=str(kind))
                 continue
             finally:
                 self._ring_seq = None
@@ -1123,7 +1128,6 @@ class EventsMixin:
             except (OSError, ValueError):
                 return
             self._snap_sig = sig
-        gid = d.get("gameId") or d.get("timestamp") and "live"
         if not self.started_said:
             self.started_said = True
             if (d.get("turn") or 0) <= 1 and not d.get("gameOver"):
@@ -1321,7 +1325,8 @@ class EventsMixin:
             d = self.mailbox / "seat-0-voice"
             d.mkdir(parents=True, exist_ok=True)
             f = d / "final.json"
-            if not f.exists():
+            if not getattr(self, "_final_published", False):   # once per process; run() removes a killed run's leftover
+                self._final_published = True
                 f.write_text(json.dumps({"done": round(time.time(), 3)}))
                 self.say("[voice] final sequence done — the table may be torn down")
                 summary = getattr(self, "record_summary", None)

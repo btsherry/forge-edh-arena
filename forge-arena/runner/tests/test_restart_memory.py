@@ -16,7 +16,6 @@ Everything runs against the synthetic stock tree of test_barks_runtime. Run:
 python3 -m unittest discover -s tests
 """
 import json
-import os
 import sys
 import tempfile
 import unittest

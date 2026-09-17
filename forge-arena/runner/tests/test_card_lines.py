@@ -7,7 +7,6 @@ arrival and death, the combo's last piece (owner crows, table alarms), the human
 game changers and commander included.
 Run: python3 -m unittest discover -s tests"""
 import json
-import os
 import sys
 import unittest
 from pathlib import Path

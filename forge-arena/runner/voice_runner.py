@@ -421,12 +421,16 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         The fallback when no checkpoint exists (a crash before the first save)."""
         out: dict = {"started_said": False, "said_at": {}, "seat_said_at": {}, "bark_spoken_at": {}, "spoken_log": [],
                      "last_spoken_at": None, "eliminated": set()}
+        self._earlier_ups = 0                                   # record_up's restart count, from this same pass
         try:
             raw = self._jsonl.read_bytes()
         except OSError:
             return out
         now_c, now_w = self.clock(), self.wall()
         for line in raw.splitlines():
+            if b'"event": "up"' in line:
+                self._earlier_ups += 1
+                continue
             if b'"spoke"' not in line and b'"noted"' not in line:
                 continue
             try:
@@ -451,7 +455,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             if ev != "spoke" or r.get("kind") == "atom":
                 continue                                                   # an atom is presence, not a line
             stock = str(r.get("stock") or "")
-            if r.get("kind") == "human_out":
+            if r.get("kind") == "human_out" and self.human_seat is not None:   # an all-AI table has no human to lose
                 out["eliminated"].add(self.human_seat)
             elif stock == "eliminated" and seat is not None:
                 out["eliminated"].add(int(seat))
@@ -535,7 +539,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             "started_said": bool(self.started_said), "game_over_said": bool(self.game_over_said), "final_locked": bool(self.final_locked),
             "event_seq": self._event_seq,
             "loop_called": {str(s): t for s, t in sorted((self._loop_called or {}).items())},
-            "heckled": int(getattr(self, "_heckled", 0) or 0),
+            "stack_seen": sorted([str(n), o, list(t)] for n, o, t in self._stack_seen),   # hold-on already said for these (hygiene pass)
             "last_spoken_at": self.last_spoken_at,                 # a spoken line is a checkpoint too
         }
 
@@ -558,9 +562,8 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             "turn_start": {str(s): dict(v) for s, v in self._turn_start.items()},
             "threat": {str(s): round(v, 3) for s, v in getattr(self, "_threat", {}).items()},
             "casts": {str(s): [x for x in v if now - x <= STATE_RECENT_S] for s, v in getattr(self, "_casts", {}).items()},
-            "answered": sorted(int(x) for x in self.answered),
+            "answered": sorted(int(x) for x in self.answered if now - self.answered_at.get(x, now) <= STATE_RECENT_S),
             "answered_at": {str(k): v for k, v in self.answered_at.items() if now - v <= STATE_RECENT_S},
-            "ring_seq": self._ring_seq,
             "atom_seat_at": {str(s): t for s, t in d.get("_atom_seat_at", {}).items()},
             "atom_used": {f"{s}|{stem}": t for (s, stem), t in d.get("_atom_used", {}).items()},
         }
@@ -648,6 +651,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         # durable
         self.eliminated = ints(get("eliminated", list))
         self._seen_seats = ints(get("seen_seats", list)) | self.eliminated
+        self._stack_seen = {(n, o, tuple(str(x) for x in (t or []))) for n, o, t in get("stack_seen", list) if isinstance(t, list)}
         self._combos_done = {int(s): {frozenset(str(p) for p in fs) for fs in sets} for s, sets in get("combos_done", dict).items()}
         self._gc_cast_seen = {(int(s), str(c)) for s, c in get("gc_cast_seen", list)}
         self._card_events_turn = {(int(s), str(c)): int(n) for s, c, n in get("card_events_turn", list)}
@@ -704,7 +708,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self._threat = {int(s): float(v) for s, v in get("threat", dict).items()}
         self._casts = {int(s): [t(x) for x in v if t(x) is not None] for s, v in get("casts", dict).items()}
         self.answered = {int(x) for x in get("answered", list)}
-        self.answered_at = {int(k): float(v) for k, v in get("answered_at", dict).items()}
+        self.answered_at = {int(k): t(v) for k, v in get("answered_at", dict).items() if t(v) is not None}   # a clock: rebased
         self.last_spoken_at = t(state.get("last_spoken_at"), now)
         self._advisor_spoke_at = t(state.get("advisor_spoke_at"), -1e9)
         self._patter_due = t(state.get("patter_due"), now)
@@ -840,18 +844,27 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         pause toggle (control/advisor.json {"enabled": false}) is set — pausing
         the advisor silences EVERY line: advice, quips, colour, your-move, the
         elimination and game-over lines, the bleeps (Ben, 2026-09-08)."""
-        try:
-            if not bool(json.loads(self._control.read_text()).get("enabled", True)):
-                return False
-        except (OSError, ValueError):
-            pass
-        try:
-            adv = self._control.parent / "advisor.json"
-            if adv.exists() and not bool(json.loads(adv.read_text()).get("enabled", True)):
-                return False
-        except (OSError, ValueError):
-            pass
-        return True
+        files = (self._control, self._control.parent / "advisor.json")
+        sig = []
+        for f in files:                                          # re-parsed only when a file changed: this is polled every 200 ms while a line plays
+            try:
+                st = f.stat()
+                sig.append((st.st_mtime_ns, st.st_size))
+            except OSError:
+                sig.append(None)
+        memo = getattr(self, "_enabled_memo", None)
+        if memo is not None and memo[0] == sig:
+            return memo[1]
+        on = True
+        for f in files:
+            try:
+                if not bool(json.loads(f.read_text()).get("enabled", True)):
+                    on = False
+                    break
+            except (OSError, ValueError):
+                continue
+        self._enabled_memo = (sig, on)
+        return on
 
     def executive_on(self) -> bool:
         """control/executive.json {"on": true}: the advisor is playing the
@@ -968,13 +981,8 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
     def record_up(self) -> None:
         """One `up` record per (re)start (plan tune 11): the restart count is the number of earlier `up`
         records in this game's voice-0.jsonl, so hygiene reads restarts from the runner's own log."""
-        earlier = 0
-        try:
-            for line in self._jsonl.read_text().splitlines():
-                if '"event": "up"' in line:
-                    earlier += 1
-        except OSError:
-            pass
+        earlier = int(getattr(self, "_earlier_ups", 0) or 0)   # counted by _log_memory's pass over the log
+        self._earlier_ups = earlier + 1
         tune_sha = ""
         try:
             import hashlib
@@ -1005,6 +1013,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
                     if self.barks_mode != "off" and self.seat_libraries else (" (no seat voice libraries found)" if self.barks_mode != "off" else "")))
         hb = self.mailbox / "seat-0-voice" / "heartbeat"
         hb.parent.mkdir(parents=True, exist_ok=True)
+        (hb.parent / "final.json").unlink(missing_ok=True)     # a killed run's teardown signal is not this game's (hygiene pass)
 
         def beat():
             while True:
@@ -1079,10 +1088,29 @@ def _read_stamped(path: Path) -> list[tuple[float, str]]:
     return out
 
 
+class _TapeRing:
+    """The archived event ring sorted by seq once; window(lo, hi) = the events with lo < seq <= hi by bisection
+    (the tape loop used to rescan the whole game per record — quadratic on a long archive)."""
+
+    def __init__(self, events: list[dict]):
+        self.events = sorted((e for e in events if isinstance(e.get("seq"), int)), key=lambda e: e["seq"])
+        self.keys = [e["seq"] for e in self.events]
+
+    def window(self, lo, hi) -> list[dict]:
+        import bisect
+        a = 0 if lo is None else bisect.bisect_right(self.keys, lo)
+        return self.events[a:bisect.bisect_right(self.keys, hi)]
+
+
 def _snapshot_from_tape(rec: dict, events: list[dict], lo, hi) -> dict:
     """A live-shaped snapshot from a compacted observer-tape record: the seats with their
     battlefield entries as dicts, the ring = the archived events with lo < seq <= hi."""
-    ring = [] if hi is None else [e for e in events if isinstance(e.get("seq"), int) and (lo is None or e["seq"] > lo) and e["seq"] <= hi]
+    if hi is None:
+        ring = []
+    elif isinstance(events, _TapeRing):
+        ring = events.window(lo, hi)
+    else:
+        ring = [e for e in events if isinstance(e.get("seq"), int) and (lo is None or e["seq"] > lo) and e["seq"] <= hi]
     seats = [{"seat": s.get("seat"), "name": f"seat {s.get('seat')}", "life": s.get("life"), "handSize": s.get("handSize"),
               "pool": s.get("pool"), "eliminated": bool(s.get("eliminated")),
               "battlefield": [dict(c) for c in (s.get("battlefield") or []) if isinstance(c, dict)]}
@@ -1123,6 +1151,7 @@ def replay(archive: Path, seed: int = 1, out=print) -> list[str]:
         vr.rng.seed(seed)
         vr.start_backchannel = lambda item, seconds=None: False        # no real-time timers in a replay
         seqs = [e["seq"] for e in events if isinstance(e.get("seq"), int)]
+        events = _TapeRing(events)                                     # sorted once: the window bisects instead of rescanning the game
         prev_seq = first.get("seq") if first.get("seq") is not None else (min(seqs) - 1 if seqs else None)
         vr._event_seq = prev_seq                                       # the live runner primed here; the tape holds what followed
         cursors = {"game": 0, "advisor": 0}

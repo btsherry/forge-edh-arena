@@ -447,8 +447,12 @@ class Renderer:
     def variants(self, pid: str, library: str = "") -> list[Path]:
         """<id>.wav plus <id>-N.wav (N numeric) in the Joshua library or voices/<library>/."""
         d = (VOICES_DIR / library) if library else STOCK
-        files = [d / f"{pid}.wav"] + sorted(d.glob(f"{pid}-[0-9]*.wav"))
-        return [f for f in files if f.exists()]
+        cache = self.__dict__.setdefault("_variants", {})      # the libraries are read-only for the run: glob each id once
+        key = (str(d), pid)
+        if key not in cache:
+            files = [d / f"{pid}.wav"] + sorted(d.glob(f"{pid}-[0-9]*.wav"))
+            cache[key] = [f for f in files if f.exists()]
+        return list(cache[key])
 
     def stock(self, pid: str, library: str = "") -> Path | None:
         """One wording of a stock line. Several wordings (2026-09-10: four for the
@@ -476,19 +480,19 @@ class Renderer:
         names = self.manifest.get("sfx") or []
         if not names:
             return None
-        p = STOCK / "sfx" / random.choice(names)
+        p = STOCK / "sfx" / self.rng.choice(names)             # the seeded rng, like every other draw (replay determinism)
         return p if p.exists() else None
 
     def _trim_cache(self) -> None:
         """logs/cache/voice grows 3–10 renders a game with a near-zero hit rate (advice sentences are
         unique): keep it under CACHE_MAX_BYTES and CACHE_MAX_AGE_S, oldest first (plan C6)."""
         try:
-            files = sorted(self.cache_dir.glob("*.wav"), key=lambda f: f.stat().st_mtime)
+            stats = sorted(((f, f.stat()) for f in self.cache_dir.glob("*.wav")), key=lambda fs: fs[1].st_mtime)
             now = time.time()
-            total = sum(f.stat().st_size for f in files)
-            for f in files:
-                if now - f.stat().st_mtime > CACHE_MAX_AGE_S or total > CACHE_MAX_BYTES:
-                    total -= f.stat().st_size
+            total = sum(st.st_size for _, st in stats)
+            for f, st in stats:
+                if now - st.st_mtime > CACHE_MAX_AGE_S or total > CACHE_MAX_BYTES:
+                    total -= st.st_size
                     f.unlink()
         except OSError:
             pass

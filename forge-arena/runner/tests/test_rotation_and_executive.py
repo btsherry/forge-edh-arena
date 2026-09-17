@@ -16,7 +16,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import advisor_runner as ar  # noqa: E402
-import seatd.brain as brain_mod  # noqa: E402
 from seatd import record  # noqa: E402
 from seatd.brain import SeatBrain  # noqa: E402
 from seatd.runner import SeatRunner  # noqa: E402

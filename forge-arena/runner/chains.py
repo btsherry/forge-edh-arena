@@ -121,14 +121,14 @@ def plan_reply(table: ChainTable, spoken: dict, chain: dict | None, voiced: dict
     rng.shuffle(options)
     # a reply the answering seat used recently goes to the back of the line (soft; the per-turn rule is hard)
     recent = recent or set()
+    # each role is resolved ONCE (a bystander is a dice roll: resolving twice could sort one seat and pick another)
+    resolved = [(opt, resolve_role(opt.get("role", ""), speaker, ctx, chain, voiced, human_seat, leader_of, rng)) for opt in options]
     if recent:
         fresh, stale = [], []
-        for opt in options:
-            who = resolve_role(opt.get("role", ""), speaker, ctx, chain, voiced, human_seat, leader_of, rng)
-            (stale if who is not None and who != human_seat and (who, opt.get("reply", "")) in recent else fresh).append(opt)
-        options = fresh + stale
-    for opt in options:
-        who = resolve_role(opt.get("role", ""), speaker, ctx, chain, voiced, human_seat, leader_of, rng)
+        for opt, who in resolved:
+            (stale if who is not None and who != human_seat and (who, opt.get("reply", "")) in recent else fresh).append((opt, who))
+        resolved = fresh + stale
+    for opt, who in resolved:
         if who is None:
             continue
         if who == human_seat:

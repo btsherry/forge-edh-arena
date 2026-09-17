@@ -7,7 +7,6 @@
 3. The runner publishes its yields (mailbox/seat-N/yield.json) for the engine
    mirror; the usage snapshot carries context size and rotations.
 Run: python3 -m unittest discover -s tests"""
-import io
 import json
 import os
 import sys

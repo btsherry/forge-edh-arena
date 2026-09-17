@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import voice_runner as vr  # noqa: E402
 from chains import ChainTable, plan_reply  # noqa: E402
 from voice import scheduler as sch  # noqa: E402
-from test_barks_runtime import FakePlayer  # noqa: E402
 from test_table_lines import _TableCase  # noqa: E402
 
 RUNNER = Path(__file__).resolve().parents[1]

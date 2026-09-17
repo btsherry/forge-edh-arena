@@ -17,7 +17,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from seatd import runner as runner_mod  # noqa: E402
 from test_cycle_replay import make_runner  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures" / "game47-seat1-turn20.jsonl"

@@ -299,5 +299,3 @@ def hand_pid(hand) -> str:
     except (TypeError, ValueError):
         return ""
     return f"hand-{n}" if 0 <= n <= 10 else ""
-
-

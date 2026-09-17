@@ -277,6 +277,8 @@ class AtomsMixin:
             enabled = getattr(self, "enabled", None)
             if self.final_locked or int(seat) in self.eliminated or (enabled is not None and not enabled()):
                 return                                             # muted since the timer was armed (critic, 2026-09-14)
+            if self.clock() < self._atom_main_until:
+                return                                             # a floor atom holds the main channel: never two atoms at once
             if not self.player.play_under(path, UNDER_VOLUME):
                 return
             self._atom_played(seat, path, "under", under=under)

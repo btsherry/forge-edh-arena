@@ -4,17 +4,14 @@ player), procedural narration ungoverned, grudges every second hit, the runner's
 hygiene's grounding score, the named -> generic fallback, the kill-shot family, threat memory.
 Run: python3 -m unittest discover -s tests"""
 import json
-import os
 import sys
-import time
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import voice_runner as vr  # noqa: E402
 from voice import scheduler as sch  # noqa: E402
 from voice import events as ev  # noqa: E402
-from test_deals_seat import make_runner, offer, cast, react, deal_rows  # noqa: E402
+from test_deals_seat import make_runner, offer, react, deal_rows  # noqa: E402
 from test_table_lines import _TableCase  # noqa: E402
 
 

@@ -390,7 +390,7 @@ class SchedulerMixin:
                 "prio": prio if prio is not None else (CHAIN_HOP_PRIORITY if chain else PRIORITY.get(kind, 9)),
                 "at": self.clock(), "expires": self.clock() + ttl, "library": library, "seat": seat,
                 "ctx": ctx or {}, "gap": gap, "chain": chain, "source": source or ("chain" if chain else kind), "follow": not evict}
-        before = self.queue
+        before = list(self.queue)                                          # a copy: the eviction audit below compares against it
         if kind == "bark" and not evict:
             pass                                                            # a follow-on: it queues behind what is already pending
         elif kind == "bark":
@@ -413,7 +413,7 @@ class SchedulerMixin:
         elif kind in ("advice", "your_move", "quip", "color"):
             self.queue = [q for q in self.queue if q["kind"] != kind]       # one pending item per kind: newest wins
         for q in before:
-            if q not in self.queue and q["kind"] in ("bark", "event"):     # game 48: Urza's "kill" vanished without a trace
+            if q["kind"] in ("bark", "event") and all(q is not x for x in self.queue):   # game 48: Urza's "kill" vanished without a trace
                 self.record("dropped", kind=q["kind"], why=f"evicted by {stock or kind}", stock=q["stock"], seat=q.get("seat"))
         self.queue.append(item)
 
@@ -1040,7 +1040,7 @@ class SchedulerMixin:
             self._floor_atom_run = 0                            # a content line: the atoms may run again
         floor = SILENCE_FLOOR_S["human" if human_turn else "ai"] / max(0.25, self.chatter) * mult   # an idle table: the floor slows too
         silent_for = now - max(self.last_spoken_at, getattr(self, "_floor_rearmed_at", -1e9))   # an atom re-arms the floor without a line
-        breaking = silent_for >= floor and not self.queue
+        breaking = silent_for >= floor                             # the queue is empty here: patter() returned on a pending item above
         if not breaking and (now < self._patter_due or now - self._advisor_spoke_at < self.patter_after_advice):
             return
         living = [int(x) for x in self.seat_libraries if int(x) not in self.eliminated]
@@ -1074,12 +1074,10 @@ class SchedulerMixin:
             if self.rng.random() >= g:
                 self.record("skipped", kind="bark", why=f"governor (duty {self.duty():.2f} vs goal {self.duty_goal():.2f}, p={g:.2f})", source="patter")
                 return
-        total = sum(w for *_, w in cands)
-        pick = self.rng.random() * total
-        for speaker, pid, target, w in cands:
-            pick -= w
-            if pick <= 0:
-                break
+        weights = [w for *_, w in cands]
+        if sum(weights) <= 0:
+            return                                                    # every survivor weighed nothing: no pick
+        speaker, pid, target, _ = cands[self.rng.choices(range(len(cands)), weights=weights)[0]]
         said = self.maybe_bark(speaker, pid, turn=snap.get("turn"), source="patter", p=1.0 if breaking else None,
                                ctx={"targets": [target] if target is not None else []})
         if breaking and not said:

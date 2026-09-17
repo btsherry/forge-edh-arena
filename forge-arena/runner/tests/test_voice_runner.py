@@ -410,7 +410,7 @@ class PcmAndLiteChain(unittest.TestCase):
         self._orig_urlopen = vr.urllib.request.urlopen
 
     def test_pcm_response_is_wrapped_and_cached_as_wav(self):
-        import voice_runner as vr, tempfile, io, array, wave
+        import tempfile, array, wave
         from pathlib import Path as _P
         tmp = _P(tempfile.mkdtemp(prefix="pcm-"))
         pcm = array.array("h", [500, -500] * 2400).tobytes()
@@ -433,7 +433,7 @@ class PcmAndLiteChain(unittest.TestCase):
         self.assertEqual(r.chars_used, 12)
 
     def test_404_resolves_the_voice_by_library_name(self):
-        import voice_runner as vr, tempfile, json as js, array, urllib.error
+        import tempfile, json as js, array, urllib.error
         from pathlib import Path as _P
         tmp = _P(tempfile.mkdtemp(prefix="v404-"))
         pcm = array.array("h", [1, -1] * 1200).tobytes()

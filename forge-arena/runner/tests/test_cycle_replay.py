@@ -150,8 +150,7 @@ class CycleReplayTests(unittest.TestCase):
         self.drive(r, req(3, "CAST_SPELL", [SCEPTER]))
         self.assertIsNotNone(r.cycle)
         # an OPPONENT spell appears on the stack: signature mismatch -> model
-        out = self.drive(r, req(4, "REACT", ["X"],
-                                stack=["Dramatic Reversal", "Swan Song"]))
+        self.drive(r, req(4, "REACT", ["X"], stack=["Dramatic Reversal", "Swan Song"]))
         self.assertIsNone(r.cycle, "novelty must break the cycle")
         self.assertEqual(r.brain.calls, 4, "the novel window must go to the model")
 
@@ -443,4 +442,3 @@ class StopConditionTests(unittest.TestCase):
         r4.handle(castA(1, 40)); r4.handle(castA(2, 50))
         self.assertEqual(r4.mb.responses[-1][1], {"chosenId": 1}); r4.handle(castC(3, 60))
         self.assertEqual((r4.brain.calls, r4.mb.responses[-1][1]), (2, {"chosenId": 1}), "with a target, the new castable is the loop's own churn: replayed")
-
