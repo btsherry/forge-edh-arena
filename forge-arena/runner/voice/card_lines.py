@@ -685,7 +685,7 @@ def coverage() -> list[str]:
 
 def render_block(lib: str) -> dict:
     parent = json.loads((VOICES / lib / "manifest.json").read_text())
-    return {k: parent[k] for k in ("voice_id", "voice_name", "temperament", "render", "bake", "sample_rate", "tags_note") if k in parent}
+    return {k: parent[k] for k in ("voice_id", "voice_name", "temperament", "render", "bake", "sample_rate", "tags_note", "fx_chain_file") if k in parent}
 
 
 def build_manifest(lib: str) -> dict:

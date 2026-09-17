@@ -86,7 +86,11 @@ class SharedVocabulary(unittest.TestCase):
             self.assertIn(settings["stability"], (0.0, 0.5), f"{lib}: v3 tags only take at Creative/Natural stability")
             self.assertEqual(formats, ("pcm_24000",), f"{lib}: 24 kHz raws like the Joshua takes")
             b = bs.bake_settings(m)
-            self.assertEqual((b["fx"], b["glitch"], b["rate"]), ("none", "off", 22050), f"{lib}: a seat voice stays clean and small")
+            if lib == "joshua":
+                self.assertEqual((b["fx"], b["glitch"], b["rate"]), ("chain", "light", 22050), "Joshua keeps his mainframe chain and glitches at the table (Ben, 2026-09-16)")
+                self.assertTrue((VOICES / lib / "fx-chain.txt").exists(), "the chain file sits beside his manifest")
+            else:
+                self.assertEqual((b["fx"], b["glitch"], b["rate"]), ("none", "off", 22050), f"{lib}: a seat voice stays clean and small")
             self.assertEqual((b["gain"], b["target_lufs"], b["true_peak_max"]), ("library", -24.0, -1.0), f"{lib}: library-relative gain to the Joshua level")
             self.assertTrue(m.get("temperament"), f"{lib}: the advisor's guide quotes the temperament")
         self.assertEqual(seats, {0, 1, 2, 3}, "joshua sits at seat 0 — voiced only when no human does")

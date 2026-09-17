@@ -19,15 +19,16 @@
  },
  "bake": {
   "rate": 22050,
-  "fx": "none",
-  "glitch": "off",
+  "fx": "chain",
+  "glitch": "light",
   "gain": "library",
   "target_lufs": -24.0,
   "true_peak_max": -1.0,
-  "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
+  "note": "Joshua's film chain and W.O.P.R. glitches even at the table; the chain sets the level (the -24 LUFS reference)"
  },
  "sample_rate": 22050,
  "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
+ "fx_chain_file": "fx-chain.txt",
  "phrases": {
   "gc-ancient-tomb-cast": {
    "category": "card",

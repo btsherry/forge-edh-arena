@@ -322,7 +322,11 @@ def write_base() -> None:
          "temperament": ("the calm machine: measured, dry, precise, faintly amused; never shouts; short declaratives and the "
                          "occasional probability. The advisor's voice, seated at the table only when no human sits at seat 0."),
          "render": {"model": "eleven_v3", "voice_settings": {"stability": 0.5, "speed": 0.92}, "formats": ["pcm_24000"]},
-         "bake": dict(ref["bake"]), "sample_rate": ref.get("sample_rate", 22050), "tags_note": ref.get("tags_note", ""),
+         # Ben, 2026-09-16: "Joshua should have his standard glitch effects added even in a four player ai game" — the
+         # mainframe chain (fx-chain.txt, a copy of the stock library's) and the light glitches, at the seat libraries' rate
+         "bake": {"rate": 22050, "fx": "chain", "glitch": "light", "gain": "library", "target_lufs": -24.0, "true_peak_max": -1.0,
+                  "note": "Joshua's film chain and W.O.P.R. glitches even at the table; the chain sets the level (the -24 LUFS reference)"},
+         "fx_chain_file": "fx-chain.txt", "sample_rate": ref.get("sample_rate", 22050), "tags_note": ref.get("tags_note", ""),
          "sources": {"joshua-seat-2026-09-16": "seat-bark library 'joshua' — the fourth seat's voice for all-AI tables (Ben, 2026-09-16); "
                                                "wordings in runner/voice/joshua_lines.py"},
          "phrases": {}}
