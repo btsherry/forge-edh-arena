@@ -111,6 +111,8 @@ def render(args, env=os.environ) -> str:
             out.append(f"  spectator: linger {args.linger}s | auto-stop {'on' if args.autostop != '0' else 'off'}")
     changed = []
     for group, rows in KNOBS.items():
+        if args.mode == "all-ai" and group.startswith("human game"):
+            continue                                          # game 55: the human section has no meaning at a four-brain table
         out.append(f"  -- {group}")
         for name, default, meaning in rows:
             if "/" in name:                                   # a file the numbers live in, not a variable to set

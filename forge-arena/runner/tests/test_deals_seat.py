@@ -541,3 +541,42 @@ class WordsFromThePlayer(unittest.TestCase):
             self.assertEqual(r._party_name(0, rq), "seat 0", "nobody is Player One on an all-AI table")
         finally:
             os.environ.pop("ALL_SEATS", None)
+
+
+class Game55Fixes(unittest.TestCase):
+    """Game 55 (the all-AI table): seat 0's say is offered with no human; parties are named from the roster;
+    a one-card answer in the single form is the list of one."""
+
+    def test_seat_zero_gets_the_say_menu_only_on_an_all_ai_table(self):
+        import os
+        rq = cast(1, turn=6)
+        self.assertFalse(rules.say_offer(rq, 0), "a human table: Joshua is a ghost, the Executive relays")
+        os.environ["ALL_SEATS"] = "1"
+        try:
+            self.assertTrue(rules.say_offer(rq, 0))
+        finally:
+            os.environ.pop("ALL_SEATS", None)
+        self.assertTrue(rules.say_offer(rq, 2))
+
+    def test_parties_are_named_from_the_roster_on_an_all_ai_table(self):
+        import os
+        r = make_runner(seat=3)
+        os.environ["ALL_SEATS"] = "1"
+        os.environ["ARENA_SEAT_DECKS"] = "urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds"
+        try:
+            name0 = r._party_name(0, cast(1, turn=6))
+            self.assertTrue(name0.startswith("Urza") and "(seat 0)" in name0, name0)
+            self.assertTrue(r._party_name(2, cast(1, turn=6)).startswith("Purphoros"))
+        finally:
+            os.environ.pop("ALL_SEATS", None); os.environ.pop("ARENA_SEAT_DECKS", None)
+
+    def test_a_one_card_pick_in_the_single_form_is_accepted(self):
+        rq = _base(1, "CHOOSE_ENTITIES", 11, "CLEANUP")
+        rq["state"].update({"min": 1, "max": 1})
+        rq["options"] = [{"id": 0, "label": "Choose none", "type": "NONE"}, {"id": 109, "label": "Forest"}, {"id": 135, "label": "Plains"}]
+        self.assertEqual(rules.validate(rq, {"chosenId": 135, "why": "surplus Plains"}), {"chosen": [135]}, "game 55: Giada was punted to a different card")
+        self.assertEqual(rules.validate(rq, {"chosen": [135]}), {"chosen": [135]})
+        self.assertIsNone(rules.validate(rq, {"chosenId": 999}), "an unknown id still falls to stock")
+        self.assertIsNone(rules.validate(rq, {"chosenId": 0}), "none is not a legal count here")
+        rq["state"].update({"min": 2, "max": 2})
+        self.assertIsNone(rules.validate(rq, {"chosenId": 135}), "two picks wanted: the single form is not an answer")

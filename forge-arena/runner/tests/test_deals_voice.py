@@ -513,3 +513,16 @@ class AnAllAiTable(_DealCase):
         self._game({"seat": 2, "turn": 3, "type": "DEAL", "deal": {"offer_id": "a2", "accept": True}})   # no `with`, no human to default to
         self.assertTrue(any("naming no other party" in x["why"] for x in self._records("skipped", "deal")))
         self.assertFalse(self.r.human_turn(), "no seat is the human's: the table is never 'quieter on your turn'")
+
+
+class ADealLineWaitsOutTheGuard(_DealCase):
+    def test_a_deal_line_is_held_not_dropped_by_the_seat_guard(self):
+        self.r.rng.random = lambda: 0.99
+        self.r._bark_spoken_at[1] = self.clock.t - 2.0                     # Urza spoke two seconds ago
+        self.r._seat_last_class()[1] = self.r._guard_class("anchored")
+        self.assertFalse(self.r.maybe_bark(1, "kill-that", turn=3, source="event", p=1.0, ctx={"targets": [2]}), "an ordinary anchored line: guarded")
+        self.assertTrue(self.r.maybe_bark(1, sch.DEAL_PROPOSE_LINE, turn=3, source="brain", p=1.0, ctx={"targets": [2], "terminal": True}),
+                        "game 55: 'Deal, Selvala?' died to the guard while the offer stood")
+        item = [q for q in self.r.queue if q["kind"] == "bark"][-1]
+        self.assertGreaterEqual(item["gap"], self.r.barks_cooldown - 2.0 - 0.01, "held for the rest of the guard, not dropped")
+        self.assertIn("deal line held", [x["why"] for x in self._records("noted", "bark")][-1])

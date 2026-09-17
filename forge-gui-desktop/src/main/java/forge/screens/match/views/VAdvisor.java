@@ -222,7 +222,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     }
 
     private void syncAsk() {
-        if (!forge.arena.interactive.AiControlFile.advisorAttached()) {
+        if (!forge.arena.interactive.AiControlFile.relayAttached()) {
             askField.setEnabled(false);
             askButton.setEnabled(false);
             askButton.setText("Chat");
@@ -329,7 +329,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     }
 
     private void syncMute() {
-        final boolean attached = forge.arena.interactive.AiControlFile.advisorAttached();
+        final boolean attached = forge.arena.interactive.AiControlFile.voiceAttached();
         final boolean on = !attached || forge.arena.interactive.AiControlFile.voiceEnabled();
         mute.setEnabled(attached);
         final javax.swing.Icon icon = on ? VOICE_ON : VOICE_OFF;
@@ -340,7 +340,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         } else {
             mute.setText(on ? "Voice" : "Muted");   // icon resource missing: a plain label still works
         }
-        mute.setToolTipText(!attached ? "Voice: no advisor attached to this game"
+        mute.setToolTipText(!attached ? "Voice: no voice runner in this game"
                 : on ? "Voice on — click to mute every spoken line"
                      : "Voice muted — click to unmute");
     }
@@ -463,6 +463,9 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         if (age == Long.MAX_VALUE) {
             status.setText("● Advisor offline — launch with arena-play.sh --advisor");
             status.setForeground(Color.DARK_GRAY);
+        } else if (!forge.arena.interactive.AiControlFile.advisorAttached()) {
+            status.setText("● Table relay — advisor off (deals and table talk only)");
+            status.setForeground(age < 60_000 ? new Color(0x3D, 0xC8, 0x5C) : Color.DARK_GRAY);
         } else {
             status.setText("● Advisor" + (age < 60_000 ? " — live" : ""));
             status.setForeground(age < 60_000 ? new Color(0x3D, 0xC8, 0x5C)

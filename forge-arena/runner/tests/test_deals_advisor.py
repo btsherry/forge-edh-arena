@@ -536,3 +536,34 @@ class WordsToASeat(unittest.TestCase):
         self.ask("@joshua is the truce good?")
         self.assertIn("a truce forbids attacks only", self.r.brain.prompts[-1], "game 54: he called a Chaos Warp a broken truce")
         self.assertIn("a truce is not broken by a spell", self.r.brain.prompts[-1])
+
+
+class RelayOnly(unittest.TestCase):
+    """Advisor off (Ben, 2026-09-16: "no Joshua, never no deals"): the relay-only runner never calls the brain but
+    still relays offers, invitations and talk, prints the panel and writes the offer pane's files."""
+    tearDown = DealTests.tearDown
+    snapshot, ask, panel, notes, records = DealTests.snapshot, DealTests.ask, DealTests.panel, DealTests.notes, DealTests.records
+    game_line = DealTests.game_line
+
+    def setUp(self):
+        DealTests.setUp(self)
+        self.r = ar.AdvisorRunner("giada-font-of-hope", self.base, "opus", "low", 30.0, log_dir=self.base / "logs", relay_only=True)
+        self.r.inbox.mkdir(parents=True, exist_ok=True)
+        self.snapshot(7, 1)
+
+    def test_deals_and_talk_relay_and_questions_get_the_off_line(self):
+        self.ask("@urza peace for a turn?")
+        self.assertEqual([p.name.endswith("-deal-offer.json") for p in self.notes(1)], [True])
+        self.ask("@purphoros you dirty bastard")
+        self.assertEqual([p.name.endswith("-table-talk.json") for p in self.notes(2)], [True])
+        self.ask("@joshua is the truce good?")
+        self.assertIn("the advisor is off — @<seat> deals and talk still reach the table", self.panel())
+        self.assertEqual(self.r.brain.prompts, [], "the brain is never called")
+        oid = list(self.r._offers)[0]
+        self.game_line(seat=2, turn=7, type="DEAL", deal={"offer_id": "p-2-0", "propose": True, "with": 0, "terms": {"kind": "truce", "rounds": 1}})
+        self.r._deal_tick()
+        q = json.loads((self.r._questions / "p-2-0.json").read_text())
+        self.assertIsNone(q["assessment"], "no Joshua: the pane shows the terms without a read")
+        self.assertEqual(self.r.brain.prompts, [])
+        self.assertIn("Purphoros] offers you truce, 1 turn", self.panel())
+        self.assertTrue(oid)

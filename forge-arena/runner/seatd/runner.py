@@ -372,7 +372,10 @@ class SeatRunner:
         # the request rarely names a commander (game 50: "seat 3"): the launch roster does
         try:
             from voice.table import load_address, seat_decks_from_roster
-            decks = seat_decks_from_roster(os.environ.get("ARENA_HUMAN_DECK"), os.environ.get("ARENA_SEAT_DECKS"))
+            if self._all_ai():
+                decks = {i: d for i, d in enumerate((os.environ.get("ARENA_SEAT_DECKS") or "").split())}   # all-AI: seat i plays roster[i]
+            else:
+                decks = seat_decks_from_roster(os.environ.get("ARENA_HUMAN_DECK"), os.environ.get("ARENA_SEAT_DECKS"))
             cmd = (load_address().get("commanders") or {}).get(decks.get(n) or "", {})
             name = cmd.get("name") or cmd.get("say")
             if isinstance(name, str) and name.strip():

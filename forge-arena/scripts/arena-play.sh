@@ -179,9 +179,18 @@ sleep 3
 # B4 (2026-09-14): ELEVENLABS_API_KEY likewise — only the voice runner (2.6) needs it.
 # BL-26: supervised like the seats (runner/run_advisor.sh restart loop); the
 # loop writes advisor.pid per restart, this PID is the loop itself.
+RELAY=0
 if [ "$ADVISOR" = "1" ]; then
   nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY -u ELEVENLABS_API_KEY \
     "$ROOT/runner/run_advisor.sh" --deck "$HUMAN_SLUG" \
+    --model "$MODEL" --effort "$EFFORT" >"$LOGS/advisor_runner.out" 2>&1 &
+  echo $! > "$LOGS/pids/advisor-loop.pid"
+elif [ "$MODE" = "human" ]; then
+  # Ben, 2026-09-16: "advisor off means no Joshua, never no deals" — the same runner, relay only: no brain
+  # session, no advice; it relays the player's @seat words, prints the panel lines, writes the offer pane's files.
+  RELAY=1
+  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY -u ELEVENLABS_API_KEY \
+    "$ROOT/runner/run_advisor.sh" --deck "$HUMAN_SLUG" --relay-only \
     --model "$MODEL" --effort "$EFFORT" >"$LOGS/advisor_runner.out" 2>&1 &
   echo $! > "$LOGS/pids/advisor-loop.pid"
 fi
@@ -192,7 +201,7 @@ fi
 # Off with --no-voice or ARENA_VOICE=off; no advisor → no voice, EXCEPT an
 # all-AI table (2026-09-16): the voice runner is the seats' voices and owns the
 # deal ledger, so four brains dealing with each other need it with no advisor.
-if { [ "$ADVISOR" = "1" ] || [ "$MODE" = "all-ai" ]; } && [ "$VOICE" != "off" ]; then
+if [ "$VOICE" != "off" ]; then
   nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY ARENA_HUMAN_DECK="$HUMAN_SLUG" $ALL \
     "$ROOT/runner/run_voice.sh" >"$LOGS/voice_runner.out" 2>&1 &
   echo $! > "$LOGS/pids/voice-loop.pid"
@@ -200,7 +209,7 @@ fi
 
 # 3) GUI (spectator for all-ai, human seat 0 otherwise)
 if [ "$MODE" = "all-ai" ]; then GUI_ARG="--all-ai"; else GUI_ARG="$HUMAN_DECK"; fi
-ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" \
+ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" ARENA_RELAY="$RELAY" ARENA_VOICE_RUNNER="$([ "$VOICE" != "off" ] && echo 1 || echo 0)" \
   ARENA_AUTOPASS="${ARENA_AUTOPASS:-casts}" \
   nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
   "$DIR/run-pilot-match.sh" "$GUI_ARG" >>"$LOGS/gui.out" 2>&1 &
@@ -224,7 +233,7 @@ done
 if [ -f "$ROOT/mailbox/observer-state.json" ]; then
   seats=$(python3 "$ROOT/runner/arena-ctl.py" status 2>/dev/null | grep -c "model=")
   echo "arena live [$MODE]: $seats AI seats @ $MODEL/$EFFORT, timeout=${TIMEOUT}s"$([ "$MODE" = human ] && echo ", human=$HUMAN_DECK")
-  [ "$ADVISOR" = "1" ] && [ "$VOICE" != "off" ] && echo "  voice: stock phrases on$([ -n "${ELEVENLABS_API_KEY:-}" ] && echo ", live advice on" || echo ", live advice off (no ELEVENLABS_API_KEY)"), seat barks ${ARENA_BARKS:-some} (--no-voice to silence)"
+  [ "$VOICE" != "off" ] && echo "  voice: stock phrases on$([ -n "${ELEVENLABS_API_KEY:-}" ] && echo ", live advice on" || echo ", live advice off (no ELEVENLABS_API_KEY)"), seat barks ${ARENA_BARKS:-some} (--no-voice to silence)"
   # 6) auto-teardown once the match has clearly concluded (Ben, 2026-09-04):
   # a plain sleep-loop watcher (no scheduler) waits for the engine's gameOver
   # flag or the GUI JVM to vanish, lingers, then runs arena-stop.sh exactly as

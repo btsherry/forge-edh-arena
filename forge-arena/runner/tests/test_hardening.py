@@ -358,7 +358,8 @@ class MonoColorPick(unittest.TestCase):
 class LaunchBanner(unittest.TestCase):
     IGNORE = {"ARENA_RATE_VOIDED", "ARENA_OAI_API_KEY", "ARENA_HUMAN_DECK", "ARENA_MAILBOX_DIR", "ARENA_ADVISOR",
               "ARENA_AUTOSTOP_STATE", "ARENA_AUTOSTOP_STOP", "ARENA_AUTOSTOP_PID_FILE", "ARENA_AUTOSTOP_GUI_PID_FILE",
-              "ARENA_STOPS", "ARENA_VOICE_ID"}
+              "ARENA_STOPS", "ARENA_VOICE_ID",
+              "ARENA_RELAY", "ARENA_VOICE_RUNNER"}          # launcher -> GUI plumbing (relay-only advisor, voice runner present), not knobs
 
     def _observed(self):
         seen = {}

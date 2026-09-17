@@ -508,7 +508,7 @@ def opponent_deck_sections(own_deck: str, arena_root: Path) -> list[str]:
 
 class AdvisorRunner:
     def __init__(self, deck: str, base: Path, model: str, effort: str, timeout: float,
-                 log_dir: Path | None = None):
+                 log_dir: Path | None = None, relay_only: bool = False):
         self.inbox = base / "seat-0-advisor" / "inbox"
         self._voice_state = base / "seat-0-voice" / "state.json"
         # seat barks: the voices at the table (from the stock libraries) and the knob
@@ -555,6 +555,7 @@ class AdvisorRunner:
         tools = None
         if os.environ.get("ARENA_ADVISOR_TOOLS", "on").lower() != "off":
             tools = [PUBLIC_STATE_TOOL]
+        self.relay_only = bool(relay_only)     # advisor off: relay the table, never call the brain
         self.brain = SeatBrain(0, deck, model=model, effort=effort,
                                log=self._say, brief="advisor-brief.md",
                                extra_parts=opponent_deck_sections(deck, arena_root),
@@ -1091,6 +1092,11 @@ class AdvisorRunner:
 
     def _answer_ask(self, text: str, deals: bool = False) -> None:
         turn = self._turn_now()          # the snapshot's turn, else the feed's (a question before any feed: "t?")
+        if self.relay_only:
+            self._panel("you", text, turn)
+            self._panel("table", "the advisor is off — @<seat> deals and talk still reach the table", turn)
+            self._record("ask", {"turn": turn, "text": text, "answer": None, "relay_only": True})
+            return
         turn = turn if turn is not None else "?"
         ctx = ""
         if self.pending_context:
@@ -1520,6 +1526,8 @@ class AdvisorRunner:
         dice made the advisor absent at the moment the player acts on his read; DEAL_COLOR_P is
         1.0 and kept only as the knob). Never for the player's own offer — that is relayed, not answered;
         a SEAT's offer to the player is assessed as it arrives (_on_seat_offer): the player must decide."""
+        if self.relay_only:
+            return                                     # no brain to ask: the offer pane shows the terms without a read
         if DEAL_COLOR_P < 1.0 and self.deal_rng.random() >= DEAL_COLOR_P:
             return
         board = self._board_brief()
@@ -1542,7 +1550,34 @@ class AdvisorRunner:
 
     # ---- main loop ---------------------------------------------------------------
 
+    def _run_relay_only(self) -> None:
+        """Advisor off (Ben, 2026-09-16: "no Joshua, never no deals"): no brain session, no feed, no
+        Executive — the clock, the player's @seat words, the seats' answers and the ledger into the
+        panel, the offer pane's files. A question for Joshua gets one panel line saying he is off."""
+        self._say(f"[advisor] table relay up (advisor off) — deck={self.brain.deck} watching {self.inbox}")
+        self._stream_write("[advisor] table relay — the advisor is off. @urza, @giada… still deal and talk; nobody answers questions.\n")
+        import threading
+        hb = self.inbox.parent / "heartbeat"
+
+        def beat():
+            while True:
+                try:
+                    hb.touch()
+                except OSError:
+                    pass
+                time.sleep(5.0)
+        threading.Thread(target=beat, name="advisor-heartbeat", daemon=True).start()
+        while True:
+            self._apply_control()
+            self._clock.observe()
+            self._handle_asks()
+            self._deal_tick()
+            time.sleep(POLL_S)
+
     def run(self) -> None:
+        if self.relay_only:
+            self._run_relay_only()
+            return
         self._say(f"[advisor] up — deck={self.brain.deck} model={self.brain.model} "
                   f"watching {self.inbox}")
         self.brain.ensure_session()  # pre-warm: dossier loads before turn 0
@@ -1606,6 +1641,8 @@ def main() -> None:
     ap.add_argument("--effort", default="low")
     ap.add_argument("--base", default=str(Path(__file__).resolve().parent.parent / "mailbox"))
     ap.add_argument("--timeout", type=float, default=60.0)
+    ap.add_argument("--relay-only", action="store_true",
+                    help="advisor off: no brain session, no advice — relay the player's @seat words, the panel lines and the offer pane's files")
     args = ap.parse_args()
     model = args.model
     if backends.parse_model(model)[0] != "claude":
@@ -1616,7 +1653,7 @@ def main() -> None:
               f"advisor in v1 — falling back to opus", flush=True)
         model = "opus"
     AdvisorRunner(args.deck, Path(args.base), model, args.effort,
-                  args.timeout).run()
+                  args.timeout, relay_only=args.relay_only).run()
 
 
 if __name__ == "__main__":

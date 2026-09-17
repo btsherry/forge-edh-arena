@@ -19,6 +19,7 @@ Traps encoded here (from the source-extracted contract, docs/INTERACTIVE-ARENA.m
 from __future__ import annotations
 
 import json
+import os
 
 # What the model must emit, per decisionType (fed into the prompt by brain.py).
 ANSWER_CONTRACT = {
@@ -242,13 +243,18 @@ SAY_OFFER = ('OPTIONAL "say": one of [' + ", ".join(SAY_MENU) + '] — a table l
              'aloud. Only when it fits this moment, at most one, otherwise omit the key.')
 
 
+def all_ai_table() -> bool:
+    """run_table.sh sets ALL_SEATS=1 for a four-brain table: seat 0 is a seat like the others."""
+    return os.environ.get("ALL_SEATS") == "1"
+
+
 def say_offer(req: dict, seat: int | None = None) -> bool:
     """Offer the say key on this window? Never on a procedural one: a window with a
     single option (a plain pass, a forced pick) is ceremony, not a moment — and never
     to seat 0: the advisor plays the human's seat in executive mode and Joshua is a
     ghost outside the game, not a voice at the table (Ben, 2026-09-14)."""
-    if seat is not None and int(seat) not in (1, 2, 3):
-        return False
+    if seat is not None and int(seat) not in (1, 2, 3) and not (int(seat) == 0 and all_ai_table()):
+        return False                    # all-AI (game 55): seat 0 is a brain with a voice, and its says were all dropped
     dtype = req.get("decisionType")
     if dtype not in SAY_WINDOWS:
         return False
@@ -354,10 +360,18 @@ def validate(req: dict, out) -> dict | None:
 
     if dtype in ("CHOOSE_ENTITIES", "CHOOSE_CARDS"):
         arr = out.get("chosen")
-        if not isinstance(arr, list):
-            return None
         lo, hi = _bounds(req, 0, len(ids))
         pool = [i for i in ids if i != 0]
+        if not isinstance(arr, list):
+            # game 55: a brain answered a one-card discard with {"chosenId": 135} and was punted to a
+            # different card. The single form is the list of one when the window allows one pick.
+            cid = out.get("chosenId")
+            if _is_int(cid) and cid in pool and lo <= 1 <= hi:
+                arr = [cid]
+            elif cid == 0 and lo == 0:
+                arr = []
+            else:
+                return None
         if len(arr) != len(set(arr)) or not (lo <= len(arr) <= hi):
             return None
         if any((not _is_int(i)) or i not in pool for i in arr):

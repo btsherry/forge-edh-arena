@@ -107,6 +107,10 @@ SEAT_DECKS_ARG=""
 ADVISOR_ARGS=""
 [ "${ARENA_ADVISOR:-0}" = "1" ] && \
   ADVISOR_ARGS="-Darena.advisor=1 -Darena.autopass=${ARENA_AUTOPASS:-casts}"
+# the Advisor tab's chat and offer pane work through a relay-only runner (advisor off); the mute
+# button exists whenever a voice runner is part of the game (Ben, 2026-09-16)
+[ "${ARENA_RELAY:-0}" = "1" ] && ADVISOR_ARGS="$ADVISOR_ARGS -Darena.relay=1"
+[ "${ARENA_VOICE_RUNNER:-0}" = "1" ] && ADVISOR_ARGS="$ADVISOR_ARGS -Darena.voice=1"
 
 # Backend models for the AI panel's dial cycle (plan F-27/F-34): the unique
 # or/ | oai/ entries from ARENA_SEAT_MODELS slots 1-3 only (slot 0 is the

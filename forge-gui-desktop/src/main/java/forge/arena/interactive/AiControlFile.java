@@ -166,6 +166,18 @@ public final class AiControlFile {
         return "1".equals(System.getProperty("arena.advisor"));
     }
 
+    /** The Advisor tab's chat works: a full advisor OR the relay-only runner (advisor off; deals and
+     *  table talk still reach the seats — Ben, 2026-09-16: "no Joshua, never no deals"). */
+    public static boolean relayAttached() {
+        return advisorAttached() || "1".equals(System.getProperty("arena.relay"));
+    }
+
+    /** A voice runner is part of this game (any mode): the mute button exists. Before 2026-09-16 the
+     *  button keyed on the advisor and sat dead through an all-AI game while three voices talked. */
+    public static boolean voiceAttached() {
+        return "1".equals(System.getProperty("arena.voice"));
+    }
+
     public static boolean advisorEnabled() {
         final File f = advisorToggleFile();
         if (!f.exists()) {

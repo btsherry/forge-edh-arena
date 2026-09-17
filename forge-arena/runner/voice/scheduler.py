@@ -659,10 +659,18 @@ class SchedulerMixin:
         since = self.clock() - self._bark_spoken_at.get(int(seat), -1e9)
         cls = self._guard_class(classify_source(source))
         last = self._seat_last_class().get(int(seat))
+        deal_line = (pid in DEAL_ANSWER_LINE.values() or pid in JOSHUA_DEAL_LINE.values() or pid == "deal-over"
+                     or (pid == DEAL_PROPOSE_LINE and source == "brain"))
         if since < self.barks_cooldown and pid not in OWN_ACTION_LINES and (last is None or last == cls):
-            self.record("skipped", kind="bark", why=f"seat guard ({since:.0f}s < {self.barks_cooldown:.0f}s, {cls} after {last or 'a line'})",
-                        stock=pid, seat=seat, source=source)
-            return False
+            if deal_line:
+                # game 55: "Deal, Selvala?" died to the guard 3 s after the seat's own line while the offer stood.
+                # A deal line is state: it waits out the guard instead of being dropped.
+                gap = max(gap or 0.0, self.barks_cooldown - since)
+                self.record("noted", kind="bark", why=f"deal line held {gap:.0f}s for the seat guard", stock=pid, seat=seat, source=source)
+            else:
+                self.record("skipped", kind="bark", why=f"seat guard ({since:.0f}s < {self.barks_cooldown:.0f}s, {cls} after {last or 'a line'})",
+                            stock=pid, seat=seat, source=source)
+                return False
         # an explicit p (the opener's own number) always applies; otherwise "all" means always, "some" means barks_p (tuning.json)
         chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
         ungoverned = (pid in MULL_LINE.values() or (source == "patter" and p == 1.0) or source == "procedural"
