@@ -1,8 +1,36 @@
 # forge-light-llm — Patch Notes
 
-## v4.2 — unreleased (experimental/voicework2)
+## v4.2 Experimental — 2026-09-17
 
-The AI seats talk like people at a table. Built in live games 38–46.
+The AI seats talk like people at a table, and they make deals. Built and played in live games 38–59
+on the `experimental/voicework2` branch, then fast-forwarded to `arena`. **Experimental** means one
+tarball with every voice bundled (the voice-pack split waits for 5.0) and a table that is still being
+tuned from live play; everything below shipped through two full review passes and a clean game 59.
+
+- **Deals, both ways.** The seats propose truces, no-target pacts and alliances to each other and to
+  you — at their own cast and attack windows, from turn 3, about once in six turns, or sooner when you
+  invite one (`@urza make me an offer`). You answer in the chat (`@urza accept` / `@urza no`) or in the
+  **offer pane** that opens when a seat offers you something: Accept, Refuse, or Counter… (which puts
+  `@urza ` in the chat for you to finish), with Joshua's read of the offer when the advisor is on and
+  "the advisor is off — your call" when it is not. The shape of a legal deal is printed at the start,
+  on `@joshua deals`, and once after table talk is relayed. Every pact, counter, refusal, lapse and
+  break is in the deal ledger (`logs/deals.jsonl`) and reaches the seat brains as notes; a seat under a
+  truce is warned before it attacks or targets its partner, and the table calls out a broken oath.
+- **The all-AI table has four voices.** With no human, Joshua leaves the advisor's chair and sits at the
+  fourth seat (radio glitch and all); seat 0 is a brain like the others and may deal. Who speaks as
+  whom is one rule in `runner/voice/stock/voices/assign.json`: your seat is silent, Joshua sits only
+  where there is no human, a deck with an association takes its voice, every other seat takes the
+  next in the fallback order — four unknown decks, or none listed, seat the same way.
+- **`--no-voice` starts the table muted, never absent:** the voice runner owns the deal ledger, so deals
+  work in silence; unmute from the Advisor tab. A muted table drops what it would have said.
+- **The mute button is live in every mode**, and the match screen brings a talking seat's tab forward
+  once per line and never takes back a tab you clicked to.
+- **Final hygiene (2026-09-17):** two review passes over the whole branch (a mechanical sweep, Gemini
+  as a wide reader, four Opus reads, every finding verified before a fix). Fixed among others: the
+  seats' truce guard read a label the engine never writes; a lapsed offer between seats was announced
+  as a refusal to you; an all-AI table went silent through its opening and always ended on Joshua's
+  loss line; a killed run's teardown signal tore the next table down at game over; the 16-bit audio
+  fix declared twice its data in every WAV header. Record: `docs/reviews/2026-09-17-final-hygiene-pass.md`.
 
 - **Forge's sound effects no longer pop and crackle (BL-56).** The effects were being decoded to 8-bit,
   which pushed them through Java's software mixer and summed overlapping sounds into overload — the
@@ -77,8 +105,8 @@ The AI seats talk like people at a table. Built in live games 38–46.
   are gone; each AI seat's process starts at its base effort and the effort
   buttons restart it; the advisor always advises a window where an opponent
   targets you.
-- The package grows by about 270 MB of audio; the dry takes and the wording
-  generators are not shipped.
+- The package grows by about 270 MB of audio (every voice bundled — Experimental); the dry takes
+  and the wording generators are not shipped.
 
 ## v4.1 — 2026-09-10
 
