@@ -45,6 +45,8 @@ class SeatRunner:
     _pending_offers = None   # offer_id -> the deal-offer/deal-counter note the brain must answer
     _deals_in_force = None   # other seat -> {"kind", "until_turn", "offer_id", "struck"} from deal-struck notes
     _deal_notes = None       # rendered RUNNER NOTE sentences waiting for the next prompt (≤ 3)
+    _my_offers = None        # offer_id -> {"to", "turn"}: the offers THIS seat made and nobody has answered (one at a time)
+    _last_propose_turn = None
     def __init__(self, seat: int, deck: str, base, model: str = "sonnet",
                  effort: str = "low", timeout_s: float = 90.0, log_dir=None,
                  autopass: tuple[str, ...] = DEFAULT_AUTOPASS,
@@ -329,7 +331,7 @@ class SeatRunner:
     # owes an answer, and the deals in force (for the fastpath hand-off). The runner never
     # overrides a model answer: a deal is honoured or broken by the brain, on purpose.
 
-    NOTE_KINDS = ("deal-offer", "deal-counter", "deal-struck", "deal-broken", "deal-lapsed")
+    NOTE_KINDS = ("deal-offer", "deal-counter", "deal-struck", "deal-broken", "deal-lapsed", "deal-refused")
     NOTES_PER_PROMPT = 3
     TARGET_WINDOWS = ("CHOOSE_ENTITY", "CHOOSE_ENTITIES", "CHOOSE_CARD", "CHOOSE_CARDS")
     _SEAT_IN_LABEL = re.compile(r"\(seat (\d+)\)")
@@ -343,6 +345,11 @@ class SeatRunner:
         if self._deals_in_force is None:
             self._deals_in_force = {}
         return self._deals_in_force
+
+    def _mine(self) -> dict:
+        if self._my_offers is None:
+            self._my_offers = {}
+        return self._my_offers
 
     def _notes_dir(self) -> Path:
         """mailbox/seat-<n>/notes — a sibling of inbox/ (the mailbox's own root when it has one)."""
@@ -420,8 +427,12 @@ class SeatRunner:
             self._deals()[int(other)] = {"kind": dk, "until_turn": deal.get("until_turn"), "rounds": deal.get("rounds"),
                                          "offer_id": note.get("offer_id"), "struck": note.get("turn")}
             self._pending().pop(note.get("offer_id"), None)   # answered on the other side
+            self._mine().pop(note.get("offer_id"), None)      # ...or it was this seat's own offer, taken
             return (f"you have {self._kind_word(dk, True)} with {who} {rules.deal_duration(deal)}: "
                     f"{rules.DEAL_DUTY[dk]}. Breaking it is a choice the table will remember.")
+        if kind == "deal-refused":
+            self._mine().pop(note.get("offer_id"), None)
+            return f"{who} refused your offer of {self._kind_word(dk)}."
         was = self._deals().pop(int(other), None) or {}
         word = self._kind_word(was.get("kind") or dk).split(" ", 1)[1]   # no article: "your truce"
         if kind == "deal-broken":
@@ -456,6 +467,10 @@ class SeatRunner:
                     raise ValueError("not an object")
                 if note.get("kind") not in self.NOTE_KINDS:
                     self._say(f"[seat {self.seat}] note {p.name} dropped: unknown kind {note.get('kind')!r}")
+                    continue
+                if (note.get("kind") in ("deal-offer", "deal-counter") and isinstance(note.get("turn"), int)
+                        and isinstance(req.get("turn"), int) and note["turn"] < req["turn"] - 1):
+                    self._say(f"[seat {self.seat}] note {p.name} dropped: an offer from turn {note['turn']} is stale on turn {req['turn']}")
                     continue
                 text = self._render_note(note, req)
                 if text is not None:
@@ -555,7 +570,10 @@ class SeatRunner:
 
     def _deal_key(self, req: dict, raw) -> dict | None:
         """The brain's "deal" answer: validated against the pending offers, recorded as its own
-        DEAL record and returned for the decision record; invalid -> dropped with a log line."""
+        DEAL record and returned for the decision record; invalid -> dropped with a log line.
+        A "propose" inside it is this seat's OWN offer to another party (_propose_deal)."""
+        if isinstance(raw, dict) and "propose" in raw:
+            return self._propose_deal(req, raw.get("propose"))
         clean, why = rules.validate_deal(raw, self._pending(), req.get("turn"))
         if clean is None:
             self._say(f"[seat {self.seat}] deal {json.dumps(raw)[:120]} dropped: {why}")
@@ -573,16 +591,95 @@ class SeatRunner:
         return clean
 
     def _lapse_offers(self, req: dict) -> None:
-        """The turn changed without an answer: every pending offer lapses, with a record."""
+        """The turn changed without an answer: every pending offer lapses, with a record. An offer
+        THIS seat made is forgotten a turn later (the other side lapses it at its own turn change)."""
         for oid in list(self._pending()):
             self._pending().pop(oid, None)
             self._say(f"[seat {self.seat}] deal offer {oid} lapsed: no answer before the turn changed")
             self._record_deal(req, {"offer_id": oid, "accept": None, "why": "no answer"})
+        turn = req.get("turn")
+        if isinstance(turn, int):
+            for oid, mine in list(self._mine().items()):
+                if not isinstance(mine.get("turn"), int) or mine["turn"] < turn - 1:
+                    self._mine().pop(oid, None)
+                    self._say(f"[seat {self.seat}] my offer {oid} to seat {mine.get('to')} went unanswered")
 
-    def _deal_offer_lines(self) -> str | None:
-        """The prompt line(s) offered ONLY while an offer is pending (rules.deal_offer_line)."""
+    # ---- this seat's own offers (Ben, 2026-09-16: seats offer each other, and the player, deals) ----
+    def _alive_parties(self, req: dict) -> list[tuple[int, str]]:
+        """The other seats still in the game, from the request's opponents, named for the prompt."""
+        out = []
+        for o in ((req.get("state") or {}).get("opponents") or []):
+            if not isinstance(o, dict) or not isinstance(o.get("seat"), int) or o.get("eliminated"):
+                continue
+            if o["seat"] == self.seat:
+                continue
+            name = self._party_name(o["seat"], req)
+            if f"seat {o['seat']}" not in name:
+                name = f"{name} (seat {o['seat']})"
+            out.append((o["seat"], name))
+        return out
+
+    def _can_propose(self, req: dict) -> bool:
+        """The propose key is offered on a main-phase window of the seat's own turn, from turn
+        PROPOSE_MIN_TURN, with no offer of its own open and none pending against it, at most once
+        every PROPOSE_EVERY_TURNS table turns. Never seat 0: the Executive relays, it does not propose."""
+        if self.seat not in (1, 2, 3) or req.get("decisionType") not in rules.PROPOSE_WINDOWS:
+            return False
+        turn = req.get("turn")
+        if not isinstance(turn, int) or turn < rules.PROPOSE_MIN_TURN:
+            return False
+        if self._mine() or self._pending():
+            return False
+        last = self._last_propose_turn
+        return last is None or turn - last >= rules.PROPOSE_EVERY_TURNS
+
+    def _propose_deal(self, req: dict, raw) -> dict | None:
+        """The brain's own offer: validated (rules.validate_proposal), written as a deal-offer note into the
+        other party's mailbox (seat 0's is read by the Executive when it plays the seat; otherwise the advisor
+        relays the DEAL record to the player's panel), recorded as a DEAL record with "propose", remembered
+        as this seat's one open offer. Dropped with a log line when the window does not allow it."""
+        if not self._can_propose(req):
+            self._say(f"[seat {self.seat}] propose {json.dumps(raw)[:100]} dropped: not offered on this window")
+            return None
+        alive = {n for n, _ in self._alive_parties(req)}
+        clean, why = rules.validate_proposal(raw, self.seat, alive, req.get("turn"))
+        if clean is None:
+            self._say(f"[seat {self.seat}] propose {json.dumps(raw)[:100]} dropped: {why}")
+            return None
+        to = clean["to"]
+        terms = {k: v for k, v in clean.items() if k != "to"}
+        turn = req.get("turn")
+        ts_ms = int(time.time() * 1000)
+        oid = f"{ts_ms}-{self.seat}-{to}"
+        text = str(raw.get("text") or "").strip()[:100] if isinstance(raw, dict) else ""
+        note = {"kind": "deal-offer", "from": self.seat, "to": to, "deal": terms, "offer_id": oid, "text": text, "turn": turn}
+        d = self._notes_dir().parent.parent / f"seat-{to}" / "notes"
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            tmp = d / f".{ts_ms}-deal-offer.json.tmp"
+            tmp.write_text(json.dumps(note))
+            os.replace(tmp, d / f"{ts_ms}-deal-offer.json")
+        except OSError as e:
+            self._say(f"[seat {self.seat}] propose to seat {to} dropped: could not write the note ({e})")
+            return None
+        deal = {"offer_id": oid, "propose": True, "with": to, "terms": terms}
+        if text:
+            deal["text"] = text
+        self._mine()[oid] = {"to": to, "turn": turn}
+        self._last_propose_turn = turn
+        self._say(f"[seat {self.seat}] DEAL {oid} proposed to seat {to}: {json.dumps(terms)}")
+        self._record_deal(req, deal)
+        return deal
+
+    def _deal_offer_lines(self, req: dict | None = None) -> str | None:
+        """The prompt line(s) offered ONLY while an offer is pending (rules.deal_offer_line), or the
+        propose line when this window allows an offer of the seat's own (rules.deal_propose_line)."""
         lines = [rules.deal_offer_line(oid, can_counter=not (n or {}).get("counter"), say=self.seat in (1, 2, 3))
                  for oid, n in list(self._pending().items())[:2]]
+        if not lines and req is not None and self._can_propose(req):
+            parties = self._alive_parties(req)
+            if parties:
+                lines.append(rules.deal_propose_line(parties))
         return "\n".join(lines) if lines else None
 
     def _record(self, req: dict, answer: dict, source: str, meta=None,
@@ -1861,6 +1958,7 @@ class SeatRunner:
             self._yielded = {}
             self._publish_yields()
             self._pending_offers, self._deals_in_force, self._deal_notes = {}, {}, []   # deals die with the game
+            self._my_offers, self._last_propose_turn = {}, None
         if req.get("gameId"):
             self._game_id = req.get("gameId")
         new_turn = self._last_turn != req.get("turn")
@@ -2021,7 +2119,7 @@ class SeatRunner:
                 speculative=self.speculative, react_hold=self.react_hold,
                 combo_status=rules.combo_status_line(self.combos, req),
                 runner_note="\nRUNNER NOTE: ".join(notes) if notes else None, seat=self.seat,
-                deal_offer=self._deal_offer_lines())
+                deal_offer=self._deal_offer_lines(req))
             # Item 2: the brain gets the DEADLINE, not a duration — init and
             # the decision call each spend only what remains of it (the old
             # min(budget, 240) handed the same budget to both, so a lazy

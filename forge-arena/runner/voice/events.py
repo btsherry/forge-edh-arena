@@ -40,7 +40,7 @@ import re
 import time
 from pathlib import Path
 
-from voice.scheduler import (DEAL_ANSWER_LINE, DEAL_CONTROL_DIR, I_BROKE_IT_P, JOSHUA_DEAL_LINE, MULL_DIG_WORDS, MULL_LINE, MULL_P,
+from voice.scheduler import (DEAL_ANSWER_LINE, DEAL_CONTROL_DIR, DEAL_PROPOSE_LINE, I_BROKE_IT_P, JOSHUA_DEAL_LINE, MULL_DIG_WORDS, MULL_LINE, MULL_P,
                              MULL_SCREW_WORDS, PRIORITY, deal_terms)
 from voice.table import card_kind, card_slug
 
@@ -58,7 +58,8 @@ SAY_MENU = ("taunt", "respect", "nice-play", "kill-that", "youre-the-threat", "i
 SAY_TARGETED = ("deal", "kill-that", "youre-the-threat")     # spoken to the life leader among the OTHER seats, else not at all
 # §11: a brain answering the player's offer adds a `say` beside its DEAL record; the DEAL record voices the addressed line
 # (deal-with-you / no-deal-with-you / counter-offer). Whichever record is read first speaks; the twin is then "said this turn".
-DEAL_SAY_TWINS = {"take-the-deal": "deal-with-you", "promise": "deal-with-you", "no-deal": "no-deal-with-you", "counter-offer": "counter-offer"}
+DEAL_SAY_TWINS = {"take-the-deal": "deal-with-you", "promise": "deal-with-you", "no-deal": "no-deal-with-you", "counter-offer": "counter-offer",
+                  "deal": "deal"}                            # a seat's own offer: the DEAL record speaks it, the say beside it stays quiet
 EVENTS_TAPE = "events.jsonl"                                  # §4.3: every consumed ring event, as-is, plus turn and ts
 OBSERVER_TAPE = "observer-tape.jsonl"                         # §4.3: every CHANGED snapshot, compacted
 THINK_S = 8.0
@@ -331,7 +332,7 @@ class EventsMixin:
             self.record("skipped", kind="bark", why="say id not on the menu", stock=say, seat=seat, source="brain")
             return
         twin = DEAL_SAY_TWINS.get(say)
-        if twin and twin != say and self.said_this_turn(seat, twin, optional=False):
+        if twin and self.said_this_turn(seat, twin, optional=False):
             self.record("skipped", kind="bark", why=f"the DEAL answer already spoke ({twin})", stock=say, seat=seat, source="brain")
             return
         ctx: dict = {"targets": []}
@@ -369,7 +370,12 @@ class EventsMixin:
             return
         terms = deal_terms(deal.get("terms"))
         t = self._turn_int(turn)
+        if deal.get("propose"):
+            self.deal_proposal(r, seat, other, terms, offer_id, t)
+            return
         counter = deal.get("counter") if isinstance(deal.get("counter"), dict) else None
+        if offer_id:
+            self._deal_counters_map().pop(offer_id, None)         # the Executive answered a seat's offer to the player: no typed answer is due
         if deal.get("accept"):
             self.strike_deal(seat, other, terms["kind"], t, by=seat, rounds=terms.get("rounds"), until_turn=terms.get("until_turn"),
                              offer_id=offer_id, source="brain")
@@ -403,14 +409,33 @@ class EventsMixin:
                 for s in twins:
                     self._turn_said().add((seat, s))                                # a `say` twin read later stays quiet
 
+    def deal_proposal(self, r: dict, seat: int, other: int, terms: dict, offer_id, t: int) -> None:
+        """A seat's OWN offer (Ben, 2026-09-16): {"offer_id", "propose": true, "with": the party, "terms"}. The seat
+        runner already wrote the deal-offer note into the party's mailbox; here the ledger gets `offer`, an offer to
+        the player is remembered beside the counters so the advisor's accept/refuse file answers it (a turn longer
+        than a counter: the player is not at a window), and the seat speaks the deal line to the party — state,
+        never rolled, terminal (the answer comes from the party's brain, not the voice chain's small-talk truce)."""
+        self._ledger("offer", (seat, other), by=seat, deal=terms, offer_id=offer_id, turn=t)
+        if other == self.human_seat and offer_id:
+            self._deal_counters_map()[offer_id] = {"between": [seat, other], "deal": dict(terms), "turn": t + 1, "proposal": True}
+        snap_turn = self._last_snapshot.get("turn")
+        age = time.time() - float(r.get("ts") or time.time())
+        if (snap_turn is not None and t and t < snap_turn) or age > INTENT_MAX_AGE_S:
+            self.record("skipped", kind="bark", why=f"stale deal offer (turn {t} vs {snap_turn}, {age:.0f}s old)", stock=DEAL_PROPOSE_LINE, seat=seat, source="brain")
+            return
+        if seat != self.human_seat and self.library_for_seat(seat):
+            self._roll_turn(t)
+            self._bark(seat, DEAL_PROPOSE_LINE, turn=t, source="brain", p=1.0, ctx={"targets": [other], "terminal": True})
+
     def scan_deal_control(self) -> None:
-        """logs/control/deal/<ts>-accept.json {"offer_id"} — the advisor relays the player's `@urza accept` of a
-        seat's counter. The counter's terms are the runner's own memory (deal_answer, checkpointed); a match
-        strikes the deal (by = the player) and the seat confirms it aloud (deal-with-you); an unknown or expired
-        offer is noted. Every file is consumed; one caught mid-write (unparseable, under two seconds old) waits."""
+        """logs/control/deal/<ts>-accept|refuse.json {"offer_id"} — the advisor relays the player's `@urza accept` (or
+        `no`) of a seat's counter or of a seat's own offer. The terms are the runner's own memory (deal_answer /
+        deal_proposal, checkpointed); an accept strikes the deal (by = the player) and the seat confirms it aloud
+        (deal-with-you); a refusal is a `refused` ledger record and a deal-refused note to the seat; an unknown or
+        expired offer is noted. Every file is consumed; one caught mid-write (unparseable, under two seconds old) waits."""
         d = self.logs / "control" / DEAL_CONTROL_DIR
         try:
-            files = sorted(d.glob("*-accept.json"))
+            files = sorted(list(d.glob("*-accept.json")) + list(d.glob("*-refuse.json")))
         except OSError:
             return
         for f in files:
@@ -433,13 +458,20 @@ class EventsMixin:
                 self.record("noted", kind="deal", why=f"unreadable accept file {f.name}: dropped")
                 continue
             oid = str(body.get("offer_id") or "")
+            action = "refuse" if f.name.endswith("-refuse.json") else "accept"
             c = self._deal_counters_map().pop(oid, None)
             turn = self._last_snapshot.get("turn")
             if not c:
-                self.record("noted", kind="deal", why=f"accept for an unknown or expired counter: {oid or '(no offer_id)'}", offer_id=oid or None)
+                self.record("noted", kind="deal", why=f"{action} for an unknown or expired offer: {oid or '(no offer_id)'}", offer_id=oid or None)
                 continue
             a, b = (int(x) for x in c["between"])
             terms = c.get("deal") or {}
+            if action == "refuse":
+                t = self._turn_int(turn)
+                self._ledger("refused", (a, b), by=self.human_seat, deal=terms, offer_id=oid, turn=t)
+                if c.get("proposal"):
+                    self._deal_note(a, {"kind": "deal-refused", "between": [a, b], "by": self.human_seat, "deal": dict(terms), "offer_id": oid, "turn": t})
+                continue
             self.strike_deal(a, b, terms.get("kind", "truce"), turn, by=self.human_seat, rounds=terms.get("rounds"),
                              until_turn=terms.get("until_turn"), offer_id=oid, source="player")
             if a != self.human_seat and self.library_for_seat(a) and self.barks_mode != "off" and not self.final_locked:

@@ -168,7 +168,7 @@ class ADealFromTheSeat(_DealCase):
         self.r.scan_deal_control()
         self.assertEqual(sorted(f.name for f in d.iterdir()), ["3-accept.json"])
         whys = [r["why"] for r in self._records("noted", "deal")]
-        self.assertIn("accept for an unknown or expired counter: nope", whys)
+        self.assertIn("accept for an unknown or expired offer: nope", whys)
         self.assertTrue(any(w.startswith("unreadable accept file 2-accept.json") for w in whys), whys)
         self.assertEqual(self.r._deals, {})
 
@@ -427,3 +427,63 @@ class TheWordings(unittest.TestCase):
                         self.assertIn("Player One", t, f"{lib}/{pid}: spoken to the player")
                     self.assertNotIn("{", t, "fixed lines: no fills")
             self.assertEqual(sum(1 for p in ph.values() if p["category"] == "deal"), 6)
+
+
+class ASeatsOwnOffer(_DealCase):
+    """Ben, 2026-09-16: a seat's DEAL record with "propose" — the `offer` ledger record, the deal line spoken to the
+    party (state, terminal), an offer to the player remembered until the advisor's accept/refuse file."""
+
+    def _propose(self, seat, to, terms, oid, turn=3):
+        self._game({"seat": seat, "turn": turn, "type": "DEAL", "deal": {"offer_id": oid, "propose": True, "with": to, "terms": terms}})
+
+    def test_seat_to_seat_the_offer_is_spoken_and_the_answer_strikes_it(self):
+        self.r.rng.random = lambda: 0.99                              # the generic wording, not the named take
+        terms = {"kind": "truce", "rounds": 2}
+        self._propose(1, 2, terms, "p1")
+        self.assertEqual([(x["event"], x["between"], x["by"], x["deal"], x["offer_id"]) for x in self._ledger()], [("offer", [1, 2], 1, terms, "p1")])
+        q = [x for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual([(x["stock"], x["library"], x["seat"], x["source"], x["ctx"]["targets"], x["ctx"].get("terminal")) for x in q],
+                         [("deal", "harry", 1, "brain", [2], True)], "the seat asks the party, never rolled; the voice chain's small-talk truce does not answer it")
+        self.assertEqual(self.r._deal_counters, {}, "a seat answers a seat: nothing waits on the player")
+        self.r.queue.clear()
+        self._game({"seat": 1, "turn": 3, "say": "deal", "source": "model", "answer": {"chosenId": 0}})
+        self.assertEqual([x for x in self.r.queue if x["kind"] == "bark"], [], "the say beside the proposal stays quiet")
+        self.assertIn("the DEAL answer already spoke (deal)", [x["why"] for x in self._records("skipped", "bark")])
+        self._deal_record(2, True, terms=terms, with_=1, offer_id="p1")
+        self.assertEqual(self.r._deals[(1, 2)]["kind"], "truce")
+        self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"]); self.assertEqual([n["kind"] for n in self._notes(2)], ["deal-struck"])
+        self.assertEqual(self._seat_lines(), [("deal-with-you", "bill/table", 2)])
+
+    def test_an_offer_to_the_player_waits_for_the_typed_answer(self):
+        self.r.rng.random = lambda: 0.99
+        terms = {"kind": "alliance", "until_turn": 9}
+        self._propose(2, 0, terms, "p2")
+        self.assertEqual(self.r._deal_counters, {"p2": {"between": [2, 0], "deal": terms, "turn": 4, "proposal": True}}, "a turn longer than a counter: the player is not at a window")
+        self.assertEqual(self._seat_lines(), [("deal", "bill", 2)])
+        self.r.queue.clear()
+        d = self.logs / "control" / "deal"; d.mkdir(parents=True)
+        (d / "1700000000123-refuse.json").write_text(json.dumps({"offer_id": "p2"}))
+        self.r.scan_deal_control()
+        self.assertEqual(self.r._deal_counters, {}); self.assertEqual(self.r._deals, {})
+        self.assertEqual([(x["event"], x["between"], x["by"]) for x in self._ledger()][-1], ("refused", [2, 0], 0))
+        self.assertEqual(self._notes(2)[-1], {"kind": "deal-refused", "between": [2, 0], "by": 0, "deal": terms, "offer_id": "p2", "turn": 3})
+        self.assertEqual(self._seat_lines(), [], "a refusal is not answered aloud")
+        self._propose(2, 0, {"kind": "truce", "rounds": 1}, "p3")
+        self.r.queue.clear()
+        (d / "1700000000456-accept.json").write_text(json.dumps({"offer_id": "p3"}))
+        self.r.scan_deal_control()
+        self.assertEqual(self.r._deals[(0, 2)]["kind"], "truce")
+        self.assertEqual(self._ledger("struck")[-1]["by"], 0)
+        self.assertEqual(self._seat_lines(), [("deal-with-you", "bill/table", 2)])
+        self.assertEqual(sorted(p.name for p in d.iterdir()), [], "both files consumed")
+
+    def test_the_executive_answering_the_offer_leaves_nothing_for_the_player_to_type(self):
+        self.r.rng.random = lambda: 0.99
+        terms = {"kind": "truce", "rounds": 1}
+        self._propose(1, 0, terms, "p4")
+        self.assertIn("p4", self.r._deal_counters)
+        self._deal_record(0, True, terms=terms, with_=1, offer_id="p4")
+        self.assertEqual(self.r._deals[(0, 1)]["kind"], "truce")
+        self.assertNotIn("p4", self.r._deal_counters)
+        self.r.lapse_deals(5)
+        self.assertEqual(self._ledger("expired"), [], "nothing expires: it was answered")

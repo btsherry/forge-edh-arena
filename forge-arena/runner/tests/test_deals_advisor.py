@@ -279,7 +279,7 @@ class DealTests(unittest.TestCase):
 
     def test_counter_accept_and_refuse_write_control_files_and_lapse_at_turn_end(self):
         self.ask("@urza accept")
-        self.assertIn("[r2-t7 · table] no counter from Urza is pending", self.panel())
+        self.assertIn("[r2-t7 · table] no counter or offer from Urza is pending", self.panel())
         self.assertFalse(self.r._deal_control.exists())
         oid = self.offer()
         self.game_line(seat=1, turn=7, type="DEAL", deal={"offer_id": oid, "accept": False, "with": 0,
@@ -314,7 +314,7 @@ class DealTests(unittest.TestCase):
         self.assertIn(f"\n[{self.lbl(10)} · table] Selvala's counter lapsed\n", self.panel())
         self.assertEqual(self.r._offers[oid3]["status"], "counter-lapsed")
         self.ask("@selvala accept")
-        self.assertIn(f"[{self.lbl(10)} · table] no counter from Selvala is pending", self.panel())
+        self.assertIn(f"[{self.lbl(10)} · table] no counter or offer from Selvala is pending", self.panel())
 
     def test_executive_answer_for_the_player_prints_as_you(self):
         self.game_line(seat=0, turn=7, type="DEAL", deal={"offer_id": "1-1-0", "accept": True, "with": 1, "terms": {"kind": "truce", "rounds": 1}})
@@ -398,3 +398,69 @@ class DealTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SeatOffers(unittest.TestCase):
+    """Ben, 2026-09-16: a seat's own offer, from its DEAL record with "propose". Seat to seat: one table line.
+    To the player: the panel line with the typed answer, remembered like a counter, Joshua's assessment at once."""
+    setUp, tearDown = DealTests.setUp, DealTests.tearDown
+    snapshot, ask, panel, records, game_line, ledger_line, lbl = (DealTests.snapshot, DealTests.ask, DealTests.panel, DealTests.records,
+                                                                  DealTests.game_line, DealTests.ledger_line, DealTests.lbl)
+
+    def _propose(self, seat, to, terms, oid, turn=7, text=None):
+        deal = {"offer_id": oid, "propose": True, "with": to, "terms": terms}
+        if text:
+            deal["text"] = text
+        self.game_line(seat=seat, turn=turn, type="DEAL", deal=deal)
+        self.r._deal_tick()
+
+    def test_a_seat_offering_another_seat_is_one_table_line(self):
+        self._propose(1, 2, {"kind": "truce", "rounds": 2}, "p-1-2", text="we both lose to Giada")
+        self.assertIn('\n[r2-t7 · table] Urza offers Purphoros truce, 2 turns — "we both lose to Giada"\n', self.panel())
+        self.assertEqual(self.r._offers, {})
+        self.r._deal_tick()
+        self.assertEqual(self.panel().count("Urza offers"), 1, "read once")
+        self.assertEqual(self.records("deal")[-1]["event"], "seat-offer")
+
+    def test_a_seat_offering_the_player_is_answered_in_the_chat_and_assessed_at_once(self):
+        self.r.brain.reply = "Take it: Purphoros cannot race you and Urza is the one to fear."
+        self._propose(2, 0, {"kind": "alliance", "until_turn": 10}, "p-2-0", text="Urza is the threat")
+        self.assertIn('\n[r2-t7 · Purphoros] offers you alliance until turn 10 — "Urza is the threat" (@purphoros accept/no)\n', self.panel())
+        off = self.r._offers["p-2-0"]
+        self.assertEqual((off["status"], off["from"], off["counter_turn"], off["deal"]), ("proposed", 2, 8, {"kind": "alliance", "until_turn": 10}))
+        self.assertIn("TABLE DEAL: Purphoros OFFERS you alliance until turn 10 (unanswered", self.r.brain.prompts[-1], "Joshua assesses the offer: state, no dice")
+        self.assertIn("[r2-t7 · color] Take it:", self.panel())
+        self.ask("@purphoros accept")
+        files = sorted(self.r._deal_control.iterdir())
+        self.assertEqual([f.name.endswith("-accept.json") for f in files], [True])
+        self.assertEqual(json.loads(files[0].read_text()), {"offer_id": "p-2-0", "counter": {"kind": "alliance", "until_turn": 10}})
+        self.assertIn("\n[r2-t7 · you → Purphoros] accept the offer: alliance until turn 10\n", self.panel())
+        self.assertEqual(self.r._offers["p-2-0"]["status"], "offer-accepted")
+        self.assertIn("Purphoros's offer of alliance until turn 10 (turn 7): offer-accepted", self.r._deal_facts())
+        # the player's refusal of a second offer is echoed as typed, and the ledger's `refused` (by 0) is not repeated
+        self._propose(1, 0, {"kind": "truce", "rounds": 1}, "p-1-0")
+        self.ask("@urza no")
+        self.assertIn("\n[r2-t7 · you → Urza] refuse the offer\n", self.panel())
+        self.assertEqual([f.name.endswith("-refuse.json") for f in sorted(self.r._deal_control.iterdir())][-1], True)
+        self.ledger_line(turn=7, event="refused", between=[1, 0], by=0, offer_id="p-1-0", deal={"kind": "truce", "rounds": 1})
+        self.r._deal_tick()
+        self.assertNotIn("Urza] refuses", self.panel())
+
+    def test_an_unanswered_offer_lapses_a_turn_later_and_the_executive_answers_its_own(self):
+        self.r.brain.reply = "Noted."
+        self._propose(2, 0, {"kind": "truce", "rounds": 1}, "p-2-0")
+        self.snapshot(8, 2); self.r._deal_tick()
+        self.assertEqual(self.r._offers["p-2-0"]["status"], "proposed", "turn 8: still open")
+        self.snapshot(9, 3); self.r._deal_tick()
+        self.assertEqual(self.r._offers["p-2-0"]["status"], "offer-lapsed")
+        self.assertIn(f"\n[{self.lbl(9)} · table] Purphoros's offer lapsed\n", self.panel())
+        self.ledger_line(turn=9, event="expired", between=[2, 0], by=2, offer_id="p-2-0", deal={"kind": "truce", "rounds": 1})
+        self.r._deal_tick()
+        self.assertNotIn("did not answer", self.panel(), "the lapse was the tick's line")
+        self.ask("@purphoros accept")
+        self.assertIn("no counter or offer from Purphoros is pending", self.panel())
+        self.r._exec_file.parent.mkdir(parents=True, exist_ok=True)
+        self.r._exec_file.write_text(json.dumps({"on": True}))
+        self._propose(1, 0, {"kind": "truce", "rounds": 1}, "p-1-0", turn=9)
+        self.assertIn(f"\n[{self.lbl(9)} · Urza] offers you truce, 1 turn — the Executive answers for you\n", self.panel())
+        self.assertNotIn("p-1-0", self.r._offers)

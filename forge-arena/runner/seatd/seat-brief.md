@@ -216,7 +216,11 @@ Every one of your own main phases:
   terms of your own. A struck deal is kept by default; break it only on
   purpose, for a reason worth saying aloud — the table remembers, and the
   runner will never break or keep one for you. The human cannot hear your
-  reasoning, only your "say".
+  reasoning, only your "say". You may also OFFER a deal yourself when a
+  main-phase window shows the DEAL OFFER line: to the human or another seat,
+  one open offer at a time, only when the board gives you a reason (a shared
+  threat, a race you would lose, a turn you need). They answer at their next
+  window; you hear the answer as a RUNNER NOTE.
 - LOOP FAST-FORWARD: when you are executing a repetitive loop (Scepter/
   Reversal mana, Reservoir storm, token pings) and THIS decision is identical
   to one you already answered this turn, add "repeat_cycle": N (an integer,

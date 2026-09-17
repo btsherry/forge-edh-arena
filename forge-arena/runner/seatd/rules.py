@@ -193,6 +193,48 @@ def validate_deal(raw, pending: dict, turn) -> tuple[dict | None, str]:
             return None, f"counter until_turn must be after turn {turn}"
         clean = {"kind": kind, "until_turn": until}
     return {"offer_id": oid, "accept": False, "counter": clean}, "countered"
+
+
+# Seat-made offers (Ben, 2026-09-16: "seats offering each other and me deals"). A seat may PROPOSE a
+# deal on its own main-phase windows: to any living party (the human at seat 0 included), one open
+# offer at a time, not before turn PROPOSE_MIN_TURN, and PROPOSE_EVERY_TURNS table turns apart. The
+# runner writes the same deal-offer note the advisor writes for the player, and a DEAL record with
+# "propose" so the voice runner (the ledger, the spoken line) and the advisor (the panel) see it.
+PROPOSE_WINDOWS = ("CAST_SPELL", "DECLARE_ATTACKERS")
+PROPOSE_MIN_TURN = 3
+PROPOSE_EVERY_TURNS = 6
+
+
+def deal_propose_line(parties: list[tuple[int, str]]) -> str:
+    """The one prompt line offering the propose key (≤ 70 tokens), naming the living parties."""
+    who = ", ".join(name for _, name in parties)
+    return ('DEAL OFFER (optional, rare — only when the board gives a reason): add "deal": {"propose": '
+            '{"to": <seat>, "kind": "truce|no-target|alliance", "rounds": 1-3} or {..., "until_turn": N}} '
+            f'plus "say": deal. Parties: {who}. One open offer at a time; they answer at their next window.')
+
+
+def validate_proposal(raw, seat: int, alive, turn) -> tuple[dict | None, str]:
+    """The brain's "propose" against the table: {"to", "kind", "rounds"|"until_turn"} -> (clean, why);
+    clean is {"to", "kind", "rounds"} | {"to", "kind", "until_turn"}, None when dropped. `alive` is the
+    set of seats still in the game (the proposer excluded or not — it may never deal with itself)."""
+    if not isinstance(raw, dict):
+        return None, "propose must be an object"
+    to = raw.get("to")
+    if not _is_int(to) or to == seat or to not in set(alive or ()):
+        return None, f"propose.to {to!r} is not another living seat"
+    kind = raw.get("kind")
+    if kind not in DEAL_KINDS:
+        return None, f"propose kind {kind!r} not one of {'/'.join(DEAL_KINDS)}"
+    rounds, until = raw.get("rounds"), raw.get("until_turn")
+    if (rounds is None) == (until is None):
+        return None, "propose needs exactly one of rounds / until_turn"
+    if rounds is not None:
+        if not _is_int(rounds) or not (1 <= rounds <= DEAL_MAX_ROUNDS):
+            return None, f"propose rounds must be 1..{DEAL_MAX_ROUNDS}"
+        return {"to": to, "kind": kind, "rounds": rounds}, "proposed"
+    if not _is_int(until) or not _is_int(turn) or until <= turn:
+        return None, f"propose until_turn must be after turn {turn}"
+    return {"to": to, "kind": kind, "until_turn": until}, "proposed"
 # Windows the offer goes on: casts, reactions (counters), attacks, blocks and target picks.
 # A mulligan, a mode/number/colour pick, a confirm or a pay-unless is procedural.
 SAY_WINDOWS = ("CAST_SPELL", "REACT", "DECLARE_ATTACKERS", "DECLARE_BLOCKERS", "CHOOSE_ENTITY", "CHOOSE_ENTITIES")

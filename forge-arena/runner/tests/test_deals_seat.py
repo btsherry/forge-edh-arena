@@ -426,3 +426,81 @@ class TermsAndNames(unittest.TestCase):
                 else: os.environ[k] = v
         self.assertIn("Purphoros", name); self.assertIn("(seat 3)", name)
         self.assertEqual(r._party_name(0), "Player One (seat 0)")
+
+
+class SeatOffers(unittest.TestCase):
+    """Ben, 2026-09-16: seats offer each other, and the player, deals. The propose key is offered on a
+    main-phase window from turn 3, one open offer at a time, six turns apart; the proposal is a
+    deal-offer note in the other party's mailbox plus a DEAL record with "propose"; the answer comes
+    back as a deal-struck or deal-refused note."""
+
+    def test_the_line_is_offered_from_turn_three_on_main_windows_and_a_proposal_is_written(self):
+        r = make_runner()
+        r.handle(cast(1, turn=2))
+        self.assertNotIn("DEAL OFFER", r.brain.last_prompt, "turn 2: nothing on the board to deal over")
+        r.handle(react(2, turn=5))
+        self.assertNotIn("DEAL OFFER", r.brain.last_prompt, "a reaction window is not the moment")
+        r.brain.script = [{"chosenId": 0, "why": "race", "say": "deal",
+                           "deal": {"propose": {"to": 1, "kind": "truce", "rounds": 2, "text": "we both lose to the Hydra"}}}]
+        r.handle(cast(3, turn=5))
+        p = r.brain.last_prompt
+        self.assertIn('DEAL OFFER (optional, rare — only when the board gives a reason): add "deal": {"propose": {"to": <seat>, '
+                      '"kind": "truce|no-target|alliance", "rounds": 1-3} or {..., "until_turn": N}} plus "say": deal. '
+                      'Parties: Player One (seat 0), seat 1, seat 2. One open offer at a time; they answer at their next window.', p)
+        notes = sorted((r._notes_dir().parent.parent / "seat-1" / "notes").iterdir())
+        self.assertEqual(len(notes), 1)
+        body = json.loads(notes[0].read_text())
+        oid = body["offer_id"]
+        self.assertTrue(notes[0].name.endswith("-deal-offer.json") and oid.endswith("-3-1"), notes[0].name)
+        self.assertEqual({k: body[k] for k in ("kind", "from", "to", "deal", "text", "turn")},
+                         {"kind": "deal-offer", "from": 3, "to": 1, "deal": {"kind": "truce", "rounds": 2}, "text": "we both lose to the Hydra", "turn": 5})
+        self.assertEqual(deal_rows(r)[-1]["deal"], {"offer_id": oid, "propose": True, "with": 1, "terms": {"kind": "truce", "rounds": 2},
+                                                    "text": "we both lose to the Hydra"})
+        self.assertEqual(r._mine(), {oid: {"to": 1, "turn": 5}})
+        self.assertEqual(r.records[-1][3].get("say"), "deal", "the say rides the decision record; the voice runner speaks the DEAL")
+        r.handle(cast(4, turn=5))
+        self.assertNotIn("DEAL OFFER", r.brain.last_prompt, "one open offer at a time")
+        r.handle(cast(5, turn=7))
+        self.assertEqual(r._mine(), {}, "unanswered for a turn: forgotten (the other side lapsed it)")
+        self.assertIn("went unanswered", "\n".join(r.log_lines))
+        self.assertNotIn("DEAL OFFER", r.brain.last_prompt, "two turns on: the cooldown holds")
+        r.handle(cast(6, turn=11))
+        self.assertIn("DEAL OFFER", r.brain.last_prompt, "six turns on: it may offer again")
+
+    def test_a_proposal_off_its_window_or_malformed_is_dropped_with_a_log_line(self):
+        r = make_runner()
+        r.brain.script = [{"chosenId": 0, "deal": {"propose": {"to": 1, "kind": "truce", "rounds": 1}}}]
+        r.handle(react(1, turn=5))
+        self.assertEqual(deal_rows(r), []); self.assertEqual(r._mine(), {})
+        self.assertIn("dropped: not offered on this window", "\n".join(r.log_lines))
+        r.brain.script = [{"chosenId": 0, "deal": {"propose": {"to": 3, "kind": "truce", "rounds": 1}}}]
+        r.handle(cast(2, turn=5))
+        self.assertIn("dropped: propose.to 3 is not another living seat", "\n".join(r.log_lines))
+        self.assertEqual(deal_rows(r), [])
+        alive = {0, 1, 2}
+        self.assertEqual(rules.validate_proposal({"to": 0, "kind": "alliance", "until_turn": 9}, 3, alive, 5),
+                         ({"to": 0, "kind": "alliance", "until_turn": 9}, "proposed"))
+        self.assertEqual(rules.validate_proposal({"to": 0, "kind": "alliance", "until_turn": 5}, 3, alive, 5)[0], None)
+        self.assertEqual(rules.validate_proposal({"to": 1, "kind": "bribe", "rounds": 1}, 3, alive, 5)[0], None)
+        self.assertEqual(rules.validate_proposal({"to": 1, "kind": "truce", "rounds": 4}, 3, alive, 5)[0], None)
+        self.assertEqual(rules.validate_proposal({"to": 1, "kind": "truce", "rounds": 1, "until_turn": 9}, 3, alive, 5)[0], None)
+        self.assertEqual(rules.validate_proposal({"to": 1, "kind": "truce"}, 3, alive, 5)[0], None)
+
+    def test_the_answer_comes_back_as_a_note_and_a_stale_offer_is_dropped(self):
+        r = make_runner()
+        r._mine()["1000-3-1"] = {"to": 1, "turn": 5}
+        note(r, "deal-refused", 1001, between=[1, 3], by=1, deal={"kind": "truce", "rounds": 2}, offer_id="1000-3-1", turn=5)
+        r.handle(cast(1, turn=5))
+        self.assertIn("RUNNER NOTE: seat 1 refused your offer of a truce.", r.brain.last_prompt)
+        self.assertEqual(r._mine(), {})
+        r._mine()["1002-3-2"] = {"to": 2, "turn": 5}
+        note(r, "deal-struck", 1003, between=[2, 3], deal={"kind": "alliance", "rounds": 1, "until_turn": 9}, offer_id="1002-3-2", turn=5)
+        r.handle(cast(2, turn=5))
+        self.assertIn("you have an ALLIANCE with seat 2", r.brain.last_prompt)
+        self.assertEqual(r._mine(), {}, "taken: the seat may offer again after the cooldown")
+        offer(r, 1004, "1004-0-3")                                   # the player's offer, from turn 5...
+        r.handle(cast(3, turn=8))                                    # ...read on turn 8
+        self.assertEqual(r._pending(), {})
+        self.assertNotIn("Player One (seat 0) offers", r.brain.last_prompt)
+        self.assertIn("an offer from turn 5 is stale on turn 8", "\n".join(r.log_lines))
+        self.assertEqual(notes_left(r), [])

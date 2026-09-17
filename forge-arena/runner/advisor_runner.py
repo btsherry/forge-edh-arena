@@ -1198,25 +1198,27 @@ class AdvisorRunner:
         {"offer_id", "counter"}; the voice runner strikes or closes the deal (lane A2)."""
         name = self._deal_name(seat)
         turn = self._turn_now()
-        open_ = [(oid, o) for oid, o in self._offers.items() if o["seat"] == seat and o["status"] == "countered"]
+        open_ = [(oid, o) for oid, o in self._offers.items() if o["seat"] == seat and o["status"] in ("countered", "proposed")]
         if not open_:
-            self._panel("table", f"no counter from {name} is pending", turn)
+            self._panel("table", f"no counter or offer from {name} is pending", turn)
             return
         oid, off = open_[-1]
-        body = {"offer_id": oid, "counter": off["counter"]}
+        proposal = off["status"] == "proposed"
+        body = {"offer_id": oid, "counter": off["counter"] or off["deal"]}
         try:
             self._write_atomic(self._deal_control / f"{int(time.time() * 1000)}-{action}.json", body)
         except OSError as e:
             self._panel("table", f"could not record your answer ({e.__class__.__name__}) — try again", turn)
             return
-        off["status"] = "counter-accepted" if action == "accept" else "counter-refused"
+        what = "offer" if proposal else "counter"
+        off["status"] = f"{what}-accepted" if action == "accept" else f"{what}-refused"
         if action == "accept":
             off["deal"] = dict(off["counter"] or off["deal"])
             off["until_turn"] = off["deal"].get("until_turn")
-            self._panel(f"you → {name}", f"accept the counter: {deal_terms_text(off['deal'])}", turn)
+            self._panel(f"you → {name}", f"accept the {what}: {deal_terms_text(off['deal'])}", turn)
         else:
-            self._panel(f"you → {name}", "refuse the counter", turn)
-        self._record("deal", {"event": f"counter-{action}", "offer_id": oid, "seat": seat, "turn": turn, "counter": off["counter"]})
+            self._panel(f"you → {name}", f"refuse the {what}", turn)
+        self._record("deal", {"event": f"{what}-{action}", "offer_id": oid, "seat": seat, "turn": turn, "counter": off["counter"] or off["deal"]})
 
     def _tail_jsonl(self, path: Path, attr: str) -> list[dict]:
         """New complete JSON lines since the cursor in `attr`; a shrunken file (arena-stop
@@ -1263,16 +1265,20 @@ class AdvisorRunner:
             if off["status"] == "open" and not off.get("nudged") and time.time() - float(off.get("ts") or time.time()) > OFFER_NUDGE_S:
                 off["nudged"] = True                                     # game 50: a seat answers at its next window, which may be its own turn
                 self._panel("table", f"{off['who']} hasn't had a decision yet — the answer comes at the next window", now)
-            if off["status"] == "countered" and isinstance(off.get("counter_turn"), int) and off["counter_turn"] < now:
-                off["status"] = "counter-lapsed"
-                self._panel("table", f"{off['who']}'s counter lapsed", now)
-                self._record("deal", {"event": "counter-lapsed", "offer_id": oid, "seat": off["seat"], "turn": now})
+            if off["status"] in ("countered", "proposed") and isinstance(off.get("counter_turn"), int) and off["counter_turn"] < now:
+                what = "offer" if off["status"] == "proposed" else "counter"
+                off["status"] = f"{what}-lapsed"
+                self._panel("table", f"{off['who']}'s {what} lapsed", now)
+                self._record("deal", {"event": f"{what}-lapsed", "offer_id": oid, "seat": off["seat"], "turn": now})
 
     def _on_deal_record(self, r: dict, deal: dict) -> None:
         """A seat's `deal` answer from game.jsonl (lane A1): accept / refuse / counter."""
         seat, turn, oid = r.get("seat"), r.get("turn"), deal.get("offer_id")
         terms = deal.get("terms") if isinstance(deal.get("terms"), dict) else {}
         counter = deal.get("counter") if isinstance(deal.get("counter"), dict) else None
+        if deal.get("propose"):
+            self._on_seat_offer(r, deal, seat, turn, oid, terms)
+            return
         if seat == 0:
             # Executive (Ben's decision 5): the advisor answered a seat's offer on the player's behalf
             other = self._deal_name(deal.get("with"))
@@ -1315,6 +1321,39 @@ class AdvisorRunner:
         self._panel(name, body, turn)
         self._record("deal", {"event": "answer", "offer_id": oid, "seat": seat, "turn": turn,
                               "accept": bool(deal.get("accept")), "counter": counter, "terms": terms})
+
+    def _on_seat_offer(self, r: dict, deal: dict, seat, turn, oid, terms: dict) -> None:
+        """A seat's OWN offer (Ben, 2026-09-16), from its DEAL record. To another seat: one panel line, the table's
+        business. To the player: the panel line with the typed answer, remembered like a counter (`@urza accept` /
+        `@urza no` -> the control file the voice runner strikes or refuses from), and Joshua's assessment at once —
+        it is state, not colour. Executive holding seat 0 answers it itself through the seat-0 runner."""
+        try:
+            seat, other = int(seat), int(deal.get("with"))
+        except (TypeError, ValueError):
+            return
+        if not isinstance(oid, str) or (oid, "offer") in self._deal_seen:
+            return
+        self._deal_seen.add((oid, "offer"))
+        name = self._deal_name(seat)
+        terms = dict(terms or {"kind": "truce", "rounds": 1})
+        text = str(deal.get("text") or "").strip()
+        said = f' — "{text[:30]}"' if text else ""                                     # the panel line is capped; the words are a flavour
+        if other != 0:
+            self._panel("table", f"{name} offers {self._deal_name(other)} {deal_terms_text(terms)}{said}", turn)
+            self._record("deal", {"event": "seat-offer", "offer_id": oid, "seat": seat, "to": other, "turn": turn, "deal": terms})
+            return
+        if self._executive_wanted():
+            self._panel(name, f"offers you {deal_terms_text(terms)}{said} — the Executive answers for you", turn)
+            self._record("deal", {"event": "seat-offer", "offer_id": oid, "seat": seat, "to": 0, "turn": turn, "deal": terms, "executive": True})
+            return
+        handle = self._deal_handles.get(seat, str(seat))
+        t = turn if isinstance(turn, int) else self._turn_now()
+        self._offers[oid] = {"seat": seat, "who": name, "from": seat, "turn": t, "deal": terms, "offered": dict(terms), "text": text,
+                             "status": "proposed", "counter": None, "counter_turn": (t + 1) if isinstance(t, int) else None,
+                             "until_turn": terms.get("until_turn"), "ts": time.time(), "nudged": True}
+        self._panel(name, f"offers you {deal_terms_text(terms)}{said} (@{handle} accept/no)", turn)
+        self._record("deal", {"event": "seat-offer", "offer_id": oid, "seat": seat, "to": 0, "turn": turn, "deal": terms, "text": text})
+        self._assess_deal(f"{name} OFFERS you {deal_terms_text(terms)} (unanswered — you accept or refuse in the chat)", turn)
 
     def _on_ledger_record(self, r: dict) -> None:
         """The voice runner's ledger (lane A2): struck / refused / expired / lapsed / broken
@@ -1367,11 +1406,12 @@ class AdvisorRunner:
             if off is not None:
                 off["status"] = "lapsed"
         elif ev == "expired":
-            self._panel("table", f"{name} did not answer", turn)
+            if off is None or off.get("from") is None:
+                self._panel("table", f"{name} did not answer", turn)          # a seat's own offer lapsing was the tick's line
             if off is not None and off["status"] == "open":
                 off["status"] = "expired"
         elif ev == "refused":
-            if (oid, "answer") not in self._deal_seen:
+            if (oid, "answer") not in self._deal_seen and r.get("by") != 0:     # the player's own refusal was echoed as typed
                 self._panel(name, "refuses", turn)
                 if off is not None:
                     off["status"] = "refused"
@@ -1389,7 +1429,10 @@ class AdvisorRunner:
             return "no deals offered or struck so far."
         parts = []
         for oid, off in list(self._offers.items())[-6:]:
-            s = f"{deal_terms_text(off.get('offered') or off['deal'])} with {off['who']} (offered turn {off['turn']}): {off['status']}"
+            if off.get("from") is not None:
+                s = f"{off['who']}'s offer of {deal_terms_text(off.get('offered') or off['deal'])} (turn {off['turn']}): {off['status']}"
+            else:
+                s = f"{deal_terms_text(off.get('offered') or off['deal'])} with {off['who']} (offered turn {off['turn']}): {off['status']}"
             if off.get("counter") and off["status"] == "countered":
                 s += f", their counter {deal_terms_text(off['counter'])}"
             if off.get("until_turn") is not None and off["status"] in ("accepted", "struck"):
@@ -1412,7 +1455,8 @@ class AdvisorRunner:
         """On a deal the player struck or had broken, Joshua adds ONE assessment line through the
         colour path (a `color` record the voice runner speaks) — every time (Ben, game 50: the
         dice made the advisor absent at the moment the player acts on his read; DEAL_COLOR_P is
-        1.0 and kept only as the knob). Never for the offer itself — that is relayed, not answered."""
+        1.0 and kept only as the knob). Never for the player's own offer — that is relayed, not answered;
+        a SEAT's offer to the player is assessed as it arrives (_on_seat_offer): the player must decide."""
         if DEAL_COLOR_P < 1.0 and self.deal_rng.random() >= DEAL_COLOR_P:
             return
         board = self._board_brief()

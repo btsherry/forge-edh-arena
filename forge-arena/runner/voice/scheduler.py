@@ -114,7 +114,8 @@ DEAL_MAX_ROUNDS = 3                                           # §2: "for one tu
 DEAL_TURNS = 8            # the OLD memory (a truce remembered for two rounds): an int in an old checkpoint upgrades to struck + DEAL_TURNS
 DEALS_LEDGER = "deals.jsonl"                                  # logs/deals.jsonl, archived by scripts/arena-stop.sh
 DEAL_CONTROL_DIR = "deal"                                     # logs/control/deal/<ts>-accept.json {"offer_id"} — the player accepts a seat's counter (the advisor writes it)
-DEAL_NOTE_KINDS = ("deal-struck", "deal-broken", "deal-lapsed")
+DEAL_NOTE_KINDS = ("deal-struck", "deal-broken", "deal-lapsed", "deal-refused")
+DEAL_PROPOSE_LINE = "deal"                                    # a seat's own offer, spoken to the party (address-swapped: "Deal, Urza?")
 DEAL_LINES = frozenset({"deal-with-you", "no-deal-with-you", "counter-offer", "deal-over", "you-broke-it", "i-broke-it"})
 DEAL_ANSWER_LINE = {"accept": "deal-with-you", "refuse": "no-deal-with-you", "counter": "counter-offer"}      # the seat, to the player (table sub-library)
 JOSHUA_DEAL_LINE = {"accept": "joshua-deal-yes", "refuse": "joshua-deal-no", "counter": "joshua-deal-counter"}   # Executive: Joshua is the player at the table
@@ -666,6 +667,7 @@ class SchedulerMixin:
         chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
         ungoverned = (pid in MULL_LINE.values() or (source == "patter" and p == 1.0) or source == "procedural"
                       or pid in DEAL_ANSWER_LINE.values() or pid in JOSHUA_DEAL_LINE.values()    # a deal's answer is state (game 51: a 4 % miss)
+                      or (pid == DEAL_PROPOSE_LINE and source == "brain")                          # ...and so is a seat's own offer
                       or (pid == "deal-over" and p == 1.0))                                       # ...and so is its end for the player (game 51: p=0.93 lost it)
         # a mulligan is always worth the breath; so is breaking a silence; so is a seat narrating its own turn
         # ("land, go", "no blocks" — game 48: thirty of them died to the budget while filler lived; the seat guard,

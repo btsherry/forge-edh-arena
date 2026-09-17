@@ -208,3 +208,46 @@ for the target's own offers → a panel line, no note.
 `deal-over`, `you-broke-it`, `i-broke-it`. **Joshua (stock, 3 wordings each):** `joshua-deal-yes`,
 `joshua-deal-no`, `joshua-deal-counter` (Executive mode only). Chains: `deal-with-you` → bystander `hah`/`tsk`
 atom and `youre-next` at 0.35; `you-broke-it` → bystander `laugh`.
+
+
+---
+
+## 12. Seat-made offers (built 2026-09-16, after Ben: "seats offering each other and me deals")
+
+The plan above gave the seats the answering half only. This section adds the proposing half; everything
+downstream (answers, the ledger, notes, lapse, break, the spoken answers) is unchanged.
+
+**Seat side (`runner/seatd`).** On a `CAST_SPELL` or `DECLARE_ATTACKERS` window of its own turn, from turn
+`PROPOSE_MIN_TURN` (3), with no offer of its own open and none pending against it, and at least
+`PROPOSE_EVERY_TURNS` (6) table turns after its last, the prompt carries one line
+(`rules.deal_propose_line`) naming the living parties. The brain may answer
+`"deal": {"propose": {"to": n, "kind": "truce|no-target|alliance", "rounds": 1-3 | "until_turn": N, "text"?: "…"}}`
+plus `"say": "deal"`. `rules.validate_proposal` checks the party (another living seat, seat 0 included), the
+kind and exactly one duration. The runner writes the SAME `deal-offer` note the advisor writes for the player
+into `mailbox/seat-<n>/notes/` (`from` = the seat), records
+`{"type": "DEAL", "deal": {"offer_id": "<ts>-<from>-<to>", "propose": true, "with": n, "terms": {...}, "text"?}}`
+in game.jsonl, and remembers its one open offer (`_my_offers`), forgotten a turn later or on the answer's
+note. New note kind `deal-refused` ("Urza refused your offer of a truce."). Offer notes two turns old are
+dropped at ingest (a note for seat 0 waits for the Executive; stale by then). Seat 0 never proposes.
+
+**Voice side (`runner/voice`).** `deal_answer` routes `propose` to `deal_proposal`: an `offer` ledger record;
+an offer to the player is remembered beside the counters (`_deal_counters`, `proposal: true`, one turn
+longer) so the advisor's control file answers it; the seat speaks the `deal` line to the party
+(address-swapped "Deal, Urza?"), ungoverned (`DEAL_PROPOSE_LINE`), terminal — the voice chain's small-talk
+truce never answers a real offer. The `say: deal` beside it stays quiet (`DEAL_SAY_TWINS`). The control
+directory now takes `<ts>-refuse.json` too: `refused` (by 0) in the ledger and a `deal-refused` note to the
+seat. A DEAL answer from seat 0 (the Executive) pops the remembered offer so nothing expires twice.
+
+**Advisor side (`runner/advisor_runner.py`).** `_on_seat_offer`: seat to seat → one `[table]` line
+("Urza offers Purphoros truce, 2 turns"). Seat to player → `[Purphoros] offers you alliance until turn 10 —
+"…" (@purphoros accept/no)`, an `_offers` entry with status `proposed` (lapses at the end of the following
+turn: "Purphoros's offer lapsed"), and Joshua's assessment at once (no dice — state). `@purphoros accept` /
+`@purphoros no` answer a proposal as they answer a counter (statuses `offer-accepted` / `offer-refused`,
+control file `<ts>-accept|refuse.json`). Executive on → "the Executive answers for you", no entry: the
+seat-0 runner answers the note itself. The player's own `refused` ledger record is not echoed; a proposal's
+`expired` record is not repeated after the tick's lapse line.
+
+**Tests:** `SeatOffers` in test_deals_seat.py, `ASeatsOwnOffer` in test_deals_voice.py, `SeatOffers` in
+test_deals_advisor.py. **Not rendered:** kind-specific offer wordings; the generic/named `deal` line serves.
+**Next:** prove it in a live game (a seat proposes, another answers; a seat proposes to Ben, he answers in
+the chat); the Yes/No pane (stack rank #13) is the answer surface for later.
