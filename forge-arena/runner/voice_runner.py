@@ -299,7 +299,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         # default seats until the game log names all three AI decks
         self._human_deck: str = os.environ.get("ARENA_HUMAN_DECK") or ""
         self._seat_decks: dict[int, str] = seat_decks_from_roster(self._human_deck, os.environ.get("ARENA_SEAT_DECKS", ""))
-        self.seat_libraries = load_seat_libraries(seat_decks=self._seat_decks or None)
+        self.seat_libraries = load_seat_libraries(seat_decks=self._seat_decks or None, exclude_seat=self.human_seat)
         self.game_changers: dict[int, set[str]] = self._table_game_changers()
         self.address = load_address()
         self._who: dict[int, str] = self._table_who()
@@ -926,7 +926,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             self._table_confirmed = True
             if ai != self._seat_decks:
                 self._seat_decks = ai
-                self.seat_libraries = load_seat_libraries(seat_decks=ai)
+                self.seat_libraries = load_seat_libraries(seat_decks=ai, exclude_seat=self.human_seat)
             self._human_deck = decks.get(self.human_seat) or self._human_deck
             self.game_changers = self._table_game_changers()
             self._who = self._table_who()

@@ -21,7 +21,7 @@ sys.path.insert(0, str(RUNNER / "voice"))
 import build_stock as bs  # noqa: E402
 
 VOICES = RUNNER / "voice" / "stock" / "voices"
-LIBS = ("harry", "bill", "lily")
+LIBS = ("harry", "bill", "lily", "joshua")      # joshua: the fourth seat's voice for all-AI tables (Ben, 2026-09-16)
 TAG_RE = re.compile(r"^\[[a-z ]+\] \S")
 
 
@@ -89,7 +89,7 @@ class SharedVocabulary(unittest.TestCase):
             self.assertEqual((b["fx"], b["glitch"], b["rate"]), ("none", "off", 22050), f"{lib}: a seat voice stays clean and small")
             self.assertEqual((b["gain"], b["target_lufs"], b["true_peak_max"]), ("library", -24.0, -1.0), f"{lib}: library-relative gain to the Joshua level")
             self.assertTrue(m.get("temperament"), f"{lib}: the advisor's guide quotes the temperament")
-        self.assertEqual(seats, {1, 2, 3})
+        self.assertEqual(seats, {0, 1, 2, 3}, "joshua sits at seat 0 — voiced only when no human does")
 
 
 class RenderedAudio(unittest.TestCase):
@@ -232,3 +232,32 @@ class Builder(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheFourthVoice(unittest.TestCase):
+    """Ben, 2026-09-16: the fourth seat gets Joshua. His library sits at seat 0 and is assigned only when no human
+    sits there; on a human table seat 0 is never voiced and the three seat voices keep their defaults."""
+
+    def test_the_humans_seat_is_never_voiced_and_all_ai_seats_zero_speaks_as_joshua(self):
+        sys.path.insert(0, str(RUNNER / "voice"))
+        import table as T
+        libs = T.load_libraries(VOICES)
+        self.assertIn("joshua", libs); self.assertEqual(libs["joshua"]["seat"], 0)
+        human = T.assign_voices(libs, None, {}, exclude_seat=0)
+        self.assertEqual(sorted(human), [1, 2, 3], "a human table: three voices, seat 0 silent")
+        self.assertNotIn("joshua", {v["library"] for v in human.values()})
+        allai = T.assign_voices(libs, None, {}, exclude_seat=None)
+        self.assertEqual({s: v["library"] for s, v in allai.items()}, {0: "joshua", 1: "harry", 2: "bill", 3: "lily"},
+                         "game 55: four seats, three libraries doubled Harry; now the fourth is Joshua")
+        by_deck = {"purphoros-god-of-the-forge": "harry"}
+        assigned = T.assign_voices(libs, {1: "urza-lord-high-artificer", 2: "giada-font-of-hope", 3: "purphoros-god-of-the-forge"}, by_deck, exclude_seat=0)
+        self.assertEqual(assigned[3]["library"], "harry", "Ben's deck association still wins")
+        self.assertNotIn(0, assigned)
+
+    def test_joshuas_table_and_card_libraries_cover_the_same_ids(self):
+        for sub in ("table", "cards"):
+            ref = json.loads((VOICES / "harry" / sub / "manifest.json").read_text())["phrases"]
+            j = json.loads((VOICES / "joshua" / sub / "manifest.json").read_text())["phrases"]
+            self.assertEqual(list(j), list(ref), f"{sub}: the same ids in the same order")
+            for pid, ph in j.items():
+                self.assertTrue(ph["text"] and all(TAG_RE.match(t) for t in ph["text"]), f"joshua/{sub}/{pid}")

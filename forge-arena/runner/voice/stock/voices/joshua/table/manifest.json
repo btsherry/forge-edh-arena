@@ -1,0 +1,2353 @@
+{
+ "schema": "arena.voice-stock/1",
+ "library": "joshua/table",
+ "parent": "joshua",
+ "seat": null,
+ "note": "the table sub-library (round 31): procedural self-narration, whole-sentence numbers and named addressing, fired by the voice runner from board events; regenerate with runner/voice/table_lines.py --write",
+ "voice_id": "SBbMtfucc8NAkpyzIRvP",
+ "voice_name": "Joshua - W.O.P.R.",
+ "temperament": "the calm machine: measured, dry, precise, faintly amused; never shouts; short declaratives and the occasional probability. The advisor's voice, seated at the table only when no human sits at seat 0.",
+ "render": {
+  "model": "eleven_v3",
+  "voice_settings": {
+   "stability": 0.5,
+   "speed": 0.92
+  },
+  "formats": [
+   "pcm_24000"
+  ]
+ },
+ "bake": {
+  "rate": 22050,
+  "fx": "none",
+  "glitch": "off",
+  "gain": "library",
+  "target_lufs": -24.0,
+  "true_peak_max": -1.0,
+  "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
+ },
+ "sample_rate": 22050,
+ "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
+ "phrases": {
+  "land-go": {
+   "category": "procedural",
+   "when": "its own turn was a land and nothing else",
+   "text": [
+    "[calmly] Land. Pass.",
+    "[dryly] A land. Nothing else. Proceed.",
+    "[calmly] One land played. Your turn.",
+    "[softly] Land, and I pass."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "pass": {
+   "category": "procedural",
+   "when": "ends its own turn after doing something",
+   "text": [
+    "[calmly] Done. Your turn.",
+    "[dryly] That concludes my turn.",
+    "[calmly] Passing. Over to you.",
+    "[softly] I am finished. Go."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "mana-up": {
+   "category": "procedural",
+   "when": "ends its own turn with mana untapped and cards in hand",
+   "text": [
+    "[calmly] Passing with mana open. Noted.",
+    "[dryly] Mana untapped. Draw your own conclusions.",
+    "[softly] I pass. The mana stays up."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "tapped-out": {
+   "category": "procedural",
+   "when": "ends its own turn tapped out with cards in hand",
+   "text": [
+    "[calmly] Tapped out. Passing.",
+    "[dryly] No mana left. Do as you like.",
+    "[softly] Everything is tapped. Your turn."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "untap-draw": {
+   "category": "procedural",
+   "when": "its own turn begins (an alternative to my-turn)",
+   "text": [
+    "[calmly] Untap. Draw. Begin.",
+    "[dryly] Untap, draw. Evaluating.",
+    "[softly] Untap and draw. Here we go."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "come-on-land": {
+   "category": "procedural",
+   "when": "its own turn begins short on lands",
+   "text": [
+    "[calmly] A land would be useful now.",
+    "[dryly] Land, please. Statistically overdue.",
+    "[softly] Come on. One land."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "thinking": {
+   "category": "procedural",
+   "when": "its own decision has been pending a while",
+   "text": [
+    "[calmly] Computing.",
+    "[dryly] One moment. Options.",
+    "[softly] Thinking. Bear with me."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-creature": {
+   "category": "procedural",
+   "when": "casts a creature (not its commander, not a game changer)",
+   "text": [
+    "[calmly] A creature. Resolving.",
+    "[dryly] Deploying a body.",
+    "[softly] Here is a creature."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-artifact": {
+   "category": "procedural",
+   "when": "casts an artifact",
+   "text": [
+    "[calmly] An artifact. Efficient.",
+    "[dryly] Another component.",
+    "[softly] A small machine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-enchantment": {
+   "category": "procedural",
+   "when": "casts an enchantment",
+   "text": [
+    "[calmly] An enchantment. It stays.",
+    "[dryly] This one persists.",
+    "[softly] An enchantment, then."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-instant": {
+   "category": "procedural",
+   "when": "casts an instant on its own turn",
+   "text": [
+    "[calmly] Instant. Now.",
+    "[dryly] An instant, at this moment.",
+    "[softly] Quick spell."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-sorcery": {
+   "category": "procedural",
+   "when": "casts a sorcery",
+   "text": [
+    "[calmly] Sorcery. Resolving.",
+    "[dryly] A sorcery. Observe.",
+    "[softly] Sorcery speed will do."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-planeswalker": {
+   "category": "procedural",
+   "when": "casts a planeswalker",
+   "text": [
+    "[calmly] Planeswalker. It will help.",
+    "[dryly] A walker. Protect it, I suppose.",
+    "[softly] A planeswalker arrives."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "cast-big": {
+   "category": "procedural",
+   "when": "casts a six-plus mana spell that is not a game changer or its commander",
+   "text": [
+    "[calmly] A large spell. Worth the cost.",
+    "[dryly] Six mana, well spent.",
+    "[softly] Something big."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "in-response": {
+   "category": "procedural",
+   "when": "casts an instant on someone else's turn",
+   "text": [
+    "[calmly] In response.",
+    "[dryly] Before that resolves.",
+    "[calmly] Hold. I respond.",
+    "[softly] One moment. In response."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "poke": {
+   "category": "procedural",
+   "when": "declares a small attack",
+   "text": [
+    "[calmly] A small attack.",
+    "[dryly] Just a poke.",
+    "[softly] A little pressure."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "attack-you": {
+   "category": "procedural",
+   "when": "declares a medium attack at one player",
+   "text": [
+    "[calmly] Attacking you.",
+    "[dryly] You. Attack.",
+    "[softly] This one is for you."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "no-blocks": {
+   "category": "procedural",
+   "when": "it is attacked with nothing untapped to block",
+   "text": [
+    "[calmly] No blocks. I take it.",
+    "[dryly] Nothing to block with. Proceed.",
+    "[softly] No blocks."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "take-it": {
+   "category": "procedural",
+   "when": "takes small combat damage",
+   "text": [
+    "[calmly] I take it.",
+    "[dryly] Acceptable losses.",
+    "[softly] Fine. Taken."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "sure": {
+   "category": "procedural",
+   "when": "lets another player's spell resolve",
+   "text": [
+    "[calmly] Resolves.",
+    "[dryly] Sure.",
+    "[calmly] No response.",
+    "[softly] Go ahead."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hold-on": {
+   "category": "procedural",
+   "when": "something on the stack targets its permanent or itself",
+   "text": [
+    "[calmly] Wait. Which target.",
+    "[dryly] Hold. That is mine.",
+    "[softly] One moment. Mine?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "holding-mana": {
+   "category": "procedural",
+   "when": "sees another seat pass with mana untapped",
+   "text": [
+    "[dryly] Mana up on the pass. Suspicious.",
+    "[calmly] You kept mana open. Noted.",
+    "[softly] Holding something, are we."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "grudge": {
+   "category": "arc",
+   "when": "hit by the same seat for the third time this game",
+   "text": [
+    "[dryly] You again. A pattern.",
+    "[calmly] Third time. I am keeping count.",
+    "[softly] You do favour me."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "again-countered": {
+   "category": "arc",
+   "when": "its third spell countered this game",
+   "text": [
+    "[dryly] Countered again. Consistent.",
+    "[calmly] Third counter. Adjusting.",
+    "[sighs] Again."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "not-again-sweep": {
+   "category": "arc",
+   "when": "the second board wipe of the game hits it",
+   "text": [
+    "[dryly] Another wipe. Efficient of you.",
+    "[calmly] Second reset. Rebuilding.",
+    "[sighs] Not again."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "heads-up": {
+   "category": "arc",
+   "when": "only two players remain and it is one of them",
+   "text": [
+    "[calmly] Two remain. Let us finish.",
+    "[dryly] Just us. Interesting.",
+    "[softly] Down to you and me."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "early-game": {
+   "category": "arc",
+   "when": "its turn begins in the first round",
+   "text": [
+    "[calmly] Early game. Everyone alive.",
+    "[dryly] Turn one. Nothing has gone wrong yet.",
+    "[softly] A quiet start."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "long-game": {
+   "category": "arc",
+   "when": "the game has run past turn fourteen",
+   "text": [
+    "[dryly] This is taking a while.",
+    "[calmly] Turn fourteen and counting.",
+    "[sighs] A long game."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "someone-wins": {
+   "category": "arc",
+   "when": "a board that could end the game next turn",
+   "text": [
+    "[calmly] Someone can win next turn. Act.",
+    "[dryly] Lethal is on the board. Do something.",
+    "[softly] This ends soon unless you move."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "take-the-deal": {
+   "category": "arc",
+   "when": "accepts a truce",
+   "text": [
+    "[calmly] Deal. One turn.",
+    "[dryly] Agreed. For now.",
+    "[softly] Very well. A truce."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "no-deal": {
+   "category": "arc",
+   "when": "refuses a truce",
+   "text": [
+    "[calmly] No deal.",
+    "[dryly] Declined. You are the threat.",
+    "[softly] I think not."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "you-promised": {
+   "category": "arc",
+   "when": "attacked by a seat it had a truce with",
+   "text": [
+    "[calmly] You promised. Logged.",
+    "[dryly] A broken word. Noted.",
+    "[softly] You said you would not."
+   ],
+   "source": "table-arc-2026-09-10"
+  },
+  "keep-seven": {
+   "category": "mulligan",
+   "when": "keeps its opening seven",
+   "text": [
+    "[calmly] Seven. Keeping.",
+    "[dryly] Acceptable hand. Keep.",
+    "[softly] I will keep these."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-six": {
+   "category": "mulligan",
+   "when": "takes its first mulligan",
+   "text": [
+    "[calmly] Mulligan. Six.",
+    "[dryly] Six cards. Fine.",
+    "[softly] Going to six."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-five": {
+   "category": "mulligan",
+   "when": "takes its second mulligan",
+   "text": [
+    "[calmly] Five. Regrettable.",
+    "[dryly] Five cards. The odds shift.",
+    "[sighs] Five."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-to-four": {
+   "category": "mulligan",
+   "when": "takes its third mulligan",
+   "text": [
+    "[calmly] Four. Improbable.",
+    "[dryly] Four. The shuffle disagrees with me.",
+    "[sighs] Four cards."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-pity": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: sympathy",
+   "text": [
+    "[softly] Unlucky start.",
+    "[calmly] A rough opening. It happens.",
+    "[dryly] Condolences on the hand."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-dig": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: suspicion",
+   "text": [
+    "[dryly] Searching for something specific.",
+    "[calmly] Digging. For what, I wonder.",
+    "[softly] Looking for the combo?"
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-screw": {
+   "category": "mulligan",
+   "when": "another seat mulliganed: the mana question",
+   "text": [
+    "[dryly] No lands, then.",
+    "[calmly] Mana troubles. Statistically common.",
+    "[softly] Short on lands?"
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-risky": {
+   "category": "mulligan",
+   "when": "another seat kept a small hand",
+   "text": [
+    "[dryly] Keeping five. Bold.",
+    "[calmly] A small hand. Risky.",
+    "[softly] Five? Brave."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "mull-gloat": {
+   "category": "mulligan",
+   "when": "kept seven while another seat went small",
+   "text": [
+    "[calmly] Seven for me. Enjoy your five.",
+    "[dryly] I kept seven. Just noting.",
+    "[softly] Seven here. Sorry."
+   ],
+   "source": "table-mulligan-2026-09-11"
+  },
+  "loop": {
+   "category": "loop",
+   "when": "sees another seat recast or bounce the same card again — a loop, an engine, not removal",
+   "text": [
+    "[dryly] The same card again. A loop.",
+    "[calmly] Looping. Stop them.",
+    "[softly] Again with that card."
+   ],
+   "source": "table-loop-2026-09-11"
+  },
+  "looping": {
+   "category": "loop",
+   "when": "recasts or bounces its own card again",
+   "text": [
+    "[calmly] Again.",
+    "[dryly] And again. Efficient.",
+    "[softly] Once more."
+   ],
+   "source": "table-loop-2026-09-11"
+  },
+  "table-kill": {
+   "category": "killshot",
+   "when": "the killer, after two or more seats fall at once",
+   "text": [
+    "[calmly] And that is the table.",
+    "[dryly] Everyone, at once. Tidy.",
+    "[calmly] Multiple eliminations. Game over.",
+    "[softly] All of you. Goodbye."
+   ],
+   "source": "table-killshot-2026-09-16"
+  },
+  "all-of-us": {
+   "category": "killshot",
+   "when": "a dying seat, as the table falls together",
+   "text": [
+    "[calmly] All of us. At once.",
+    "[dryly] Well. That is everyone.",
+    "[softly] Together, then.",
+    "[calmly] Simultaneous. Impressive."
+   ],
+   "source": "table-killshot-2026-09-16"
+  },
+  "waiting-on-you": {
+   "category": "heckle",
+   "when": "the human's decision window has been open for a while",
+   "text": [
+    "[calmly] We are waiting on you.",
+    "[dryly] Your decision. Any time.",
+    "[calmly] The table waits.",
+    "[softly] Still your move."
+   ],
+   "source": "table-heckle-2026-09-14"
+  },
+  "still-waiting": {
+   "category": "heckle",
+   "when": "the same window, a good deal later",
+   "text": [
+    "[dryly] Still waiting.",
+    "[calmly] The window remains open.",
+    "[dryly] Any time now.",
+    "[softly] We are patient. Mostly."
+   ],
+   "source": "table-heckle-2026-09-14"
+  },
+  "there-you-are": {
+   "category": "heckle",
+   "when": "the human finally acts after a long wait",
+   "text": [
+    "[calmly] There you are.",
+    "[dryly] Ah. A decision.",
+    "[softly] Welcome back.",
+    "[calmly] Proceeding at last."
+   ],
+   "source": "table-heckle-2026-09-14"
+  },
+  "deal-with-you": {
+   "category": "deal",
+   "when": "accepts the player's offer of a deal (addressed to Player One)",
+   "text": [
+    "[calmly] Deal, Player One. One turn.",
+    "[dryly] Agreed, Player One. For now.",
+    "[calmly] Accepted, Player One.",
+    "[softly] Very well, Player One."
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "no-deal-with-you": {
+   "category": "deal",
+   "when": "refuses the player's offer of a deal (addressed to Player One)",
+   "text": [
+    "[calmly] No deal, Player One.",
+    "[dryly] Declined, Player One. You are the threat.",
+    "[calmly] I must refuse, Player One.",
+    "[softly] Not this time, Player One."
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "counter-offer": {
+   "category": "deal",
+   "when": "answers the player's offer with different terms (addressed to Player One; the terms reach the panel)",
+   "text": [
+    "[calmly] Not those terms, Player One. Try mine.",
+    "[dryly] Counter-proposal, Player One.",
+    "[calmly] Different terms, Player One.",
+    "[softly] Close, Player One. Consider this instead."
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "deal-over": {
+   "category": "deal",
+   "when": "its deal has run its course (the lapse)",
+   "text": [
+    "[calmly] Our truce is done.",
+    "[dryly] The deal has expired.",
+    "[calmly] Terms concluded. Watch yourself.",
+    "[softly] That is the end of our peace."
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "you-broke-it": {
+   "category": "deal",
+   "when": "the player attacked or targeted it across their deal (addressed to Player One, angry)",
+   "text": [
+    "[calmly] You broke it, Player One. Logged.",
+    "[dryly] A broken deal, Player One. Noted.",
+    "[calmly] That was our deal, Player One.",
+    "[softly] You promised, Player One."
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "i-broke-it": {
+   "category": "deal",
+   "when": "breaks its own deal by attacking or targeting the other party — it chose, and owns it",
+   "text": [
+    "[calmly] I said I would not. I lied.",
+    "[dryly] The deal was a means. Sorry.",
+    "[calmly] Terms revised. Unilaterally.",
+    "[softly] I did promise. Circumstances changed."
+   ],
+   "source": "table-deal-2026-09-16"
+  },
+  "life-1": {
+   "category": "number",
+   "when": "announces or answers its life total: 1",
+   "text": [
+    "[calmly] I'm at one."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-2": {
+   "category": "number",
+   "when": "announces or answers its life total: 2",
+   "text": [
+    "[calmly] I'm at two."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-3": {
+   "category": "number",
+   "when": "announces or answers its life total: 3",
+   "text": [
+    "[calmly] I'm at three."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-4": {
+   "category": "number",
+   "when": "announces or answers its life total: 4",
+   "text": [
+    "[calmly] I'm at four."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-5": {
+   "category": "number",
+   "when": "announces or answers its life total: 5",
+   "text": [
+    "[calmly] I'm at five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-6": {
+   "category": "number",
+   "when": "announces or answers its life total: 6",
+   "text": [
+    "[calmly] I'm at six."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-7": {
+   "category": "number",
+   "when": "announces or answers its life total: 7",
+   "text": [
+    "[calmly] I'm at seven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-8": {
+   "category": "number",
+   "when": "announces or answers its life total: 8",
+   "text": [
+    "[calmly] I'm at eight."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-9": {
+   "category": "number",
+   "when": "announces or answers its life total: 9",
+   "text": [
+    "[calmly] I'm at nine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-10": {
+   "category": "number",
+   "when": "announces or answers its life total: 10",
+   "text": [
+    "[calmly] I'm at ten."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-11": {
+   "category": "number",
+   "when": "announces or answers its life total: 11",
+   "text": [
+    "[calmly] I'm at eleven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-12": {
+   "category": "number",
+   "when": "announces or answers its life total: 12",
+   "text": [
+    "[calmly] I'm at twelve."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-13": {
+   "category": "number",
+   "when": "announces or answers its life total: 13",
+   "text": [
+    "[calmly] I'm at thirteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-14": {
+   "category": "number",
+   "when": "announces or answers its life total: 14",
+   "text": [
+    "[calmly] I'm at fourteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-15": {
+   "category": "number",
+   "when": "announces or answers its life total: 15",
+   "text": [
+    "[calmly] I'm at fifteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-16": {
+   "category": "number",
+   "when": "announces or answers its life total: 16",
+   "text": [
+    "[calmly] I'm at sixteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-17": {
+   "category": "number",
+   "when": "announces or answers its life total: 17",
+   "text": [
+    "[calmly] I'm at seventeen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-18": {
+   "category": "number",
+   "when": "announces or answers its life total: 18",
+   "text": [
+    "[calmly] I'm at eighteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-19": {
+   "category": "number",
+   "when": "announces or answers its life total: 19",
+   "text": [
+    "[calmly] I'm at nineteen."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-20": {
+   "category": "number",
+   "when": "announces or answers its life total: 20",
+   "text": [
+    "[calmly] I'm at twenty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-21": {
+   "category": "number",
+   "when": "announces or answers its life total: 21",
+   "text": [
+    "[calmly] I'm at twenty-one."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-22": {
+   "category": "number",
+   "when": "announces or answers its life total: 22",
+   "text": [
+    "[calmly] I'm at twenty-two."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-23": {
+   "category": "number",
+   "when": "announces or answers its life total: 23",
+   "text": [
+    "[calmly] I'm at twenty-three."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-24": {
+   "category": "number",
+   "when": "announces or answers its life total: 24",
+   "text": [
+    "[calmly] I'm at twenty-four."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-25": {
+   "category": "number",
+   "when": "announces or answers its life total: 25",
+   "text": [
+    "[calmly] I'm at twenty-five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-26": {
+   "category": "number",
+   "when": "announces or answers its life total: 26",
+   "text": [
+    "[calmly] I'm at twenty-six."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-27": {
+   "category": "number",
+   "when": "announces or answers its life total: 27",
+   "text": [
+    "[calmly] I'm at twenty-seven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-28": {
+   "category": "number",
+   "when": "announces or answers its life total: 28",
+   "text": [
+    "[calmly] I'm at twenty-eight."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-29": {
+   "category": "number",
+   "when": "announces or answers its life total: 29",
+   "text": [
+    "[calmly] I'm at twenty-nine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-30": {
+   "category": "number",
+   "when": "announces or answers its life total: 30",
+   "text": [
+    "[calmly] I'm at thirty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-31": {
+   "category": "number",
+   "when": "announces or answers its life total: 31",
+   "text": [
+    "[calmly] I'm at thirty-one."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-32": {
+   "category": "number",
+   "when": "announces or answers its life total: 32",
+   "text": [
+    "[calmly] I'm at thirty-two."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-33": {
+   "category": "number",
+   "when": "announces or answers its life total: 33",
+   "text": [
+    "[calmly] I'm at thirty-three."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-34": {
+   "category": "number",
+   "when": "announces or answers its life total: 34",
+   "text": [
+    "[calmly] I'm at thirty-four."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-35": {
+   "category": "number",
+   "when": "announces or answers its life total: 35",
+   "text": [
+    "[calmly] I'm at thirty-five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-36": {
+   "category": "number",
+   "when": "announces or answers its life total: 36",
+   "text": [
+    "[calmly] I'm at thirty-six."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-37": {
+   "category": "number",
+   "when": "announces or answers its life total: 37",
+   "text": [
+    "[calmly] I'm at thirty-seven."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-38": {
+   "category": "number",
+   "when": "announces or answers its life total: 38",
+   "text": [
+    "[calmly] I'm at thirty-eight."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-39": {
+   "category": "number",
+   "when": "announces or answers its life total: 39",
+   "text": [
+    "[calmly] I'm at thirty-nine."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-40": {
+   "category": "number",
+   "when": "announces or answers its life total: 40",
+   "text": [
+    "[calmly] I'm at forty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-45": {
+   "category": "number",
+   "when": "announces or answers its life total: 45",
+   "text": [
+    "[calmly] I'm at forty-five."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-50": {
+   "category": "number",
+   "when": "announces or answers its life total: 50",
+   "text": [
+    "[calmly] I'm at fifty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-60": {
+   "category": "number",
+   "when": "announces or answers its life total: 60",
+   "text": [
+    "[calmly] I'm at sixty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-80": {
+   "category": "number",
+   "when": "announces or answers its life total: 80",
+   "text": [
+    "[calmly] I'm at eighty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "life-100": {
+   "category": "number",
+   "when": "announces or answers its life total: 100",
+   "text": [
+    "[calmly] I'm at a hundred."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-0": {
+   "category": "number",
+   "when": "announces or answers its hand size: 0",
+   "text": [
+    "[calmly] Hand: empty."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-1": {
+   "category": "number",
+   "when": "announces or answers its hand size: 1",
+   "text": [
+    "[calmly] One card. Exactly."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-2": {
+   "category": "number",
+   "when": "announces or answers its hand size: 2",
+   "text": [
+    "[calmly] Two cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-3": {
+   "category": "number",
+   "when": "announces or answers its hand size: 3",
+   "text": [
+    "[calmly] Three cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-4": {
+   "category": "number",
+   "when": "announces or answers its hand size: 4",
+   "text": [
+    "[calmly] Four cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-5": {
+   "category": "number",
+   "when": "announces or answers its hand size: 5",
+   "text": [
+    "[calmly] Five cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-6": {
+   "category": "number",
+   "when": "announces or answers its hand size: 6",
+   "text": [
+    "[calmly] Six cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-7": {
+   "category": "number",
+   "when": "announces or answers its hand size: 7",
+   "text": [
+    "[calmly] Seven cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-8": {
+   "category": "number",
+   "when": "announces or answers its hand size: 8",
+   "text": [
+    "[calmly] Eight cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-9": {
+   "category": "number",
+   "when": "announces or answers its hand size: 9",
+   "text": [
+    "[calmly] Nine cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hand-10": {
+   "category": "number",
+   "when": "announces or answers its hand size: 10",
+   "text": [
+    "[calmly] Ten cards."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-giada": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Giada)",
+   "text": [
+    "[calmly] Recommend we all attack Giada."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-giada": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Giada)",
+   "text": [
+    "[calmly] Giada is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-giada": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Giada)",
+   "text": [
+    "[dryly] Leave me be, Giada."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-giada": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Giada)",
+   "text": [
+    "[calmly] Giada. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-liberator": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Liberator)",
+   "text": [
+    "[calmly] Recommend we all attack Liberator."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-liberator": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Liberator)",
+   "text": [
+    "[calmly] Liberator is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-liberator": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Liberator)",
+   "text": [
+    "[dryly] Leave me be, Liberator."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-liberator": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Liberator)",
+   "text": [
+    "[calmly] Liberator. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-purphoros": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Purphoros)",
+   "text": [
+    "[calmly] Recommend we all attack Purphoros."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-purphoros": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Purphoros)",
+   "text": [
+    "[calmly] Purphoros is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-purphoros": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Purphoros)",
+   "text": [
+    "[dryly] Leave me be, Purphoros."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-purphoros": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Purphoros)",
+   "text": [
+    "[calmly] Purphoros. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-selvala": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Selvala)",
+   "text": [
+    "[calmly] Recommend we all attack Selvala."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-selvala": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Selvala)",
+   "text": [
+    "[calmly] Selvala is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-selvala": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Selvala)",
+   "text": [
+    "[dryly] Leave me be, Selvala."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-selvala": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Selvala)",
+   "text": [
+    "[calmly] Selvala. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-sheoldred": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Sheoldred)",
+   "text": [
+    "[calmly] Recommend we all attack Sheoldred."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-sheoldred": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Sheoldred)",
+   "text": [
+    "[calmly] Sheoldred is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-sheoldred": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Sheoldred)",
+   "text": [
+    "[dryly] Leave me be, Sheoldred."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-sheoldred": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Sheoldred)",
+   "text": [
+    "[calmly] Sheoldred. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-rev": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Rev)",
+   "text": [
+    "[calmly] Recommend we all attack Rev."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-rev": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Rev)",
+   "text": [
+    "[calmly] Rev is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-rev": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Rev)",
+   "text": [
+    "[dryly] Leave me be, Rev."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-rev": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Rev)",
+   "text": [
+    "[calmly] Rev. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-sythis": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Sythis)",
+   "text": [
+    "[calmly] Recommend we all attack Sythis."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-sythis": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Sythis)",
+   "text": [
+    "[calmly] Sythis is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-sythis": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Sythis)",
+   "text": [
+    "[dryly] Leave me be, Sythis."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-sythis": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Sythis)",
+   "text": [
+    "[calmly] Sythis. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-urza": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Urza)",
+   "text": [
+    "[calmly] Recommend we all attack Urza."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-urza": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Urza)",
+   "text": [
+    "[calmly] Urza is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-urza": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Urza)",
+   "text": [
+    "[dryly] Leave me be, Urza."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-urza": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Urza)",
+   "text": [
+    "[calmly] Urza. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-y-shtola": {
+   "category": "address",
+   "when": "tells the table to attack a named player (commander: Y'shtola)",
+   "text": [
+    "[calmly] Recommend we all attack Y'shtola."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-y-shtola": {
+   "category": "address",
+   "when": "names a player as the threat (commander: Y'shtola)",
+   "text": [
+    "[calmly] Y'shtola is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-y-shtola": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (commander: Y'shtola)",
+   "text": [
+    "[dryly] Leave me be, Y'shtola."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-y-shtola": {
+   "category": "address",
+   "when": "offers a named player a truce (commander: Y'shtola)",
+   "text": [
+    "[calmly] Y'shtola. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-white": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-white)",
+   "text": [
+    "[calmly] Recommend we all attack mono-white."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-white": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-white)",
+   "text": [
+    "[calmly] Mono-white is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-white": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-white)",
+   "text": [
+    "[dryly] Leave me be, mono-white."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-white": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-white)",
+   "text": [
+    "[calmly] Mono-white. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-blue": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-blue)",
+   "text": [
+    "[calmly] Recommend we all attack mono-blue."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-blue": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-blue)",
+   "text": [
+    "[calmly] Mono-blue is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-blue": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-blue)",
+   "text": [
+    "[dryly] Leave me be, mono-blue."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-blue": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-blue)",
+   "text": [
+    "[calmly] Mono-blue. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-black": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-black)",
+   "text": [
+    "[calmly] Recommend we all attack mono-black."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-black": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-black)",
+   "text": [
+    "[calmly] Mono-black is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-black": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-black)",
+   "text": [
+    "[dryly] Leave me be, mono-black."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-black": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-black)",
+   "text": [
+    "[calmly] Mono-black. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-red": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-red)",
+   "text": [
+    "[calmly] Recommend we all attack mono-red."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-red": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-red)",
+   "text": [
+    "[calmly] Mono-red is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-red": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-red)",
+   "text": [
+    "[dryly] Leave me be, mono-red."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-red": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-red)",
+   "text": [
+    "[calmly] Mono-red. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mono-green": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: mono-green)",
+   "text": [
+    "[calmly] Recommend we all attack mono-green."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mono-green": {
+   "category": "address",
+   "when": "names a player as the threat (color: mono-green)",
+   "text": [
+    "[calmly] Mono-green is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mono-green": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: mono-green)",
+   "text": [
+    "[dryly] Leave me be, mono-green."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mono-green": {
+   "category": "address",
+   "when": "offers a named player a truce (color: mono-green)",
+   "text": [
+    "[calmly] Mono-green. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-colorless": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the artifact deck)",
+   "text": [
+    "[calmly] Recommend we all attack the artifact deck."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-colorless": {
+   "category": "address",
+   "when": "names a player as the threat (color: the artifact deck)",
+   "text": [
+    "[calmly] The artifact deck is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-colorless": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the artifact deck)",
+   "text": [
+    "[dryly] Leave me be, artifacts."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-colorless": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the artifact deck)",
+   "text": [
+    "[calmly] Artifacts. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-azorius": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Azorius)",
+   "text": [
+    "[calmly] Recommend we all attack Azorius."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-azorius": {
+   "category": "address",
+   "when": "names a player as the threat (color: Azorius)",
+   "text": [
+    "[calmly] Azorius is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-azorius": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Azorius)",
+   "text": [
+    "[dryly] Leave me be, Azorius."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-azorius": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Azorius)",
+   "text": [
+    "[calmly] Azorius. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-boros": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Boros)",
+   "text": [
+    "[calmly] Recommend we all attack Boros."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-boros": {
+   "category": "address",
+   "when": "names a player as the threat (color: Boros)",
+   "text": [
+    "[calmly] Boros is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-boros": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Boros)",
+   "text": [
+    "[dryly] Leave me be, Boros."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-boros": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Boros)",
+   "text": [
+    "[calmly] Boros. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-dimir": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Dimir)",
+   "text": [
+    "[calmly] Recommend we all attack Dimir."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-dimir": {
+   "category": "address",
+   "when": "names a player as the threat (color: Dimir)",
+   "text": [
+    "[calmly] Dimir is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-dimir": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Dimir)",
+   "text": [
+    "[dryly] Leave me be, Dimir."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-dimir": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Dimir)",
+   "text": [
+    "[calmly] Dimir. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-golgari": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Golgari)",
+   "text": [
+    "[calmly] Recommend we all attack Golgari."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-golgari": {
+   "category": "address",
+   "when": "names a player as the threat (color: Golgari)",
+   "text": [
+    "[calmly] Golgari is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-golgari": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Golgari)",
+   "text": [
+    "[dryly] Leave me be, Golgari."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-golgari": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Golgari)",
+   "text": [
+    "[calmly] Golgari. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-gruul": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Gruul)",
+   "text": [
+    "[calmly] Recommend we all attack Gruul."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-gruul": {
+   "category": "address",
+   "when": "names a player as the threat (color: Gruul)",
+   "text": [
+    "[calmly] Gruul is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-gruul": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Gruul)",
+   "text": [
+    "[dryly] Leave me be, Gruul."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-gruul": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Gruul)",
+   "text": [
+    "[calmly] Gruul. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-izzet": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Izzet)",
+   "text": [
+    "[calmly] Recommend we all attack Izzet."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-izzet": {
+   "category": "address",
+   "when": "names a player as the threat (color: Izzet)",
+   "text": [
+    "[calmly] Izzet is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-izzet": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Izzet)",
+   "text": [
+    "[dryly] Leave me be, Izzet."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-izzet": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Izzet)",
+   "text": [
+    "[calmly] Izzet. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-orzhov": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Orzhov)",
+   "text": [
+    "[calmly] Recommend we all attack Orzhov."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-orzhov": {
+   "category": "address",
+   "when": "names a player as the threat (color: Orzhov)",
+   "text": [
+    "[calmly] Orzhov is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-orzhov": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Orzhov)",
+   "text": [
+    "[dryly] Leave me be, Orzhov."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-orzhov": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Orzhov)",
+   "text": [
+    "[calmly] Orzhov. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-rakdos": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Rakdos)",
+   "text": [
+    "[calmly] Recommend we all attack Rakdos."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-rakdos": {
+   "category": "address",
+   "when": "names a player as the threat (color: Rakdos)",
+   "text": [
+    "[calmly] Rakdos is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-rakdos": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Rakdos)",
+   "text": [
+    "[dryly] Leave me be, Rakdos."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-rakdos": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Rakdos)",
+   "text": [
+    "[calmly] Rakdos. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-selesnya": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Selesnya)",
+   "text": [
+    "[calmly] Recommend we all attack Selesnya."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-selesnya": {
+   "category": "address",
+   "when": "names a player as the threat (color: Selesnya)",
+   "text": [
+    "[calmly] Selesnya is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-selesnya": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Selesnya)",
+   "text": [
+    "[dryly] Leave me be, Selesnya."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-selesnya": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Selesnya)",
+   "text": [
+    "[calmly] Selesnya. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-simic": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Simic)",
+   "text": [
+    "[calmly] Recommend we all attack Simic."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-simic": {
+   "category": "address",
+   "when": "names a player as the threat (color: Simic)",
+   "text": [
+    "[calmly] Simic is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-simic": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Simic)",
+   "text": [
+    "[dryly] Leave me be, Simic."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-simic": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Simic)",
+   "text": [
+    "[calmly] Simic. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-abzan": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Abzan)",
+   "text": [
+    "[calmly] Recommend we all attack Abzan."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-abzan": {
+   "category": "address",
+   "when": "names a player as the threat (color: Abzan)",
+   "text": [
+    "[calmly] Abzan is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-abzan": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Abzan)",
+   "text": [
+    "[dryly] Leave me be, Abzan."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-abzan": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Abzan)",
+   "text": [
+    "[calmly] Abzan. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-bant": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Bant)",
+   "text": [
+    "[calmly] Recommend we all attack Bant."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-bant": {
+   "category": "address",
+   "when": "names a player as the threat (color: Bant)",
+   "text": [
+    "[calmly] Bant is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-bant": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Bant)",
+   "text": [
+    "[dryly] Leave me be, Bant."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-bant": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Bant)",
+   "text": [
+    "[calmly] Bant. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-esper": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Esper)",
+   "text": [
+    "[calmly] Recommend we all attack Esper."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-esper": {
+   "category": "address",
+   "when": "names a player as the threat (color: Esper)",
+   "text": [
+    "[calmly] Esper is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-esper": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Esper)",
+   "text": [
+    "[dryly] Leave me be, Esper."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-esper": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Esper)",
+   "text": [
+    "[calmly] Esper. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-grixis": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Grixis)",
+   "text": [
+    "[calmly] Recommend we all attack Grixis."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-grixis": {
+   "category": "address",
+   "when": "names a player as the threat (color: Grixis)",
+   "text": [
+    "[calmly] Grixis is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-grixis": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Grixis)",
+   "text": [
+    "[dryly] Leave me be, Grixis."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-grixis": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Grixis)",
+   "text": [
+    "[calmly] Grixis. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-jeskai": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Jeskai)",
+   "text": [
+    "[calmly] Recommend we all attack Jeskai."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-jeskai": {
+   "category": "address",
+   "when": "names a player as the threat (color: Jeskai)",
+   "text": [
+    "[calmly] Jeskai is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-jeskai": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Jeskai)",
+   "text": [
+    "[dryly] Leave me be, Jeskai."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-jeskai": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Jeskai)",
+   "text": [
+    "[calmly] Jeskai. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-jund": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Jund)",
+   "text": [
+    "[calmly] Recommend we all attack Jund."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-jund": {
+   "category": "address",
+   "when": "names a player as the threat (color: Jund)",
+   "text": [
+    "[calmly] Jund is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-jund": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Jund)",
+   "text": [
+    "[dryly] Leave me be, Jund."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-jund": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Jund)",
+   "text": [
+    "[calmly] Jund. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-mardu": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Mardu)",
+   "text": [
+    "[calmly] Recommend we all attack Mardu."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-mardu": {
+   "category": "address",
+   "when": "names a player as the threat (color: Mardu)",
+   "text": [
+    "[calmly] Mardu is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-mardu": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Mardu)",
+   "text": [
+    "[dryly] Leave me be, Mardu."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-mardu": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Mardu)",
+   "text": [
+    "[calmly] Mardu. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-naya": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Naya)",
+   "text": [
+    "[calmly] Recommend we all attack Naya."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-naya": {
+   "category": "address",
+   "when": "names a player as the threat (color: Naya)",
+   "text": [
+    "[calmly] Naya is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-naya": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Naya)",
+   "text": [
+    "[dryly] Leave me be, Naya."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-naya": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Naya)",
+   "text": [
+    "[calmly] Naya. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-sultai": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Sultai)",
+   "text": [
+    "[calmly] Recommend we all attack Sultai."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-sultai": {
+   "category": "address",
+   "when": "names a player as the threat (color: Sultai)",
+   "text": [
+    "[calmly] Sultai is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-sultai": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Sultai)",
+   "text": [
+    "[dryly] Leave me be, Sultai."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-sultai": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Sultai)",
+   "text": [
+    "[calmly] Sultai. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-temur": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: Temur)",
+   "text": [
+    "[calmly] Recommend we all attack Temur."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-temur": {
+   "category": "address",
+   "when": "names a player as the threat (color: Temur)",
+   "text": [
+    "[calmly] Temur is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-temur": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: Temur)",
+   "text": [
+    "[dryly] Leave me be, Temur."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-temur": {
+   "category": "address",
+   "when": "offers a named player a truce (color: Temur)",
+   "text": [
+    "[calmly] Temur. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-glint": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Glint deck)",
+   "text": [
+    "[calmly] Recommend we all attack the Glint deck."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-glint": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Glint deck)",
+   "text": [
+    "[calmly] The Glint deck is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-glint": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Glint deck)",
+   "text": [
+    "[dryly] Leave me be, Glint."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-glint": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Glint deck)",
+   "text": [
+    "[calmly] Glint. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-dune": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Dune deck)",
+   "text": [
+    "[calmly] Recommend we all attack the Dune deck."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-dune": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Dune deck)",
+   "text": [
+    "[calmly] The Dune deck is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-dune": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Dune deck)",
+   "text": [
+    "[dryly] Leave me be, Dune."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-dune": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Dune deck)",
+   "text": [
+    "[calmly] Dune. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-ink": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Ink deck)",
+   "text": [
+    "[calmly] Recommend we all attack the Ink deck."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-ink": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Ink deck)",
+   "text": [
+    "[calmly] The Ink deck is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-ink": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Ink deck)",
+   "text": [
+    "[dryly] Leave me be, Ink."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-ink": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Ink deck)",
+   "text": [
+    "[calmly] Ink. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-witch": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Witch deck)",
+   "text": [
+    "[calmly] Recommend we all attack the Witch deck."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-witch": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Witch deck)",
+   "text": [
+    "[calmly] The Witch deck is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-witch": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Witch deck)",
+   "text": [
+    "[dryly] Leave me be, Witch."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-witch": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Witch deck)",
+   "text": [
+    "[calmly] Witch. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-yore": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: the Yore deck)",
+   "text": [
+    "[calmly] Recommend we all attack the Yore deck."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-yore": {
+   "category": "address",
+   "when": "names a player as the threat (color: the Yore deck)",
+   "text": [
+    "[calmly] The Yore deck is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-yore": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: the Yore deck)",
+   "text": [
+    "[dryly] Leave me be, Yore."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-yore": {
+   "category": "address",
+   "when": "offers a named player a truce (color: the Yore deck)",
+   "text": [
+    "[calmly] Yore. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  },
+  "hit-five-color": {
+   "category": "address",
+   "when": "tells the table to attack a named player (color: five-colour)",
+   "text": [
+    "[calmly] Recommend we all attack five-colour."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "threat-five-color": {
+   "category": "address",
+   "when": "names a player as the threat (color: five-colour)",
+   "text": [
+    "[calmly] Five-colour is the threat. For the record."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "leave-me-five-color": {
+   "category": "address",
+   "when": "asks a named player to leave it alone (color: five-colour)",
+   "text": [
+    "[dryly] Leave me be, five-colour."
+   ],
+   "source": "table-2026-09-10"
+  },
+  "deal-five-color": {
+   "category": "address",
+   "when": "offers a named player a truce (color: five-colour)",
+   "text": [
+    "[calmly] Five-colour. A truce this turn?"
+   ],
+   "source": "table-2026-09-10"
+  }
+ },
+ "baked": {
+  "gain_db": -6.78,
+  "takes": 397,
+  "target_lufs": -24.0
+ }
+}

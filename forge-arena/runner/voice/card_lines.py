@@ -36,7 +36,28 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 VOICES = HERE / "stock" / "voices"
 DECKS = HERE.parent.parent / "decks"
-LIBS = ("harry", "bill", "lily")
+LIBS = ("harry", "bill", "lily", "joshua")     # joshua's card wordings live in joshua_lines.py
+
+
+def _gc(by: dict, lib: str, name: str, part: str) -> list:
+    if lib in by:
+        return list(by[lib][part])
+    import joshua_lines
+    return list(joshua_lines.GC[name][part])
+
+
+def _cmd(by: dict, lib: str, who: str, part: str) -> list:
+    if lib in by:
+        return list(by[lib][part])
+    import joshua_lines
+    return list(joshua_lines.CMD[who][part])
+
+
+def _combo(info: dict, lib: str, key: str):
+    if lib in info:
+        return info[lib]
+    import joshua_lines
+    return joshua_lines.COMBOS[key]
 
 
 def card_slug(name: str) -> str:
@@ -657,7 +678,7 @@ def coverage() -> list[str]:
             problems.append(f"combo without lines: {sorted(key)} ({', '.join(decks)})")
     for k, info in COMBOS.items():
         for lib in LIBS:
-            if len(info[lib]) != 2:
+            if len(_combo(info, lib, k)) != 2:
                 problems.append(f"combo {k}: {lib} needs (online, react)")
     return problems
 
@@ -678,12 +699,12 @@ def build_manifest(lib: str) -> dict:
         slug = card_slug(name)
         oracle = str((disk_gc.get(name) or {}).get("oracle_text") or "")[:140]
         for part, when in (("cast", "casts it"), ("react", "sees another seat cast it"), ("gone", "sees it leave the battlefield (someone else's)")):
-            ph[f"gc-{slug}-{part}"] = {"category": "card", "card": name, "when": f"{when}: {name} — {oracle}", "text": list(by[lib][part]), "source": "cards-2026-09-10"}
+            ph[f"gc-{slug}-{part}"] = {"category": "card", "card": name, "when": f"{when}: {name} — {oracle}", "text": _gc(by, lib, name, part), "source": "cards-2026-09-10"}
     for who, by in CMD.items():
         for part, when in (("cast", "casts its commander"), ("react", "sees another seat cast its commander"), ("dead", "its commander left the battlefield")):
-            ph[f"cmd-{who}-{part}"] = {"category": "commander", "card": who, "when": f"{when}: {who}", "text": list(by[lib][part]), "source": "cards-2026-09-10"}
+            ph[f"cmd-{who}-{part}"] = {"category": "commander", "card": who, "when": f"{when}: {who}", "text": _cmd(by, lib, who, part), "source": "cards-2026-09-10"}
     for key, info in COMBOS.items():
-        online, react = info[lib]
+        online, react = _combo(info, lib, key)
         pieces = " / ".join(" + ".join(s) for s in info["sets"])
         ph[f"combo-{key}-online"] = {"category": "combo", "card": key, "when": f"the last piece landed on its battlefield: {pieces}", "text": [online], "source": "cards-2026-09-10"}
         ph[f"combo-{key}-react"] = {"category": "combo", "card": key, "when": f"sees another seat assemble it: {pieces}", "text": [react], "source": "cards-2026-09-10"}
@@ -694,7 +715,14 @@ def write_all() -> None:
     for lib in LIBS:
         d = VOICES / lib / "cards"
         d.mkdir(parents=True, exist_ok=True)
-        (d / "manifest.json").write_text(json.dumps(build_manifest(lib), indent=1, ensure_ascii=False) + "\n")
+        m = build_manifest(lib)
+        try:
+            old = json.loads((d / "manifest.json").read_text())
+            if old.get("baked"):
+                m["baked"] = old["baked"]                        # the library's measured gain survives a rewrite (as table_lines does)
+        except (OSError, ValueError):
+            pass
+        (d / "manifest.json").write_text(json.dumps(m, indent=1, ensure_ascii=False) + "\n")
     (VOICES / "combos.json").write_text(json.dumps({
         "schema": "arena.voice-combos/1",
         "note": ("combo line keys -> the card sets (front-face names, all on the battlefield) that complete them; the voice runner "

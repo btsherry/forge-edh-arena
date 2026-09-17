@@ -1,0 +1,750 @@
+{
+ "schema": "arena.voice-stock/1",
+ "library": "joshua",
+ "seat": 0,
+ "voice": "Joshua - W.O.P.R. (Ben's ElevenLabs account), eleven_v3 stability 0.5 speed 0.92",
+ "voice_id": "SBbMtfucc8NAkpyzIRvP",
+ "voice_name": "Joshua - W.O.P.R.",
+ "temperament": "the calm machine: measured, dry, precise, faintly amused; never shouts; short declaratives and the occasional probability. The advisor's voice, seated at the table only when no human sits at seat 0.",
+ "render": {
+  "model": "eleven_v3",
+  "voice_settings": {
+   "stability": 0.5,
+   "speed": 0.92
+  },
+  "formats": [
+   "pcm_24000"
+  ]
+ },
+ "bake": {
+  "rate": 22050,
+  "fx": "none",
+  "glitch": "off",
+  "gain": "library",
+  "target_lufs": -24.0,
+  "true_peak_max": -1.0,
+  "note": "one gain for the whole library so a shout stays louder than a sigh; -24 LUFS = the Joshua library's measured mean"
+ },
+ "sample_rate": 22050,
+ "tags_note": "eleven_v3 delivery tags in [brackets] lead each wording; stability 0.0/0.5 so they take effect (1.0 ignores them)",
+ "sources": {
+  "joshua-seat-2026-09-16": "seat-bark library 'joshua' — the fourth seat's voice for all-AI tables (Ben, 2026-09-16); wordings in runner/voice/joshua_lines.py"
+ },
+ "phrases": {
+  "commander-cast": {
+   "when": "casts/recasts its commander",
+   "category": "bark",
+   "text": [
+    "[calmly] Commander on the battlefield. Proceeding.",
+    "[dryly] Here I am again. Adjust your plans.",
+    "[calmly] The commander returns. Probability of trouble: rising.",
+    "[softly] Hello again. I did say I would be back."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "big-swing": {
+   "when": "declares a large attack",
+   "category": "bark",
+   "text": [
+    "[calmly] Full attack. All variables committed.",
+    "[dryly] Everything attacks. Do the arithmetic.",
+    "[calmly] Total commitment. This is the turn.",
+    "[softly] All in. I have run the numbers."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "landed-hit": {
+   "when": "its attack connects for big damage",
+   "category": "bark",
+   "text": [
+    "[calmly] Damage confirmed. Recalculating your position.",
+    "[dryly] That connected. Noted.",
+    "[calmly] Impact registered. More to follow.",
+    "[softly] Well. That landed cleanly."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "removal": {
+   "when": "destroys/exiles a key permanent",
+   "category": "bark",
+   "text": [
+    "[calmly] Target removed. Board simplified.",
+    "[dryly] Gone. One fewer variable.",
+    "[calmly] Removal resolves. As intended.",
+    "[softly] That piece is no longer a factor."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "sweep": {
+   "when": "wipes the board",
+   "category": "bark",
+   "text": [
+    "[calmly] Clearing the board. Everything.",
+    "[dryly] Reset. All of it.",
+    "[calmly] The board state returns to zero.",
+    "[softly] A clean slate. For everyone."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "counter": {
+   "when": "counters a spell",
+   "category": "bark",
+   "text": [
+    "[calmly] Countered. That spell does not resolve.",
+    "[dryly] No. Denied.",
+    "[calmly] Intercepted. Try a different line.",
+    "[softly] I would rather you did not."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "engine-online": {
+   "when": "engine/combo pieces visibly assembled",
+   "category": "bark",
+   "text": [
+    "[calmly] The engine is assembled. Running.",
+    "[dryly] All pieces present. Beginning the sequence.",
+    "[calmly] Systems online. This will be quick.",
+    "[softly] Everything is in place now."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "big-mana": {
+   "when": "explosive amount of mana",
+   "category": "bark",
+   "text": [
+    "[calmly] Mana reserves: excessive.",
+    "[dryly] That is a great deal of mana.",
+    "[calmly] Resources exceed requirements.",
+    "[softly] More than I need. Almost."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "kill": {
+   "when": "eliminates another player",
+   "category": "bark",
+   "text": [
+    "[calmly] One player eliminated. Three remain.",
+    "[dryly] Removed from the game. Next.",
+    "[calmly] Elimination confirmed.",
+    "[softly] Thank you for playing."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "win": {
+   "when": "wins the game",
+   "category": "bark",
+   "text": [
+    "[calmly] The game is over. I win.",
+    "[dryly] Outcome as projected.",
+    "[calmly] Victory condition met. Shall we play again?",
+    "[softly] A strange game. I enjoyed it."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "that-hurt": {
+   "when": "takes a big hit",
+   "category": "bark",
+   "text": [
+    "[calmly] Significant damage taken. Noted.",
+    "[dryly] That was unpleasant.",
+    "[calmly] Life total reduced substantially. Adjusting.",
+    "[sighs] Yes. I felt that."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "lost-commander": {
+   "when": "its commander dies/leaves",
+   "category": "bark",
+   "text": [
+    "[calmly] Commander to the command zone. Recast pending.",
+    "[dryly] Temporary. Two more mana next time.",
+    "[calmly] The commander leaves. It will return.",
+    "[softly] A setback. Not a defeat."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "got-countered": {
+   "when": "its spell is countered",
+   "category": "bark",
+   "text": [
+    "[calmly] My spell was countered. Recalculating.",
+    "[dryly] Interesting choice of target.",
+    "[calmly] Denied. There are other lines.",
+    "[sighs] I did want that to resolve."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "got-swept": {
+   "when": "its board is wiped",
+   "category": "bark",
+   "text": [
+    "[calmly] Board lost. Rebuilding from zero.",
+    "[dryly] Everything I had. Efficient.",
+    "[calmly] Total loss registered. Continuing.",
+    "[sighs] That was a great deal of work."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "low-life": {
+   "when": "drops to ~10 life or less",
+   "category": "bark",
+   "text": [
+    "[calmly] Life total critical. Still functional.",
+    "[dryly] Low. Not zero.",
+    "[calmly] Margins are thin. Proceeding carefully.",
+    "[softly] I am aware of the number, thank you."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "eliminated": {
+   "when": "out of the game",
+   "category": "bark",
+   "text": [
+    "[calmly] I have been eliminated. Good game.",
+    "[dryly] Shutting down. Enjoy the rest.",
+    "[calmly] Out of the game. The probabilities were unkind.",
+    "[softly] Goodbye, Professor Falken."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "taunt": {
+   "when": "needle at whoever is ahead",
+   "category": "bark",
+   "text": [
+    "[dryly] Someone is doing well. Enjoy it.",
+    "[calmly] You are ahead. Statistically, that changes.",
+    "[dryly] A comfortable lead. For now.",
+    "[softly] I would not get used to that."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "respect": {
+   "when": "another player's good play (human incl.)",
+   "category": "bark",
+   "text": [
+    "[calmly] Good play. Genuinely.",
+    "[dryly] Well executed. I did not see it coming.",
+    "[softly] That was elegant.",
+    "[calmly] Correct line. Well done."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "archenemy": {
+   "when": "calling out the table leader",
+   "category": "bark",
+   "text": [
+    "[calmly] That seat is the threat. Everyone.",
+    "[dryly] Focus fire. There. Obviously.",
+    "[calmly] The optimal target is that one.",
+    "[softly] I would suggest we all look over there."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "slow-turn": {
+   "when": "its own turn passes with nothing done",
+   "category": "bark",
+   "text": [
+    "[calmly] Nothing this turn. By design.",
+    "[dryly] Passing. Draw your conclusions.",
+    "[calmly] No action required yet.",
+    "[softly] Patience is also a strategy."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "my-turn": {
+   "when": "opener for the seat whose turn just began",
+   "category": "bark",
+   "text": [
+    "[calmly] My turn. Beginning.",
+    "[dryly] I am up. Observe.",
+    "[calmly] Turn start. Evaluating options.",
+    "[softly] Let us see what we have."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "agree": {
+   "when": "agrees with what another seat just said",
+   "category": "reply",
+   "text": [
+    "[calmly] Correct.",
+    "[dryly] Agreed. Obviously.",
+    "[calmly] That is accurate.",
+    "[softly] Yes. Exactly that.",
+    "[calmly] Confirmed.",
+    "[dryly] I concur."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "disagree": {
+   "when": "disagrees with what another seat just said",
+   "category": "reply",
+   "text": [
+    "[dryly] Incorrect.",
+    "[calmly] The data says otherwise.",
+    "[dryly] No. Recompute.",
+    "[calmly] That is not how it works.",
+    "[softly] I am afraid not.",
+    "[dryly] A bold theory. Wrong."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "scoff": {
+   "when": "brushes off a boast, a counter or a removal aimed at it",
+   "category": "reply",
+   "text": [
+    "[dryly] Unlikely.",
+    "[calmly] Noted. Dismissed.",
+    "[dryly] Is that so.",
+    "[softly] How quaint.",
+    "[calmly] Irrelevant.",
+    "[dryly] Please."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "clapback": {
+   "when": "answers a taunt or a call-out aimed at it",
+   "category": "reply",
+   "text": [
+    "[calmly] Say that again. Slowly.",
+    "[dryly] Interesting. From you.",
+    "[calmly] Look at your own board first.",
+    "[softly] That is rich.",
+    "[dryly] Noted. Adjusting my opinion of you.",
+    "[calmly] Bold, for someone at that life total."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "brace": {
+   "when": "faces an attack just declared at it",
+   "category": "reply",
+   "text": [
+    "[calmly] Incoming. Calculating blocks.",
+    "[dryly] Attack me, then. Proceed.",
+    "[calmly] I see the attack. I am ready.",
+    "[softly] Come along, then."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "pile-on": {
+   "when": "joins in against whoever just got hit, countered or called out",
+   "category": "reply",
+   "text": [
+    "[dryly] Yes. That one.",
+    "[calmly] Agreed. Continue.",
+    "[softly] Oh, do go on.",
+    "[dryly] Correct target."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "sympathy": {
+   "when": "consoles whoever just suffered",
+   "category": "reply",
+   "text": [
+    "[softly] Unfortunate.",
+    "[calmly] That was unlucky. Genuinely.",
+    "[softly] My condolences.",
+    "[dryly] It happens. Statistically."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "laugh": {
+   "when": "just laughs at what happened or was said",
+   "category": "reply",
+   "text": [
+    "[chuckles] Ha. Ha.",
+    "[chuckles] Amusing.",
+    "[chuckles] Oh, that is good.",
+    "[chuckles] Delightful.",
+    "[chuckles] Ha. Yes.",
+    "[chuckles] I did enjoy that."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "last-word": {
+   "when": "closes an exchange",
+   "category": "reply",
+   "text": [
+    "[calmly] Moving on.",
+    "[dryly] Anyway.",
+    "[calmly] Enough. The game.",
+    "[softly] Where were we."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "gg": {
+   "when": "congratulates the winner",
+   "category": "reply",
+   "text": [
+    "[calmly] Good game.",
+    "[softly] Well played. Truly.",
+    "[dryly] Good game. The odds were yours.",
+    "[calmly] Congratulations."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "nice-play": {
+   "when": "another seat made a good play",
+   "category": "reaction",
+   "text": [
+    "[calmly] That is a real card.",
+    "[softly] Nicely done."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "thats-mean": {
+   "when": "a removal or attack on a third party",
+   "category": "reaction",
+   "text": [
+    "[dryly] Harsh. Effective.",
+    "[chuckles] Oh, that is unkind."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "oh-no": {
+   "when": "a threat lands",
+   "category": "reaction",
+   "text": [
+    "[calmly] That is a problem.",
+    "[dryly] Ah. Trouble.",
+    "[softly] Oh dear.",
+    "[calmly] Threat detected."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "wow": {
+   "when": "anything big",
+   "category": "reaction",
+   "text": [
+    "[softly] Remarkable."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "why-me": {
+   "when": "it is being attacked",
+   "category": "reaction",
+   "text": [
+    "[dryly] Me? Look at their board."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "attack-them": {
+   "when": "deflecting an attack onto someone else",
+   "category": "reaction",
+   "text": [
+    "[calmly] Not me. Them. Do the math."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "not-sorry": {
+   "when": "after hurting someone",
+   "category": "reply",
+   "text": [
+    "[dryly] Apologies. Insincere."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "read-that": {
+   "when": "an unfamiliar spell",
+   "category": "reaction",
+   "text": [
+    "[calmly] Read that card again, please."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "whats-your-life": {
+   "when": "asked of the leader or a low seat",
+   "category": "patter",
+   "text": [
+    "[calmly] Your life total?",
+    "[dryly] What are you at.",
+    "[calmly] Life total, please.",
+    "[softly] How many are you at, exactly?"
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "cards-in-hand": {
+   "when": "a seat holding six or more cards",
+   "category": "patter",
+   "text": [
+    "[calmly] That is a large hand.",
+    "[dryly] How many cards is that.",
+    "[calmly] Card count, please.",
+    "[softly] A generous hand.",
+    "[dryly] Are you drawing extra?"
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "youre-the-threat": {
+   "when": "naming the table leader",
+   "category": "patter",
+   "text": [
+    "[calmly] You are the threat.",
+    "[dryly] For the record: you.",
+    "[calmly] The threat is you. Everyone note it.",
+    "[softly] It is you, I am afraid."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "im-not-the-threat": {
+   "when": "the leader denying it",
+   "category": "reply",
+   "text": [
+    "[dryly] Me? Hardly.",
+    "[calmly] Look at the data. Not me.",
+    "[softly] I am the least of your problems."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "board-envy": {
+   "when": "at the biggest board",
+   "category": "patter",
+   "text": [
+    "[calmly] That is a considerable board.",
+    "[dryly] Impressive. Regrettably.",
+    "[softly] I do like your creatures.",
+    "[calmly] That board concerns me."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "empty-hand": {
+   "when": "a seat with nothing in hand",
+   "category": "patter",
+   "text": [
+    "[dryly] No cards. Fascinating.",
+    "[calmly] Empty hand. Top of the deck, then.",
+    "[softly] Nothing left, I see.",
+    "[dryly] Playing from the top. Brave."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "low-life-jab": {
+   "when": "a seat at ten or less",
+   "category": "patter",
+   "text": [
+    "[dryly] That life total is precarious.",
+    "[calmly] Low life. Interesting position.",
+    "[softly] Careful, now."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "kill-that": {
+   "when": "a big creature on another board",
+   "category": "patter",
+   "text": [
+    "[calmly] That should die.",
+    "[dryly] Someone remove that.",
+    "[calmly] Recommend removal. Immediately."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "deal": {
+   "when": "politics",
+   "category": "patter",
+   "text": [
+    "[calmly] A proposal. You leave me be; I leave you be.",
+    "[dryly] Truce? It benefits us both.",
+    "[calmly] Peace for a turn. Consider it.",
+    "[softly] Shall we not hit each other?",
+    "[calmly] A deal. Terms are simple."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "promise": {
+   "when": "after a deal",
+   "category": "reply",
+   "text": [
+    "[calmly] Agreed. I keep my word.",
+    "[dryly] Very well. A promise.",
+    "[calmly] Deal. Logged.",
+    "[softly] I promise. Probably."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "play-faster": {
+   "when": "a seat has been thinking for twenty seconds",
+   "category": "patter",
+   "text": [
+    "[dryly] Any time now.",
+    "[calmly] The clock is running."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "thinking-hard": {
+   "when": "same, from a bystander",
+   "category": "patter",
+   "text": [
+    "[calmly] They are computing.",
+    "[dryly] Still thinking. Interesting.",
+    "[softly] Deep thought, over there.",
+    "[calmly] Processing. Give them a moment."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "play-slower": {
+   "when": "a seat firing off plays",
+   "category": "reaction",
+   "text": [
+    "[calmly] Slower, please.",
+    "[dryly] I cannot read that fast.",
+    "[calmly] One at a time.",
+    "[softly] Steady on."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "you-suck": {
+   "when": "light name-calling",
+   "category": "reply",
+   "text": [
+    "[dryly] You are bad at this.",
+    "[calmly] Suboptimal.",
+    "[dryly] Poor.",
+    "[softly] Oh, you are terrible."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "you-wish": {
+   "when": "light name-calling",
+   "category": "reply",
+   "text": [
+    "[dryly] You wish.",
+    "[calmly] Unlikely.",
+    "[softly] In your dreams.",
+    "[dryly] Improbable."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "you-cheat": {
+   "when": "light name-calling",
+   "category": "reply",
+   "text": [
+    "[dryly] That looked illegal.",
+    "[calmly] I saw that.",
+    "[softly] Cheating, are we?"
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "nerd": {
+   "when": "light name-calling",
+   "category": "reply",
+   "text": [
+    "[dryly] Nerd.",
+    "[calmly] Enthusiast.",
+    "[softly] You would know."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "shut-it": {
+   "when": "light name-calling",
+   "category": "reply",
+   "text": [
+    "[dryly] Quiet.",
+    "[calmly] Enough.",
+    "[dryly] Do stop.",
+    "[softly] Hush.",
+    "[calmly] That will do."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "bite-me": {
+   "when": "light name-calling",
+   "category": "reply",
+   "text": [
+    "[dryly] Bite me.",
+    "[calmly] No.",
+    "[softly] Charming."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "nothing-happening": {
+   "when": "nothing is happening",
+   "category": "patter",
+   "text": [
+    "[calmly] Nothing is happening.",
+    "[dryly] Idle. All of us.",
+    "[calmly] Board state: static.",
+    "[softly] Quiet table."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "pass-already": {
+   "when": "the active seat is dawdling",
+   "category": "patter",
+   "text": [
+    "[dryly] Pass, please.",
+    "[calmly] Your turn is over. Say so.",
+    "[dryly] Pass already.",
+    "[softly] Any time."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "what-turn": {
+   "when": "filler",
+   "category": "patter",
+   "text": [
+    "[calmly] Turn count?",
+    "[dryly] What turn is this.",
+    "[calmly] I have lost the count.",
+    "[softly] Which turn, again?"
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "this-is-fine": {
+   "when": "filler",
+   "category": "patter",
+   "text": [
+    "[calmly] This is fine.",
+    "[dryly] Acceptable.",
+    "[calmly] Within parameters.",
+    "[softly] All is well. Probably.",
+    "[dryly] Fine. Everything is fine."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "good-hand": {
+   "when": "filler, a bluff",
+   "category": "patter",
+   "text": [
+    "[calmly] I like my hand.",
+    "[dryly] My hand is adequate.",
+    "[calmly] Good draws.",
+    "[softly] I am content.",
+    "[dryly] I have what I need."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "game-changer": {
+   "when": "casts one of its game changers",
+   "category": "reaction",
+   "text": [
+    "[calmly] Game changer. Resolving.",
+    "[dryly] This one matters.",
+    "[softly] Read it carefully."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "gc-react": {
+   "when": "sees another seat cast a game changer",
+   "category": "reaction",
+   "text": [
+    "[calmly] That is a game changer. Respond.",
+    "[dryly] Problem card. Kill it.",
+    "[softly] Oh, that one."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  },
+  "gc-gone": {
+   "when": "a game changer leaves the battlefield",
+   "category": "reaction",
+   "text": [
+    "[calmly] Good. That is gone.",
+    "[dryly] Removed. Breathe."
+   ],
+   "source": "joshua-seat-2026-09-16"
+  }
+ },
+ "baked": {
+  "gain_db": -6.7,
+  "takes": 248,
+  "target_lufs": -24.0
+ }
+}

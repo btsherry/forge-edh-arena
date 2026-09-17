@@ -84,14 +84,18 @@ def load_assignments(voices_dir: Path | None = None) -> dict[str, str]:
         return {}
 
 
-def assign_voices(libraries: dict[str, dict], seat_decks: dict[int, str] | None, by_deck: dict[str, str] | None) -> dict[int, dict]:
+def assign_voices(libraries: dict[str, dict], seat_decks: dict[int, str] | None, by_deck: dict[str, str] | None,
+                  exclude_seat: int | None = None) -> dict[int, dict]:
     """{seat: library info}. A seat whose deck is in by_deck gets that library
     (lower seat wins a clash); every other seat takes a free library in seat
     order — the library's default seat first, then whatever is left. With no
     seat->deck knowledge every library sits at its default seat."""
     if not libraries:
         return {}
-    seat_decks = seat_decks or {}
+    if exclude_seat is not None:
+        # the human's seat is never voiced (2026-09-16: Joshua's library sits at seat 0 for all-AI tables only)
+        libraries = {n: i for n, i in libraries.items() if i["seat"] != exclude_seat}
+    seat_decks = {s: d for s, d in (seat_decks or {}).items() if s != exclude_seat}
     by_deck = by_deck or {}
     out: dict[int, dict] = {}
     used: set[str] = set()
@@ -113,11 +117,12 @@ def assign_voices(libraries: dict[str, dict], seat_decks: dict[int, str] | None,
     return out
 
 
-def load_seat_libraries(voices_dir: Path | None = None, seat_decks: dict[int, str] | None = None) -> dict[int, dict]:
+def load_seat_libraries(voices_dir: Path | None = None, seat_decks: dict[int, str] | None = None,
+                        exclude_seat: int | None = None) -> dict[int, dict]:
     """{seat: {"library", "voice", "temperament", "seat"}} — the voices at the table,
-    by deck when the table is known (voices/assign.json), by default seat otherwise.
-    Missing dir -> {} (barks silently off)."""
-    return assign_voices(load_libraries(voices_dir), seat_decks, load_assignments(voices_dir))
+    by deck when the table is known (voices/assign.json), by default seat otherwise;
+    the human's seat (exclude_seat) is never voiced. Missing dir -> {} (barks silently off)."""
+    return assign_voices(load_libraries(voices_dir), seat_decks, load_assignments(voices_dir), exclude_seat)
 
 
 DEFAULT_TABLE = "urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds"

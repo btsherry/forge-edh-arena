@@ -36,7 +36,15 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 VOICES = HERE / "stock" / "voices"
 DECKS = HERE.parent.parent / "decks"
-LIBS = ("harry", "bill", "lily")
+LIBS = ("harry", "bill", "lily", "joshua")     # joshua (seat 0, all-AI tables) keeps its wordings in joshua_lines.py
+
+
+def _w(by: dict, lib: str, pid: str) -> list:
+    """A family's wordings for `lib`: the literal here, else Joshua's file."""
+    if lib in by:
+        return list(by[lib])
+    import joshua_lines
+    return list(joshua_lines.TABLE[pid])
 
 # ---- number words ---------------------------------------------------------------
 ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
@@ -379,6 +387,7 @@ NUMBER_TAGS = {
     "harry": lambda n: "[angry]" if n <= 10 else "[exhales]" if n <= 20 else "[smug]",
     "bill": lambda n: "[calmly]",
     "lily": lambda n: "[softly]" if n <= 10 else "[gently]",
+    "joshua": lambda n: "[calmly]",
 }
 
 
@@ -387,24 +396,28 @@ def life_line(lib: str, n: int) -> str:
 
 
 def hand_line(lib: str, n: int) -> str:
-    tag = {"harry": "[scoffs]", "bill": "[calmly]", "lily": "[gently]"}[lib]
+    tag = {"harry": "[scoffs]", "bill": "[calmly]", "lily": "[gently]", "joshua": "[calmly]"}[lib]
     if n == 0:
-        return f"{tag} " + {"harry": "No cards. Happy?", "bill": "No cards in hand.", "lily": "Not a card, dear."}[lib]
+        return f"{tag} " + {"harry": "No cards. Happy?", "bill": "No cards in hand.", "lily": "Not a card, dear.", "joshua": "Hand: empty."}[lib]
     if n == 1:
-        return f"{tag} " + {"harry": "One card.", "bill": "One card.", "lily": "Just the one, love."}[lib]
+        return f"{tag} " + {"harry": "One card.", "bill": "One card.", "lily": "Just the one, love.", "joshua": "One card. Exactly."}[lib]
     return f"{tag} {words(n).capitalize()} cards."
 
 
 # address families: template per lib; {say} as a subject, {voc} when addressed
 ADDRESS = {
     "hit": ("tells the table to attack a named player", {
-        "harry": "[shouting] Everybody hit {say}!", "bill": "[dryly] Might I suggest we all hit {say}.", "lily": "[gently] Dears, {say} needs attention."}),
+        "harry": "[shouting] Everybody hit {say}!", "bill": "[dryly] Might I suggest we all hit {say}.", "lily": "[gently] Dears, {say} needs attention.",
+        "joshua": "[calmly] Recommend we all attack {say}."}),
     "threat": ("names a player as the threat", {
-        "harry": "[shouting] {Say}'s the threat! Wake up!", "bill": "[calmly] For the record, {say} is the threat.", "lily": "[warmly] {Say} is the problem, loves."}),
+        "harry": "[shouting] {Say}'s the threat! Wake up!", "bill": "[calmly] For the record, {say} is the threat.", "lily": "[warmly] {Say} is the problem, loves.",
+        "joshua": "[calmly] {Say} is the threat. For the record."}),
     "leave-me": ("asks a named player to leave it alone", {
-        "harry": "[angry] Leave me alone, {voc}!", "bill": "[dryly] Do leave me be, {voc}.", "lily": "[gently] Leave me be, {voc} dear."}),
+        "harry": "[angry] Leave me alone, {voc}!", "bill": "[dryly] Do leave me be, {voc}.", "lily": "[gently] Leave me be, {voc} dear.",
+        "joshua": "[dryly] Leave me be, {voc}."}),
     "deal": ("offers a named player a truce", {
-        "harry": "[laughs] Deal, {voc}? Don't hit me, I don't hit you.", "bill": "[calmly] {Voc}. A truce, this turn?", "lily": "[warmly] Peace for a turn, {voc}?"}),
+        "harry": "[laughs] Deal, {voc}? Don't hit me, I don't hit you.", "bill": "[calmly] {Voc}. A truce, this turn?", "lily": "[warmly] Peace for a turn, {voc}?",
+        "joshua": "[calmly] {Voc}. A truce this turn?"}),
 }
 
 
@@ -430,19 +443,19 @@ def build_manifest(lib: str) -> dict:
          **render_block(lib), "phrases": {}}
     ph = m["phrases"]
     for pid, (when, by) in PROCEDURAL.items():
-        ph[pid] = {"category": "procedural", "when": when, "text": list(by[lib]), "source": "table-2026-09-10"}
+        ph[pid] = {"category": "procedural", "when": when, "text": _w(by, lib, pid), "source": "table-2026-09-10"}
     for pid, (when, by) in ARC.items():
-        ph[pid] = {"category": "arc", "when": when, "text": list(by[lib]), "source": "table-arc-2026-09-10"}
+        ph[pid] = {"category": "arc", "when": when, "text": _w(by, lib, pid), "source": "table-arc-2026-09-10"}
     for pid, (when, by) in MULLIGAN.items():
-        ph[pid] = {"category": "mulligan", "when": when, "text": list(by[lib]), "source": "table-mulligan-2026-09-11"}
+        ph[pid] = {"category": "mulligan", "when": when, "text": _w(by, lib, pid), "source": "table-mulligan-2026-09-11"}
     for pid, (when, by) in LOOP.items():
-        ph[pid] = {"category": "loop", "when": when, "text": list(by[lib]), "source": "table-loop-2026-09-11"}
+        ph[pid] = {"category": "loop", "when": when, "text": _w(by, lib, pid), "source": "table-loop-2026-09-11"}
     for pid, (when, by) in KILLSHOT.items():
-        ph[pid] = {"category": "killshot", "when": when, "text": list(by[lib]), "source": "table-killshot-2026-09-16"}
+        ph[pid] = {"category": "killshot", "when": when, "text": _w(by, lib, pid), "source": "table-killshot-2026-09-16"}
     for pid, (when, by) in HECKLE.items():
-        ph[pid] = {"category": "heckle", "when": when, "text": list(by[lib]), "source": "table-heckle-2026-09-14"}
+        ph[pid] = {"category": "heckle", "when": when, "text": _w(by, lib, pid), "source": "table-heckle-2026-09-14"}
     for pid, (when, by) in DEALS.items():
-        ph[pid] = {"category": "deal", "when": when, "text": list(by[lib]), "source": "table-deal-2026-09-16"}
+        ph[pid] = {"category": "deal", "when": when, "text": _w(by, lib, pid), "source": "table-deal-2026-09-16"}
     for n in LIFE_NUMBERS:
         ph[f"life-{n}"] = {"category": "number", "when": f"announces or answers its life total: {n}", "text": [life_line(lib, n)], "source": "table-2026-09-10"}
     for n in HAND_NUMBERS:
