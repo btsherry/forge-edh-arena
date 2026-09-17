@@ -537,8 +537,10 @@ class WordsFromThePlayer(unittest.TestCase):
         try:
             r.handle(cast(2, turn=6) | {"state": rq["state"]})
             self.assertIn("DEAL OFFER", r.brain.last_prompt, "all-AI: seat 0 may propose like any seat")
-            self.assertIn("Parties: seat 1, seat 2, seat 3.", r.brain.last_prompt)
-            self.assertEqual(r._party_name(0, rq), "seat 0", "nobody is Player One on an all-AI table")
+            self.assertRegex(r.brain.last_prompt, r"Parties: .*\(seat 1\), .*\(seat 2\), .*\(seat 3\)\.",
+                             "no roster env: the arena's default table names the parties (table_from_launcher, 2026-09-17)")
+            self.assertNotIn("Player One", r._party_name(0, rq), "nobody is Player One on an all-AI table")
+            self.assertTrue(r._party_name(0, rq).endswith("seat 0)"), r._party_name(0, rq))
         finally:
             os.environ.pop("ALL_SEATS", None)
 

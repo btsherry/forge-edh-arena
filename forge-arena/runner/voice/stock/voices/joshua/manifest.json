@@ -2,6 +2,7 @@
  "schema": "arena.voice-stock/1",
  "library": "joshua",
  "seat": 0,
+ "role": "advisor",
  "voice": "Joshua - W.O.P.R. (Ben's ElevenLabs account), eleven_v3 stability 0.5 speed 0.92",
  "voice_id": "SBbMtfucc8NAkpyzIRvP",
  "voice_name": "Joshua - W.O.P.R.",

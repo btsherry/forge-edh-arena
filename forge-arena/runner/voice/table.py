@@ -57,8 +57,9 @@ CARD_REACTIONS = {"gc": ({"gc-react", "oh-no", "kill-that", "wow", "read-that", 
 
 
 def load_libraries(voices_dir: Path | None = None) -> dict[str, dict]:
-    """{library: {"library", "voice", "temperament", "seat"}} from every
-    voices/<name>/manifest.json; `seat` is the library's default seat."""
+    """{library: {"library", "voice", "temperament", "role", "seat"}} from every voices/<name>/manifest.json.
+    `role` is "seat" (a table voice) or "advisor" (Joshua's library: it never sits at a table with a human);
+    `seat` is the manifest's old default seat, kept only to order the fallback when assign.json names none."""
     out: dict[str, dict] = {}
     d = voices_dir or VOICES_DIR
     try:
@@ -68,84 +69,108 @@ def load_libraries(voices_dir: Path | None = None) -> dict[str, dict]:
     for mp in mans:
         try:
             m = json.loads(mp.read_text())
-            seat = int(m["seat"])
-        except (OSError, ValueError, KeyError, TypeError):
+        except (OSError, ValueError):
             continue
-        out[mp.parent.name] = {"library": mp.parent.name, "voice": str(m.get("voice_name", mp.parent.name)).split(" - ")[0],
-                               "temperament": str(m.get("temperament", "")), "seat": seat}
+        if not isinstance(m, dict):
+            continue                                            # a manifest that is not an object is no library (Gemini review, 2026-09-17)
+        try:
+            seat = int(m.get("seat", 99))
+        except (TypeError, ValueError):
+            seat = 99
+        out[mp.parent.name] = {"library": mp.parent.name, "voice": str(m.get("voice_name") or mp.parent.name).split(" - ")[0],
+                               "temperament": str(m.get("temperament") or ""), "role": str(m.get("role") or "seat"), "seat": seat}
     return out
 
 
 def load_assignments(voices_dir: Path | None = None) -> dict[str, str]:
-    """voices/assign.json by_deck: deck slug -> library (Ben's associations)."""
+    """voices/assign.json by_deck: deck slug -> library (Ben's associations); anything but an object is no associations."""
+    by = _assign_file(voices_dir).get("by_deck")
+    return {str(k): str(v) for k, v in by.items()} if isinstance(by, dict) else {}
+
+
+def load_fallback(voices_dir: Path | None = None) -> list[str]:
+    """voices/assign.json fallback: the order unassociated decks take the free libraries in."""
+    fb = _assign_file(voices_dir).get("fallback")
+    return [str(x) for x in fb] if isinstance(fb, list) else []
+
+
+def _assign_file(voices_dir: Path | None) -> dict:
     try:
-        return dict((json.loads(((voices_dir or VOICES_DIR) / "assign.json").read_text()).get("by_deck") or {}))
-    except (OSError, ValueError, TypeError, AttributeError):
+        d = json.loads(((voices_dir or VOICES_DIR) / "assign.json").read_text())
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
         return {}
 
 
 def assign_voices(libraries: dict[str, dict], seat_decks: dict[int, str] | None, by_deck: dict[str, str] | None,
-                  exclude_seat: int | None = None) -> dict[int, dict]:
-    """{seat: library info}. A seat whose deck is in by_deck gets that library
-    (lower seat wins a clash); every other seat takes a free library in seat
-    order — the library's default seat first, then whatever is left. With no
-    seat->deck knowledge every library sits at its default seat."""
+                  human_seat: int | None = 0, fallback: list[str] | None = None) -> dict[int, dict]:
+    """Who speaks as whom — ONE rule, three passes (2026-09-17, replacing the default-seat / late-rebind tangle):
+
+    1. The human's seat is never voiced, and a library with role "advisor" (Joshua) never sits at a table with a
+       human — his voice is the advisor's there.
+    2. A seat whose deck has an association takes that library; when two seats want the same one, the lower seat
+       keeps it and the other falls through.
+    3. Every remaining seat, in seat order, takes the next free library in the fallback order (assign.json
+       `fallback`, else the manifests' old default seats, else the name). Each library is used once; a table with
+       more seats than libraries leaves the last seats voiceless — never two seats in one voice.
+
+    `seat_decks` is the launcher's table ({seat: deck}); with no table at all the seats are 0-3 minus the human's,
+    which with three seat libraries and a human at 0 is seats 1-3 — the old default behaviour. Four random decks
+    with no associations, or no assign.json at all, seat deterministically through pass 3."""
     if not libraries:
         return {}
-    if exclude_seat is not None:
-        # the human's seat is never voiced (2026-09-16: Joshua's library sits at seat 0 for all-AI tables only)
-        libraries = {n: i for n, i in libraries.items() if i["seat"] != exclude_seat}
-    seat_decks = {s: d for s, d in (seat_decks or {}).items() if s != exclude_seat}
+    libs = {n: i for n, i in libraries.items() if not (human_seat is not None and i.get("role") == "advisor")}
     by_deck = by_deck or {}
+    decks: dict[int, str] = {}
+    for k, v in (seat_decks or {}).items():                         # keys may arrive as strings from JSON (Gemini review)
+        try:
+            decks[int(k)] = str(v)
+        except (TypeError, ValueError):
+            continue
+    order = [n for n in (fallback or []) if n in libs]
+    order += [n for n in sorted(libs, key=lambda n: (libs[n].get("seat", 99), n)) if n not in order]
+    if decks:
+        seats = sorted(s for s in decks if s != human_seat)
+    else:
+        seats = [s for s in range(4) if s != human_seat][:len(order)]
     out: dict[int, dict] = {}
     used: set[str] = set()
-    for seat in sorted(seat_decks):
-        lib = by_deck.get(seat_decks[seat])
-        if lib in libraries and lib not in used:
-            out[seat] = libraries[lib]; used.add(lib)
-    defaults = {info["seat"]: name for name, info in libraries.items()}
-    seats = sorted(set(seat_decks) | set(defaults))
-    for seat in seats:
+    for seat in seats:                                              # pass 2: the associations, lower seat first
+        lib = by_deck.get(decks.get(seat, ""))
+        if lib in libs and lib not in used:
+            out[seat] = libs[lib]; used.add(lib)
+    for seat in seats:                                              # pass 3: the fallback order
         if seat in out:
             continue
-        lib = defaults.get(seat)
-        if lib is None or lib in used:
-            free = [n for n in sorted(libraries, key=lambda n: libraries[n]["seat"]) if n not in used]
-            lib = free[0] if free else None
-        if lib is not None:
-            out[seat] = libraries[lib]; used.add(lib)
+        free = next((n for n in order if n not in used), None)
+        if free is None:
+            break                                                   # more seats than libraries: the rest stay silent
+        out[seat] = libs[free]; used.add(free)
     return out
 
 
 def load_seat_libraries(voices_dir: Path | None = None, seat_decks: dict[int, str] | None = None,
-                        exclude_seat: int | None = None) -> dict[int, dict]:
-    """{seat: {"library", "voice", "temperament", "seat"}} — the voices at the table,
-    by deck when the table is known (voices/assign.json), by default seat otherwise;
-    the human's seat (exclude_seat) is never voiced. Missing dir -> {} (barks silently off)."""
-    return assign_voices(load_libraries(voices_dir), seat_decks, load_assignments(voices_dir), exclude_seat)
+                        human_seat: int | None = 0) -> dict[int, dict]:
+    """{seat: {"library", "voice", "temperament", ...}} — the voices at the table (assign_voices). Missing dir -> {}."""
+    return assign_voices(load_libraries(voices_dir), seat_decks, load_assignments(voices_dir), human_seat, load_fallback(voices_dir))
 
 
 DEFAULT_TABLE = "urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds"
 
 
 def table_from_launcher(human_deck: str | None, roster: str | None, all_ai: bool) -> dict[int, str]:
-    """The seats the launcher knows at startup: an all-AI table seats roster[i] at seat i (game 56:
-    without it Urza spoke two lines as Joshua before the game log named the decks and the voices
-    moved); a human table is the roster minus the human's deck, seats 1-3."""
+    """The table as the launcher seats it — the ONLY source of who plays what (the game-log rebind is gone,
+    2026-09-17): an all-AI table seats roster[i] at seat i; a human table is the roster minus the human's deck,
+    in roster order, at seats 1-3. An empty roster is the arena's default table."""
+    slugs = (roster or "").split() or DEFAULT_TABLE.split()
     if all_ai:
-        slugs = (roster or "").split() or DEFAULT_TABLE.split()
         return {i: d for i, d in enumerate(slugs[:4])}
-    return seat_decks_from_roster(human_deck, roster)
-
-
-def seat_decks_from_roster(human_deck: str | None, roster: str | None) -> dict[int, str]:
-    """{1..3: deck} the way GuiPilotMatch/run_table.sh/the advisor seat a human
-    table: the roster minus the human's deck, in roster order, first three.
-    Empty when the human deck is unknown (an all-AI table, or an old launcher)."""
     if not human_deck:
         return {}
-    slugs = (roster or "").split() or DEFAULT_TABLE.split()
-    return {i + 1: d for i, d in enumerate([d for d in slugs if d != human_deck][:3])}
+    rest = list(slugs)
+    if human_deck in rest:
+        rest.remove(human_deck)                                     # the human's ONE copy; a roster listing a deck twice keeps the other (Gemini review)
+    return {i + 1: d for i, d in enumerate(rest[:3])}
 
 
 def game_changers_of(deck_slug: str, decks_dir: Path | None = None) -> set[str]:
@@ -276,21 +301,3 @@ def hand_pid(hand) -> str:
     return f"hand-{n}" if 0 <= n <= 10 else ""
 
 
-def seat_decks_from_game_log(game_log: Path) -> dict[int, str]:
-    """{seat: deck slug} from the runners' shared game log (each record carries
-    seat + deck); empty until the first decisions land."""
-    out: dict[int, str] = {}
-    try:
-        with game_log.open("rb") as f:
-            for raw in f:
-                try:
-                    r = json.loads(raw)
-                except ValueError:
-                    continue
-                if r.get("seat") is not None and r.get("deck"):
-                    out.setdefault(int(r["seat"]), str(r["deck"]))
-                if len(out) >= 4:
-                    break
-    except OSError:
-        pass
-    return out

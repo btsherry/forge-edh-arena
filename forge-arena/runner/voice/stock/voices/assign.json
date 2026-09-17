@@ -1,10 +1,16 @@
 {
   "schema": "arena.voice-assign/1",
-  "note": "Ben, 2026-09-10 / 2026-09-16: which voice a deck gets — Purphoros the eager warrior, Urza the cool intellectual, Giada the warm voice, Selvala Joshua (all-AI tables only: Joshua's library sits at seat 0 and never voices a table with a human). A deck not listed takes a free library in seat order; two listed decks wanting the same voice: the lower seat keeps it.",
+  "note": "Who speaks as whom (voice/table.py assign_voices, 2026-09-17): the human's seat is silent; Joshua (role advisor) never sits at a table with a human; a deck in by_deck takes its library (lower seat wins a clash); every other seat takes the next free library in `fallback` order — four random decks, or no associations at all, still seat deterministically, each library once.",
   "by_deck": {
     "purphoros-god-of-the-forge": "harry",
     "urza-lord-high-artificer": "bill",
     "giada-font-of-hope": "lily",
     "selvala-heart-of-the-wilds": "joshua"
-  }
+  },
+  "fallback": [
+    "harry",
+    "bill",
+    "lily",
+    "joshua"
+  ]
 }

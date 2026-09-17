@@ -97,13 +97,13 @@ def git_stamp() -> str:
 
 
 def _voices_line(env) -> str:
-    """Who speaks as whom on an all-AI table (2026-09-16): the roster seated in order, Ben's associations, Joshua at the
-    seat without one. Best effort — a banner never fails a launch."""
+    """Who speaks as whom on an all-AI table (2026-09-16): the roster seated in order, Ben's associations, then the
+    fallback order (Joshua sits only here). Best effort — a banner never fails a launch."""
     try:
         sys.path.insert(0, str(ROOT / "runner"))
         import voice.table as T  # noqa: E402
         decks = T.table_from_launcher("", env.get("ARENA_SEAT_DECKS") or ROSTER, all_ai=True)
-        voices = T.assign_voices(T.load_libraries(), decks, T.load_assignments(), exclude_seat=None)
+        voices = T.load_seat_libraries(seat_decks=decks, human_seat=None)          # the one rule (voice/table.py, 2026-09-17)
         who = {d: c.get("say") or d for d, c in (T.load_address().get("commanders") or {}).items()}
         return ", ".join(f"{who.get(decks[s], decks[s]).split(',')[0]}={v['voice']}" for s, v in sorted(voices.items()) if s in decks)
     except Exception:  # noqa: BLE001

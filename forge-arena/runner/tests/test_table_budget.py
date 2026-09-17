@@ -171,17 +171,20 @@ class ReactToTheHuman(_TreeCase):
         self.assertEqual([q for q in self._queued() if q[0] == "bark"], [])
         self.assertIn("p=0.70", self._records("skipped", "bark")[-1]["why"])
 
-    def test_the_humans_game_changers_come_from_the_launcher_and_the_game_log(self):
-        os.environ["ARENA_HUMAN_DECK"] = "giada-font-of-hope"
-        r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
-        self.assertIn("Smothering Tithe", r.game_changers[0], "the human's deck from the launcher")
+    def test_the_tables_game_changers_come_from_the_launcher_alone(self):
         self.assertNotIn(0, self.r.game_changers, "no launcher env: nothing known about the human")
-        with (self.logs / "game.jsonl").open("w") as f:
-            for seat, deck in ((0, "giada-font-of-hope"), (1, "urza-lord-high-artificer"), (2, "purphoros-god-of-the-forge"), (3, "selvala-heart-of-the-wilds")):
-                f.write(json.dumps({"seat": seat, "deck": deck}) + "\n")
-        self.r.learn_table()
-        self.assertIn("The One Ring", self.r.game_changers[0], "the game log names the human's deck too")
-        self.assertIn("Rhystic Study", self.r.game_changers[1])
+        old = {k: os.environ.get(k) for k in ("ARENA_HUMAN_DECK", "ARENA_SEAT_DECKS")}
+        os.environ["ARENA_HUMAN_DECK"] = "giada-font-of-hope"
+        os.environ["ARENA_SEAT_DECKS"] = "urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds"
+        try:
+            r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
+        finally:
+            for k, v in old.items():
+                os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        self.assertIn("Smothering Tithe", r.game_changers[0], "the human's deck from the launcher")
+        self.assertIn("The One Ring", r.game_changers[0])
+        self.assertIn("Rhystic Study", r.game_changers[1], "seat 1 = the roster minus the human's deck, in order")
+        self.assertEqual(sorted(r.game_changers), [0, 1, 2, 3], "the table is seated once, from the launcher (the game-log rebind is gone, 2026-09-17)")
 
 
 class LeanerBags(_TreeCase):

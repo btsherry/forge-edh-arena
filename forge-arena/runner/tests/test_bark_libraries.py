@@ -248,14 +248,14 @@ class TheFourthVoice(unittest.TestCase):
         import table as T
         libs = T.load_libraries(VOICES)
         self.assertIn("joshua", libs); self.assertEqual(libs["joshua"]["seat"], 0)
-        human = T.assign_voices(libs, None, {}, exclude_seat=0)
+        human = T.assign_voices(libs, None, {}, human_seat=0)
         self.assertEqual(sorted(human), [1, 2, 3], "a human table: three voices, seat 0 silent")
         self.assertNotIn("joshua", {v["library"] for v in human.values()})
-        allai = T.assign_voices(libs, None, {}, exclude_seat=None)
+        allai = T.assign_voices(libs, None, {}, human_seat=None)
         self.assertEqual({s: v["library"] for s, v in allai.items()}, {0: "joshua", 1: "harry", 2: "bill", 3: "lily"},
                          "game 55: four seats, three libraries doubled Harry; now the fourth is Joshua")
         by_deck = {"purphoros-god-of-the-forge": "harry"}
-        assigned = T.assign_voices(libs, {1: "urza-lord-high-artificer", 2: "giada-font-of-hope", 3: "purphoros-god-of-the-forge"}, by_deck, exclude_seat=0)
+        assigned = T.assign_voices(libs, {1: "urza-lord-high-artificer", 2: "giada-font-of-hope", 3: "purphoros-god-of-the-forge"}, by_deck, human_seat=0)
         self.assertEqual(assigned[3]["library"], "harry", "Ben's deck association still wins")
         self.assertNotIn(0, assigned)
 
@@ -282,8 +282,8 @@ class TheTableAtStartup(unittest.TestCase):
                          {1: "urza-lord-high-artificer", 2: "giada-font-of-hope", 3: "purphoros-god-of-the-forge"}, "a human table: the roster minus the human's deck")
         by_deck = T.load_assignments(VOICES)
         self.assertEqual(by_deck["selvala-heart-of-the-wilds"], "joshua", "Ben, 2026-09-16: Selvala gets Joshua as an association")
-        voices = T.assign_voices(T.load_libraries(VOICES), decks, by_deck, exclude_seat=None)
+        voices = T.assign_voices(T.load_libraries(VOICES), decks, by_deck, human_seat=None)
         self.assertEqual({s: v["library"] for s, v in sorted(voices.items())}, {0: "bill", 1: "lily", 2: "harry", 3: "joshua"},
                          "all-AI: Urza cool, Giada warm, Purphoros eager, Selvala Joshua — from the first line, no mid-game switch")
-        human = T.assign_voices(T.load_libraries(VOICES), T.table_from_launcher("giada-font-of-hope", roster, all_ai=False), by_deck, exclude_seat=0)
+        human = T.assign_voices(T.load_libraries(VOICES), T.table_from_launcher("giada-font-of-hope", roster, all_ai=False), by_deck, human_seat=0)
         self.assertNotIn("joshua", {v["library"] for v in human.values()}, "a human table: Selvala at an AI seat takes a free seat voice, never Joshua")

@@ -140,9 +140,9 @@ from voice.renderer import (  # noqa: E402,F401 — re-exported (voice_runner.X)
     Player, Renderer)
 from voice.table import (  # noqa: E402,F401 — re-exported
     TABLE_LIB, TABLE_P, LIFE_STEPS, CARD_LIB, CARD_SWAP, CARD_REACTIONS, load_libraries, load_assignments,
-    assign_voices, load_seat_libraries, DEFAULT_TABLE, seat_decks_from_roster, table_from_launcher, game_changers_of, deck_cards_of,
+    assign_voices, load_seat_libraries, DEFAULT_TABLE, table_from_launcher, game_changers_of, deck_cards_of,
     card_kind, load_address, who_for_deck, card_slug, load_combo_index, deck_combos_of, life_pid, hand_pid,
-    seat_decks_from_game_log, TUNING_FILE, TUNING_SCHEMA, load_tuning)
+    TUNING_FILE, TUNING_SCHEMA, load_tuning)
 from voice.scheduler import (  # noqa: E402,F401 — re-exported
     PRIORITY, CHAIN_HOP_PRIORITY, BARK_PRIORITY, DUTY_BASE, DUTY_WINDOW_S, DUTY_HUMAN_MULT, SILENCE_FLOOR_S,
     QUESTION_LINES, QUESTION_PREFIXES, PROPOSAL_LINES, PROPOSAL_PREFIXES, PROPOSAL_P, PROPOSAL_TARGET_P,
@@ -300,9 +300,10 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self._human_deck: str = os.environ.get("ARENA_HUMAN_DECK") or ""
         self._seat_decks: dict[int, str] = table_from_launcher(self._human_deck, os.environ.get("ARENA_SEAT_DECKS", ""),
                                                                all_ai=self.human_seat is None)
-        self.seat_libraries = load_seat_libraries(seat_decks=self._seat_decks or None, exclude_seat=self.human_seat)
+        self.seat_libraries = load_seat_libraries(seat_decks=self._seat_decks or None, human_seat=self.human_seat)
         self.game_changers: dict[int, set[str]] = self._table_game_changers()
         self.address = load_address()
+        self._table_line = ", ".join(f"seat {k} {self._seat_decks.get(k, '?')} -> {v['voice']}" for k, v in sorted(self.seat_libraries.items())) or "no seat voices"
         self._who: dict[int, str] = self._table_who()
         self.table_ids, self.card_ids = self._load_sub_ids()
         self._combo_index = load_combo_index()
@@ -922,26 +923,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.after_spoken(item)
         return True
 
-    # -- seat barks
-    def learn_table(self) -> None:
-        """Once the game log names the decks at the table, re-seat the voices by
-        deck (Ben, 2026-09-10: Purphoros fiery, Urza cool, Giada warm)."""
-        if getattr(self, "_table_confirmed", False):
-            return
-        decks = seat_decks_from_game_log(self.logs / "game.jsonl")
-        ai = {k: v for k, v in decks.items() if k != self.human_seat}
-        if len(ai) >= 3:                                      # the whole table: confirm, or correct the launcher's roster
-            self._table_confirmed = True
-            if ai != self._seat_decks:
-                self._seat_decks = ai
-                self.seat_libraries = load_seat_libraries(seat_decks=ai, exclude_seat=self.human_seat)
-            self._human_deck = decks.get(self.human_seat) or self._human_deck
-            self.game_changers = self._table_game_changers()
-            self._who = self._table_who()
-            self.table_ids, self.card_ids = self._load_sub_ids()
-            self._cards.clear()
-            self._combo_sets.clear()
-            self.say("[voice] table: " + ", ".join(f"seat {k} {ai.get(k, '?')} -> {v['voice']}" for k, v in sorted(self.seat_libraries.items())))
+    # -- seat barks (the table is seated once, at startup, from the launcher's roster — 2026-09-17)
 
     def library_for_seat(self, seat: int) -> str:
         info = self.seat_libraries.get(int(seat))
@@ -968,7 +950,6 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
                 self.publish_final()
             self.save_state()
             return
-        self.learn_table()
         self.scan_advisor()
         self.scan_observer()
         self.scan_game_log()
@@ -1020,7 +1001,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
                  f"live={'on' if self.renderer.live else 'off (no ELEVENLABS_API_KEY)'}, min_gap={self.min_gap}s, "
                  f"fx={self.renderer.fx_mode}, format={self.renderer.format}, glitch={self.renderer.glitch}, sfx={'on' if self.sfx_on else 'off'}, color={self.color_mode}, "
                  f"your_move={self.your_move_mode}, barks={self.barks_mode}, patter={'off' if not self.patter_on else f'{self.patter_gap[0]:g}-{self.patter_gap[1]:g}s'}" + (f", chains p={self.chains.first_hop_p}/decay {self.chains.decay}/max {self.chains.max_hops}/gap {self.chains.gap_s}s" if self.chains else ", chains=off (no chains.json)")
-                 + (f" (p={self.barks_p}, opener_p={self.barks_opener_p}, swing>={self.barks_swing}, hit>={self.barks_hit}, guard={self.barks_cooldown:.0f}s; " + ", ".join(f"seat {k} {v['voice']}" for k, v in sorted(self.seat_libraries.items())) + ")"
+                 + (f" (p={self.barks_p}, opener_p={self.barks_opener_p}, swing>={self.barks_swing}, hit>={self.barks_hit}, guard={self.barks_cooldown:.0f}s; " + self._table_line + ")"
                     if self.barks_mode != "off" and self.seat_libraries else (" (no seat voice libraries found)" if self.barks_mode != "off" else "")))
         hb = self.mailbox / "seat-0-voice" / "heartbeat"
         hb.parent.mkdir(parents=True, exist_ok=True)
@@ -1161,7 +1142,6 @@ def replay(archive: Path, seed: int = 1, out=print) -> list[str]:
         def tick() -> None:
             feed("game", game_lines)
             feed("advisor", adv_lines)
-            vr.learn_table()
             vr.scan_game_log()
             vr.scan_advisor()
             vr.mutter()

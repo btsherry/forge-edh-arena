@@ -2074,7 +2074,9 @@ Hard-won from two live sessions; read before optimizing anything.
     games 38–46).** Three ElevenLabs stock voices (Harry / Bill / Lily, eleven_v3
     with delivery tags at stability 0.0/0.5, pcm_24000 raws baked to 22.05 kHz
     at one library gain to -24 LUFS) speak for the AI seats, assigned by deck
-    (`voices/assign.json`). Design of record: every turn boundary has one owner;
+    (`voices/assign.json`; the 2026-09-17 rule of record — silent human seat, Joshua only
+    without a human, `by_deck` then `fallback`, seated once from the launcher — is
+    `docs/reviews/2026-09-17-voice-mapping-gemini-review.md`). Design of record: every turn boundary has one owner;
     instant reactions from `ObserverSnapshot`'s public event ring (attack /
     damage / cast / left / countered / gameover + per-seat pool); interaction
     chains (`runner/chains.py`, roles target / aggressor / bystander / leader /

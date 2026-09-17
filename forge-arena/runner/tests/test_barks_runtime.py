@@ -166,18 +166,41 @@ class BarkRuntime(_TreeCase):
         # an unlisted deck takes a free library in seat order
         got = vr.assign_voices(libs, {1: "sheoldreds-sacrifice", 2: "purphoros-god-of-the-forge", 3: "sythis-harvests-hand"}, prefs)
         self.assertEqual({k: v["library"] for k, v in got.items()}, {2: "harry", 1: "bill"})
-        # no table knowledge: default seats
+        # no table knowledge: seats 1-3 minus nothing take the fallback order (the manifests' old seats: harry, bill)
         self.assertEqual({k: v["library"] for k, v in vr.assign_voices(libs, None, prefs).items()}, {1: "harry", 2: "bill"})
+        # four random decks and no associations at all: deterministic, each library once, the human's seat silent
+        four = {0: "deck-a", 1: "deck-b", 2: "deck-c", 3: "deck-d"}
+        self.assertEqual({k: v["library"] for k, v in vr.assign_voices(libs, four, {}, human_seat=0).items()}, {1: "harry", 2: "bill"},
+                         "a human table with two libraries: seats 1 and 2 speak, seat 3 stays silent — never two seats in one voice")
+        self.assertEqual({k: v["library"] for k, v in vr.assign_voices(libs, four, {}, human_seat=None).items()}, {0: "harry", 1: "bill"})
+        self.assertEqual({k: v["library"] for k, v in vr.assign_voices(libs, four, {}, human_seat=None, fallback=["bill", "harry"]).items()}, {0: "bill", 1: "harry"},
+                         "assign.json's fallback order wins over the manifests' old seats")
+        advisor = dict(libs, joshua={"library": "joshua", "voice": "Joshua", "temperament": "", "role": "advisor", "seat": 0})
+        self.assertNotIn("joshua", {v["library"] for v in vr.assign_voices(advisor, four, {"deck-d": "joshua"}, human_seat=0).values()},
+                         "Joshua never sits at a table with a human, association or not")
+        self.assertEqual(vr.assign_voices(advisor, four, {"deck-d": "joshua"}, human_seat=None)[3]["library"], "joshua", "...but does on an all-AI table")
+        # Gemini review (2026-09-17): string seat keys from JSON still honour the associations; malformed data is no data
+        self.assertEqual({k: v["library"] for k, v in vr.assign_voices(libs, {"1": "urza-lord-high-artificer", "2": "deck-x"}, prefs).items()}, {1: "bill", 2: "harry"})
+        bad = Path(vr.VOICES_DIR) / "broken"; bad.mkdir()
+        (bad / "manifest.json").write_text("[]")
+        nulled = Path(vr.VOICES_DIR) / "nulled"; nulled.mkdir()
+        (nulled / "manifest.json").write_text(json.dumps({"schema": "arena.voice-stock/1", "voice_name": None, "seat": "x"}))
+        got = vr.load_libraries()
+        self.assertNotIn("broken", got); self.assertEqual((got["nulled"]["voice"], got["nulled"]["seat"]), ("nulled", 99))
+        (Path(vr.VOICES_DIR) / "assign.json").write_text(json.dumps({"by_deck": "not an object", "fallback": "nor this"}))
+        self.assertEqual((vr_table.load_assignments(), vr_table.load_fallback()), ({}, []))
         # a clash: two decks wanting Harry — the lower seat keeps it, the other takes what is free
         got = vr.assign_voices(libs, {1: "purphoros-god-of-the-forge", 2: "purphoros-god-of-the-forge"}, prefs)
         self.assertEqual({k: v["library"] for k, v in got.items()}, {1: "harry", 2: "bill"})
         self.assertEqual(vr.assign_voices({}, {1: "x"}, prefs), {})
 
     def test_the_launcher_hands_the_runner_the_table_at_startup(self):
-        self.assertEqual(vr.seat_decks_from_roster("selvala-heart-of-the-wilds", ""),
+        self.assertEqual(vr.table_from_launcher("selvala-heart-of-the-wilds", "", all_ai=False),
                          {1: "urza-lord-high-artificer", 2: "giada-font-of-hope", 3: "purphoros-god-of-the-forge"})
-        self.assertEqual(vr.seat_decks_from_roster("giada-font-of-hope", "a b c d"), {1: "a", 2: "b", 3: "c"})
-        self.assertEqual(vr.seat_decks_from_roster(None, ""), {}, "all-AI or an old launcher: default seats")
+        self.assertEqual(vr.table_from_launcher("giada-font-of-hope", "a b c d", all_ai=False), {1: "a", 2: "b", 3: "c"})
+        self.assertEqual(vr.table_from_launcher(None, "", all_ai=False), {}, "an old launcher with no human deck: the fallback seats")
+        self.assertEqual(vr.table_from_launcher("", "a b c d", all_ai=True), {0: "a", 1: "b", 2: "c", 3: "d"}, "all-AI: seat i plays roster[i]")
+        self.assertEqual(vr.table_from_launcher("a", "a a b c", all_ai=False), {1: "a", 2: "b", 3: "c"}, "a roster naming the human's deck twice keeps the other copy (Gemini review)")
         (Path(vr.VOICES_DIR) / "assign.json").write_text(json.dumps({"by_deck": {"purphoros-god-of-the-forge": "harry", "urza-lord-high-artificer": "bill", "giada-font-of-hope": "lily"}}))
         os.environ["ARENA_HUMAN_DECK"] = "selvala-heart-of-the-wilds"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
@@ -187,22 +210,17 @@ class BarkRuntime(_TreeCase):
         cfg = (Path(__file__).resolve().parents[2] / "scripts" / "arena-config.py").read_text()
         self.assertIn('ROSTER = "' + vr.DEFAULT_TABLE + '"', cfg)
 
-    def test_the_runner_learns_the_table_from_the_game_log_and_reseats_the_voices(self):
+    def test_the_table_is_seated_once_at_startup_and_never_moves(self):
+        """2026-09-17: the game-log rebind is gone (game 56: Urza spoke two lines as Joshua before the log named the
+        decks and the voices moved). The launcher's roster seats the table before the first line; nothing re-seats it."""
         (self.logs / "game.jsonl").write_text("\n".join(json.dumps(r) for r in (
             {"seat": 1, "deck": "giada-font-of-hope", "type": "MULLIGAN"},
             {"seat": 2, "deck": "purphoros-god-of-the-forge", "type": "MULLIGAN"},
-            {"seat": 3, "deck": "urza-lord-high-artificer", "type": "MULLIGAN"},
-            {"seat": 0, "deck": "selvala-heart-of-the-wilds", "type": "MULLIGAN"})) + "\n")
-        (Path(vr.VOICES_DIR) / "assign.json").write_text(json.dumps({"by_deck": {"purphoros-god-of-the-forge": "harry", "urza-lord-high-artificer": "bill", "giada-font-of-hope": "lily"}}))
-        self.assertEqual({k: v["library"] for k, v in self.r.seat_libraries.items()}, {1: "harry", 2: "bill"}, "before the log: default seats")
-        (self.logs / "game-partial.jsonl").write_text(json.dumps({"seat": 2, "deck": "purphoros-god-of-the-forge"}) + "\n")
-        partial = vr.seat_decks_from_game_log(self.logs / "game-partial.jsonl")
-        self.assertEqual(len(partial), 1, "one deck known is not a table")
-        self.r.learn_table()
-        self.assertEqual(vr.seat_decks_from_game_log(self.logs / "game.jsonl")[2], "purphoros-god-of-the-forge")
-        self.assertEqual({k: v["library"] for k, v in self.r.seat_libraries.items()}, {2: "harry", 3: "bill"},
-                         "Purphoros (seat 2) is Harry, Urza (seat 3) is Bill; Giada would be Lily but this tree has no Lily")
-        self.assertEqual(self.r.library_for_seat(1), "", "Giada's seat has no voice in this tree")
+            {"seat": 3, "deck": "urza-lord-high-artificer", "type": "MULLIGAN"})) + "\n")
+        before = {k: v["library"] for k, v in self.r.seat_libraries.items()}
+        self._observer(1, 1); self.r.step()
+        self.assertEqual({k: v["library"] for k, v in self.r.seat_libraries.items()}, before, "the log names decks; the voices do not move")
+        self.assertFalse(hasattr(vr.VoiceRunner, "learn_table"))
 
     def test_shuffle_bag_plays_every_wording_before_repeating_and_never_twice_running(self):
         picks = [self.r.renderer.stock("your-move").name for _ in range(12)]
@@ -225,6 +243,7 @@ class BarkRuntime(_TreeCase):
 
     def test_colour_belongs_to_joshua_only_after_the_humans_turn(self):
         self.r.color_mode = "all"
+        self.r.rng.random = lambda: 0.99                                  # Joshua's 30 % share of a seat's colour misses (game 58 knob; unpinned it flaked)
         self._advisor(kind="color", seq=1, turn=5, owner=1, text="Urza had a turn.")
         self._advisor(kind="color", seq=2, turn=6, owner=0, text="You had a turn.")
         self._advisor(kind="color", seq=3, turn=7, owner=3, text="Seat 3 has no voice library.")
@@ -244,6 +263,10 @@ class BarkRuntime(_TreeCase):
         self._advisor(kind="color", seq=6, turn=10, owner=2, text="Barks off.")
         self.r.scan_advisor()
         self.assertEqual([q["text"] for q in self.r.queue], ["Barks off."])
+        self.r.queue.clear(); self.r.barks_mode = "some"; self.r.rng.random = lambda: 0.0
+        self._advisor(kind="color", seq=7, turn=11, owner=1, text="Joshua's share.")
+        self.r.scan_advisor()
+        self.assertEqual([q["text"] for q in self.r.queue], ["Joshua's share."], "the share hits: Joshua takes the seat's colour, spoken not rolled again")
 
     def test_one_dice_a_short_guard_and_never_the_same_line_twice_in_a_turn(self):
         self.r.barks_mode = "some"; self.r.barks_p = 0.85
