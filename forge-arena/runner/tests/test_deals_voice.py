@@ -454,6 +454,16 @@ class ASeatsOwnOffer(_DealCase):
         self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"]); self.assertEqual([n["kind"] for n in self._notes(2)], ["deal-struck"])
         self.assertEqual(self._seat_lines(), [("deal-with-you", "bill/table", 2)])
 
+    def test_a_seats_refusal_is_told_to_the_proposer(self):
+        self.r.rng.random = lambda: 0.99
+        terms = {"kind": "truce", "rounds": 1}
+        self._propose(3, 1, terms, "p5")                              # Selvala (voiceless) asks Urza
+        self._deal_record(1, False, terms=terms, with_=3, offer_id="p5")
+        self.assertEqual(self._notes(3), [{"kind": "deal-refused", "between": [1, 3], "by": 1, "deal": terms, "offer_id": "p5", "turn": 3}],
+                         "game 53: Purphoros never learned Giada said no")
+        self.assertEqual(self._notes(1), [], "the refuser has nothing to learn")
+        self.assertEqual(self._seat_lines(), [("no-deal-with-you", "harry/table", 1)])
+
     def test_an_offer_to_the_player_waits_for_the_typed_answer(self):
         self.r.rng.random = lambda: 0.99
         terms = {"kind": "alliance", "until_turn": 9}

@@ -499,8 +499,7 @@ class SeatOffers(unittest.TestCase):
         self.assertIn("you have an ALLIANCE with seat 2", r.brain.last_prompt)
         self.assertEqual(r._mine(), {}, "taken: the seat may offer again after the cooldown")
         offer(r, 1004, "1004-0-3")                                   # the player's offer, from turn 5...
-        r.handle(cast(3, turn=8))                                    # ...read on turn 8
-        self.assertEqual(r._pending(), {})
-        self.assertNotIn("Player One (seat 0) offers", r.brain.last_prompt)
-        self.assertIn("an offer from turn 5 is stale on turn 8", "\n".join(r.log_lines))
+        r.handle(cast(3, turn=8))                                    # ...read on turn 8: the seat had no window for three turns (game 53)
+        self.assertIn("1004-0-3", r._pending(), "delivered at the next window, however late — game 50's rule; game 53 lost two offers to a staleness guard")
+        self.assertIn("Player One (seat 0) offers", r.brain.last_prompt)
         self.assertEqual(notes_left(r), [])

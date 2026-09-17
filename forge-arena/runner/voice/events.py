@@ -388,6 +388,8 @@ class EventsMixin:
             what = "counter"
         else:
             self._ledger("refused", (seat, other), by=seat, deal=terms, offer_id=offer_id, turn=t)
+            if offer_id:                                                # the proposer hears it (game 53: Purphoros never learned Giada said no)
+                self._deal_note(other, {"kind": "deal-refused", "between": [seat, other], "by": seat, "deal": dict(terms), "offer_id": offer_id, "turn": t})
             what = "refuse"
         snap_turn = self._last_snapshot.get("turn")
         age = time.time() - float(r.get("ts") or time.time())

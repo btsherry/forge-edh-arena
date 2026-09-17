@@ -468,10 +468,8 @@ class SeatRunner:
                 if note.get("kind") not in self.NOTE_KINDS:
                     self._say(f"[seat {self.seat}] note {p.name} dropped: unknown kind {note.get('kind')!r}")
                     continue
-                if (note.get("kind") in ("deal-offer", "deal-counter") and isinstance(note.get("turn"), int)
-                        and isinstance(req.get("turn"), int) and note["turn"] < req["turn"] - 1):
-                    self._say(f"[seat {self.seat}] note {p.name} dropped: an offer from turn {note['turn']} is stale on turn {req['turn']}")
-                    continue
+                # no staleness rule on offers: a seat with nothing to do gets no window for turns on end (game 53: Urza had none
+                # from turn 10 to 14, Giada none on 22-23) and the offer must still reach it at the next one (game 50's rule)
                 text = self._render_note(note, req)
                 if text is not None:
                     self._deal_notes.append(text)
