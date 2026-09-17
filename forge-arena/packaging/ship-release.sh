@@ -5,6 +5,9 @@
 # is the alias that is overwritten. Both are downloaded back and compared by
 # sha256 before this script reports success.
 #
+# LIMIT: this REST endpoint (and wrangler) refuse objects over 300 MiB (HTTP 413). A tarball with the voices
+# bundled is ~480 MiB — ship those with ship-release-s3.py (S3 API, multipart) beside this script.
+#
 # Usage:  forge-arena/packaging/ship-release.sh <tarball> <dated-key>
 #   e.g.  forge-arena/packaging/ship-release.sh ~/Claude/personal/forge-light-llm-20260909.tar.gz forge-light-llm-20260909.tar.gz
 #   --no-latest   upload the dated object only (a re-cut you do not want as -latest yet)
