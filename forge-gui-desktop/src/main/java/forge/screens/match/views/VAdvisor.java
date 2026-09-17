@@ -98,7 +98,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         // becomes logs/control/ask/ask-<ts>-<n>.json; the advisor runner
         // deletes the file when it picks the question up and answers in the
         // stream this panel already tails — one-way files, no engine thread.
-        final JPanel askRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][]", "[]"));
+        askRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][]", "[]"));
         askRow.setOpaque(false);
         askField.setToolTipText("Ask the advisor a question — Enter or Chat sends it");
         // Black field on the dark dock (Ben, 2026-09-04): the skin's white
@@ -153,7 +153,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             syncExecutive();
         });
         // Ben (2026-09-08): both toggles on ONE row, short labels
-        final JPanel toggleRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][grow]", "[]"));
+        toggleRow = new JPanel(new MigLayout("insets 0, gap 4, fill", "[grow][grow]", "[]"));
         toggleRow.setOpaque(false);
         toggleRow.add(toggle, "growx");
         toggleRow.add(executive, "growx");
@@ -192,6 +192,10 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     // publishes under logs/control/deal/questions/, oldest first; closed with the file, or dismissed by
     // the player ("later" — the offer stays open in the panel for a typed answer).
     private forge.arena.interactive.VDealOffer offerPane;
+    // Ben, 2026-09-16 (game 56, a spectator table): the chat row exists only when an advisor or the relay answers
+    // it; the Advisor/Executive toggles only with an advisor. What stays is the status line and the mute.
+    private JPanel askRow;
+    private JPanel toggleRow;
     private final java.util.Set<String> offerDismissed = new java.util.HashSet<>();
     private static final long ASK_PICKUP_MS = 20_000;
 
@@ -444,6 +448,12 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     }
 
     private void poll() {
+        if (askRow != null) {
+            askRow.setVisible(forge.arena.interactive.AiControlFile.relayAttached());
+        }
+        if (toggleRow != null) {
+            toggleRow.setVisible(forge.arena.interactive.AiControlFile.advisorAttached());
+        }
         syncToggle();
         syncExecutive();
         syncMute();

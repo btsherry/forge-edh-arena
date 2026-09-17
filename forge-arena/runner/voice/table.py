@@ -128,6 +128,16 @@ def load_seat_libraries(voices_dir: Path | None = None, seat_decks: dict[int, st
 DEFAULT_TABLE = "urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds"
 
 
+def table_from_launcher(human_deck: str | None, roster: str | None, all_ai: bool) -> dict[int, str]:
+    """The seats the launcher knows at startup: an all-AI table seats roster[i] at seat i (game 56:
+    without it Urza spoke two lines as Joshua before the game log named the decks and the voices
+    moved); a human table is the roster minus the human's deck, seats 1-3."""
+    if all_ai:
+        slugs = (roster or "").split() or DEFAULT_TABLE.split()
+        return {i: d for i, d in enumerate(slugs[:4])}
+    return seat_decks_from_roster(human_deck, roster)
+
+
 def seat_decks_from_roster(human_deck: str | None, roster: str | None) -> dict[int, str]:
     """{1..3: deck} the way GuiPilotMatch/run_table.sh/the advisor seat a human
     table: the roster minus the human's deck, in roster order, first three.

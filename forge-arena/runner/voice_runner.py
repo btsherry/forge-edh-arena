@@ -140,7 +140,7 @@ from voice.renderer import (  # noqa: E402,F401 — re-exported (voice_runner.X)
     Player, Renderer)
 from voice.table import (  # noqa: E402,F401 — re-exported
     TABLE_LIB, TABLE_P, LIFE_STEPS, CARD_LIB, CARD_SWAP, CARD_REACTIONS, load_libraries, load_assignments,
-    assign_voices, load_seat_libraries, DEFAULT_TABLE, seat_decks_from_roster, game_changers_of, deck_cards_of,
+    assign_voices, load_seat_libraries, DEFAULT_TABLE, seat_decks_from_roster, table_from_launcher, game_changers_of, deck_cards_of,
     card_kind, load_address, who_for_deck, card_slug, load_combo_index, deck_combos_of, life_pid, hand_pid,
     seat_decks_from_game_log, TUNING_FILE, TUNING_SCHEMA, load_tuning)
 from voice.scheduler import (  # noqa: E402,F401 — re-exported
@@ -298,7 +298,8 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         # the table: from the launcher at startup (ARENA_HUMAN_DECK + the roster), else
         # default seats until the game log names all three AI decks
         self._human_deck: str = os.environ.get("ARENA_HUMAN_DECK") or ""
-        self._seat_decks: dict[int, str] = seat_decks_from_roster(self._human_deck, os.environ.get("ARENA_SEAT_DECKS", ""))
+        self._seat_decks: dict[int, str] = table_from_launcher(self._human_deck, os.environ.get("ARENA_SEAT_DECKS", ""),
+                                                               all_ai=self.human_seat is None)
         self.seat_libraries = load_seat_libraries(seat_decks=self._seat_decks or None, exclude_seat=self.human_seat)
         self.game_changers: dict[int, set[str]] = self._table_game_changers()
         self.address = load_address()

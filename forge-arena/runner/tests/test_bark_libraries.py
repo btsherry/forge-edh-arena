@@ -265,3 +265,24 @@ class TheFourthVoice(unittest.TestCase):
             self.assertEqual(list(j), list(ref), f"{sub}: the same ids in the same order")
             for pid, ph in j.items():
                 self.assertTrue(ph["text"] and all(TAG_RE.match(t) for t in ph["text"]), f"joshua/{sub}/{pid}")
+
+
+class TheTableAtStartup(unittest.TestCase):
+    """Game 56: the all-AI voice runner seats roster[i] at seat i from the first line, and Ben's associations
+    (Purphoros eager, Urza cool, Giada warm, Selvala Joshua) decide who speaks as whom."""
+
+    def test_the_launcher_roster_seats_four_decks_and_the_associations_place_the_voices(self):
+        sys.path.insert(0, str(RUNNER / "voice"))
+        import table as T
+        roster = "urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds"
+        decks = T.table_from_launcher("", roster, all_ai=True)
+        self.assertEqual(decks, {0: "urza-lord-high-artificer", 1: "giada-font-of-hope", 2: "purphoros-god-of-the-forge", 3: "selvala-heart-of-the-wilds"})
+        self.assertEqual(T.table_from_launcher("selvala-heart-of-the-wilds", roster, all_ai=False),
+                         {1: "urza-lord-high-artificer", 2: "giada-font-of-hope", 3: "purphoros-god-of-the-forge"}, "a human table: the roster minus the human's deck")
+        by_deck = T.load_assignments(VOICES)
+        self.assertEqual(by_deck["selvala-heart-of-the-wilds"], "joshua", "Ben, 2026-09-16: Selvala gets Joshua as an association")
+        voices = T.assign_voices(T.load_libraries(VOICES), decks, by_deck, exclude_seat=None)
+        self.assertEqual({s: v["library"] for s, v in sorted(voices.items())}, {0: "bill", 1: "lily", 2: "harry", 3: "joshua"},
+                         "all-AI: Urza cool, Giada warm, Purphoros eager, Selvala Joshua — from the first line, no mid-game switch")
+        human = T.assign_voices(T.load_libraries(VOICES), T.table_from_launcher("giada-font-of-hope", roster, all_ai=False), by_deck, exclude_seat=0)
+        self.assertNotIn("joshua", {v["library"] for v in human.values()}, "a human table: Selvala at an AI seat takes a free seat voice, never Joshua")
