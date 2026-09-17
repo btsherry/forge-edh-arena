@@ -128,7 +128,8 @@ class RenderedTable(unittest.TestCase):
                         self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 22050), f"{lib}/table/{stem}")
                         secs = w.getnframes() / w.getframerate()
                         self.assertTrue(0.4 <= secs <= 6.0, f"{lib}/table/{stem}: {secs:.1f}s")
-                    self.assertTrue((REAL_VOICES / lib / "table" / "raw" / f"{stem}.wav").exists(), f"{lib}/table/raw/{stem}.wav")
+                    if (REAL_VOICES / lib / "table" / "raw").is_dir():        # the dry takes left the tree 2026-09-17 (Ben)
+                        self.assertTrue((REAL_VOICES / lib / "table" / "raw" / f"{stem}.wav").exists(), f"{lib}/table/raw/{stem}.wav")
                     n += 1
             self.assertEqual(n, 290 + 30 + 27 + 6 + 12 + 24 + 8, lib)
 

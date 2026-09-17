@@ -111,7 +111,8 @@ class RenderedAudio(unittest.TestCase):
                     self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 22050), f"{lib}/{stem}")
                     secs = w.getnframes() / w.getframerate()
                     self.assertTrue(0.5 <= secs <= 6.0, f"{lib}/{stem}: {secs:.1f}s")
-                self.assertTrue((VOICES / lib / "raw" / f"{stem}.wav").exists(), f"{lib}/raw/{stem}.wav: the dry take is the source for re-bakes")
+                if (VOICES / lib / "raw").is_dir():                       # the dry takes left the tree 2026-09-17 (Ben): a re-bake re-renders
+                    self.assertTrue((VOICES / lib / "raw" / f"{stem}.wav").exists(), f"{lib}/raw/{stem}.wav: the dry take is the source for re-bakes")
 
     def test_joshua_variants_are_baked_beside_the_originals(self):
         import wave

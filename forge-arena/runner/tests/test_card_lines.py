@@ -85,7 +85,8 @@ class RenderedCards(unittest.TestCase):
                         self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 22050), f"{lib}/cards/{stem}")
                         secs = w.getnframes() / w.getframerate()
                         self.assertTrue(0.4 <= secs <= 8.0, f"{lib}/cards/{stem}: {secs:.1f}s")   # Bill's slowest ten-word line runs 7.3 s
-                    self.assertTrue((REAL_VOICES / lib / "cards" / "raw" / f"{stem}.wav").exists(), f"{lib}/cards/raw/{stem}.wav")
+                    if (REAL_VOICES / lib / "cards" / "raw").is_dir():        # the dry takes left the tree 2026-09-17 (Ben)
+                        self.assertTrue((REAL_VOICES / lib / "cards" / "raw" / f"{stem}.wav").exists(), f"{lib}/cards/raw/{stem}.wav")
                     n += 1
             self.assertEqual(n, 264, lib)
 
