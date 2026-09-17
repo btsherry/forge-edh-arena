@@ -547,3 +547,27 @@ class StopsRestore(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LaunchBannerModeLines(unittest.TestCase):
+    """2026-09-16: the banner's first lines tell the truth about the relay and the spectator table's voices."""
+
+    def _args(self, **kw):
+        import argparse
+        base = dict(mode="", deck="", model="opus", effort="medium", timeout="90", advisor="", voice="", stops="", linger="60", autostop="1", out="")
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    def test_human_line_names_the_relay_and_the_spectator_line_names_the_voices(self):
+        cfg = _load_script("arena-config")
+        env = {"ARENA_CHATTER": "rowdy", "ARENA_SEAT_DECKS": "urza-lord-high-artificer giada-font-of-hope purphoros-god-of-the-forge selvala-heart-of-the-wilds"}
+        human_off = cfg.render(self._args(mode="human", deck="selvala-heart-of-the-wilds", advisor="0", voice="on"), env)
+        self.assertIn("advisor off (table relay on)", human_off)
+        human_on = cfg.render(self._args(mode="human", deck="selvala-heart-of-the-wilds", advisor="1", voice="on"), env)
+        self.assertIn("advisor on |", human_on)
+        allai = cfg.render(self._args(mode="all-ai", voice="on"), env)
+        self.assertIn("spectator: four brains, no advisor | voice on (chatter rowdy, barks some)", allai)
+        self.assertIn("voices Urza=Bill, Giada=Lily, Purphoros=Harry, Selvala=Joshua", allai)
+        self.assertNotIn("human game (advisor", allai, "the human section is skipped for four brains")
+        allai_mute = cfg.render(self._args(mode="all-ai", voice="off"), env)
+        self.assertIn("| voice off |", allai_mute)

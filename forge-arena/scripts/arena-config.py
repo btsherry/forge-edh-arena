@@ -51,9 +51,9 @@ KNOBS = {
         ("ARENA_ADVISOR_ROTATE_TOKENS", "400000", "advisor session rotation threshold"),
     ],
     "voice": [
-        ("ARENA_VOICE", "on", "the advisor's voice (arena-play --no-voice = off)"),
+        ("ARENA_VOICE", "on", "the table's voices — the seat voices, Joshua's lines, and Joshua at the fourth seat on an all-AI table (arena-play --no-voice = off)"),
         ("ARENA_CHATTER", "normal", "quiet | normal | lively | rowdy (or a number) — one dial for how much the table talks: sets the talk budget (speaking fraction of the last minute: .09 / .18 / .27 / .36) the governor spends, shortens the gap, lowers the reaction thresholds; advice frequency is untouched"),
-        ("ELEVENLABS_API_KEY", "", "live spoken advice needs it; stock phrases play without it"),
+        ("ELEVENLABS_API_KEY", "", "only Joshua's LIVE lines (advice, colour, deal reads) need it; every seat voice and every baked take plays without it (game 52)"),
         ("ARENA_VOICE_FORMAT", "pcm_24000", "ElevenLabs output; PCM needs no decoder"),
         ("ARENA_VOICE_FX", "on", "on = film effects (ffmpeg when present, else the lite chain) | lite | off"),
         ("ARENA_VOICE_MODEL", "eleven_flash_v2_5", "ElevenLabs model"),
@@ -64,8 +64,8 @@ KNOBS = {
         ("ARENA_VOICE_GLITCH", "light", "off | light | heavy — the radio glitch"),
         ("ARENA_VOICE_FOCUS", "on", "on | off — the match screen brings a talking seat's field tab forward, then puts your tab back"),
     ],
-    "seat barks (the AI seats' voices; advisor on + unmuted)": [
-        ("ARENA_BARKS", "some", "off | some | all — the AI seats speak in their own voices (Harry, Bill, Lily; by deck via voices/assign.json): openers, reactions, table talk, card lines, exchanges; the advisor must be on and unmuted"),
+    "seat barks (the AI seats' voices; any mode, whenever ARENA_VOICE is on)": [
+        ("ARENA_BARKS", "some", "off | some | all — the AI seats speak in their own voices (Harry, Bill, Lily, and Joshua on an all-AI table; by deck via voices/assign.json): openers, reactions, table talk, card lines, deals, exchanges; no advisor needed"),
         # Not a variable: the file that holds every number the talk runs on (2026-09-16, hardening plan §2 —
         # the 24 ARENA_BARKS_* / ARENA_VOICE_PATTER* / DUTY / COLOR / MIN_GAP / TABLE_P knobs retired into it).
         (TUNING_FILE, "", "the numbers the talk runs on, as data — the gap between lines (8 s), the odds of a bark, an opener, a reaction to your play, a recap or 'your move', the swing/hit thresholds, the seat guard, the human-turn budget, the patter clock's gap and rate, the slow-seat and big-mana lines, the chains' odds, decay, hop cap and beat; edit the file, not the environment (ARENA_CHATTER scales the pace ones)"),
@@ -93,6 +93,20 @@ def git_stamp() -> str:
         return "git unavailable"
 
 
+def _voices_line(env) -> str:
+    """Who speaks as whom on an all-AI table (2026-09-16): the roster seated in order, Ben's associations, Joshua at the
+    seat without one. Best effort — a banner never fails a launch."""
+    try:
+        sys.path.insert(0, str(ROOT / "runner"))
+        import voice.table as T  # noqa: E402
+        decks = T.table_from_launcher("", env.get("ARENA_SEAT_DECKS") or ROSTER, all_ai=True)
+        voices = T.assign_voices(T.load_libraries(), decks, T.load_assignments(), exclude_seat=None)
+        who = {d: c.get("say") or d for d, c in (T.load_address().get("commanders") or {}).items()}
+        return ", ".join(f"{who.get(decks[s], decks[s]).split(',')[0]}={v['voice']}" for s, v in sorted(voices.items()) if s in decks)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def render(args, env=os.environ) -> str:
     out = []
     out.append(f"== ARENA LAUNCH CONFIG  {time.strftime('%Y-%m-%d %H:%M:%S %z')}  ({git_stamp()}) ==")
@@ -105,10 +119,17 @@ def render(args, env=os.environ) -> str:
             voice = args.voice or "on"
             if voice != "off":
                 voice += " (live advice " + ("on" if env.get("ELEVENLABS_API_KEY", "").strip() else "off: no ELEVENLABS_API_KEY") + ")"
-            out.append(f"  human: deck {args.deck} | advisor {'on' if args.advisor == '1' else 'off'} | voice {voice}"
+            advisor = "on" if args.advisor == "1" else "off (table relay on)"
+            out.append(f"  human: deck {args.deck} | advisor {advisor} | voice {voice}"
                        f" | opponent-turn stops {args.stops or 'keep'} | linger {args.linger}s | auto-stop {'on' if args.autostop != '0' else 'off'}")
         else:
-            out.append(f"  spectator: linger {args.linger}s | auto-stop {'on' if args.autostop != '0' else 'off'}")
+            voice = args.voice or "on"
+            if voice != "off":
+                voice += f" (chatter {env.get('ARENA_CHATTER') or 'normal'}, barks {env.get('ARENA_BARKS') or 'some'})"
+                voices = _voices_line(env)
+                if voices:
+                    voice += f" | voices {voices}"
+            out.append(f"  spectator: four brains, no advisor | voice {voice} | linger {args.linger}s | auto-stop {'on' if args.autostop != '0' else 'off'}")
     changed = []
     for group, rows in KNOBS.items():
         if args.mode == "all-ai" and group.startswith("human game"):

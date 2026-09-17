@@ -8,7 +8,9 @@
 #   arena-play.sh --all-ai [--timeout N] [--model M] [--effort E]
 #   arena-play.sh --human [deck.dck] [--timeout N] [--model M] [--effort E] [--no-advisor]
 #   ... [--linger N] [--no-autostop]
-#   ... [--no-voice]   (the advisor's spoken voice: stock phrases always, live lines with ELEVENLABS_API_KEY)
+#   ... [--no-voice]   (silences the whole table: the seat voices, Joshua at the table on an all-AI game, and the
+#                      advisor's lines. Baked takes play without a key; only Joshua's live lines need ELEVENLABS_API_KEY)
+#   ARENA_CHATTER=quiet|normal|lively|rowdy   how much the table talks (the one dial); ARENA_BARKS=off|some|all the seat voices
 #   ... [--stops quick|full|keep|restore]  (human games: opponent-turn priority stops in Forge's preferences —
 #                              quick (DEFAULT) = declare-attackers + end step only; full = + begin-combat +
 #                              declare-blockers; keep = leave your preferences alone; restore = put back the
@@ -22,8 +24,12 @@
 #   leaves the table up until you stop it by hand.
 # Human games run the seat-0 AI Advisor BY DEFAULT (2026-08-17, Ben) — teaching
 #   commentary in the GUI's Advisor tab + autopass (ARENA_AUTOPASS=off|strict|casts,
-#   default casts). --no-advisor opts out; a non-ingested human deck auto-disables
-#   it (the game still launches, unadvised). --advisor is accepted as a no-op.
+#   default casts). --no-advisor opts out of Joshua only: the same runner starts as a
+#   TABLE RELAY (2026-09-16), so @seat deals, invitations, table talk, the panel lines
+#   and the offer pane keep working — "no Joshua, never no deals". A non-ingested human
+#   deck auto-disables the advisor the same way. --advisor is accepted as a no-op.
+# All-AI games (--all-ai): four brains, no advisor, no relay; the voices still run —
+#   Joshua takes the seat whose deck has no voice association (Selvala, per Ben).
 #
 # Notes:
 #  - max/xhigh effort needs --timeout 300 or the seat punts past the 90s deadline.
@@ -233,7 +239,8 @@ done
 if [ -f "$ROOT/mailbox/observer-state.json" ]; then
   seats=$(python3 "$ROOT/runner/arena-ctl.py" status 2>/dev/null | grep -c "model=")
   echo "arena live [$MODE]: $seats AI seats @ $MODEL/$EFFORT, timeout=${TIMEOUT}s"$([ "$MODE" = human ] && echo ", human=$HUMAN_DECK")
-  [ "$VOICE" != "off" ] && echo "  voice: stock phrases on$([ -n "${ELEVENLABS_API_KEY:-}" ] && echo ", live advice on" || echo ", live advice off (no ELEVENLABS_API_KEY)"), seat barks ${ARENA_BARKS:-some} (--no-voice to silence)"
+  [ "$MODE" = human ] && echo "  advisor: $([ "$ADVISOR" = 1 ] && echo on || echo "off (table relay on — deals and table talk still work)")"
+  [ "$VOICE" != "off" ] && echo "  voice: baked takes on$([ -n "${ELEVENLABS_API_KEY:-}" ] && echo ", live lines on" || echo ", live lines off (no ELEVENLABS_API_KEY)"), chatter ${ARENA_CHATTER:-normal}, seat barks ${ARENA_BARKS:-some} (--no-voice to silence)"
   # 6) auto-teardown once the match has clearly concluded (Ben, 2026-09-04):
   # a plain sleep-loop watcher (no scheduler) waits for the engine's gameOver
   # flag or the GUI JVM to vanish, lingers, then runs arena-stop.sh exactly as
