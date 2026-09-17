@@ -184,7 +184,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.dry_run = dry_run
         self.clock = clock
         self.wall = time.time                                  # wall time for records and the checkpoint; --replay swaps it
-        self.human_seat = 0
+        self.human_seat = None if os.environ.get("ALL_SEATS") == "1" else 0   # all-AI (run_table.sh): seat 0 is a brain, notes and deals reach it
         self._log_path = logs_dir / "voice-0.log"
         self._jsonl = logs_dir / "voice-0.jsonl"
         self._control = logs_dir / "control" / "voice.json"

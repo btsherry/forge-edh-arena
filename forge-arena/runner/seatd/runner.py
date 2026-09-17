@@ -331,7 +331,8 @@ class SeatRunner:
     # owes an answer, and the deals in force (for the fastpath hand-off). The runner never
     # overrides a model answer: a deal is honoured or broken by the brain, on purpose.
 
-    NOTE_KINDS = ("deal-offer", "deal-counter", "deal-struck", "deal-broken", "deal-lapsed", "deal-refused")
+    NOTE_KINDS = ("deal-offer", "deal-counter", "deal-struck", "deal-broken", "deal-lapsed", "deal-refused", "deal-invite", "table-talk")
+    _invited = False         # a deal-invite note lifted the propose cooldown for this seat's next main window
     NOTES_PER_PROMPT = 3
     TARGET_WINDOWS = ("CHOOSE_ENTITY", "CHOOSE_ENTITIES", "CHOOSE_CARD", "CHOOSE_CARDS")
     _SEAT_IN_LABEL = re.compile(r"\(seat (\d+)\)")
@@ -361,7 +362,7 @@ class SeatRunner:
             n = int(seat)
         except (TypeError, ValueError):
             return f"seat {seat}"
-        if n == 0:
+        if n == 0 and not self._all_ai():
             return "Player One (seat 0)"
         for o in ((req or {}).get("state") or {}).get("opponents") or []:
             if isinstance(o, dict) and o.get("seat") == n:
@@ -379,6 +380,11 @@ class SeatRunner:
         except Exception:  # noqa: BLE001 — a name is a nicety
             pass
         return f"seat {n}"
+
+    @staticmethod
+    def _all_ai() -> bool:
+        """An all-AI table (run_table.sh: ALL_SEATS=1): seat 0 is a brain like the others, not the human."""
+        return os.environ.get("ALL_SEATS") == "1"
 
     def _other_party(self, note: dict):
         between = note.get("between")
@@ -402,6 +408,19 @@ class SeatRunner:
         kind = note.get("kind")
         deal = note.get("deal") if isinstance(note.get("deal"), dict) else {}
         dk = deal.get("kind") if deal.get("kind") in rules.DEAL_KINDS else "truce"
+        if kind == "table-talk":
+            who = self._party_name(note.get("from"), req)
+            said = str(note.get("text") or "").strip()[:120]
+            if not said:
+                return None
+            return (f'{who} says to you: "{said}". Table talk — it changes nothing; you may answer with a "say" '
+                    f"on a window that offers one, or ignore it.")
+        if kind == "deal-invite":
+            who = self._party_name(note.get("from"), req)
+            self._invited = True
+            self._last_propose_turn = None
+            return (f"{who} asks what deal you would take. If one helps you, propose it with the DEAL OFFER key on your "
+                    f"next main-phase window (truce / no-target / alliance, 1-3 turns or until a turn); otherwise say nothing.")
         if kind in ("deal-offer", "deal-counter"):
             oid = note.get("offer_id")
             if not isinstance(oid, str) or not oid:
@@ -620,14 +639,20 @@ class SeatRunner:
     def _can_propose(self, req: dict) -> bool:
         """The propose key is offered on a main-phase window of the seat's own turn, from turn
         PROPOSE_MIN_TURN, with no offer of its own open and none pending against it, at most once
-        every PROPOSE_EVERY_TURNS table turns. Never seat 0: the Executive relays, it does not propose."""
-        if self.seat not in (1, 2, 3) or req.get("decisionType") not in rules.PROPOSE_WINDOWS:
+        every PROPOSE_EVERY_TURNS table turns (Ben, game 53: "they offered enough") — unless the player
+        invited an offer (deal-invite), which lifts the cooldown once. Never seat 0 while a human plays
+        it: the Executive relays, it does not propose. On an all-AI table seat 0 is a brain like the rest."""
+        if req.get("decisionType") not in rules.PROPOSE_WINDOWS:
+            return False
+        if self.seat not in (1, 2, 3) and not (self.seat == 0 and self._all_ai()):
             return False
         turn = req.get("turn")
         if not isinstance(turn, int) or turn < rules.PROPOSE_MIN_TURN:
             return False
         if self._mine() or self._pending():
             return False
+        if self._invited:
+            return True
         last = self._last_propose_turn
         return last is None or turn - last >= rules.PROPOSE_EVERY_TURNS
 
@@ -665,6 +690,7 @@ class SeatRunner:
             deal["text"] = text
         self._mine()[oid] = {"to": to, "turn": turn}
         self._last_propose_turn = turn
+        self._invited = False
         self._say(f"[seat {self.seat}] DEAL {oid} proposed to seat {to}: {json.dumps(terms)}")
         self._record_deal(req, deal)
         return deal
@@ -1956,7 +1982,7 @@ class SeatRunner:
             self._yielded = {}
             self._publish_yields()
             self._pending_offers, self._deals_in_force, self._deal_notes = {}, {}, []   # deals die with the game
-            self._my_offers, self._last_propose_turn = {}, None
+            self._my_offers, self._last_propose_turn, self._invited = {}, None, False
         if req.get("gameId"):
             self._game_id = req.get("gameId")
         new_turn = self._last_turn != req.get("turn")

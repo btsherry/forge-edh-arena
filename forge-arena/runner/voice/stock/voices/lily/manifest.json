@@ -279,7 +279,13 @@
     "[softly] We see it differently.",
     "[mischievously] Sweet, but no.",
     "[softly] I really don't think so.",
-    "[gently] No, dear. Not quite."
+    "[gently] No, dear. Not quite.",
+    "[chuckles] Sweetheart, no.",
+    "[softly] I love your confidence. Not your math.",
+    "[chuckles] That's adorable and also wrong.",
+    "[gently] Mm, no, that's not it.",
+    "[mischievously] Try again, honey.",
+    "[chuckles] Bless you for saying that out loud."
    ],
    "when": "disagrees with what another seat just said",
    "category": "reply",
@@ -760,8 +766,8 @@
   "elevenlabs-v3-2026-09-10-gamechangers": "game-changer lines (WotC bracket list, per Scryfall's game_changer flag in each dossier) + more you-cheat wordings (Purphoros repeated it)"
  },
  "baked": {
-  "gain_db": -5.4,
-  "takes": 249,
+  "gain_db": -5.41,
+  "takes": 255,
   "target_lufs": -24.0
  }
 }

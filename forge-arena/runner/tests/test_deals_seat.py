@@ -503,3 +503,41 @@ class SeatOffers(unittest.TestCase):
         self.assertIn("1004-0-3", r._pending(), "delivered at the next window, however late — game 50's rule; game 53 lost two offers to a staleness guard")
         self.assertIn("Player One (seat 0) offers", r.brain.last_prompt)
         self.assertEqual(notes_left(r), [])
+
+
+class WordsFromThePlayer(unittest.TestCase):
+    """Game 54: an invitation lifts the propose cooldown for one offer; table talk is a sentence the brain may answer."""
+
+    def test_an_invitation_lets_the_seat_propose_at_once_and_talk_is_just_talk(self):
+        r = make_runner()
+        r._last_propose_turn = 4                                     # it offered on turn 4: the cooldown would hold until turn 10
+        r.handle(cast(1, turn=6))
+        self.assertNotIn("DEAL OFFER", r.brain.last_prompt)
+        note(r, "deal-invite", 1000, **{"from": 0, "to": 3, "text": "make me an offer", "turn": 6})
+        note(r, "table-talk", 1001, **{"from": 0, "to": 3, "text": "You dirty bastard!", "turn": 6})
+        r.brain.script = [{"chosenId": 0, "deal": {"propose": {"to": 0, "kind": "truce", "rounds": 1}}, "say": "deal"}]
+        r.handle(cast(2, turn=6))
+        p = r.brain.last_prompt
+        self.assertIn("RUNNER NOTE: Player One (seat 0) asks what deal you would take. If one helps you, propose it with the DEAL OFFER key", p)
+        self.assertIn('RUNNER NOTE: Player One (seat 0) says to you: "You dirty bastard!". Table talk — it changes nothing', p)
+        self.assertIn("DEAL OFFER", p, "invited: the cooldown is lifted")
+        self.assertEqual(deal_rows(r)[-1]["deal"]["with"], 0, "...and the offer went to the player")
+        self.assertFalse(r._invited, "one invitation, one offer")
+        self.assertEqual(notes_left(r), [])
+
+    def test_on_an_all_ai_table_seat_zero_is_a_brain(self):
+        import os
+        r = make_runner(seat=0)
+        r._last_propose_turn = None
+        rq = cast(1, turn=6); rq["state"]["seat"] = 0
+        rq["state"]["opponents"] = [{"seat": 1, "life": 40, "battlefield": []}, {"seat": 2, "life": 40, "battlefield": []}, {"seat": 3, "life": 40, "battlefield": []}]
+        r.handle(rq)
+        self.assertNotIn("DEAL OFFER", r.brain.last_prompt, "a human's seat 0: the Executive relays, it does not propose")
+        os.environ["ALL_SEATS"] = "1"
+        try:
+            r.handle(cast(2, turn=6) | {"state": rq["state"]})
+            self.assertIn("DEAL OFFER", r.brain.last_prompt, "all-AI: seat 0 may propose like any seat")
+            self.assertIn("Parties: seat 1, seat 2, seat 3.", r.brain.last_prompt)
+            self.assertEqual(r._party_name(0, rq), "seat 0", "nobody is Player One on an all-AI table")
+        finally:
+            os.environ.pop("ALL_SEATS", None)

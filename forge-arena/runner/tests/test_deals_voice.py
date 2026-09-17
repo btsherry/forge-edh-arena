@@ -497,3 +497,19 @@ class ASeatsOwnOffer(_DealCase):
         self.assertNotIn("p4", self.r._deal_counters)
         self.r.lapse_deals(5)
         self.assertEqual(self._ledger("expired"), [], "nothing expires: it was answered")
+
+
+class AnAllAiTable(_DealCase):
+    """ALL_SEATS=1 (run_table.sh): there is no human seat — seat 0's runner gets every note like the others, and a
+    deal record that names nobody is skipped, not a crash."""
+
+    def test_seat_zero_gets_the_notes_and_nobody_is_the_player(self):
+        self.r.human_seat = None
+        self.r.rng.random = lambda: 0.99
+        self._deal_record(1, True, terms={"kind": "truce", "rounds": 1}, with_=0, offer_id="a1")
+        self.assertEqual(self.r._deals[(1, 0)]["kind"], "truce")
+        self.assertEqual([n["kind"] for n in self._notes(0)], ["deal-struck"], "seat 0 is a brain here: it is told")
+        self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"])
+        self._game({"seat": 2, "turn": 3, "type": "DEAL", "deal": {"offer_id": "a2", "accept": True}})   # no `with`, no human to default to
+        self.assertTrue(any("naming no other party" in x["why"] for x in self._records("skipped", "deal")))
+        self.assertFalse(self.r.human_turn(), "no seat is the human's: the table is never 'quieter on your turn'")

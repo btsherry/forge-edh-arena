@@ -279,7 +279,13 @@
     "[sarcastic] A bold theory.",
     "[dryly] No. Next.",
     "[dryly] I beg to differ.",
-    "[calmly] Incorrect."
+    "[calmly] Incorrect.",
+    "[sighs] No. And I'll explain why later.",
+    "[sarcastic] That's... an interesting theory.",
+    "[dryly] Citation needed.",
+    "[sighs] Reread the card, then we'll talk.",
+    "[dryly] Bold claim from someone at twelve life.",
+    "[dryly] You're allowed to be wrong. You just are."
    ],
    "when": "disagrees with what another seat just said",
    "category": "reply",
@@ -761,7 +767,7 @@
  },
  "baked": {
   "gain_db": -6.53,
-  "takes": 249,
+  "takes": 255,
   "target_lufs": -24.0
  }
 }

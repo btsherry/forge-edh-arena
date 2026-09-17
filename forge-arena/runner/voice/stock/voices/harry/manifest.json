@@ -279,7 +279,13 @@
     "[laughs] Not a chance.",
     "[shouting] Nonsense!",
     "[angry] Wrong! Dead wrong!",
-    "[scoffs] That's nonsense and you know it."
+    "[scoffs] That's nonsense and you know it.",
+    "[angry] Wrong. Wrong, wrong, wrong.",
+    "[scoffs] Whatever you're smoking, share it.",
+    "[shouting] That is NOT how that works!",
+    "[angry] Say that again and mean it. I dare you.",
+    "[laughs] Oh, you actually believe that.",
+    "[scoffs] Confidently incorrect. Impressive."
    ],
    "when": "disagrees with what another seat just said",
    "category": "reply",
@@ -760,7 +766,7 @@
  },
  "baked": {
   "gain_db": -8.77,
-  "takes": 248,
+  "takes": 254,
   "target_lufs": -24.0
  }
 }

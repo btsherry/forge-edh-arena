@@ -365,6 +365,9 @@ class EventsMixin:
             other = int(deal.get("with", self.human_seat))
         except (TypeError, ValueError):
             other = self.human_seat
+        if other is None:
+            self.record("skipped", kind="deal", why="a deal record naming no other party (all-AI table)", seat=seat, offer_id=offer_id)
+            return
         if other == seat:
             self.record("skipped", kind="deal", why="a deal with oneself", seat=seat, offer_id=offer_id)
             return

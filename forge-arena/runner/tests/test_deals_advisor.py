@@ -491,3 +491,48 @@ class SeatOffers(unittest.TestCase):
         self._propose(1, 0, {"kind": "truce", "rounds": 1}, "p-1-0", turn=9)
         self.assertIn(f"\n[{self.lbl(9)} · Urza] offers you truce, 1 turn — the Executive answers for you\n", self.panel())
         self.assertNotIn("p-1-0", self.r._offers)
+
+
+class WordsToASeat(unittest.TestCase):
+    """Game 54 (Ben): "make me an offer" and "you dirty bastard" both went out as one-turn truces. Now an offer needs
+    deal words; an invitation asks the seat to propose; anything else is table talk relayed to the seat's brain."""
+    setUp, tearDown = DealTests.setUp, DealTests.tearDown
+    snapshot, ask, panel, records, notes = DealTests.snapshot, DealTests.ask, DealTests.panel, DealTests.records, DealTests.notes
+
+    def test_the_grammar_tells_offers_invitations_and_talk_apart(self):
+        al, _n, _h = ar.deal_table(TABLE)
+        self.assertEqual(ar.parse_deal("@urza make me an offer", al)["action"], "invite")
+        self.assertEqual(ar.parse_deal("@urza what do you want for peace?", al)["action"], "invite")
+        self.assertEqual(ar.parse_deal("@purphoros You dirty bastard!", al), {"to": 2, "action": "talk", "words": "You dirty bastard!"})
+        self.assertEqual(ar.parse_deal("@giada nice play", al)["action"], "talk")
+        self.assertEqual(ar.parse_deal("@urza peace for a turn?", al)["action"], "offer", "deal words: an offer, as before")
+        self.assertEqual(ar.parse_deal("@urza alliance", al)["deal"], {"kind": "alliance", "rounds": 1})
+        self.assertEqual(ar.parse_deal("@urza until turn 12", al)["deal"], {"kind": "truce", "until_turn": 12})
+        self.assertEqual(ar.parse_deal("@selvala", al)["action"], "offer", "a bare address is still the one-turn truce")
+        self.assertEqual(ar.parse_deal("@urza accept", al)["action"], "accept")
+
+    def test_an_invitation_and_talk_are_relayed_as_notes_not_offers(self):
+        self.ask("@urza make me an offer")
+        n = self.notes(1)
+        self.assertEqual([p.name.endswith("-deal-invite.json") for p in n], [True])
+        body = json.loads(n[0].read_text())
+        self.assertEqual(body, {"kind": "deal-invite", "from": 0, "to": 1, "text": "make me an offer", "turn": 7})
+        self.assertIn('\n[r2-t7 · you → Urza] make me an offer: "make me an offer"\n', self.panel())
+        self.assertEqual(self.r._offers, {}, "no offer was made")
+        self.ask("@purphoros You dirty bastard!")
+        n3 = self.notes(2)                                                     # Purphoros sits at seat 2 in this fixture
+        self.assertEqual([p.name.endswith("-table-talk.json") for p in n3], [True])
+        self.assertEqual(json.loads(n3[0].read_text())["text"], "You dirty bastard!")
+        self.assertIn('\n[r2-t7 · you → Purphoros] "You dirty bastard!"\n', self.panel())
+        self.assertEqual(self.r.brain.prompts, [], "Joshua stays out of it")
+        self.assertEqual([r["event"] for r in self.records("deal")], ["invite", "talk"])
+        self.snapshot(8, 1, dead=(2,))
+        self.ask("@purphoros still there?")
+        self.assertIn("Purphoros is out of the game", self.panel())
+        self.assertEqual(len(self.notes(2)), 1, "nothing to a dead seat")
+
+    def test_joshua_is_told_what_each_kind_of_deal_forbids(self):
+        self.ask("@urza peace for a turn?")
+        self.ask("@joshua is the truce good?")
+        self.assertIn("a truce forbids attacks only", self.r.brain.prompts[-1], "game 54: he called a Chaos Warp a broken truce")
+        self.assertIn("a truce is not broken by a spell", self.r.brain.prompts[-1])

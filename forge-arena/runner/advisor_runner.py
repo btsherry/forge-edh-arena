@@ -366,6 +366,13 @@ _DEAL_KIND_RES = (("no-target", re.compile(r"\bno[\s-]?targets?\b|\bdon'?t targe
                   ("alliance", re.compile(r"\b(alliance|allied|ally|allies|both)\b", re.I)),
                   ("truce", re.compile(r"\b(truce|peace)\b", re.I)))
 _ADVISOR_NAMES = ("joshua", "advisor", "wopr")
+# Game 54 (Ben): "make me an offer" and "you dirty bastard" both went out as one-turn truces. Words to a seat are an
+# OFFER only when they carry deal terms; an invitation asks the seat to propose; anything else is table talk relayed
+# to the seat's brain (it may answer with a say). A bare "@urza" stays the one-turn truce it always was.
+_DEAL_TERM_RE = re.compile(r"\b(deal|truce|peace|alliance|ally|allies|allied|no[\s-]?targets?|don'?t target|turns?|rounds?|until)\b", re.I)
+_DEAL_INVITE_RE = re.compile(r"\b(make (me )?an offer|make me an? (deal|proposal)|what do you want|what would you (take|want)|your terms|name your (price|terms)|offer me|propose (something|a deal)|got an offer)\b", re.I)
+DEAL_KINDS_TEXT = ("Terms of a deal: a truce forbids attacks only; a no-target deal forbids targeting the other player or their "
+                   "permanents; an alliance forbids both. Nothing else is promised — a truce is not broken by a spell.")
 _DEAL_ASK_RE = re.compile(r"\b(deal|truce|alliance|no[\s-]target|counter[\s-]?offer)\b", re.I)
 
 
@@ -427,6 +434,10 @@ def parse_deal(text: str, aliases: dict) -> dict | None:
         return {"to": seat, "action": "accept", "words": words}
     if _DEAL_REFUSE_RE.match(words):
         return {"to": seat, "action": "refuse", "words": words}
+    if _DEAL_INVITE_RE.search(words):
+        return {"to": seat, "action": "invite", "words": words}
+    if words and not _DEAL_TERM_RE.search(words):
+        return {"to": seat, "action": "talk", "words": words}
     kind = "truce"
     for k, rx in _DEAL_KIND_RES:
         if rx.search(words):
@@ -1090,7 +1101,7 @@ class AdvisorRunner:
             self._context_dropped = 0
         if deals or _DEAL_ASK_RE.search(text):
             # Ben's decision 4: asked about a deal, Joshua always assesses — with the facts
-            ctx += "DEALS AT THE TABLE (the runner's ledger, ground truth): " + self._deal_facts() + "\n\n"
+            ctx += "DEALS AT THE TABLE (the runner's ledger, ground truth): " + self._deal_facts() + " " + DEAL_KINDS_TEXT + "\n\n"
         prompt = (f"{ctx}THE HUMAN AT YOUR SEAT ASKS: {text}\n\n"
                   "Answer them directly (1-4 sentences, plain text). Ground it in the "
                   "most recent board state you were shown; if it needs something you "
@@ -1171,6 +1182,9 @@ class AdvisorRunner:
             self._panel("table", f"{name} is out of the game — no deal", turn)
             self._record("deal_rejected", {"turn": turn, "text": text, "why": "dead", "seat": seat})
             return
+        if action in ("invite", "talk"):
+            self._relay_words(seat, name, action, words, turn)
+            return
         pending = [o for o in self._offers.values()
                    if o["seat"] == seat and o["status"] in ("open", "countered") and o["turn"] == turn]
         if pending:
@@ -1195,6 +1209,24 @@ class AdvisorRunner:
                                   "ts": time.time(), "nudged": False}
         self._panel(f"you → {name}", f"{deal_terms_text(deal)}: \"{words}\"", turn)
         self._record("deal", {"event": "offer", "offer_id": offer_id, "seat": seat, "turn": turn, "deal": deal, "text": words})
+
+    def _relay_words(self, seat: int, name: str, action: str, words: str, turn) -> None:
+        """Game 54: words to a seat that are not an offer. `invite` -> a deal-invite note (the seat may propose on its
+        next main window, its cooldown lifted); `talk` -> a table-talk note (the seat's brain hears it and may answer
+        with a say). Relayed as the player's own words, Executive or not; Joshua stays out of it."""
+        ts_ms = int(time.time() * 1000)
+        kind = "deal-invite" if action == "invite" else "table-talk"
+        note = {"kind": kind, "from": 0, "to": seat, "text": words[:200], "turn": turn}
+        try:
+            self._write_atomic(self._base / f"seat-{seat}" / "notes" / f"{ts_ms}-{kind}.json", note)
+        except OSError as e:
+            self._panel("table", f"could not reach {name}'s mailbox ({e.__class__.__name__}) — not sent", turn)
+            return
+        if action == "invite":
+            self._panel(f"you → {name}", f"make me an offer: \"{words}\"", turn)
+        else:
+            self._panel(f"you → {name}", f"\"{words}\"", turn)
+        self._record("deal", {"event": action, "seat": seat, "turn": turn, "text": words})
 
     def _answer_counter(self, seat: int, action: str) -> None:
         """`@urza accept` / `@urza no` on a pending counter -> logs/control/deal/<ts>-accept|refuse.json
@@ -1491,7 +1523,7 @@ class AdvisorRunner:
         if DEAL_COLOR_P < 1.0 and self.deal_rng.random() >= DEAL_COLOR_P:
             return
         board = self._board_brief()
-        prompt = (f"TABLE DEAL: {facts}. Deals at the table: {self._deal_facts()}"
+        prompt = (f"TABLE DEAL: {facts}. Deals at the table: {self._deal_facts()} {DEAL_KINDS_TEXT}"
                   + (f" BOARD: {board}." if board else "")
                   + "\n\nOne sentence: was this a good deal for the human, and what to watch (plain text).")
         answer, meta = self.brain.decide(prompt, min(self.timeout, 45.0))

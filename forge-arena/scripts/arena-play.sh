@@ -189,9 +189,11 @@ fi
 # 2.6) the advisor's voice (Ben, 2026-09-07): Joshua/W.O.P.R. stock phrases
 # always (shipped, offline), first-sentence advice live only when
 # ELEVENLABS_API_KEY is set. One-way like the advisor; supervised the same way.
-# Off with --no-voice or ARENA_VOICE=off; no advisor → no voice.
-if [ "$ADVISOR" = "1" ] && [ "$VOICE" != "off" ]; then
-  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY ARENA_HUMAN_DECK="$HUMAN_SLUG" \
+# Off with --no-voice or ARENA_VOICE=off; no advisor → no voice, EXCEPT an
+# all-AI table (2026-09-16): the voice runner is the seats' voices and owns the
+# deal ledger, so four brains dealing with each other need it with no advisor.
+if { [ "$ADVISOR" = "1" ] || [ "$MODE" = "all-ai" ]; } && [ "$VOICE" != "off" ]; then
+  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY ARENA_HUMAN_DECK="$HUMAN_SLUG" $ALL \
     "$ROOT/runner/run_voice.sh" >"$LOGS/voice_runner.out" 2>&1 &
   echo $! > "$LOGS/pids/voice-loop.pid"
 fi
