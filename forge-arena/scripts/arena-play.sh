@@ -239,7 +239,9 @@ done
 
 # 5) one status line
 if [ -f "$ROOT/mailbox/observer-state.json" ]; then
-  seats=$(python3 "$ROOT/runner/arena-ctl.py" status 2>/dev/null | grep -c "model=")
+  # the brains at the table: every seat with a control file, minus seat 0 in a human game — that file is the
+  # human's own seat (the advisor's), not a brain (game 59: the banner said "4 AI seats" at a three-brain table)
+  seats=$(python3 "$ROOT/runner/arena-ctl.py" status 2>/dev/null | grep "model=" | { if [ "$MODE" = human ]; then grep -vc "^seat 0:"; else grep -c .; fi; })
   echo "arena live [$MODE]: $seats AI seats @ $MODEL/$EFFORT, timeout=${TIMEOUT}s"$([ "$MODE" = human ] && echo ", human=$HUMAN_DECK")
   [ "$MODE" = human ] && echo "  advisor: $([ "$ADVISOR" = 1 ] && echo on || echo "off (table relay on — deals and table talk still work)")"
   [ "$VOICE" = "off" ] && echo "  voice: MUTED at start (--no-voice) — the runner still keeps the deal ledger; unmute from the Advisor tab"
