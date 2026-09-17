@@ -172,8 +172,8 @@ class EventsMixin:
         DECIDED is not the test: the seats after the human in the order are not even asked until the
         human keeps (game 49: Urza's request came five seconds before turn 1). A table with no human
         (seat 0 voiced) has nobody to heckle."""
-        if (snap.get("turn") or 0) != 0 or self.library_for_seat(self.human_seat):
-            return False
+        if self.human_seat is None or (snap.get("turn") or 0) != 0 or self.library_for_seat(self.human_seat):
+            return False                                           # an all-AI table has nobody to heckle (pass 2: int(None) killed every opening step)
         seats = [x for x in snap.get("seats") or [] if isinstance(x, dict)]
         if len(seats) < 2 or any((x.get("handSize") or 0) < 1 for x in seats):
             return False                                              # not dealt yet: Forge is still setting the table
@@ -271,14 +271,15 @@ class EventsMixin:
             return "mull-screw"
         return "mull-pity"
 
-    def scan_game_log(self) -> None:
+    def scan_game_log(self, voice: bool | None = None) -> None:
         """New records in the seat runners' shared game log, read by complete lines
         (`_tail`): a MULLIGAN is voiced by the seat and answered by the table; any
         other record is read for the brain's intent — a `cycle` replay or a `say`
         key (§4.4). A voiced AI seat's records only; the human has none — except a DEAL record
         (§11), which is read from every seat (seat 0's under the Executive) and whatever the barks
         knob says: the ledger and the notes to the brains are not voice."""
-        voice = not (self.barks_mode == "off" or self.final_locked)
+        if voice is None:
+            voice = not (self.barks_mode == "off" or self.final_locked)
         for raw in self._tail(self.logs / "game.jsonl", "game"):
             try:
                 r = json.loads(raw)
@@ -403,6 +404,12 @@ class EventsMixin:
         counter = deal.get("counter") if isinstance(deal.get("counter"), dict) else None
         if offer_id:
             self._deal_counters_map().pop(offer_id, None)         # the Executive answered a seat's offer to the player: no typed answer is due
+        if deal.get("lapsed") or (deal.get("accept") is None and counter is None and deal.get("why") == "no answer"):
+            # the seat's turn changed with the offer unanswered: expired, not refused (pass 2, 2026-09-17 — it used to
+            # land in the refuse branch addressed to the player, who never made it)
+            self._ledger("expired", (other, seat), by=seat, deal=terms, offer_id=offer_id, turn=t)
+            self.record("noted", kind="deal", why="offer lapsed unanswered at the seat", seat=seat, offer_id=offer_id)
+            return
         if deal.get("accept"):
             self.strike_deal(seat, other, terms["kind"], t, by=seat, rounds=terms.get("rounds"), until_turn=terms.get("until_turn"),
                              offer_id=offer_id, source="brain")
@@ -1258,9 +1265,10 @@ class EventsMixin:
                 self.queue.append({"kind": "game_over", "text": "", "stock": "win", "seq": None, "prio": PRIORITY["game_over"],
                                    "at": t, "expires": t + 120.0, "library": self.library_for_seat(winner), "seat": winner,
                                    "ctx": {}, "gap": None, "chain": None})
-            self.queue.append({"kind": "game_over", "text": "", "stock": "you-win" if won else "strange-game", "seq": None,
-                               "prio": PRIORITY["game_over"], "at": t + 0.001, "expires": t + 120.0,
-                               "library": "", "seat": None, "ctx": {}, "gap": None, "chain": None})
+            if self.human_seat is not None:                        # a spectator table has no verdict for Joshua to give (pass 2: it always heard the loss line)
+                self.queue.append({"kind": "game_over", "text": "", "stock": "you-win" if won else "strange-game", "seq": None,
+                                   "prio": PRIORITY["game_over"], "at": t + 0.001, "expires": t + 120.0,
+                                   "library": "", "seat": None, "ctx": {}, "gap": None, "chain": None})
             self.queue.append({"kind": "game_over", "text": "", "stock": "game-over-gg", "seq": None,
                                "prio": PRIORITY["game_over"], "at": t + 0.002, "expires": t + 120.0,
                                "library": "", "seat": None, "ctx": {}, "gap": None, "chain": None})

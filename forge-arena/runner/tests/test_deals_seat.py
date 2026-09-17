@@ -101,7 +101,8 @@ def attack(seq, turn=5, defenders=(0, 1, 2)):
     names = {0: "Selvala", 1: "Purphoros", 2: "Giada"}
     r = _base(seq, "DECLARE_ATTACKERS", turn, "COMBAT_DECLARE_ATTACKERS")
     r["options"] = [{"id": 0, "label": "Pass (do nothing)"}, {"id": 302, "label": "Urza 1/4", "type": "ATTACKER"}]
-    r["state"]["defenders"] = [{"id": d, "label": f"{names[d]} player (seat {d}), life 40", "type": "PLAYER"} for d in defenders]
+    # the engine's shapes (MailboxController.defenderList / GuiPilotMatch.seatLabel): "Player One", "<commander>-S<n>"
+    r["state"]["defenders"] = [{"id": d, "label": "Player One" if d == 0 else f"{names[d]}, Commander-S{d}", "type": "PLAYER"} for d in defenders]
     return r
 
 
@@ -297,7 +298,9 @@ class DealKey(unittest.TestCase):
         r.handle(cast(2, turn=6))
         self.assertNotIn("DEAL PENDING", r.brain.last_prompt)
         self.assertEqual(r._pending(), {})
-        self.assertEqual(deal_rows(r)[-1]["deal"], {"offer_id": oid, "accept": None, "why": "no answer"})
+        lapsed = deal_rows(r)[-1]["deal"]
+        self.assertEqual((lapsed["offer_id"], lapsed["accept"], lapsed["lapsed"], lapsed["why"]), (oid, None, True, "no answer"))
+        self.assertIn("with", lapsed); self.assertIn("terms", lapsed)                 # the party and the terms travel (pass 2)
         self.assertEqual(deal_rows(r)[-1]["turn"], 6)
         self.assertTrue(any(f"deal offer {oid} lapsed: no answer" in l for l in r.log_lines))
 

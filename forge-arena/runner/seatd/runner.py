@@ -335,7 +335,17 @@ class SeatRunner:
     _invited = False         # a deal-invite note lifted the propose cooldown for this seat's next main window
     NOTES_PER_PROMPT = 3
     TARGET_WINDOWS = ("CHOOSE_ENTITY", "CHOOSE_ENTITIES", "CHOOSE_CARD", "CHOOSE_CARDS")
-    _SEAT_IN_LABEL = re.compile(r"\(seat (\d+)\)")
+    _SEAT_IN_LABEL = re.compile(r"\(seat (\d+)\)|-S(\d+)\b")            # "(seat 2)" (prose) or the engine's "<commander>-S2" (GuiPilotMatch.seatLabel)
+
+    @classmethod
+    def _seat_of_label(cls, label) -> int | None:
+        """The seat a defender/option label names: the engine writes "Player One" for the human and
+        "<commander>-S<n>" for a brain (pass 2, 2026-09-17: the old "(seat n)" form matched nothing the engine writes)."""
+        s = str(label or "")
+        if s.startswith("Player One"):
+            return 0
+        m = cls._SEAT_IN_LABEL.search(s)
+        return int(m.group(1) or m.group(2)) if m else None
 
     def _pending(self) -> dict:
         if self._pending_offers is None:
@@ -474,7 +484,12 @@ class SeatRunner:
         try:
             if not d.is_dir():
                 return
-            files = sorted(p for p in d.iterdir() if p.suffix == ".json")
+            # deals before talk: offers and deal state (struck / lapsed / broken / refused) in time order, then invites,
+            # then table talk — with three sentences a prompt, a truce behind two chats and an invite was never
+            # applied to the maps (pass 2, 2026-09-17)
+            rank = {"deal-invite": 1, "table-talk": 2}
+            files = sorted((p for p in d.iterdir() if p.suffix == ".json"),
+                           key=lambda p: (rank.get(p.stem.split("-", 1)[-1], 0), p.name))
         except OSError:
             return
         for p in files:
@@ -513,8 +528,7 @@ class SeatRunner:
             for e in (st.get(where) if where == "defenders" else req.get("options")) or []:
                 if not isinstance(e, dict):
                     continue
-                m = self._SEAT_IN_LABEL.search(str(e.get("label", "")))
-                if (m and int(m.group(1)) == other) or (where == "options" and e.get("id") in perms):
+                if self._seat_of_label(e.get("label")) == other or (where == "options" and e.get("id") in perms):
                     return other, deal
         return None
 
@@ -552,9 +566,9 @@ class SeatRunner:
         if dtype == "DECLARE_ATTACKERS":
             labels = {d.get("id"): str(d.get("label", "")) for d in (st.get("defenders") or []) if isinstance(d, dict)}
             for e in answer.get("attackers") or []:
-                m = self._SEAT_IN_LABEL.search(labels.get((e or {}).get("defender"), "")) if isinstance(e, dict) else None
-                if m and self._deals().get(int(m.group(1)), {}).get("kind") in ("truce", "alliance"):
-                    return f"attack {self._party_name(int(m.group(1)), req)}"
+                who = self._seat_of_label(labels.get((e or {}).get("defender"), "")) if isinstance(e, dict) else None
+                if who is not None and self._deals().get(who, {}).get("kind") in ("truce", "alliance"):
+                    return f"attack {self._party_name(who, req)}"
             return None
         if dtype in self.TARGET_WINDOWS:
             chosen = answer.get("chosen") if "chosen" in answer else [answer.get("chosenId")]
@@ -611,9 +625,12 @@ class SeatRunner:
         """The turn changed without an answer: every pending offer lapses, with a record. An offer
         THIS seat made is forgotten a turn later (the other side lapses it at its own turn change)."""
         for oid in list(self._pending()):
-            self._pending().pop(oid, None)
+            note = self._pending().pop(oid, None) or {}
             self._say(f"[seat {self.seat}] deal offer {oid} lapsed: no answer before the turn changed")
-            self._record_deal(req, {"offer_id": oid, "accept": None, "why": "no answer"})
+            # the party and the terms travel, marked lapsed: without them the voice runner read this as a REFUSAL of
+            # an offer from the player (pass 2, 2026-09-17)
+            self._record_deal(req, {"offer_id": oid, "accept": None, "lapsed": True, "with": note.get("from"),
+                                    "terms": note.get("deal"), "why": "no answer"})
         turn = req.get("turn")
         if isinstance(turn, int):
             for oid, mine in list(self._mine().items()):

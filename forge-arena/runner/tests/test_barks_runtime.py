@@ -200,7 +200,7 @@ class BarkRuntime(_TreeCase):
         self.assertEqual(vr.table_from_launcher("giada-font-of-hope", "a b c d", all_ai=False), {1: "a", 2: "b", 3: "c"})
         self.assertEqual(vr.table_from_launcher(None, "", all_ai=False), {}, "an old launcher with no human deck: the fallback seats")
         self.assertEqual(vr.table_from_launcher("", "a b c d", all_ai=True), {0: "a", 1: "b", 2: "c", 3: "d"}, "all-AI: seat i plays roster[i]")
-        self.assertEqual(vr.table_from_launcher("a", "a a b c", all_ai=False), {1: "a", 2: "b", 3: "c"}, "a roster naming the human's deck twice keeps the other copy (Gemini review)")
+        self.assertEqual(vr.table_from_launcher("a", "a a b c", all_ai=False), {1: "b", 2: "c"}, "every copy of the human's deck goes, as in run_table.sh / GuiPilotMatch (pass 2 reverted the Gemini variant)")
         (Path(vr.VOICES_DIR) / "assign.json").write_text(json.dumps({"by_deck": {"purphoros-god-of-the-forge": "harry", "urza-lord-high-artificer": "bill", "giada-font-of-hope": "lily"}}))
         os.environ["ARENA_HUMAN_DECK"] = "selvala-heart-of-the-wilds"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
@@ -240,6 +240,18 @@ class BarkRuntime(_TreeCase):
         spoke = self._records("spoke")[0]
         self.assertEqual((spoke["kind"], spoke["library"], spoke["seat"], spoke["file"]), ("bark", "harry", 1, "slow-turn.wav"))
         self.assertEqual(self._records("queued", "bark")[0]["source"], "recap")
+
+    def test_an_all_ai_table_opens_and_ends_without_the_humans_lines(self):
+        self.r.human_seat = None
+        snap = {"turn": 0, "activeSeat": None, "seats": [{"seat": s, "handSize": 7} for s in range(4)]}
+        self.assertFalse(self.r._opening_window_open(snap), "pass 2: library_for_seat(None) raised inside every opening step")
+        self.r._stack_seen = {("Bolt", None, ("seat 1",)), ("Bolt", 2, ("seat 0",))}
+        self.assertIn("stack_seen", self.r._durable_state(), "owners may be null: the checkpoint row still sorts")
+        self._observer(9, 1, game_over=True, elim=(0, 2, 3))
+        self.r.scan_observer()
+        stocks = [q["stock"] for q in self.r.queue if q["kind"] == "game_over"]
+        self.assertNotIn("strange-game", stocks); self.assertNotIn("you-win", stocks)
+        self.assertIn("game-over-gg", stocks)
 
     def test_colour_belongs_to_joshua_only_after_the_humans_turn(self):
         self.r.color_mode = "all"

@@ -539,7 +539,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             "started_said": bool(self.started_said), "game_over_said": bool(self.game_over_said), "final_locked": bool(self.final_locked),
             "event_seq": self._event_seq,
             "loop_called": {str(s): t for s, t in sorted((self._loop_called or {}).items())},
-            "stack_seen": sorted([str(n), o, list(t)] for n, o, t in self._stack_seen),   # hold-on already said for these (hygiene pass)
+            "stack_seen": sorted(([str(n), o, list(t)] for n, o, t in self._stack_seen), key=json.dumps),   # hold-on said; owners may be null
             "last_spoken_at": self.last_spoken_at,                 # a spoken line is a checkpoint too
         }
 
@@ -950,13 +950,17 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             # B1: a muted runner still READS the snapshot — game over sets the lock and the teardown watcher
             # gets its final.json at once instead of after LINGER; every queued line is dropped with a
             # record; nothing plays (the queue is emptied here, react_atom is gated, the backchannel is armed
-            # only by speak). The advisor stream waits for the unmute. The game log and the deal control files
-            # do NOT: this runner owns the deal ledger, and a muted table (--no-voice) still strikes and lapses
-            # deals — the offer pane's Accept used to write a file nobody read (hygiene pass, 2026-09-17).
+            # only by speak). The game log is read for its DEAL records only (voice=False) and the deal control
+            # files are consumed: this runner owns the deal ledger, and a muted table (--no-voice) still strikes
+            # and lapses deals — the offer pane's Accept used to write a file nobody read. The advisor stream is
+            # consumed and dropped: a twenty-minute-old advice line must not play on unmute (pass 2, 2026-09-17).
             self.stop_atoms()                            # a pending murmur or an under-line dies with the mute
             self.scan_observer()
-            self.scan_game_log()
+            self.scan_game_log(voice=False)
             self.scan_deal_control()
+            skipped = len(self._tail(self.logs / "advisor-0.jsonl", "advisor"))
+            if skipped:
+                self.record("dropped", kind="advice", why=f"voice disabled: {skipped} advisor record(s) not read")
             if self.queue:
                 for q in self.queue:
                     self.record("dropped", kind=q["kind"], why="voice disabled", stock=q.get("stock", ""), seat=q.get("seat"),
@@ -1016,8 +1020,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
                  + (f" (p={self.barks_p}, opener_p={self.barks_opener_p}, swing>={self.barks_swing}, hit>={self.barks_hit}, guard={self.barks_cooldown:.0f}s; " + self._table_line + ")"
                     if self.barks_mode != "off" and self.seat_libraries else (" (no seat voice libraries found)" if self.barks_mode != "off" else "")))
         hb = self.mailbox / "seat-0-voice" / "heartbeat"
-        hb.parent.mkdir(parents=True, exist_ok=True)
-        (hb.parent / "final.json").unlink(missing_ok=True)     # a killed run's teardown signal is not this game's (hygiene pass)
+        hb.parent.mkdir(parents=True, exist_ok=True)           # final.json is arena-stop's to clear: a restart inside the autostop window must not revoke it
 
         def beat():
             while True:

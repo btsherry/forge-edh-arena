@@ -185,6 +185,11 @@ class VoiceRunnerTests(unittest.TestCase):
         (self.logs / "control" / "voice.json").write_text('{"enabled": false}')
         self._observer(1, 1); self.r.step()
         self.assertEqual(self.player.played, [])
+        with (self.logs / "advisor-0.jsonl").open("a") as f:                 # advice written while muted is consumed, not saved for the unmute (pass 2)
+            f.write(json.dumps({"ts": 1.0, "kind": "advice", "seq": 5, "text": "Hold the Swords."}) + "\n")
+        self.r.step()
+        self.assertEqual(self.r._tails["advisor"][1], (self.logs / "advisor-0.jsonl").stat().st_size)
+        self.assertEqual([q for q in self.r.queue if q["kind"] == "advice"], [])
 
     # ---- glitch pass
     def test_glitch_is_deterministic_bounded_and_off_is_identity(self):

@@ -758,6 +758,11 @@ class AdvisorRunner:
             self._exec = SeatRunner(0, self.brain.deck, self._base, model=self.brain.model,
                                     effort=self.brain.effort, timeout_s=self.timeout,
                                     log_dir=self._log_dir, brain=self.brain)
+            try:                                           # the seats' offers to seat 0 while nobody played it are stale — the panel
+                for p in (self._base / "seat-0" / "notes").glob("*.json"):   # showed them; the Executive must not answer a turn-8 offer at turn 24
+                    p.unlink()
+            except OSError:
+                pass
             try:
                 self._exec.mb.start_heartbeat_thread()
             except Exception:  # noqa: BLE001 — liveness only

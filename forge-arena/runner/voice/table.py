@@ -167,9 +167,7 @@ def table_from_launcher(human_deck: str | None, roster: str | None, all_ai: bool
         return {i: d for i, d in enumerate(slugs[:4])}
     if not human_deck:
         return {}
-    rest = list(slugs)
-    if human_deck in rest:
-        rest.remove(human_deck)                                     # the human's ONE copy; a roster listing a deck twice keeps the other (Gemini review)
+    rest = [d for d in slugs if d != human_deck]                    # every copy, like run_table.sh and GuiPilotMatch (which refuse a repeated slug)
     return {i + 1: d for i, d in enumerate(rest[:3])}
 
 

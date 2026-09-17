@@ -157,6 +157,13 @@ class ADealFromTheSeat(_DealCase):
         self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"])
         self.assertEqual(self._queue(), [("deal-with-you", "harry/table", 1)], "the seat confirms the pact aloud")
 
+    def test_a_lapsed_offer_between_seats_is_expired_not_refused_to_the_player(self):
+        self._game({"seat": 1, "turn": 4, "type": "DEAL", "deal": {"offer_id": "p-2-1", "accept": None, "lapsed": True, "with": 2,
+                                                                  "terms": {"kind": "alliance", "rounds": 2}, "why": "no answer"}})
+        self.assertEqual([(r["event"], r["between"]) for r in self._ledger()], [("expired", [2, 1])], "pass 2: this used to be 'refused between [1, 0]'")
+        self.assertEqual(self._queue(), [], "no 'no deal with you' aimed at the player")
+        self.assertEqual(self._notes(0), [])
+
     def test_a_muted_table_still_strikes_the_players_deal(self):
         """--no-voice starts the runner muted (hygiene pass, 2026-09-17): the ledger is the player's, so the
         offer pane's Accept is consumed and the seat told, while every line is dropped unspoken."""

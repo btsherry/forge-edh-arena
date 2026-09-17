@@ -399,6 +399,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             return;
         }
         if (focusRestore == null) {
+            focusSeat = -1;                                // nothing to restore: forget the seat, so its next line is followed again
             return;
         }
         if (focusQuietSince == 0) {
