@@ -23,12 +23,13 @@ and never acts for another player, but it is not stock play: a punted lethal
 block is "no blocks". The table is in `forge-arena/runner/seatd/seat-brief.md`
 and pinned by a test; `PATCH-NOTES.md` lists every surface.
 
-**Download:** [forge-light-llm-latest.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-latest.tar.gz)
-(the current release; **v4.2 Experimental**, 2026-09-17, ~400 MB — every voice bundled). Each release
-also keeps its dated object, this one
-[forge-light-llm-20260917.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-20260917.tar.gz);
-`PATCH-NOTES.md` inside says which version you have. Unpack anywhere:
-`tar xzf forge-light-llm-latest.tar.gz`.
+**Download:** this is **v4.2 Experimental** (2026-09-17, ~400 MB — every voice bundled), published
+as its dated object only:
+[forge-light-llm-20260917.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-20260917.tar.gz).
+The stable alias [forge-light-llm-latest.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-latest.tar.gz)
+stays at v4.1 (2026-09-10, ~130 MB) until the table's voices and deals graduate. Every release keeps
+its dated object; `PATCH-NOTES.md` inside says which version you have. Unpack anywhere:
+`tar xzf forge-light-llm-20260917.tar.gz`.
 
 Built on [Forge](https://github.com/Card-Forge/forge) (GPL-3.0); the engine
 ships prebuilt, see `LICENSE`. Non-commercial fan project. Magic: The

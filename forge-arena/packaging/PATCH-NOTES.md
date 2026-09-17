@@ -4,8 +4,8 @@
 
 The AI seats talk like people at a table, and they make deals. Built and played in live games 38–59
 on the `experimental/voicework2` branch, then fast-forwarded to `arena`. **Experimental** means one
-tarball with every voice bundled (the voice-pack split waits for 5.0) and a table that is still being
-tuned from live play; everything below shipped through two full review passes and a clean game 59.
+tarball with every voice bundled (the voice-pack split waits for 5.0), published as its dated object while
+`-latest` stays at v4.1, and a table that is still being tuned from live play; everything below shipped through two full review passes and a clean game 59.
 
 - **Deals, both ways.** The seats propose truces, no-target pacts and alliances to each other and to
   you — at their own cast and attack windows, from turn 3, about once in six turns, or sooner when you
