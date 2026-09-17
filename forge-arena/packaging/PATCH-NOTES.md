@@ -4,6 +4,10 @@
 
 The AI seats talk like people at a table. Built in live games 38–46.
 
+- **Forge's sound effects no longer pop and crackle (BL-56).** The effects were being decoded to 8-bit,
+  which pushed them through Java's software mixer and summed overlapping sounds into overload — the
+  shuffle and the opening draws were the worst of it. They now decode to 16-bit and take the direct
+  device path. One line in Forge's sound loader, measured through a loopback before and after.
 - **Three seat voices (Harry, Bill, Lily; ElevenLabs stock voices, eleven_v3
   with delivery tags), one per AI seat, assigned by deck** (Purphoros fiery,
   Urza dry, Giada warm). A shared vocabulary of openers, reactions, replies and

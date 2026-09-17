@@ -18,9 +18,10 @@ divergence list). Read both before ANY merge from upstream.*
   patches" was **deliberately dropped**. The full delta outside
   `forge-arena/` (2026-09-04 recount, `git diff --name-status
   a5f4f9e4796..HEAD -- . ':(exclude)forge-arena'`) is **12 modified upstream files** plus our new parent-module files (2026-09-10 recount against the NEW base; INVENTORY §1 is the current table):
-  - **12 modified**: 9 upstream Java files (301 insertions / 22 deletions —
+  - **13 modified** (2026-09-17: +`AudioClip.java`): 10 upstream Java files (~308 insertions / 23 deletions —
     ComputerUtil, ComputerUtilMana, AiCostDecision, MyRandom, Combat,
-    StaticAbilityTurnPhaseReversed, MagicStack, EDocID, CMatchUI), plus
+    StaticAbilityTurnPhaseReversed, MagicStack, EDocID, CMatchUI, and
+    `forge-gui-desktop/.../sound/AudioClip.java` — the BL-56 16-bit decode, see the playbook row), plus
     `forge-gui/res/defaults/match.xml`, root `pom.xml` (the
     `<module>forge-arena</module>` reactor line), and root `.gitignore`
     (arena transient-output block). pom.xml is a REAL conflict surface —
@@ -109,6 +110,7 @@ git merge origin/master
 | Additive hooks | `AiCostDecision.java` (+`TapCostPreference`, `SacCostPreference`, `PaymentPickPreference`) | Re-insert the hook blocks ahead of upstream's (possibly new) stock logic. `TapSymmetryBreakTest` / `SacrificeSeatChoiceTest` / `PaymentPickPreferenceTest` arbitrate. |
 | Diagnostics | `MagicStack.java` | Re-add the FIZZLE stderr block wherever the fizzle branch now lives. Cheap; skip only if the branch vanished. |
 | Defensive fixes | `Combat.java`, `StaticAbilityTurnPhaseReversed.java` | Check if upstream fixed it themselves (both are upstream-worthy); if yes, drop ours — divergence shrinks. |
+| Audio decode (BL-56) | `forge-gui-desktop/.../sound/AudioClip.java` | Keep `getAudioClips` decoding to **16-bit** (`Converter.convertFrom(...).withTargetFormat(DECODE_FORMAT)`). If upstream replaced the converter or the loader, port the intent: the effects must reach Java Sound as 16-bit signed PCM, never 8-bit. If upstream fixed it themselves, drop ours. **Arbiter is a measurement, not a unit test:** `forge-arena/scripts/research/sound/run_probe.py` (`SEQ=burst … clip afplay`) — the seven-draw burst through `clip` must show 0 impulses and a peak near 0.31, matching `afplay`; 8-bit shows 2–6 impulses and a peak of 0.73–0.83. Needs the loopback device and a rebuilt fat jar. |
 | GUI wiring | `EDocID.java`, `CMatchUI.java` | Re-add the 2+6 registration lines. Mechanical. |
 | Root build/infra | `pom.xml`, `.gitignore` | Union-merge: keep upstream's changes AND our one `<module>forge-arena</module>` line (ARENA-PATCH-marked) / our arena transient-output ignore block. |
 | New files (ours) | everything in 1b, plus `runs/*.json` + `UPSTREAM-PATCHES.md` at root | No conflicts possible; verify the code files still compile against changed APIs. |
@@ -213,6 +215,9 @@ is simplest).
 ## Shrinking the divergence (standing goal)
 
 Candidates to offer upstream as PRs (each removes a conflict row forever):
+**`AudioClip.getAudioClips` 16-bit decode (BL-56) — the strongest candidate: a one-line library
+call, no new dependency, and Card-Forge issue #8857 ("crackling after the AI is thinking") is
+plausibly this very defect; take the measurement numbers along.**
 `Combat.getAttackers` snapshot fix; `StaticAbilityTurnPhaseReversed` crash
 guard; arguably the `ComputerUtil` rollback (it fixes their own FIXME).
 `MyRandom` seeding could go upstream behind a system property. The

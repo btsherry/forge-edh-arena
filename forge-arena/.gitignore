@@ -1,2 +1,4 @@
 prep-cache/
 decks/*/
+# BL-56 sound probe recordings (research, regenerable)
+scripts/research/sound/out/

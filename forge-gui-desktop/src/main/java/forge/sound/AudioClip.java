@@ -54,9 +54,16 @@ public class AudioClip implements IAudioClip {
     private boolean failed;
     private static final Map<String, byte[]> audioClips = new HashMap<>(30);
 
+    // [arena] ARENA-PATCH (BL-56, 2026-09-17): decode to 16-bit PCM. The converter's default output is 8-bit
+    // unsigned, which forces Java Sound's software mixer (impulses, held samples, overlapping effects summed to
+    // overload) and carries a 48 dB quantization floor; 16-bit takes the direct device line and mixes cleanly.
+    // Measured through a loopback in forge-arena/scripts/research/sound/. Upstream-worthy (Card-Forge #8857).
+    private static final AudioFormat DECODE_FORMAT = new AudioFormat(44100f, 16, 1, true, false);
+
     public static byte[] getAudioClips(File file) throws IOException {
         if (!audioClips.containsKey(file.toString()) ) {
-            audioClips.put(file.toString(), Converter.convertFrom(Files.asByteSource(file).openStream()).toByteArray());
+            audioClips.put(file.toString(), Converter.convertFrom(Files.asByteSource(file).openStream())
+                    .withTargetFormat(DECODE_FORMAT).toByteArray());   // [arena] was: .toByteArray() (8-bit)
         }
         return audioClips.get(file.toString());
     }
