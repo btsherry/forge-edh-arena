@@ -282,7 +282,8 @@ the advisor, which then attaches a stock quip to about one line in two, so
 the table does not fall silent; when live lines return the quips go back to
 rare. The voice's log says which mode it is in.
 
-Knobs: `--no-voice` or `ARENA_VOICE=off`; `ARENA_VOICE_SFX=off` (no bleeps);
+Knobs: `--no-voice` or `ARENA_VOICE=off` (the table starts muted; the runner still runs and keeps the deal
+ledger — unmute from the Advisor tab); `ARENA_VOICE_SFX=off` (no bleeps);
 `ARENA_VOICE_FX=off|lite|on` (film processing: off, pure-Python, or ffmpeg
 when present); `ARENA_VOICE_FORMAT` (default `pcm_24000`; `mp3_44100_128` if
 your tier rejects PCM — the runner falls back to MP3 by itself for the run);
@@ -522,7 +523,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `ARENA_VOICE` | `on` | the advisor's voice (arena-play --no-voice = off) |
+| `ARENA_VOICE` | `on` | the table's voices (arena-play --no-voice = start muted; the runner still keeps the deal ledger) |
 | `ARENA_CHATTER` | `normal` | quiet \| normal \| lively \| rowdy (or a number) — one dial for how much the table talks: sets the talk budget (the speaking fraction of the last minute: .09 / .18 / .27 / .36) that the governor spends, shortens the gap, lowers the reaction thresholds; advice frequency is untouched |
 | `ELEVENLABS_API_KEY` | unset | live spoken advice needs it; stock phrases play without it |
 | `ARENA_VOICE_FORMAT` | `pcm_24000` | ElevenLabs output; PCM needs no decoder |

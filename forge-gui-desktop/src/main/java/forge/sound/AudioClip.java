@@ -58,14 +58,31 @@ public class AudioClip implements IAudioClip {
     // unsigned, which forces Java Sound's software mixer (impulses, held samples, overlapping effects summed to
     // overload) and carries a 48 dB quantization floor; 16-bit takes the direct device line and mixes cleanly.
     // Measured through a loopback in forge-arena/scripts/research/sound/. Upstream-worthy (Card-Forge #8857).
+    // Mono at 44.1 kHz is the converter's own default (the stereo sources were always downmixed); only the depth changed.
     private static final AudioFormat DECODE_FORMAT = new AudioFormat(44100f, 16, 1, true, false);
 
     public static byte[] getAudioClips(File file) throws IOException {
         if (!audioClips.containsKey(file.toString()) ) {
-            audioClips.put(file.toString(), Converter.convertFrom(Files.asByteSource(file).openStream())
-                    .withTargetFormat(DECODE_FORMAT).toByteArray());   // [arena] was: .toByteArray() (8-bit)
+            audioClips.put(file.toString(), withTrueLength(Converter.convertFrom(Files.asByteSource(file).openStream())
+                    .withTargetFormat(DECODE_FORMAT).toByteArray()));   // [arena] was: .toByteArray() (8-bit)
         }
         return audioClips.get(file.toString());
+    }
+
+    /** [arena] The converter writes the WAV header with the BYTE count as the frame count — invisible at 8-bit
+     *  (one byte a frame), twice the truth at 16-bit, and the clip line is sized from that header. Rewrite the
+     *  container from the decoded samples so the header says what the data holds. */
+    private static byte[] withTrueLength(final byte[] wav) throws IOException {
+        try (AudioInputStream in = AudioSystem.getAudioInputStream(new ByteArrayInputStream(wav))) {
+            final byte[] pcm = in.readAllBytes();
+            final AudioFormat f = in.getFormat();
+            final java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(pcm.length + 64);
+            AudioSystem.write(new AudioInputStream(new ByteArrayInputStream(pcm), f, pcm.length / f.getFrameSize()),
+                    javax.sound.sampled.AudioFileFormat.Type.WAVE, out);
+            return out.toByteArray();
+        } catch (javax.sound.sampled.UnsupportedAudioFileException e) {
+            return wav;
+        }
     }
 
     public static boolean fileExists(String fileName) {

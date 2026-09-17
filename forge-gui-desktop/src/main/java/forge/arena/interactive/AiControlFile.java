@@ -314,6 +314,11 @@ public final class AiControlFile {
      *  answers in that order). Returns the file, or {@code null} when the text
      *  is empty or the directory cannot be written (no runner logs dir). */
     public static File askAdvisor(final String raw) {
+        return askAdvisor(raw, null);
+    }
+
+    /** The offer pane's answer names the offer it shows ({@code offer_id}); a typed question carries none. */
+    public static File askAdvisor(final String raw, final String offerId) {
         final String text = sanitizeAsk(raw);
         if (text.isEmpty()) {
             return null;
@@ -324,7 +329,8 @@ public final class AiControlFile {
             final long ts = System.currentTimeMillis();
             final File f = new File(dir, String.format("ask-%d-%03d.json", ts, ASK_SERIAL.incrementAndGet()));
             final File tmp = new File(dir, f.getName() + ".tmp");
-            Files.write(tmp.toPath(), ("{\"ask\": " + jsonString(text) + ", \"ts\": " + ts + "}")
+            final String offer = offerId == null || offerId.isEmpty() ? "" : ", \"offer_id\": " + jsonString(offerId);
+            Files.write(tmp.toPath(), ("{\"ask\": " + jsonString(text) + offer + ", \"ts\": " + ts + "}")
                     .getBytes(StandardCharsets.UTF_8));
             Files.move(tmp.toPath(), f.toPath(), StandardCopyOption.REPLACE_EXISTING,
                     StandardCopyOption.ATOMIC_MOVE);

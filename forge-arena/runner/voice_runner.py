@@ -950,9 +950,13 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             # B1: a muted runner still READS the snapshot — game over sets the lock and the teardown watcher
             # gets its final.json at once instead of after LINGER; every queued line is dropped with a
             # record; nothing plays (the queue is emptied here, react_atom is gated, the backchannel is armed
-            # only by speak). The advisor stream and the game log wait for the unmute, as before.
+            # only by speak). The advisor stream waits for the unmute. The game log and the deal control files
+            # do NOT: this runner owns the deal ledger, and a muted table (--no-voice) still strikes and lapses
+            # deals — the offer pane's Accept used to write a file nobody read (hygiene pass, 2026-09-17).
             self.stop_atoms()                            # a pending murmur or an under-line dies with the mute
             self.scan_observer()
+            self.scan_game_log()
+            self.scan_deal_control()
             if self.queue:
                 for q in self.queue:
                     self.record("dropped", kind=q["kind"], why="voice disabled", stock=q.get("stock", ""), seat=q.get("seat"),

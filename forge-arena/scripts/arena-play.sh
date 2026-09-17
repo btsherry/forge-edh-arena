@@ -8,8 +8,9 @@
 #   arena-play.sh --all-ai [--timeout N] [--model M] [--effort E]
 #   arena-play.sh --human [deck.dck] [--timeout N] [--model M] [--effort E] [--no-advisor]
 #   ... [--linger N] [--no-autostop]
-#   ... [--no-voice]   (silences the whole table: the seat voices, Joshua at the table on an all-AI game, and the
-#                      advisor's lines. Baked takes play without a key; only Joshua's live lines need ELEVENLABS_API_KEY)
+#   ... [--no-voice]   (the table starts MUTED: the seat voices, Joshua at the table on an all-AI game, and the
+#                      advisor's lines. The voice runner still runs — it owns the deal ledger — so deals work;
+#                      unmute from the Advisor tab. Baked takes play without a key; only Joshua's live lines need ELEVENLABS_API_KEY)
 #   ARENA_CHATTER=quiet|normal|lively|rowdy   how much the table talks (the one dial); ARENA_BARKS=off|some|all the seat voices
 #   ... [--stops quick|full|keep|restore]  (human games: opponent-turn priority stops in Forge's preferences —
 #                              quick (DEFAULT) = declare-attackers + end step only; full = + begin-combat +
@@ -204,18 +205,19 @@ fi
 # 2.6) the advisor's voice (Ben, 2026-09-07): Joshua/W.O.P.R. stock phrases
 # always (shipped, offline), first-sentence advice live only when
 # ELEVENLABS_API_KEY is set. One-way like the advisor; supervised the same way.
-# Off with --no-voice or ARENA_VOICE=off; no advisor → no voice, EXCEPT an
-# all-AI table (2026-09-16): the voice runner is the seats' voices and owns the
-# deal ledger, so four brains dealing with each other need it with no advisor.
-if [ "$VOICE" != "off" ]; then
-  nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY ARENA_HUMAN_DECK="$HUMAN_SLUG" $ALL \
-    "$ROOT/runner/run_voice.sh" >"$LOGS/voice_runner.out" 2>&1 &
-  echo $! > "$LOGS/pids/voice-loop.pid"
-fi
+# The runner ALWAYS starts: it is the seats' voices AND the owner of the deal
+# ledger (all-AI, 2026-09-16; hygiene pass, 2026-09-17: with --no-voice the offer
+# pane's Accept wrote a file nobody read). --no-voice / ARENA_VOICE=off starts it
+# muted (control/voice.json, the mute button's file); the Advisor tab unmutes.
+mkdir -p "$LOGS/control"
+[ "$VOICE" = "off" ] && printf '{"enabled": false}\n' > "$LOGS/control/voice.json"
+nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY $ALL \
+  "$ROOT/runner/run_voice.sh" >"$LOGS/voice_runner.out" 2>&1 &
+echo $! > "$LOGS/pids/voice-loop.pid"
 
 # 3) GUI (spectator for all-ai, human seat 0 otherwise)
 if [ "$MODE" = "all-ai" ]; then GUI_ARG="--all-ai"; else GUI_ARG="$HUMAN_DECK"; fi
-ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" ARENA_RELAY="$RELAY" ARENA_VOICE_RUNNER="$([ "$VOICE" != "off" ] && echo 1 || echo 0)" \
+ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" ARENA_RELAY="$RELAY" ARENA_VOICE_RUNNER=1 \
   ARENA_AUTOPASS="${ARENA_AUTOPASS:-casts}" \
   nohup env -u OPENROUTER_API_KEY -u ARENA_OAI_API_KEY \
   "$DIR/run-pilot-match.sh" "$GUI_ARG" >>"$LOGS/gui.out" 2>&1 &
@@ -240,6 +242,7 @@ if [ -f "$ROOT/mailbox/observer-state.json" ]; then
   seats=$(python3 "$ROOT/runner/arena-ctl.py" status 2>/dev/null | grep -c "model=")
   echo "arena live [$MODE]: $seats AI seats @ $MODEL/$EFFORT, timeout=${TIMEOUT}s"$([ "$MODE" = human ] && echo ", human=$HUMAN_DECK")
   [ "$MODE" = human ] && echo "  advisor: $([ "$ADVISOR" = 1 ] && echo on || echo "off (table relay on — deals and table talk still work)")"
+  [ "$VOICE" = "off" ] && echo "  voice: MUTED at start (--no-voice) — the runner still keeps the deal ledger; unmute from the Advisor tab"
   [ "$VOICE" != "off" ] && echo "  voice: baked takes on$([ -n "${ELEVENLABS_API_KEY:-}" ] && echo ", live lines on" || echo ", live lines off (no ELEVENLABS_API_KEY)"), chatter ${ARENA_CHATTER:-normal}, seat barks ${ARENA_BARKS:-some} (--no-voice to silence)"
   # 6) auto-teardown once the match has clearly concluded (Ben, 2026-09-04):
   # a plain sleep-loop watcher (no scheduler) waits for the engine's gameOver

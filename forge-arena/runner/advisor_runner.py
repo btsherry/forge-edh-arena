@@ -407,8 +407,11 @@ def deal_table(seat_decks: dict, commanders: dict | None = None) -> tuple[dict, 
         first = slug.split("-")[0]
         say = str(entry.get("say") or first.capitalize())
         names[seat] = say
-        handles[seat] = str(entry.get("who") or first).lower()
-        keys = {slug, first, say, str(entry.get("who") or ""), str(entry.get("name") or "").split(",")[0],
+        handle = str(entry.get("who") or first).lower()
+        if handle in handles.values():                        # two decks with one `who` (address.json: swords-plunder and -gc are both "rev")
+            handle = f"{handle}{seat}"                        # the later seat carries its number: the pane and the panel quote it
+        handles[seat] = handle
+        keys = {slug, first, say, handle, str(entry.get("who") or ""), str(entry.get("name") or "").split(",")[0],
                 str(entry.get("name") or "").split("//")[0], f"seat{seat}", f"seat-{seat}", f"s{seat}", str(seat)}
         for k in keys:
             k = " ".join(k.lower().split())
@@ -1074,11 +1077,18 @@ class AdvisorRunner:
         for p in self._scan_asks():
             body = self._load(p)
             if body is None:
-                continue  # partial write — next poll
+                try:                                           # a torn write is retried; a file still unreadable after 2 s is malformed: dropped
+                    if time.time() - p.stat().st_mtime > 2.0:
+                        p.unlink()
+                        self._record("ask_rejected", {"file": p.name, "why": "unreadable"})
+                except OSError:
+                    pass
+                continue
             try:
                 p.unlink()
             except OSError:
                 pass
+            oid = body.get("offer_id") if isinstance(body, dict) else None   # the offer pane names the offer it shows
             text = body.get("ask") if isinstance(body, dict) else None
             text = " ".join(str(text).split()) if isinstance(text, str) else ""
             if not text:
@@ -1093,7 +1103,7 @@ class AdvisorRunner:
             elif d is not None and d.get("to") == "advisor":
                 self._answer_ask(d.get("words") or text, deals=True)
             elif d is not None:
-                self._handle_deal_message(d, text)
+                self._handle_deal_message(d, text, oid if isinstance(oid, str) else None)
             else:
                 self._answer_ask(text)
             n += 1
@@ -1181,12 +1191,12 @@ class AdvisorRunner:
         tmp.write_text(json.dumps(body))
         os.replace(tmp, path)
 
-    def _handle_deal_message(self, d: dict, text: str) -> None:
+    def _handle_deal_message(self, d: dict, text: str, oid: str | None = None) -> None:
         seat, action, words = int(d["to"]), d.get("action"), d.get("words") or text
         name = self._deal_name(seat)
         turn = self._turn_now()
         if action in ("accept", "refuse"):
-            self._answer_counter(seat, action)
+            self._answer_counter(seat, action, oid)
             return
         deal = dict(d.get("deal") or {"kind": "truce", "rounds": 1})
         if seat == 0:
@@ -1253,12 +1263,20 @@ class AdvisorRunner:
                 self._panel("deals", "table talk relayed — for an offer say truce, no target or alliance (@joshua deals for the rules)", turn)
         self._record("deal", {"event": action, "seat": seat, "turn": turn, "text": words})
 
-    def _answer_counter(self, seat: int, action: str) -> None:
+    def _answer_counter(self, seat: int, action: str, oid: str | None = None) -> None:
         """`@urza accept` / `@urza no` on a pending counter -> logs/control/deal/<ts>-accept|refuse.json
-        {"offer_id", "counter"}; the voice runner strikes or closes the deal (lane A2)."""
+        {"offer_id", "counter"}; the voice runner strikes or closes the deal (lane A2). The offer pane names
+        the offer it shows (`oid`); a typed answer means the seat's newest open one."""
         name = self._deal_name(seat)
         turn = self._turn_now()
-        open_ = [(oid, o) for oid, o in self._offers.items() if o["seat"] == seat and o["status"] in ("countered", "proposed")]
+        open_ = [(o_id, o) for o_id, o in self._offers.items() if o["seat"] == seat and o["status"] in ("countered", "proposed")]
+        if oid is not None:
+            off = self._offers.get(oid)
+            if off is None or off.get("seat") != seat or off.get("status") not in ("countered", "proposed"):
+                self._panel("table", f"that offer from {name} is no longer open", turn)
+                self._question_drop(oid)                      # the pane closes instead of sitting at "Sending…"
+                return
+            open_ = [(oid, off)]
         if not open_:
             self._panel("table", f"no counter or offer from {name} is pending", turn)
             return
@@ -1390,6 +1408,8 @@ class AdvisorRunner:
 
     # ---- the offer pane's files: one per open offer to the player, gone with the offer ------------------
     def _question_write(self, oid: str, off: dict, assessment: str | None = None) -> None:
+        if assessment is None and self.relay_only:
+            assessment = "the advisor is off — your call"    # relay-only: no brain will weigh it; the pane must not wait for one
         body = {"offer_id": oid, "seat": off["seat"], "who": off["who"], "handle": self._deal_handles.get(off["seat"], str(off["seat"])),
                 "terms": deal_terms_text(off["deal"]), "text": off.get("text") or "", "turn": off["turn"],
                 "lapses_after_turn": off.get("counter_turn"), "assessment": assessment, "ts": off.get("ts") or time.time()}

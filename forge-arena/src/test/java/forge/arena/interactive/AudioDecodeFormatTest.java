@@ -26,7 +26,8 @@ public class AudioDecodeFormatTest {
 
     @Test
     public void effectsDecodeToSixteenBitSignedPcm() throws Exception {
-        for (String name : new String[] {"draw", "shuffle", "tap", "nighttime"}) {
+        // button_press (32 kHz) and coins_drop (48 kHz) are the sources the converter resamples; all 39 are stereo, downmixed
+        for (String name : new String[] {"draw", "shuffle", "tap", "nighttime", "button_press", "coins_drop"}) {
             final File mp3 = new File(SOUND, name + ".mp3");
             Assert.assertTrue(mp3.isFile(), mp3 + " (the test runs from forge-arena/, like the others)");
             final byte[] wav = forge.sound.AudioClip.getAudioClips(mp3);
@@ -37,6 +38,8 @@ public class AudioDecodeFormatTest {
                 Assert.assertEquals(f.getChannels(), 1, name);
                 Assert.assertEquals((int) f.getSampleRate(), 44100, name);
                 Assert.assertTrue(in.getFrameLength() > 0, name + ": decoded to nothing");
+                Assert.assertEquals(in.getFrameLength() * f.getFrameSize(), (long) in.available(),
+                        name + ": the header must say what the data holds (the converter wrote the byte count as the frame count)");
             }
         }
     }

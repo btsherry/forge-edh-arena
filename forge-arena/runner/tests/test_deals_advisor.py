@@ -7,6 +7,7 @@ logs/control/deal/<ts>-accept.json; Joshua assesses every deal the player strike
 Run: python3 -m unittest discover -s tests"""
 import json
 import os
+import time
 import sys
 import tempfile
 import unittest
@@ -145,6 +146,10 @@ class DealTests(unittest.TestCase):
 
     def test_unknown_deck_is_named_by_its_slug(self):
         al, names, handles = ar.deal_table({0: "giada-font-of-hope", 1: "brand-new-deck"}, commanders={})
+        _, _, two = ar.deal_table({0: "giada-font-of-hope", 1: "swords-plunder", 2: "swords-plunder-gc"})
+        self.assertEqual((two[1], two[2]), ("rev", "rev2"), "two decks with one `who`: the later seat carries its number (hygiene pass)")
+        al2, _, _ = ar.deal_table({0: "giada-font-of-hope", 1: "swords-plunder", 2: "swords-plunder-gc"})
+        self.assertEqual((al2["rev"], al2["rev2"]), (1, 2))
         self.assertEqual((names[1], handles[1], al["brand"], al["brand-new-deck"], al["seat1"]), ("Brand", "brand", 1, 1, 1))
 
     # ---- the relay
@@ -422,6 +427,36 @@ class SeatOffers(unittest.TestCase):
         self.assertEqual(self.panel().count("Urza offers"), 1, "read once")
         self.assertEqual(self.records("deal")[-1]["event"], "seat-offer")
 
+    def test_the_panes_answer_names_its_offer_and_a_stale_id_closes_the_pane(self):
+        self._propose(2, 0, {"kind": "truce", "rounds": 1}, "p-2-0a")
+        self._propose(2, 0, {"kind": "alliance", "until_turn": 10}, "p-2-0b")
+        self.r._asks.mkdir(parents=True, exist_ok=True)
+        (self.r._asks / "ask-5000-1.json").write_text(json.dumps({"ask": "@purphoros accept", "offer_id": "p-2-0a"}))
+        self.r._handle_asks()
+        files = sorted(f for f in self.r._deal_control.iterdir() if f.is_file())
+        self.assertEqual(json.loads(files[-1].read_text())["offer_id"], "p-2-0a", "the pane's click answers the offer it SHOWS, not the seat's newest")
+        self.assertEqual((self.r._offers["p-2-0a"]["status"], self.r._offers["p-2-0b"]["status"]), ("offer-accepted", "proposed"))
+        self.assertFalse((self.r._questions / "p-2-0a.json").exists()); self.assertTrue((self.r._questions / "p-2-0b.json").exists())
+        (self.r._questions / "p-2-0a.json").write_text("{}")                # a pane still open on the closed offer
+        (self.r._asks / "ask-5000-2.json").write_text(json.dumps({"ask": "@purphoros no", "offer_id": "p-2-0a"}))
+        self.r._handle_asks()
+        self.assertIn("that offer from Purphoros is no longer open", self.panel())
+        self.assertFalse((self.r._questions / "p-2-0a.json").exists(), "the file goes, so the pane closes instead of sitting at Sending…")
+        self.assertEqual(self.r._offers["p-2-0b"]["status"], "proposed", "the other offer is untouched")
+        # a typed answer (no id) still means the seat's newest open offer
+        self.ask("@purphoros accept")
+        self.assertEqual(self.r._offers["p-2-0b"]["status"], "offer-accepted")
+        # an ask file that never parses is retried while fresh and dropped once it is 2 s old
+        bad = self.r._asks / "ask-5000-3.json"
+        bad.write_text("{torn")
+        self.r._handle_asks()
+        self.assertTrue(bad.exists(), "fresh: a torn write waits for the next poll")
+        old = time.time() - 10
+        os.utime(bad, (old, old))
+        self.r._handle_asks()
+        self.assertFalse(bad.exists(), "stale and unreadable: dropped, never re-read every poll")
+        self.assertEqual(self.records("ask_rejected")[-1].get("why"), "unreadable")
+
     def test_a_seat_offering_the_player_is_answered_in_the_chat_and_assessed_at_once(self):
         self.r.brain.reply = "Take it: Purphoros cannot race you and Urza is the one to fear."
         self._propose(2, 0, {"kind": "alliance", "until_turn": 10}, "p-2-0", text="Urza is the threat")
@@ -563,7 +598,7 @@ class RelayOnly(unittest.TestCase):
         self.game_line(seat=2, turn=7, type="DEAL", deal={"offer_id": "p-2-0", "propose": True, "with": 0, "terms": {"kind": "truce", "rounds": 1}})
         self.r._deal_tick()
         q = json.loads((self.r._questions / "p-2-0.json").read_text())
-        self.assertIsNone(q["assessment"], "no Joshua: the pane shows the terms without a read")
+        self.assertEqual(q["assessment"], "the advisor is off — your call", "no Joshua: the pane says so instead of 'weighing it' forever (hygiene pass)")
         self.assertEqual(self.r.brain.prompts, [])
         self.assertIn("Purphoros] offers you truce, 1 turn", self.panel())
         self.assertTrue(oid)

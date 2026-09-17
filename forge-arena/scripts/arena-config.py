@@ -51,7 +51,7 @@ KNOBS = {
         ("ARENA_ADVISOR_ROTATE_TOKENS", "400000", "advisor session rotation threshold"),
     ],
     "voice": [
-        ("ARENA_VOICE", "on", "the table's voices — the seat voices, Joshua's lines, and Joshua at the fourth seat on an all-AI table (arena-play --no-voice = off)"),
+        ("ARENA_VOICE", "on", "the table's voices — the seat voices, Joshua's lines, and Joshua at the fourth seat on an all-AI table (arena-play --no-voice = start muted; the runner still keeps the deal ledger)"),
         ("ARENA_CHATTER", "normal", "quiet | normal | lively | rowdy (or a number) — one dial for how much the table talks: sets the talk budget (speaking fraction of the last minute: .09 / .18 / .27 / .36) the governor spends, shortens the gap, lowers the reaction thresholds; advice frequency is untouched"),
         ("ELEVENLABS_API_KEY", "", "only Joshua's LIVE lines (advice, colour, deal reads) need it; every seat voice and every baked take plays without it (game 52)"),
         ("ARENA_VOICE_FORMAT", "pcm_24000", "ElevenLabs output; PCM needs no decoder"),

@@ -1479,7 +1479,7 @@ Hard-won from two live sessions; read before optimizing anything.
 
 75. **The advisor's voice (2026-09-07, Ben; branch experimental/voicework).**
     `runner/voice_runner.py` (stdlib only, supervised by `run_voice.sh`, started by
-    `arena-play.sh` in advised human games unless `--no-voice`) reads
+    `arena-play.sh` in every game; `--no-voice` starts it muted, since it owns the deal ledger) reads
     `advisor-0.jsonl` and `mailbox/observer-state.json` and plays WAVs on the
     default output: STOCK (`runner/voice/stock/`, 22 pre-rendered lines from
     Ben's ElevenLabs voice `Jousha-W.O.P.R.` with the film-match FX chain in

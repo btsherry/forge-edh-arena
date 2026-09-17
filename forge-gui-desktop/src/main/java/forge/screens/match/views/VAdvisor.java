@@ -246,6 +246,13 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     }
 
     private void syncOffers() {
+        if (!forge.arena.interactive.AiControlFile.relayAttached()) {   // no relay: a pane's Accept would write an ask nobody reads
+            if (offerPane != null) {
+                offerPane.dispose();
+                offerPane = null;
+            }
+            return;
+        }
         final java.util.List<forge.arena.interactive.DealQuestion> qs =
                 forge.arena.interactive.DealQuestion.list(forge.arena.interactive.DealQuestion.dir());
         final java.util.Set<String> live = new java.util.HashSet<>();
@@ -280,15 +287,16 @@ public class VAdvisor implements IVDoc<CAdvisor> {
 
     private void openOffer(final forge.arena.interactive.DealQuestion q) {
         offerPane = new forge.arena.interactive.VDealOffer(q,
-                () -> answerOffer(q.acceptAsk()),
-                () -> answerOffer(q.refuseAsk()),
+                () -> answerOffer(q.acceptAsk(), q.offerId),
+                () -> answerOffer(q.refuseAsk(), q.offerId),
                 () -> counterOffer(q));
         offerPane.showBottomRight();
     }
 
-    /** The click sends exactly the chat message the player would type; the runner answers as it does a typed one. */
-    private void answerOffer(final String ask) {
-        if (forge.arena.interactive.AiControlFile.askAdvisor(ask) == null) {
+    /** The click sends exactly the chat message the player would type, plus the id of the offer on screen, so the
+     *  runner answers THAT offer (a typed answer means the seat's newest). */
+    private void answerOffer(final String ask, final String offerId) {
+        if (forge.arena.interactive.AiControlFile.askAdvisor(ask, offerId) == null) {
             text.append("\n[advisor] could not send your answer — the runner logs directory is not writable.\n");
         }
         releaseFocus();
@@ -378,6 +386,9 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             if (current == target) {
                 focusSeat = seat;
                 return;                                    // already in front
+            }
+            if (focusSeat == seat) {
+                return;                                    // brought forward once for this line; the player clicked away — theirs to keep (hygiene pass, 2026-09-17)
             }
             if (focusRestore == null || focusCell != cell) {
                 focusRestore = current;                    // remember where the player was looking
@@ -492,7 +503,7 @@ public class VAdvisor implements IVDoc<CAdvisor> {
         parentCell.getBody().add(body, "grow");
         poll();
         refresh.start();
-        if (FOCUS_ON) {
+        if (FOCUS_ON && forge.arena.interactive.AiControlFile.voiceAttached()) {   // no voice runner: nothing to follow
             focusTimer.start();
         }
     }

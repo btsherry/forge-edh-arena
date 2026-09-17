@@ -111,8 +111,12 @@ public final class DealQuestion {
 
     // ---- flat JSON readers
 
+    private static final java.util.concurrent.ConcurrentHashMap<String, Pattern> STR_RE = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, Pattern> NUM_RE = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static String str(final String json, final String key) {
-        final Matcher m = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*(null|\"((?:[^\"\\\\]|\\\\.)*)\")").matcher(json);
+        final Matcher m = STR_RE.computeIfAbsent(key,
+                k -> Pattern.compile("\"" + Pattern.quote(k) + "\"\\s*:\\s*(null|\"((?:[^\"\\\\]|\\\\.)*)\")")).matcher(json);
         if (!m.find()) {
             return null;
         }
@@ -128,7 +132,8 @@ public final class DealQuestion {
     }
 
     private static long numLong(final String json, final String key, final long dflt) {
-        final Matcher m = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*(-?\\d+)(?:\\.\\d+)?").matcher(json);
+        final Matcher m = NUM_RE.computeIfAbsent(key,
+                k -> Pattern.compile("\"" + Pattern.quote(k) + "\"\\s*:\\s*(-?\\d+)(?:\\.\\d+)?")).matcher(json);
         if (!m.find()) {
             return dflt;
         }

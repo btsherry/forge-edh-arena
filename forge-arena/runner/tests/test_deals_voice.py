@@ -157,6 +157,22 @@ class ADealFromTheSeat(_DealCase):
         self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"])
         self.assertEqual(self._queue(), [("deal-with-you", "harry/table", 1)], "the seat confirms the pact aloud")
 
+    def test_a_muted_table_still_strikes_the_players_deal(self):
+        """--no-voice starts the runner muted (hygiene pass, 2026-09-17): the ledger is the player's, so the
+        offer pane's Accept is consumed and the seat told, while every line is dropped unspoken."""
+        self._deal_record(1, False, terms={"kind": "truce", "rounds": 1}, counter={"kind": "no-target", "rounds": 2})
+        (self.logs / "control").mkdir(parents=True, exist_ok=True)
+        (self.logs / "control" / "voice.json").write_text('{"enabled": false}')
+        d = self.logs / "control" / "deal"
+        d.mkdir(parents=True, exist_ok=True)
+        f = d / "1700000000123-accept.json"
+        f.write_text(json.dumps({"offer_id": "o1"}))
+        self.r.step()
+        self.assertFalse(f.exists(), "consumed by the muted runner")
+        self.assertEqual(self.r._deals[(1, 0)]["kind"], "no-target")
+        self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"], "the seat learns it has a pact")
+        self.assertEqual(self._queue(), [], "nothing is spoken")
+
     def test_an_accept_for_an_unknown_offer_is_noted_and_dropped(self):
         d = self.logs / "control" / "deal"
         d.mkdir(parents=True)
