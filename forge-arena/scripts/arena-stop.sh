@@ -77,7 +77,7 @@ if [ "$have_logs" = 1 ]; then
      "$LOGS"/ratings.out "$LOGS"/transport-events.jsonl \
      "$LOGS"/engine-events.jsonl "$LOGS"/claude-persistent-seat-*.err \
      "$LOGS"/events.jsonl "$LOGS"/observer-tape.jsonl "$LOGS"/voice-state.json \
-     "$LOGS"/deals.jsonl \
+     "$LOGS"/deals.jsonl "$LOGS"/gui.jfr \
      "$LOGS"/launch-config.txt \
      "$ROOT"/runner/results/*.rated \
      "$ROOT"/runner/results/*.skipped "$ROOT"/runner/results/*.voided "$A/" 2>/dev/null

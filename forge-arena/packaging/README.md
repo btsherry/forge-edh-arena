@@ -552,6 +552,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_AUTOSTOP_GUI_GONE_LINGER` | `10` | seconds after the GUI vanishes before teardown |
 | `ARENA_AUTOSTOP_VOICE_WAIT` | `60` | at game over, how long to wait for the voice's final sign-off before tearing down |
 | `ARENA_AUTOSTOP_AFTER_VOICE` | `5` | seconds after the voice's last line before teardown (replaces the linger when a voice runner is up) |
+| `ARENA_JFR` | `0` | `1` = the GUI JVM records a Java Flight Recorder profile for the whole game (`runner/logs/gui.jfr`, archived with the game; read with `jfr summary <file>`); JDK 17 has it built in |
 
 Two settings stay off on purpose: `ARENA_AUTOPASS_RESOLVE_OWN` (your main
 phases are never passed for you) and the two experimental seat postures

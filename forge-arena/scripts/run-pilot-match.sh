@@ -112,6 +112,12 @@ ADVISOR_ARGS=""
 [ "${ARENA_RELAY:-0}" = "1" ] && ADVISOR_ARGS="$ADVISOR_ARGS -Darena.relay=1"
 [ "${ARENA_VOICE_RUNNER:-0}" = "1" ] && ADVISOR_ARGS="$ADVISOR_ARGS -Darena.voice=1"
 
+# Java Flight Recorder (Ben, 2026-09-17: the effects crackle — is the JVM starving its audio thread?):
+# ARENA_JFR=1 records the whole game (profile settings, ~2 % overhead) into runner/logs/gui.jfr, dumped at
+# exit and archived with the game; read it with `jfr summary` / `jfr print`. Built into JDK 17, nothing to install.
+JFR_ARGS=""
+[ "${ARENA_JFR:-0}" = "1" ] && JFR_ARGS="-XX:StartFlightRecording=filename=$REPO_ROOT/forge-arena/runner/logs/gui.jfr,settings=profile,dumponexit=true,maxsize=512m -XX:FlightRecorderOptions=stackdepth=128"
+
 # Backend models for the AI panel's dial cycle (plan F-27/F-34): the unique
 # or/ | oai/ entries from ARENA_SEAT_MODELS slots 1-3 only (slot 0 is the
 # human/advisor seat), whitelisted so AiControlFile.write()'s unescaped
@@ -134,7 +140,7 @@ echo
 
 cd "$GUI_DIR"
 # shellcheck disable=SC2086  # MAND/OPENS are intentional multi-arg word lists
-exec "$JAVA" $MAND $OPENS $SEAT_DECKS_ARG $ADVISOR_ARGS $EXTRA_MODELS_ARG \
+exec "$JAVA" $MAND $OPENS $JFR_ARGS $SEAT_DECKS_ARG $ADVISOR_ARGS $EXTRA_MODELS_ARG \
   -Darena.decks.dir="$DECKS_DIR" \
   -Darena.mailbox.dir="$MAILBOX_DIR" \
   -Darena.mailbox.timeout.sec="$TIMEOUT" \

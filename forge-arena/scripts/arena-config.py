@@ -74,6 +74,9 @@ KNOBS = {
         ("OPENROUTER_API_KEY", "", "needed by or/ seats"),
         ("ARENA_OAI_BASE_URL", "", "OpenAI-compatible endpoint for oai/ seats"),
     ],
+    "diagnostics": [
+        ("ARENA_JFR", "0", "1 = the GUI JVM records a Java Flight Recorder profile for the whole game (runner/logs/gui.jfr, archived with the game; `jfr summary <file>`)"),
+    ],
     "teardown watcher": [
         ("ARENA_AUTOSTOP_POLL", "5", "seconds between game-over checks"),
         ("ARENA_AUTOSTOP_GUI_GONE_LINGER", "10", "seconds after the GUI vanishes before teardown"),
