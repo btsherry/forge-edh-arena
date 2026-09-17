@@ -317,6 +317,10 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         if self.color_mode not in ("off", "some", "all"):
             self.color_mode = "some"
         self.color_p = float(tune["color_p"])
+        # Ben, 2026-09-17 (game 58): Joshua gets a share of the colour on the AI seats' turns (the seat had all of it);
+        # advice that lands within a few seconds of the player's own answer is still spoken, as a retrospective.
+        self.color_joshua_share = float(tune["color_joshua_share"])
+        self.advice_grace = float(tune["advice_grace_s"])
         self.apply_chatter()
         self.queue: list[dict] = []
         # A2: never -1e9 (the floor read a restart as an astronomical silence and forced a line in 3–6 s):
@@ -333,6 +337,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         except OSError:
             pass
         self.answered: set[int] = set()     # advisor request seqs the human already answered
+        self.answered_at: dict[int, float] = {}   # ...and when (the clock): advice within advice_grace_s of the answer still plays
         self.seen_turn = None
         self.seen_active = None
         self.eliminated: set[int] = set()
@@ -553,6 +558,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             "threat": {str(s): round(v, 3) for s, v in getattr(self, "_threat", {}).items()},
             "casts": {str(s): [x for x in v if now - x <= STATE_RECENT_S] for s, v in getattr(self, "_casts", {}).items()},
             "answered": sorted(int(x) for x in self.answered),
+            "answered_at": {str(k): v for k, v in self.answered_at.items() if now - v <= STATE_RECENT_S},
             "ring_seq": self._ring_seq,
             "atom_seat_at": {str(s): t for s, t in d.get("_atom_seat_at", {}).items()},
             "atom_used": {f"{s}|{stem}": t for (s, stem), t in d.get("_atom_used", {}).items()},
@@ -697,6 +703,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self._threat = {int(s): float(v) for s, v in get("threat", dict).items()}
         self._casts = {int(s): [t(x) for x in v if t(x) is not None] for s, v in get("casts", dict).items()}
         self.answered = {int(x) for x in get("answered", list)}
+        self.answered_at = {int(k): float(v) for k, v in get("answered_at", dict).items()}
         self.last_spoken_at = t(state.get("last_spoken_at"), now)
         self._advisor_spoke_at = t(state.get("advisor_spoke_at"), -1e9)
         self._patter_due = t(state.get("patter_due"), now)

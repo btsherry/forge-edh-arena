@@ -631,7 +631,14 @@ class EventsMixin:
         (the advisor stamps `owner`); the human's turn is Joshua's, under his dice."""
         owner = r.get("owner")
         if self.barks_mode != "off" and owner is not None and int(owner) != self.human_seat and self.library_for_seat(int(owner)):
-            self.record("skipped", kind="color", why=f"seat {owner}'s turn — the seat speaks", text=r["text"][:80], seq=r.get("seq"))
+            # Ben, 2026-09-17 (game 58: "not hearing much from Joshua"): the seat keeps most of its own turn's colour,
+            # Joshua takes a share (color_joshua_share, 0.3) — and when he does, it is spoken, not rolled again
+            share = float(getattr(self, "color_joshua_share", 0.0))
+            if self.rng.random() >= share:
+                self.record("skipped", kind="color", why=f"seat {owner}'s turn — the seat speaks", text=r["text"][:80], seq=r.get("seq"))
+                return
+            self.record("noted", kind="color", why=f"Joshua takes the colour on seat {owner}'s turn (share {share:.2f})", seq=r.get("seq"))
+            self.enqueue("color", text=first_sentence(r["text"]), ttl=40.0)
             return
         if self.color_mode == "all" or self.rng.random() < min(1.0, self.color_p * self.governor(optional=False)):
             self.enqueue("color", text=first_sentence(r["text"]), ttl=40.0)
@@ -1083,6 +1090,7 @@ class EventsMixin:
                 self._bark(seat, pid, turn=r.get("turn"), source="recap" if r.get("with") == "color" else "advice", ctx=ctx)
             elif k == "chosen" and r.get("seq") is not None:
                 self.answered.add(int(r["seq"]))
+                getattr(self, "answered_at", {})[int(r["seq"])] = self.clock()
 
     @staticmethod
     def _compact_card(c: dict) -> dict:

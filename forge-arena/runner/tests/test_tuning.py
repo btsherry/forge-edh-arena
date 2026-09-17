@@ -30,6 +30,7 @@ VOICE_PATH = [RUNNER / "voice_runner.py", RUNNER / "chains.py"] + sorted((RUNNER
 HELD_BY = {
     "min_gap_s": lambda r: r.min_gap, "your_move_p": lambda r: r.your_move_p,
     "color_mode": lambda r: r.color_mode, "color_p": lambda r: r.color_p,
+    "color_joshua_share": lambda r: r.color_joshua_share, "advice_grace_s": lambda r: r.advice_grace,
     "duty_target": lambda r: None if r.duty_target == min(0.45, vr.DUTY_BASE * r.chatter) else r.duty_target,
     "duty_human": lambda r: r.duty_human, "table_p": lambda r: r.table_mult,
     "barks_p": lambda r: r.barks_p, "barks_cooldown_s": lambda r: r.barks_cooldown,

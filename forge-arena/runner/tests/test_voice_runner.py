@@ -137,11 +137,14 @@ class VoiceRunnerTests(unittest.TestCase):
 
     def test_stale_advice_is_dropped_when_the_human_already_chose(self):
         self.clock.t += 100
-        self._advisor(kind="advice", seq=7, text="Attack with everything.")
         self._advisor(kind="chosen", seq=7, decisionType="DECLARE_ATTACKERS")
+        self.r.step()                                  # the human chose...
+        self.clock.t += 20                             # ...and the advice arrives twenty seconds later: history (game 58: inside
+        self._advisor(kind="advice", seq=7, text="Attack with everything.")   # advice_grace_s it would play as a retrospective)
         self.r.step()
         self.assertEqual(self.player.played, [])
-        self.assertEqual([d["why"] for d in self._records("dropped")], ["already answered"])
+        whys = [d["why"] for d in self._records("dropped")]
+        self.assertEqual(len(whys), 1); self.assertTrue(whys[0].startswith("already answered (20s ago, grace 8s)"), whys)
 
     def test_newest_advice_replaces_pending_advice_and_expiry_drops_it(self):
         self.clock.t += 100

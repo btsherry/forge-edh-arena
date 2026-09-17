@@ -526,3 +526,40 @@ class ADealLineWaitsOutTheGuard(_DealCase):
         item = [q for q in self.r.queue if q["kind"] == "bark"][-1]
         self.assertGreaterEqual(item["gap"], self.r.barks_cooldown - 2.0 - 0.01, "held for the rest of the guard, not dropped")
         self.assertIn("deal line held", [x["why"] for x in self._records("noted", "bark")][-1])
+
+
+class JoshuaHeard(_DealCase):
+    """Game 58 (Ben: "not hearing much from Joshua"): advice within the grace of the player's answer still plays;
+    Joshua takes a 30 % share of the colour on the AI seats' turns; the share is spoken, not rolled again."""
+
+    def test_advice_answered_moments_ago_still_plays_and_old_advice_does_not(self):
+        r = self.r
+        r.queue.clear()
+        r.enqueue("advice", text="Hold the counterspell.", seq=41, ttl=25.0)
+        r.answered.add(41); r.answered_at[41] = self.clock.t + 6.0                    # the player answers six seconds after the line arrives
+        self.clock.t += 10                                                            # past the table's gap; the answer is 4 s old
+        item = r.next_item()
+        self.assertIsNotNone(item); self.assertEqual(item["kind"], "advice")
+        self.assertTrue(any("spoken late" in x["why"] for x in self._records("noted", "advice")))
+        r.queue.clear()
+        r.enqueue("advice", text="Too late now.", seq=42, ttl=25.0)
+        r.answered.add(42); r.answered_at[42] = self.clock.t - 10.0                   # answered ten seconds before the line arrived
+        self.clock.t += 10                                                            # twenty seconds on: history
+        self.assertIsNone(r.next_item())
+        self.assertTrue(any(x["why"].startswith("already answered (20s ago") for x in self._records("dropped", "advice")))
+        state = r._recency_state()
+        self.assertIn("41", state["answered_at"], "the answer times travel in the checkpoint")
+
+    def test_joshua_takes_his_share_of_the_colour_on_an_ai_turn(self):
+        r = self.r; r.queue.clear()
+        rec = {"kind": "color", "text": "Urza spent the turn on artifacts. Watch the Scepter.", "owner": 1, "seq": 7}
+        r.rng.random = lambda: 0.5                                                 # above the 0.3 share: the seat keeps it
+        r._voice_color(rec)
+        self.assertEqual([q for q in r.queue if q["kind"] == "color"], [])
+        self.assertTrue(any("the seat speaks" in x["why"] for x in self._records("skipped", "color")))
+        r.rng.random = lambda: 0.2                                                 # inside the share: Joshua speaks, no second roll
+        r._voice_color(rec)
+        colour = [q for q in r.queue if q["kind"] == "color"]
+        self.assertEqual(len(colour), 1); self.assertEqual(colour[0]["text"], "Urza spent the turn on artifacts.")
+        self.assertTrue(any("Joshua takes the colour" in x["why"] for x in self._records("noted", "color")))
+        self.assertEqual(r.color_joshua_share, 0.3); self.assertEqual(r.advice_grace, 8.0)

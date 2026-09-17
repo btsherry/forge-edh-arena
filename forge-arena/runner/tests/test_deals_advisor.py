@@ -567,3 +567,26 @@ class RelayOnly(unittest.TestCase):
         self.assertEqual(self.r.brain.prompts, [])
         self.assertIn("Purphoros] offers you truce, 1 turn", self.panel())
         self.assertTrue(oid)
+
+
+class DealHelp(unittest.TestCase):
+    """Game 58 (Ben): the shape of a legal deal, surfaced — at the greeting, on request, and once when talk was relayed."""
+    setUp, tearDown = DealTests.setUp, DealTests.tearDown
+    snapshot, ask, panel, notes, records = DealTests.snapshot, DealTests.ask, DealTests.panel, DealTests.notes, DealTests.records
+
+    def test_the_rules_come_on_request_without_the_brain_and_once_after_table_talk(self):
+        self.ask("@joshua deals")
+        self.assertIn("[r2-t7 · deals] deals: @<seat> truce | no target | alliance [N turns | until turn N]\n", self.panel())
+        self.assertIn("[r2-t7 · deals] answer: @<seat> accept | no · ask: @<seat> make me an offer · else = table talk\n", self.panel())
+        self.assertIn("[r2-t7 · deals] truce = no attacks; no-target = no targeting; alliance = both; up to 3 turns\n", self.panel())
+        self.assertEqual([l for l in self.panel().splitlines() if l.startswith("[") and len(l) > ar.DEAL_PANEL_MAX], [], "every help line fits a row")
+        self.assertEqual(self.r.brain.prompts, [], "the rules are not a question for the brain")
+        self.ask("@joshua how do deals work?")
+        self.assertEqual(self.panel().count("deals: @<seat> truce"), 2)
+        self.ask("@purphoros nice angel")
+        self.assertIn("table talk relayed — for an offer say truce, no target or alliance", self.panel())
+        self.ask("@purphoros and another thing")
+        self.assertEqual(self.panel().count("table talk relayed"), 1, "the hint comes once a game")
+        self.assertEqual(self.r.brain.prompts, [])
+        self.ask("@joshua is Urza the threat?")
+        self.assertEqual(len(self.r.brain.prompts), 1, "a real question still reaches the brain")

@@ -429,8 +429,14 @@ class SchedulerMixin:
                 self.record("dropped", kind=q["kind"], why="expired", text=q["text"][:80], stock=q["stock"])
                 continue
             if q["kind"] == "advice" and q["seq"] is not None and q["seq"] in self.answered:
-                self.record("dropped", kind="advice", why="already answered", seq=q["seq"])
-                continue
+                # Ben, 2026-09-17 (game 58: ten of eleven advice lines died here — the brain's five seconds lose to the
+                # player's pace): within advice_grace_s of the answer the line still plays, as a retrospective
+                since = now - getattr(self, "answered_at", {}).get(q["seq"], -1e9)
+                grace = float(getattr(self, "advice_grace", 0.0))
+                if since > grace:
+                    self.record("dropped", kind="advice", why=f"already answered ({since:.0f}s ago, grace {grace:.0f}s)", seq=q["seq"])
+                    continue
+                self.record("noted", kind="advice", why=f"spoken late: answered {since:.0f}s ago, inside the grace", seq=q["seq"])
             live.append(q)
         self.queue = live
         if not live:

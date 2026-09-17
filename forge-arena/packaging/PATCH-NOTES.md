@@ -8,6 +8,10 @@ The AI seats talk like people at a table. Built in live games 38–46.
   which pushed them through Java's software mixer and summed overlapping sounds into overload — the
   shuffle and the opening draws were the worst of it. They now decode to 16-bit and take the direct
   device path. One line in Forge's sound loader, measured through a loopback before and after.
+- **Joshua is heard again at a rowdy table.** Advice that lands within eight seconds of your own
+  answer is still spoken, as a retrospective, instead of being dropped as stale; Joshua takes three in
+  ten of the colour lines on the AI seats' turns (the seat keeps the rest). And the shape of a legal deal
+  is printed at the start, on `@joshua deals`, and once after table talk is relayed.
 - **Three seat voices (Harry, Bill, Lily; ElevenLabs stock voices, eleven_v3
   with delivery tags), one per AI seat, assigned by deck** (Purphoros fiery,
   Urza dry, Giada warm). A shared vocabulary of openers, reactions, replies and

@@ -371,6 +371,12 @@ _ADVISOR_NAMES = ("joshua", "advisor", "wopr")
 # to the seat's brain (it may answer with a say). A bare "@urza" stays the one-turn truce it always was.
 _DEAL_TERM_RE = re.compile(r"\b(deal|truce|peace|alliance|ally|allies|allied|no[\s-]?targets?|don'?t target|turns?|rounds?|until)\b", re.I)
 _DEAL_INVITE_RE = re.compile(r"\b(make (me )?an offer|make me an? (deal|proposal)|what do you want|what would you (take|want)|your terms|name your (price|terms)|offer me|propose (something|a deal)|got an offer)\b", re.I)
+DEAL_HELP = (                                      # each fits a panel row (DEAL_PANEL_MAX) after the clock and tag
+    "deals: @<seat> truce | no target | alliance [N turns | until turn N]",
+    "answer: @<seat> accept | no · ask: @<seat> make me an offer · else = table talk",
+    "truce = no attacks; no-target = no targeting; alliance = both; up to 3 turns",
+)
+_DEAL_HELP_RE = re.compile(r"^(deals?|help|rules|how (do|does) (deals?|dealing|i deal)( work)?|deal help)\s*[?.!]*$", re.I)
 DEAL_KINDS_TEXT = ("Terms of a deal: a truce forbids attacks only; a no-target deal forbids targeting the other player or their "
                    "permanents; an alliance forbids both. Nothing else is promised — a truce is not broken by a spell.")
 _DEAL_ASK_RE = re.compile(r"\b(deal|truce|alliance|no[\s-]target|counter[\s-]?offer)\b", re.I)
@@ -1081,7 +1087,9 @@ class AdvisorRunner:
             # A deal message first (plan §11): `@urza …` / `deal urza …` is relayed
             # to the seat, never answered; `@joshua …` is a question for the brain.
             d = parse_deal(text, self._deal_aliases)
-            if d is not None and d.get("to") == "advisor":
+            if d is not None and d.get("to") == "advisor" and _DEAL_HELP_RE.match((d.get("words") or "").strip()):
+                self._deal_help(text)                          # game 58 (Ben): the shape of a legal deal, on request, no brain
+            elif d is not None and d.get("to") == "advisor":
                 self._answer_ask(d.get("words") or text, deals=True)
             elif d is not None:
                 self._handle_deal_message(d, text)
@@ -1216,6 +1224,13 @@ class AdvisorRunner:
         self._panel(f"you → {name}", f"{deal_terms_text(deal)}: \"{words}\"", turn)
         self._record("deal", {"event": "offer", "offer_id": offer_id, "seat": seat, "turn": turn, "deal": deal, "text": words})
 
+    def _deal_help(self, text: str) -> None:
+        turn = self._turn_now()
+        self._panel("you", text, turn)
+        for line in DEAL_HELP:
+            self._panel("deals", line, turn)
+        self._record("ask", {"turn": turn, "text": text, "answer": "deal help", "help": True})
+
     def _relay_words(self, seat: int, name: str, action: str, words: str, turn) -> None:
         """Game 54: words to a seat that are not an offer. `invite` -> a deal-invite note (the seat may propose on its
         next main window, its cooldown lifted); `talk` -> a table-talk note (the seat's brain hears it and may answer
@@ -1232,6 +1247,9 @@ class AdvisorRunner:
             self._panel(f"you → {name}", f"make me an offer: \"{words}\"", turn)
         else:
             self._panel(f"you → {name}", f"\"{words}\"", turn)
+            if not getattr(self, "_talk_hinted", False):          # once a game: how to make it an offer instead
+                self._talk_hinted = True
+                self._panel("deals", "table talk relayed — for an offer say truce, no target or alliance (@joshua deals for the rules)", turn)
         self._record("deal", {"event": action, "seat": seat, "turn": turn, "text": words})
 
     def _answer_counter(self, seat: int, action: str) -> None:
@@ -1556,6 +1574,7 @@ class AdvisorRunner:
         panel, the offer pane's files. A question for Joshua gets one panel line saying he is off."""
         self._say(f"[advisor] table relay up (advisor off) — deck={self.brain.deck} watching {self.inbox}")
         self._stream_write("[advisor] table relay — the advisor is off. @urza, @giada… still deal and talk; nobody answers questions.\n")
+        self._stream_write("[advisor] " + DEAL_HELP[0] + " · " + DEAL_HELP[1] + "\n")
         import threading
         hb = self.inbox.parent / "heartbeat"
 
@@ -1582,6 +1601,7 @@ class AdvisorRunner:
                   f"watching {self.inbox}")
         self.brain.ensure_session()  # pre-warm: dossier loads before turn 0
         self._stream_write("[advisor] session warm — watching your table.\n")
+        self._stream_write("[advisor] " + DEAL_HELP[0] + " · " + DEAL_HELP[1] + " · say @joshua deals for the rules.\n")
         enabled = True
         catch_up = False
         # item 12: liveness for the dashboard, from a daemon thread so it beats
