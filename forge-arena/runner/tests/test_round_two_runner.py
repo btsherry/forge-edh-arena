@@ -55,6 +55,21 @@ class CycleRebindIdentity(unittest.TestCase):
         amb = {"options": [opt(4, "Bar  {1} — x", cost="{1}"), opt(5, "Bar  {1} — y", cost="{1}")]}
         self.assertIsNone(runner_mod.SeatRunner._cycle_rebind(shape, amb))
 
+    def test_the_same_play_offered_twice_rebinds_to_the_first(self):
+        """Game 60: Sensei's Top castable off the library through Mystic Forge AND Future Sight — two options
+        with one label, type and cost. The model picked either and the loop went on; the replay called it
+        ambiguous and woke the model every pass (2026-09-18)."""
+        rec = {"options": [opt(0, "Pass (do nothing)", "PASS"), opt(16, "Sensei's Divining Top  {1} — Sensei's Divining Top", cost="{1}"),
+                           opt(17, "Sensei's Divining Top  {1} — Sensei's Divining Top", cost="{1}")]}
+        shape = runner_mod.SeatRunner._cycle_shape(rec, {"chosenId": 17})
+        nxt = {"options": [opt(0, "Pass (do nothing)", "PASS"), opt(18, "Sensei's Divining Top  {1} — Sensei's Divining Top", cost="{1}"),
+                           opt(19, "Sensei's Divining Top  {1} — Sensei's Divining Top", cost="{1}")]}
+        self.assertEqual(runner_mod.SeatRunner._cycle_rebind(shape, nxt), {"chosenId": 18}, "identical twins: the first is the same play")
+        # a costed twin next to a free one is NOT identical: BL-08 still holds
+        mixed = {"options": [opt(0, "Pass (do nothing)", "PASS"), opt(18, "Sensei's Divining Top  {1} — Sensei's Divining Top", cost="{1}"),
+                             opt(19, "Sensei's Divining Top  — Sensei's Divining Top")]}
+        self.assertEqual(runner_mod.SeatRunner._cycle_rebind(shape, mixed), {"chosenId": 18})
+
 
 class PuntsNeverReplay(unittest.TestCase):
     """BL-20: a loop containing one punted decision never arms."""

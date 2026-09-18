@@ -1183,14 +1183,19 @@ class SeatRunner:
     @staticmethod
     def _cycle_rebind(shape, req: dict):
         """Shape -> concrete answer against THIS request, or None. An exact
-        (label, type, cost) match wins; otherwise the label PREFIX (the card
-        name) must match together with the same type and cost, and exactly
-        one option may qualify — any ambiguity means no replay (BL-08)."""
+        (label, type, cost) match wins — several identical ones are the same
+        play offered twice (game 60: Sensei's Top castable off the library through
+        both Mystic Forge and Future Sight, two options with one label, type and
+        cost; the model picked either and the loop went on, the replay refused
+        and called the model every pass), so the first is taken; otherwise the
+        label PREFIX (the card name) must match together with the same type and
+        cost, and exactly one option may qualify — any ambiguity there means no
+        replay (BL-08: a costed ability must never rebind to its free sibling)."""
         def find(key):
             lab, typ, cost = key
             opts = req.get("options", []) or []
             exact = [o for o in opts if SeatRunner._opt_key(o) == key]
-            if len(exact) == 1:
+            if exact:
                 return exact[0].get("id")
             pre = lab.split("  ")[0]
             close = [o for o in opts
