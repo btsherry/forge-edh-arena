@@ -372,7 +372,7 @@ _ADVISOR_NAMES = ("joshua", "advisor", "wopr")
 _DEAL_TERM_RE = re.compile(r"\b(deal|truce|peace|alliance|ally|allies|allied|no[\s-]?targets?|don'?t target|turns?|rounds?|until)\b", re.I)
 _DEAL_INVITE_RE = re.compile(r"\b(make (me )?an offer|make me an? (deal|proposal)|what do you want|what would you (take|want)|your terms|name your (price|terms)|offer me|propose (something|a deal)|got an offer)\b", re.I)
 DEAL_HELP = (                                      # each fits a panel row (DEAL_PANEL_MAX) after the clock and tag
-    "deals: @<seat> truce | no target | alliance [N turns | until turn N]",
+    "deals: @<seat> truce | no target | alliance [N turns (1-3) | until turn N]",
     "answer: @<seat> accept | no · ask: @<seat> make me an offer · else = table talk",
     "truce = no attacks; no-target = no targeting; alliance = both; up to 3 turns",
 )
@@ -463,16 +463,21 @@ def parse_deal(text: str, aliases: dict) -> dict | None:
             tok = mr.group(1).lower()
             n = _DEAL_NUMS.get(tok) or int(tok)
         deal["rounds"] = max(1, min(DEAL_ROUNDS_MAX, n))
+        if n > DEAL_ROUNDS_MAX:
+            deal["asked"] = n                              # said back in the echo (game 62: "4 turns" became 3 without a word)
     return {"to": seat, "action": "offer", "deal": deal, "words": words}
 
 
 def deal_terms_text(deal: dict, name: str | None = None) -> str:
-    """`truce, 1 turn` / `alliance, 2 turns` / `no-target until turn 12`; with a
-    name and both durations resolved: `truce until Urza's turn 9 ends`."""
+    """`truce, 1 turn` / `alliance, 2 turns` / `no-target until turn 12`; both durations resolved (a struck
+    deal, the ledger's until_turn computed from the rounds): `alliance, 3 turns (through table turn 31)` —
+    the player's "turns" are rounds of the table, the ledger counts table turns, and game 62 read the two
+    unlabelled numbers as bad math."""
     kind = str((deal or {}).get("kind") or "truce")
     until, rounds = (deal or {}).get("until_turn"), (deal or {}).get("rounds")
-    if until is not None and rounds is not None and name:
-        return f"{kind} until {name}'s turn {until} ends"
+    if until is not None and rounds is not None:
+        n = int(rounds)
+        return f"{kind}, {n} turn{'s' if n != 1 else ''} (through table turn {until})"
     if until is not None:
         return f"{kind} until turn {until}"
     n = int(rounds or 1)
@@ -1204,6 +1209,7 @@ class AdvisorRunner:
             self._answer_counter(seat, action, oid)
             return
         deal = dict(d.get("deal") or {"kind": "truce", "rounds": 1})
+        asked = deal.pop("asked", None)                   # never travels: the seat sees the clamped terms only
         if seat == 0:
             self._panel("table", "you can't deal with yourself — name a seat (@urza, @giada…)", turn)
             self._record("deal_rejected", {"turn": turn, "text": text, "why": "self"})
@@ -1237,7 +1243,8 @@ class AdvisorRunner:
         self._offers[offer_id] = {"seat": seat, "who": name, "turn": turn, "deal": deal, "offered": dict(deal), "text": words,
                                   "status": "open", "counter": None, "until_turn": deal.get("until_turn"),
                                   "ts": time.time(), "nudged": False}
-        self._panel(f"you → {name}", f"{deal_terms_text(deal)}: \"{words}\"", turn)
+        clamp = f" (max {DEAL_ROUNDS_MAX}; you asked {asked})" if asked else ""   # short: a panel row is DEAL_PANEL_MAX
+        self._panel(f"you → {name}", f"{deal_terms_text(deal)}{clamp}: \"{words}\"", turn)
         self._record("deal", {"event": "offer", "offer_id": offer_id, "seat": seat, "turn": turn, "deal": deal, "text": words})
 
     def _deal_help(self, text: str) -> None:

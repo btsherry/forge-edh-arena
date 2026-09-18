@@ -863,8 +863,10 @@ class SchedulerMixin:
 
     def break_deal(self, breaker, victim, how: str, turn) -> dict | None:
         """`breaker` attacked or targeted `victim` across their deal: forgotten both ways, a `broken` ledger
-        record (by = the breaker, how = attack | target) and a deal-broken note to the wronged party only —
-        the breaker chose (§5). None when there was no deal."""
+        record (by = the breaker, how = attack | target) and a deal-broken note to BOTH parties — the wronged
+        one is told, the breaker's runner only drops the dead deal from its map (it chose, §5; game 62: with
+        no note the breaker kept the truce "in force" and was warned at every later window). None when there
+        was no deal."""
         breaker, victim = int(breaker), int(victim)
         deal = normalize_deal(self._deals.pop((breaker, victim), None))
         self._deals.pop((victim, breaker), None)
@@ -873,7 +875,9 @@ class SchedulerMixin:
         t = self._turn_int(turn)
         self._ledger("broken", (breaker, victim), by=breaker, deal={"kind": deal["kind"], "until_turn": deal["until_turn"]},
                      offer_id=deal["offer_id"], turn=t, how=how)
-        self._deal_note(victim, {"kind": "deal-broken", "between": [breaker, victim], "by": breaker, "how": how, "turn": t})
+        note = {"kind": "deal-broken", "between": [breaker, victim], "by": breaker, "how": how, "turn": t}
+        self._deal_note(victim, dict(note))
+        self._deal_note(breaker, dict(note))            # the seat renders nothing for its own break; the map is cleared
         return deal
 
     def lapse_deals(self, turn) -> list[tuple[int, int]]:

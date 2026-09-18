@@ -129,7 +129,7 @@ class DealTests(unittest.TestCase):
             "@Urza: yes!": {"to": 1, "action": "accept", "words": "yes!"},
             "@selvala": {"to": 3, "action": "offer", "deal": {"kind": "truce", "rounds": 1}, "words": ""},
             "deal with urza: don't attack me for two turns": {"to": 1, "action": "offer", "deal": {"kind": "truce", "rounds": 2}, "words": "don't attack me for two turns"},
-            "@1 ally 5 turns": {"to": 1, "action": "offer", "deal": {"kind": "alliance", "rounds": 3}, "words": "ally 5 turns"},
+            "@1 ally 5 turns": {"to": 1, "action": "offer", "deal": {"kind": "alliance", "rounds": 3, "asked": 5}, "words": "ally 5 turns"},
             "@seat2 truce until the end of turn 10": {"to": 2, "action": "offer", "deal": {"kind": "truce", "until_turn": 10}, "words": "truce until the end of turn 10"},
             "@purphoros both, 3 rounds": {"to": 2, "action": "offer", "deal": {"kind": "alliance", "rounds": 3}, "words": "both, 3 rounds"},
             "@urza no target 3 rounds please": {"to": 1, "action": "offer", "deal": {"kind": "no-target", "rounds": 3}, "words": "no target 3 rounds please"},
@@ -142,7 +142,8 @@ class DealTests(unittest.TestCase):
         self.assertEqual(ar.deal_terms_text({"kind": "truce", "rounds": 1}), "truce, 1 turn")
         self.assertEqual(ar.deal_terms_text({"kind": "alliance", "rounds": 2}), "alliance, 2 turns")
         self.assertEqual(ar.deal_terms_text({"kind": "no-target", "until_turn": 12}), "no-target until turn 12")
-        self.assertEqual(ar.deal_terms_text({"kind": "truce", "rounds": 1, "until_turn": 9}, "Urza"), "truce until Urza's turn 9 ends")
+        self.assertEqual(ar.deal_terms_text({"kind": "truce", "rounds": 1, "until_turn": 9}, "Urza"), "truce, 1 turn (through table turn 9)")
+        self.assertEqual(ar.deal_terms_text({"kind": "alliance", "rounds": 3, "until_turn": 31}), "alliance, 3 turns (through table turn 31)", "game 62: both units labelled")
 
     def test_unknown_deck_is_named_by_its_slug(self):
         al, names, handles = ar.deal_table({0: "giada-font-of-hope", 1: "brand-new-deck"}, commanders={})
@@ -221,7 +222,7 @@ class DealTests(unittest.TestCase):
         self.game_line(seat=1, turn=7, type="DEAL", deal={"offer_id": oid, "accept": True, "with": 0,
                                                           "terms": {"kind": "truce", "rounds": 1, "until_turn": 9}})
         self.r._deal_tick()
-        self.assertIn("\n[r2-t7 · Urza] accepts: truce until Urza's turn 9 ends\n", self.panel())
+        self.assertIn("\n[r2-t7 · Urza] accepts: truce, 1 turn (through table turn 9)\n", self.panel())
         self.assertEqual((self.r._offers[oid]["status"], self.r._offers[oid]["until_turn"]), ("accepted", 9))
         self.r._deal_tick()
         self.assertEqual(self.panel().count("accepts:"), 1, "read once")
@@ -457,6 +458,15 @@ class SeatOffers(unittest.TestCase):
         self.assertFalse(bad.exists(), "stale and unreadable: dropped, never re-read every poll")
         self.assertEqual(self.records("ask_rejected")[-1].get("why"), "unreadable")
 
+    def test_asking_for_more_than_three_turns_is_said_back_not_silently_clamped(self):
+        """Game 62: "alliance 4 turns" became "alliance, 3 turns" beside the player's own words; he read it as Giada cutting him down."""
+        self.ask("@urza alliance 4 turns")
+        self.assertIn('[r2-t7 · you → Urza] alliance, 3 turns (max 3; you asked 4): "alliance 4 turns"', self.panel())
+        oid = list(self.r._offers)[-1]
+        self.assertEqual(self.r._offers[oid]["deal"], {"kind": "alliance", "rounds": 3}, "the seat sees the clamped terms only — no 'asked' key travels")
+        self.ask("@purphoros truce 2 turns")
+        self.assertIn('[r2-t7 · you → Purphoros] truce, 2 turns: "truce 2 turns"', self.panel(), "inside the cap: no note")
+
     def test_a_seat_offering_the_player_is_answered_in_the_chat_and_assessed_at_once(self):
         self.r.brain.reply = "Take it: Purphoros cannot race you and Urza is the one to fear."
         self._propose(2, 0, {"kind": "alliance", "until_turn": 10}, "p-2-0", text="Urza is the threat")
@@ -611,7 +621,7 @@ class DealHelp(unittest.TestCase):
 
     def test_the_rules_come_on_request_without_the_brain_and_once_after_table_talk(self):
         self.ask("@joshua deals")
-        self.assertIn("[r2-t7 · deals] deals: @<seat> truce | no target | alliance [N turns | until turn N]\n", self.panel())
+        self.assertIn("[r2-t7 · deals] deals: @<seat> truce | no target | alliance [N turns (1-3) | until turn N]\n", self.panel())
         self.assertIn("[r2-t7 · deals] answer: @<seat> accept | no · ask: @<seat> make me an offer · else = table talk\n", self.panel())
         self.assertIn("[r2-t7 · deals] truce = no attacks; no-target = no targeting; alliance = both; up to 3 turns\n", self.panel())
         self.assertEqual([l for l in self.panel().splitlines() if l.startswith("[") and len(l) > ar.DEAL_PANEL_MAX], [], "every help line fits a row")

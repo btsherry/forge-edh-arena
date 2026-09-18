@@ -258,7 +258,8 @@ class ADealBrokenOrLapsed(_DealCase):
         rec = self._ledger("broken")[0]
         self.assertEqual((rec["between"], rec["by"], rec["how"], rec["deal"], rec["turn"]), ([1, 2], 1, "attack", {"kind": "truce", "until_turn": 7}, 5))
         self.assertEqual([n for n in self._notes(2) if n["kind"] == "deal-broken"], [{"kind": "deal-broken", "between": [1, 2], "by": 1, "how": "attack", "turn": 5}])
-        self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"], "the breaker chose: no note")
+        self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck", "deal-broken"],
+                         "game 62: the breaker gets the note too, so its runner drops the dead truce (it renders nothing for it)")
 
     def test_an_attack_across_a_no_target_pact_breaks_nothing_and_a_hit_on_a_voiceless_party_is_still_recorded(self):
         self.r.strike_deal(1, 2, "no-target", 3, by=1)
