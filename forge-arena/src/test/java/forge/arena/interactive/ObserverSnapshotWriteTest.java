@@ -70,6 +70,8 @@ public class ObserverSnapshotWriteTest {
         try (MailboxTestKit k = kit(60_000)) {
             Path snap = k.base.resolve("observer-state.json");
             Assert.assertTrue(Files.exists(snap), "initial snapshot written at registration");
+            Assert.assertTrue(Files.readString(snap).contains("\"gameId\":\"" + MailboxController.gameIdFor(k.game) + "\""),
+                    "the snapshot names its game with the id the seat requests carry (2026-09-18)");
             ObserverSnapshot obs = ObserverSnapshot.of(k.game);
             Assert.assertNotNull(obs, "the kit's game has its observer");
             int before = obs.writes();

@@ -751,6 +751,9 @@ public final class ObserverSnapshot {
         snap.put("turn", turn);
         snap.put("activeSeat", active != null ? active.getId() : null);
         snap.put("phase", phase != null ? phase.name() : "");
+        // the same id every seat request carries (2026-09-18): the voice runner and the relay-only advisor
+        // can tell a new game from the snapshot alone, and a moved or repurposed log still names its game
+        snap.put("gameId", MailboxController.gameIdFor(game));
         // getAge(), not isGameOver(): the latter is synchronized on the Game, and
         // the deferred write runs on the timer thread while the game thread may
         // be inside the synchronized setGameOver posting the outcome event — the
