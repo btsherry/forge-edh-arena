@@ -341,22 +341,9 @@ public final class AiControlFile {
     }
 
     /** Minimal JSON string literal — this class deliberately carries no JSON
-     *  dependency (see the ELO reader below). */
+     *  dependency; the reader/writer pair lives in {@link FlatJson}. */
     static String jsonString(final String s) {
-        final StringBuilder sb = new StringBuilder(s.length() + 2).append('"');
-        for (int i = 0; i < s.length(); i++) {
-            final char c = s.charAt(i);
-            if (c == '"') {
-                sb.append("\\\"");
-            } else if (c == '\\') {
-                sb.append("\\\\");
-            } else if (c < 0x20) {
-                sb.append(String.format("\\u%04x", (int) c));
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.append('"').toString();
+        return FlatJson.quote(s);
     }
 
     // ---- ELO digest line (plan §13.4; flat regex only — no JSON dependency) --
@@ -375,8 +362,8 @@ public final class AiControlFile {
         final double d = usageDouble(body, "d");
         final double md = usageDouble(body, "md");
         final long n = usageLong(body, "n");
-        final Matcher pm = Pattern.compile("\"pilot\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
-        final String pilot = pm.find() ? pm.group(1) : "?";
+        final String p = FlatJson.str(body, "pilot");
+        final String pilot = p == null || p.isEmpty() ? "?" : p;
         return String.format("ELO  pilot %.0f · deck %.0f · pair %.0f · n=%d (%s)",
                 m, d, md, n, displayModel(pilot));
     }
@@ -390,13 +377,11 @@ public final class AiControlFile {
     // ---- token/cost telemetry (from seat-N.usage.json) ---------------------
 
     private static long usageLong(final String body, final String key) {
-        final Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*(-?\\d+)").matcher(body);
-        return m.find() ? Long.parseLong(m.group(1)) : 0L;
+        return FlatJson.numLong(body, key, 0L);
     }
 
     private static double usageDouble(final String body, final String key) {
-        final Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*(-?[\\d.]+)").matcher(body);
-        return m.find() ? Double.parseDouble(m.group(1)) : 0.0;
+        return FlatJson.dbl(body, key, 0.0);
     }
 
     /** Compact per-seat usage line, or {@code null} if no snapshot yet. */

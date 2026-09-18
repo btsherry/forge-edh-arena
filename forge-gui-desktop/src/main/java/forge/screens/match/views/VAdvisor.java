@@ -360,7 +360,23 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     /** Bring the speaking seat's field tab forward for the line, and put the old
      *  tab back once the table has been quiet for a moment — unless the player
      *  clicked another tab in the meantime. Never touches keyboard focus. */
+    /** The match is over and this panel is no longer on screen: the two timers have nothing left to
+     *  serve. Never true during a live game (a layout change re-parents the panel for a moment, but the
+     *  game is not over), so a running table is never cut off. */
+    private boolean matchGone() {
+        try {
+            final forge.game.GameView gv = controller.getMatchUI().getGameView();
+            return (gv == null || gv.isGameOver()) && !body.isDisplayable();
+        } catch (final RuntimeException e) {
+            return false;
+        }
+    }
+
     private void followVoice() {
+        if (matchGone()) {
+            focusTimer.stop();
+            return;
+        }
         long[] speaking = new long[] {-1, 0};
         int active = -1;
         try {
@@ -374,7 +390,9 @@ public class VAdvisor implements IVDoc<CAdvisor> {
             speaking = new long[] {-1, 0};
         }
         final long now = System.currentTimeMillis();
-        if (VoiceFocus.speakingNow(speaking, now)) {
+        final boolean humanGame = forge.arena.interactive.AiControlFile.advisorAttached()
+                || forge.arena.interactive.AiControlFile.relayAttached();
+        if (VoiceFocus.speakingNow(speaking, now) && VoiceFocus.followsNow(active, humanGame)) {
             final int seat = (int) speaking[0];
             final VField target = fieldForSeat(seat);
             final DragCell cell = target != null ? target.getParentCell() : null;
@@ -460,6 +478,11 @@ public class VAdvisor implements IVDoc<CAdvisor> {
     }
 
     private void poll() {
+        if (matchGone()) {
+            refresh.stop();
+            focusTimer.stop();
+            return;
+        }
         if (askRow != null) {
             askRow.setVisible(forge.arena.interactive.AiControlFile.relayAttached());
         }

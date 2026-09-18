@@ -7,8 +7,6 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * One seat's open deal offer to the player, as the advisor runner publishes it
@@ -109,70 +107,22 @@ public final class DealQuestion {
         return "@" + handle + " ";
     }
 
-    // ---- flat JSON readers
-
-    private static final java.util.concurrent.ConcurrentHashMap<String, Pattern> STR_RE = new java.util.concurrent.ConcurrentHashMap<>();
-    private static final java.util.concurrent.ConcurrentHashMap<String, Pattern> NUM_RE = new java.util.concurrent.ConcurrentHashMap<>();
+    // ---- flat JSON readers: FlatJson (shared with AiControlFile and VoiceFocus since 2026-09-18)
 
     private static String str(final String json, final String key) {
-        final Matcher m = STR_RE.computeIfAbsent(key,
-                k -> Pattern.compile("\"" + Pattern.quote(k) + "\"\\s*:\\s*(null|\"((?:[^\"\\\\]|\\\\.)*)\")")).matcher(json);
-        if (!m.find()) {
-            return null;
-        }
-        if (m.group(2) == null) {
-            return null;   // null
-        }
-        return unescape(m.group(2));
+        return FlatJson.str(json, key);
     }
 
     private static int num(final String json, final String key, final int dflt) {
-        final long v = numLong(json, key, dflt);
-        return v > Integer.MAX_VALUE || v < Integer.MIN_VALUE ? dflt : (int) v;
+        return FlatJson.num(json, key, dflt);
     }
 
     private static long numLong(final String json, final String key, final long dflt) {
-        final Matcher m = NUM_RE.computeIfAbsent(key,
-                k -> Pattern.compile("\"" + Pattern.quote(k) + "\"\\s*:\\s*(-?\\d+)(?:\\.\\d+)?")).matcher(json);
-        if (!m.find()) {
-            return dflt;
-        }
-        try {
-            return Long.parseLong(m.group(1));
-        } catch (final NumberFormatException e) {
-            return dflt;
-        }
+        return FlatJson.numLong(json, key, dflt);
     }
 
     static String unescape(final String s) {
-        final StringBuilder sb = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            final char c = s.charAt(i);
-            if (c != '\\' || i + 1 >= s.length()) {
-                sb.append(c);
-                continue;
-            }
-            final char n = s.charAt(++i);
-            switch (n) {
-                case 'n': sb.append('\n'); break;
-                case 't': sb.append('\t'); break;
-                case 'r': sb.append('\r'); break;
-                case 'u':
-                    if (i + 4 < s.length()) {
-                        try {
-                            sb.append((char) Integer.parseInt(s.substring(i + 1, i + 5), 16));
-                            i += 4;
-                            break;
-                        } catch (final NumberFormatException e) {
-                            // fall through: keep the literal
-                        }
-                    }
-                    sb.append('u');
-                    break;
-                default: sb.append(n);   // \" \\ \/
-            }
-        }
-        return sb.toString();
+        return FlatJson.unescape(s);
     }
 
     private static String orEmpty(final String s) {
