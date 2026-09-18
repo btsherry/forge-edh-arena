@@ -67,7 +67,7 @@ def classify(item: dict) -> str:
 # mix (53 % banter, 38 % filler, 4 % about the game). The dial now sets a talk BUDGET —
 # the fraction of the last minute someone may be speaking — and every optional line is
 # rolled against the headroom left in it; lines anchored to a board event keep priority.
-DUTY_BASE = 0.18          # at chatter 1.0; quiet .09, lively .27, rowdy .36
+DUTY_BASE = 0.18          # at chatter 1.0; quiet .09, lively .27, rowdy .405 (2.25 — Ben, 2026-09-18: "a tad more")
 DUTY_WINDOW_S = 60.0
 DUTY_HUMAN_MULT = 0.6     # on the human's turn the table aims lower (Ben, game 44: minimal on my turn; game 48: silences are the bigger issue)
 # The silence floor (Ben, game 48: "too many long pauses"): nothing has played for this long -> the patter clock speaks
@@ -167,7 +167,7 @@ TURN_REPEAT_S = 180.0
 # turn, an optional one for TURN_REPEAT_S (BL-53: a nine-minute loop turn must not starve the table).
 
 
-CHATTER_LEVELS = {"quiet": 0.5, "normal": 1.0, "lively": 1.5, "rowdy": 2.0}
+CHATTER_LEVELS = {"quiet": 0.5, "normal": 1.0, "lively": 1.5, "rowdy": 2.25}   # rowdy 2.0 -> 2.25 (2026-09-18): games 49-61 ran under its goal
 
 
 def chatter_level(raw: str | None) -> float:

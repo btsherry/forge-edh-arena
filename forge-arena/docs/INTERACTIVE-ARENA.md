@@ -2097,7 +2097,7 @@ Hard-won from two live sessions; read before optimizing anything.
     damage / cast / left / countered / gameover + per-seat pool); interaction
     chains (`runner/chains.py`, roles target / aggressor / bystander / leader /
     origin / open, 0.25 s gap); a patter clock; a duty-cycle governor
-    (`ARENA_CHATTER` sets the speaking-fraction goal .09/.18/.27/.36, optional
+    (`ARENA_CHATTER` sets the speaking-fraction goal .09/.18/.27/.405 — rowdy nudged from .36 on 2026-09-18, optional
     lines scale by headroom, anchored lines keep ≥ half, ×0.4 on the human's
     turn) replacing knob pre-scaling; a bark ladder (reaction 5.5 < colour 6 <
     your-move 7 < advisor tags 8 < patter 8.5; chain hops 3.5) with eviction by

@@ -1,5 +1,27 @@
 # forge-light-llm — Patch Notes
 
+## Unreleased — after v4.2 Experimental (2026-09-18)
+
+Small corrections from games 59–61, each verified against the archive that showed it; nothing
+here changes how the table plays.
+
+- **The board stays put on your turn.** The match screen no longer brings a talking seat's tab
+  forward while it is your turn (game 59: a seat spoke as you were paying for a spell and the
+  board moved out from under the click). The follow still works on the seats' turns and on an
+  all-AI table.
+- **Loops replay when the same play is offered twice.** Sensei's Top castable off the library
+  through two different permissions gave two identical options; the loop replay called that
+  ambiguous and woke the model every pass (game 60). Identical twins are the same play; a costed
+  ability still never rebinds to its free sibling.
+- **Rowdy is a tad louder** (speaking goal .36 → .405). Measured at rowdy across games 49–61:
+  about 6 seat lines a minute at a human table, 7–8 all-AI. `normal`, the shipping default, is
+  estimated at about half that.
+- **The observer snapshot names its game** (`gameId`, the same id every seat request carries),
+  so a moved or repurposed log still says which game it belongs to.
+- Under the hood: one flat-JSON reader behind the offer pane, the control files and the voice
+  focus (three copies before); the Advisor tab's two timers stop once the match is over and the
+  screen is gone.
+
 ## v4.2 Experimental — 2026-09-17
 
 The AI seats talk like people at a table, and they make deals. Built and played in live games 38–59

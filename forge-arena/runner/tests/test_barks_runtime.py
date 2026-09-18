@@ -676,13 +676,13 @@ class BarkRuntime(_TreeCase):
         """Round 31: the dial no longer pre-scales the probability knobs — the governor
         spends its headroom at roll time (test_table_budget) — but it still sets the
         mechanical pace and the budget."""
-        self.assertEqual([vr.chatter_level(x) for x in ("quiet", "normal", "lively", "rowdy", "1.25", "bogus", None)], [0.5, 1.0, 1.5, 2.0, 1.25, 1.0, 1.0])
+        self.assertEqual([vr.chatter_level(x) for x in ("quiet", "normal", "lively", "rowdy", "1.25", "bogus", None)], [0.5, 1.0, 1.5, 2.25, 1.25, 1.0, 1.0])
         os.environ.pop("ARENA_BARKS", None)                                   # the numbers are tuning.json's: no override here
         os.environ["ARENA_CHATTER"] = "rowdy"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
         self.assertEqual((r.barks_p, r.barks_opener_p, r.color_p, r.your_move_p), (0.85, 0.35, 0.5, 0.6), "the numbers as written in tuning.json")
-        self.assertEqual((r.min_gap, r.barks_swing, r.barks_hit), (4.0, 3, 4), "gap halved, thresholds halved (floors 3 / 4)")
-        self.assertAlmostEqual(r.duty_target, 0.36); self.assertEqual(r.governor(optional=False), 2.0, "silence at rowdy: the old ×2, spent by the governor")
+        self.assertEqual((round(r.min_gap, 3), r.barks_swing, r.barks_hit), (round(8 / 2.25, 3), 3, 4), "gap divided by the dial (rowdy 2.25 since 2026-09-18), thresholds halved (floors 3 / 4)")
+        self.assertAlmostEqual(r.duty_target, 0.18 * 2.25); self.assertAlmostEqual(r.governor(optional=False), 2.25, msg="silence at rowdy: the dial's full boost, spent by the governor")
         os.environ["ARENA_CHATTER"] = "quiet"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
         self.assertEqual((r.barks_p, r.min_gap, r.barks_swing, r.barks_hit), (0.85, 16.0, 12, 16))
@@ -890,8 +890,8 @@ class PatterClock(_TreeCase):
         self.assertEqual((r.patter_on, r.patter_gap, r.patter_human, r.patter_after_advice, r.barks_slow), (True, (5.0, 7.0), 0.33, 6.0, 20.0))
         os.environ["ARENA_CHATTER"] = "rowdy"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock)
-        self.assertEqual(r.patter_gap, (2.5, 3.5)); self.assertEqual(r.chains.max_hops, 4, "a livelier table talks back one more time")
-        self.assertEqual(r.barks_cooldown, 5.0, "the seat guard follows the dial")
+        self.assertEqual(tuple(round(x, 3) for x in r.patter_gap), (round(5 / 2.25, 3), round(7 / 2.25, 3)), "the patter clock divided by the dial (rowdy 2.25)"); self.assertEqual(r.chains.max_hops, 4, "a livelier table talks back one more time")
+        self.assertAlmostEqual(r.barks_cooldown, 10 / 2.25, msg="the seat guard follows the dial (rowdy 2.25)")
 
     def test_a_slow_seat_is_told_to_play_faster_by_someone_else(self):
         self._board(active=2)

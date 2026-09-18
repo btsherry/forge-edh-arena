@@ -56,9 +56,9 @@ class TalkBudget(_TreeCase):
         self.assertEqual(r.governor(False), 0.5); self.assertEqual(r.governor(True), 0.15, "patter and banter go nearly silent")
         os.environ["ARENA_CHATTER"] = "rowdy"
         r = vr.VoiceRunner(self.logs, self.mailbox, player=FakePlayer(), clock=self.clock, tuning=self.tuning)
-        self.assertEqual((r.governor(False), r.governor(True)), (2.0, 2.0), "silence at rowdy: the dial's full boost")
-        r._spoken_log = [(t - 30, 60 * 0.18)]                          # half of rowdy's 0.36 spent
-        self.assertAlmostEqual(r.governor(False), 1.5); self.assertAlmostEqual(r.governor(True), 1.5, msg="rowdy is rowdy: the dial's boost, undamped")
+        self.assertEqual((r.governor(False), r.governor(True)), (2.25, 2.25), "silence at rowdy: the dial's full boost (2.25 since 2026-09-18)")
+        r._spoken_log = [(t - 30, 60 * 0.18 * 2.25 / 2)]                 # half of rowdy's goal (.405) spent
+        self.assertAlmostEqual(r.governor(False), 1.625); self.assertAlmostEqual(r.governor(True), 1.625, msg="rowdy is rowdy: half the goal spent, half the boost left, undamped")
         r.duty_target = 0.0
         self.assertEqual(r.governor(True), 1.0, "no goal: no governor")
 

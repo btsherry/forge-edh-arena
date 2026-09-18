@@ -525,7 +525,7 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | Variable | Default | Meaning |
 |---|---|---|
 | `ARENA_VOICE` | `on` | the table's voices (arena-play --no-voice = start muted; the runner still keeps the deal ledger) |
-| `ARENA_CHATTER` | `normal` | quiet \| normal \| lively \| rowdy (or a number) — one dial for how much the table talks: sets the talk budget (the speaking fraction of the last minute: .09 / .18 / .27 / .36) that the governor spends, shortens the gap, lowers the reaction thresholds; advice frequency is untouched |
+| `ARENA_CHATTER` | `normal` | quiet \| normal \| lively \| rowdy (or a number) — one dial for how much the table talks (Measured across games 49–61 (all at rowdy): about 6 seat lines a minute at a human table, 7–8 on an all-AI table; normal, the shipping default, is estimated at half that — about 3 a minute — until a game is played at it.) sets the talk budget (the speaking fraction of the last minute: .09 / .18 / .27 / .36) that the governor spends, shortens the gap, lowers the reaction thresholds; advice frequency is untouched |
 | `ELEVENLABS_API_KEY` | unset | live spoken advice needs it; stock phrases play without it |
 | `ARENA_VOICE_FORMAT` | `pcm_24000` | ElevenLabs output; PCM needs no decoder |
 | `ARENA_VOICE_FX` | `on` | on = film effects (ffmpeg when present, else the lite chain) | lite | off |
