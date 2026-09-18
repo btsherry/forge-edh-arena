@@ -18,6 +18,13 @@ public class VoiceFocusTest {
         Assert.assertEquals(VoiceFocus.seatOfTab("mailbox-seat3-Purphoros, God of the Forge Field"), 3, "the old naming still parses");
         Assert.assertEquals(VoiceFocus.seatOfTab("Player One Field"), -1, "the human's field is never followed");
         Assert.assertEquals(VoiceFocus.seatOfTab("Human Field"), -1);
+        Assert.assertEquals(VoiceFocus.parseActive("{\"active\": 2}"), 2);
+        Assert.assertEquals(VoiceFocus.parseActive("{}"), -1);
+        // 2026-09-18: the tabs never move on the human's own turn; an all-AI table's seat 0 is a brain
+        Assert.assertFalse(VoiceFocus.followsNow(0, true), "the player's turn: the board stays put");
+        Assert.assertTrue(VoiceFocus.followsNow(2, true));
+        Assert.assertTrue(VoiceFocus.followsNow(0, false), "all-AI: seat 0 is followed like any seat");
+        Assert.assertTrue(VoiceFocus.followsNow(-1, true), "no active seat known: follow");
         Assert.assertEquals(VoiceFocus.seatOfTab(null), -1);
         Assert.assertEquals(VoiceFocus.parseActive("{\"seat\": 3, \"until\": 1789099999123, \"active\": 2}"), 2, "the active seat rides along");
         Assert.assertEquals(VoiceFocus.parseActive("{\"active\": 0}"), 0, "nobody talking, the human is active: the screen goes home");
