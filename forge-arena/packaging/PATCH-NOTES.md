@@ -14,8 +14,16 @@ here changes how the table plays.
   ambiguous and woke the model every pass (game 60). Identical twins are the same play; a costed
   ability still never rebinds to its free sibling.
 - **Rowdy is a tad louder** (speaking goal .36 → .405). Measured at rowdy across games 49–61:
-  about 6 seat lines a minute at a human table, 7–8 all-AI. `normal`, the shipping default, is
-  estimated at about half that.
+  about 6 seat lines a minute at a human table, 7–8 all-AI. `normal`, the shipping default,
+  measured 2.5 a minute in a slowly played human game (62); a brisk one should sit near 3.
+- **A broken deal is forgotten by the breaker too** (game 62): the seat that broke a truce kept it
+  "in force" in its own book and was warned at every later attack window against a partner it had
+  already betrayed. The breaker now gets the same note as the wronged side; its runner drops the
+  dead deal and says nothing about it.
+- **Deal durations read in one unit.** Your "turns" are rounds of the table; the ledger lapses a deal
+  at a fixed table turn. A struck deal now reads `alliance, 3 turns (through table turn 31)` instead of
+  two bare numbers, and asking for more than three turns says so: `alliance, 3 turns (max 3; you
+  asked 4)` instead of quietly cutting the offer down.
 - **The observer snapshot names its game** (`gameId`, the same id every seat request carries),
   so a moved or repurposed log still says which game it belongs to.
 - Under the hood: one flat-JSON reader behind the offer pane, the control files and the voice
