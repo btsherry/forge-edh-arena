@@ -125,6 +125,7 @@ SAY_MENU = ("taunt", "respect", "nice-play", "kill-that", "youre-the-threat", "i
 # strips it like "say") and records it in game.jsonl for the voice runner's ledger.
 DEAL_KINDS = ("truce", "no-target", "alliance")
 DEAL_MAX_ROUNDS = 3
+DEAL_MAX_TURNS = 12          # three rounds' worth at a full table (a turn = one player's turn on the game's turn counter)
 DEAL_TERMS = {"truce": "neither of you attacks the other",
               "no-target": "neither of you targets the other or their permanents",
               "alliance": "neither of you attacks or targets the other"}
@@ -134,12 +135,21 @@ DEAL_DUTY = {"truce": "do not attack them",
 
 
 def deal_duration(deal: dict) -> str:
-    """'for 2 of your turns' | 'until the end of turn 12' — the two forms of §11.2."""
+    """'for 2 rounds (2 of your turns)' | 'for 3 turns (3 player turns from the strike)' | 'until the end of turn 12',
+    and once struck the note carries the end: 'for 3 turns (until the end of turn 22)'. A turn is one player's
+    turn on the game's turn counter; a round is one turn for each player (§11.2; Ben, 2026-09-18: the two units
+    were being used interchangeably)."""
+    t = deal.get("turns")
+    if _is_int(t):
+        end = f"until the end of turn {deal['until_turn']}" if _is_int(deal.get("until_turn")) else f"{t} player turn{'s' if t != 1 else ''} from the strike"
+        return f"for {t} turn{'s' if t != 1 else ''} ({end})"
+    n = deal.get("rounds")
+    if _is_int(n):
+        end = f"until the end of turn {deal['until_turn']}" if _is_int(deal.get("until_turn")) else f"{n} of your turns"
+        return f"for {n} round{'s' if n != 1 else ''} ({end})"
     if _is_int(deal.get("until_turn")):
         return f"until the end of turn {deal['until_turn']}"
-    n = deal.get("rounds")
-    n = n if _is_int(n) else 1
-    return f"for {n} of your turns"           # §5 wording: "for 1 of your turns"
+    return "for 1 round (1 of your turns)"
 
 
 def deal_offer_line(offer_id: str, can_counter: bool = True, say: bool = True) -> str:
@@ -148,7 +158,7 @@ def deal_offer_line(offer_id: str, can_counter: bool = True, say: bool = True) -
     line = f'DEAL PENDING {offer_id}: add "deal": {{"offer_id": "{offer_id}", "accept": true|false}}'
     if can_counter:
         line += ('; to counter once add "counter": {"kind": "truce|no-target|alliance", '
-                 '"rounds": 1-3} or {..., "until_turn": N}')
+                 '"rounds": 1-3 | "turns": 1-12 | "until_turn": N}')
     else:
         line += " (a counter now is a refusal)"
     if say:
@@ -182,13 +192,17 @@ def validate_deal(raw, pending: dict, turn) -> tuple[dict | None, str]:
     kind = counter.get("kind")
     if kind not in DEAL_KINDS:
         return None, f"counter kind {kind!r} not one of {'/'.join(DEAL_KINDS)}"
-    rounds, until = counter.get("rounds"), counter.get("until_turn")
-    if (rounds is None) == (until is None):
-        return None, "counter needs exactly one of rounds / until_turn"
+    rounds, until, turns = counter.get("rounds"), counter.get("until_turn"), counter.get("turns")
+    if sum(x is not None for x in (rounds, until, turns)) != 1:
+        return None, "counter needs exactly one of rounds / turns / until_turn"
     if rounds is not None:
         if not _is_int(rounds) or not (1 <= rounds <= DEAL_MAX_ROUNDS):
             return None, f"counter rounds must be 1..{DEAL_MAX_ROUNDS}"
         clean = {"kind": kind, "rounds": rounds}
+    elif turns is not None:
+        if not _is_int(turns) or not (1 <= turns <= DEAL_MAX_TURNS):
+            return None, f"counter turns must be 1..{DEAL_MAX_TURNS}"
+        clean = {"kind": kind, "turns": turns}
     else:
         if not _is_int(until) or not _is_int(turn) or until <= turn:
             return None, f"counter until_turn must be after turn {turn}"
@@ -210,7 +224,7 @@ def deal_propose_line(parties: list[tuple[int, str]]) -> str:
     """The one prompt line offering the propose key (≤ 70 tokens), naming the living parties."""
     who = ", ".join(name for _, name in parties)
     return ('DEAL OFFER (optional, rare — only when the board gives a reason): add "deal": {"propose": '
-            '{"to": <seat>, "kind": "truce|no-target|alliance", "rounds": 1-3} or {..., "until_turn": N}} '
+            '{"to": <seat>, "kind": "truce|no-target|alliance", "rounds": 1-3 | "turns": 1-12 | "until_turn": N}} '
             f'plus "say": deal. Parties: {who}. One open offer at a time; they answer at their next window.')
 
 
@@ -226,13 +240,17 @@ def validate_proposal(raw, seat: int, alive, turn) -> tuple[dict | None, str]:
     kind = raw.get("kind")
     if kind not in DEAL_KINDS:
         return None, f"propose kind {kind!r} not one of {'/'.join(DEAL_KINDS)}"
-    rounds, until = raw.get("rounds"), raw.get("until_turn")
-    if (rounds is None) == (until is None):
-        return None, "propose needs exactly one of rounds / until_turn"
+    rounds, until, turns = raw.get("rounds"), raw.get("until_turn"), raw.get("turns")
+    if sum(x is not None for x in (rounds, until, turns)) != 1:
+        return None, "propose needs exactly one of rounds / turns / until_turn"
     if rounds is not None:
         if not _is_int(rounds) or not (1 <= rounds <= DEAL_MAX_ROUNDS):
             return None, f"propose rounds must be 1..{DEAL_MAX_ROUNDS}"
         return {"to": to, "kind": kind, "rounds": rounds}, "proposed"
+    if turns is not None:
+        if not _is_int(turns) or not (1 <= turns <= DEAL_MAX_TURNS):
+            return None, f"propose turns must be 1..{DEAL_MAX_TURNS}"
+        return {"to": to, "kind": kind, "turns": turns}, "proposed"
     if not _is_int(until) or not _is_int(turn) or until <= turn:
         return None, f"propose until_turn must be after turn {turn}"
     return {"to": to, "kind": kind, "until_turn": until}, "proposed"

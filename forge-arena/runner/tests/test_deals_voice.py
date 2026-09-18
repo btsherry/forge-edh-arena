@@ -157,6 +157,18 @@ class ADealFromTheSeat(_DealCase):
         self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"])
         self.assertEqual(self._queue(), [("deal-with-you", "harry/table", 1)], "the seat confirms the pact aloud")
 
+    def test_turns_resolve_at_the_strike_and_a_dead_until_turn_expires_instead(self):
+        """Ben, 2026-09-18: a TURN is one player's turn on the turn counter, a ROUND one turn each. '3 turns' struck at
+        turn 3 runs through turn 6; a named turn already behind us when the seat finally accepts is expired, not struck."""
+        self._deal_record(1, True, terms={"kind": "truce", "turns": 3}, offer_id="t1")
+        self.assertEqual(self.r._deals[(1, 0)]["until_turn"], 6, "strike turn 3 + 3 single turns")
+        rec = self._ledger("struck")[-1]
+        self.assertEqual(rec["deal"], {"kind": "truce", "turns": 3, "until_turn": 6}, "the ledger keeps the unit for the wording")
+        self._deal_record(2, True, terms={"kind": "truce", "until_turn": 2}, offer_id="dead", turn=3)
+        self.assertNotIn((2, 0), self.r._deals, "a named turn behind us: nothing struck")
+        self.assertEqual([(r["event"], r["between"]) for r in self._ledger("expired")], [("expired", [2, 0])])
+        self.assertEqual(self._notes(2), [], "nobody is told about a pact that never existed")
+
     def test_a_lapsed_offer_between_seats_is_expired_not_refused_to_the_player(self):
         self._game({"seat": 1, "turn": 4, "type": "DEAL", "deal": {"offer_id": "p-2-1", "accept": None, "lapsed": True, "with": 2,
                                                                   "terms": {"kind": "alliance", "rounds": 2}, "why": "no answer"}})
@@ -426,7 +438,7 @@ class TheCheckpoint(_DealCase):
         self.assertEqual(sch.normalize_deal(4), {"kind": "truce", "until_turn": 12, "struck": 4, "offer_id": None})
         self.assertIsNone(sch.normalize_deal("x")); self.assertIsNone(sch.normalize_deal(None))
         self.assertEqual(sch.deal_terms({"kind": "bogus", "rounds": 9}), {"kind": "truce", "rounds": 3}, "unknown kind -> truce; rounds clamped")
-        self.assertEqual(sch.deal_terms({"kind": "alliance", "until_turn": "12", "rounds": 2}), {"kind": "alliance", "until_turn": 12}, "exactly one duration")
+        self.assertEqual(sch.deal_terms({"kind": "alliance", "until_turn": "12", "rounds": 2}), {"kind": "alliance", "until_turn": 12, "rounds": 2}, "until_turn is the end; the rounds count rides along for the wording (2026-09-18)")
         self.assertEqual(sch.deal_terms(None), {"kind": "truce", "rounds": 1})
 
 

@@ -151,11 +151,11 @@ class NotesReader(unittest.TestCase):
         note(r, "deal-lapsed", 1003, between=[3, 1], turn=9)
         r.handle(cast(1))
         p = r.brain.last_prompt
-        self.assertIn('RUNNER NOTE: Player One (seat 0) offers a TRUCE for 1 of your turns: neither of you attacks the other. '
+        self.assertIn('RUNNER NOTE: Player One (seat 0) offers a TRUCE for 1 round (1 of your turns): neither of you attacks the other. '
                       'They said: "peace for a turn?". Answer with "deal": {"offer_id": "1000-0-3", "accept": true} or "accept": false '
                       '(you may counter once), and a "say" (take-the-deal / no-deal / counter-offer). Decide as this deck would: '
                       'a truce with the threat is a mistake; one with the weakest seat buys tempo.', p)
-        self.assertIn("RUNNER NOTE: you have an ALLIANCE with Player One (seat 0) until the end of turn 9: do not attack or target them. "
+        self.assertIn("RUNNER NOTE: you have an ALLIANCE with Player One (seat 0) for 2 rounds (until the end of turn 9): do not attack or target them. "
                       "Breaking it is a choice the table will remember.", p)
         self.assertIn("RUNNER NOTE: Player One (seat 0) broke your alliance (attacked you turn 8). You owe them nothing.", p)
         self.assertNotIn("has ended", p, "the fourth note waits for the next prompt")
@@ -182,7 +182,7 @@ class NotesReader(unittest.TestCase):
         self.assertIn("note 902-deal-bribe.json dropped: unknown kind 'deal-bribe'", log)
         self.assertIn("note 903-deal-offer.json dropped: malformed (offer without offer_id)", log)
         self.assertEqual(notes_left(r), [])
-        self.assertIn("RUNNER NOTE: you have a TRUCE with Player One (seat 0) until the end of turn 6: do not attack them.", r.brain.last_prompt)
+        self.assertIn("RUNNER NOTE: you have a TRUCE with Player One (seat 0) for 1 round (until the end of turn 6): do not attack them.", r.brain.last_prompt)
         self.assertEqual(r._deals()[0]["kind"], "truce")
         self.assertEqual(r._pending(), {})
 
@@ -203,7 +203,7 @@ class NotesReader(unittest.TestCase):
         struck(r, 1001, other=1)
         rq = cast(1); rq["state"]["opponents"][1]["commander"] = "Purphoros, God of the Forge"
         r.handle(rq)
-        self.assertIn("you have a TRUCE with Purphoros, God of the Forge until", r.brain.last_prompt)
+        self.assertIn("you have a TRUCE with Purphoros, God of the Forge for 1 round (until", r.brain.last_prompt)
 
 
 class DealKey(unittest.TestCase):
@@ -216,7 +216,7 @@ class DealKey(unittest.TestCase):
                            "deal": {"offer_id": oid, "accept": True}}]
         r.handle(cast(2))
         self.assertIn(f'\nDEAL PENDING {oid}: add "deal": {{"offer_id": "{oid}", "accept": true|false}}; to counter once add '
-                      '"counter": {"kind": "truce|no-target|alliance", "rounds": 1-3} or {..., "until_turn": N}; '
+                      '"counter": {"kind": "truce|no-target|alliance", "rounds": 1-3 | "turns": 1-12 | "until_turn": N}; '
                       'plus "say": take-the-deal / no-deal / counter-offer.', r.brain.last_prompt)
         self.assertEqual(r.mb.responses[-1], (2, {"chosenId": 1}), "the engine sees the contract fields only")
         rows = deal_rows(r)
@@ -254,7 +254,7 @@ class DealKey(unittest.TestCase):
                                           "counter": True, "text": "", "turn": 5})
         r.brain.script = [{"chosenId": 1, "deal": {"offer_id": "990-0-2", "accept": False, "counter": {"kind": "truce", "rounds": 1}}}]
         r.handle(cast(1))
-        self.assertIn("RUNNER NOTE: seat 2 counters your offer: a TRUCE for 2 of your turns: neither of you attacks the other. "
+        self.assertIn("RUNNER NOTE: seat 2 counters your offer: a TRUCE for 2 rounds (2 of your turns): neither of you attacks the other. "
                       'Answer with "deal": {"offer_id": "990-0-2", "accept": true} or "accept": false (a counter to a counter is a refusal).',
                       r.brain.prompts[0])
         self.assertIn('DEAL PENDING 990-0-2: add "deal": {"offer_id": "990-0-2", "accept": true|false} (a counter now is a refusal).',
@@ -267,7 +267,7 @@ class DealKey(unittest.TestCase):
         oid = offer(r)
         bad = [({"offer_id": oid, "accept": False, "counter": {"kind": "truce", "rounds": 4}}, "counter rounds must be 1..3"),
                ({"offer_id": oid, "accept": False, "counter": {"kind": "truce", "until_turn": 3}}, "counter until_turn must be after turn 5"),
-               ({"offer_id": oid, "accept": False, "counter": {"kind": "truce", "rounds": 1, "until_turn": 8}}, "counter needs exactly one of rounds / until_turn"),
+               ({"offer_id": oid, "accept": False, "counter": {"kind": "truce", "rounds": 1, "until_turn": 8}}, "counter needs exactly one of rounds / turns / until_turn"),
                ({"offer_id": oid, "accept": False, "counter": {"kind": "bribe", "rounds": 1}}, "counter kind 'bribe'"),
                ({"offer_id": "nope", "accept": True}, "offer_id 'nope' is not pending"),
                ({"offer_id": oid, "accept": "yes"}, "accept must be true or false"),
@@ -448,7 +448,7 @@ class SeatOffers(unittest.TestCase):
         r.handle(cast(3, turn=5))
         p = r.brain.last_prompt
         self.assertIn('DEAL OFFER (optional, rare — only when the board gives a reason): add "deal": {"propose": {"to": <seat>, '
-                      '"kind": "truce|no-target|alliance", "rounds": 1-3} or {..., "until_turn": N}} plus "say": deal. '
+                      '"kind": "truce|no-target|alliance", "rounds": 1-3 | "turns": 1-12 | "until_turn": N}} plus "say": deal. '
                       'Parties: Player One (seat 0), seat 1, seat 2. One open offer at a time; they answer at their next window.', p)
         notes = sorted((r._notes_dir().parent.parent / "seat-1" / "notes").iterdir())
         self.assertEqual(len(notes), 1)

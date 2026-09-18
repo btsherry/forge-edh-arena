@@ -251,3 +251,7 @@ seat-0 runner answers the note itself. The player's own `refused` ledger record 
 test_deals_advisor.py. **Not rendered:** kind-specific offer wordings; the generic/named `deal` line serves.
 **Next:** prove it in a live game (a seat proposes, another answers; a seat proposes to Ben, he answers in
 the chat); the Yes/No pane (stack rank #13) is the answer surface for later.
+
+## 13. Turns vs rounds (2026-09-18)
+
+Ben's ruling: a TURN is one player's turn on the game's turn counter; a ROUND is one turn for every living player. §2's `rounds: N` is unchanged (resolved at the strike to strike + N × living). New: `turns: N` (1–12), resolved at the strike to strike + N; the advisor grammar reads `N turns` as turns and `N rounds` as rounds (before this both meant rounds); every human-facing duration is labelled in its unit with the resolved end turn; the brains may counter/propose in turns; a deal accepted after its named turn has passed is `expired`, not struck. Rationale and edge cases: BUG-LOG 2026-09-18.

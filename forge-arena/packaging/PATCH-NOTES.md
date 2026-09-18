@@ -20,10 +20,17 @@ here changes how the table plays.
   "in force" in its own book and was warned at every later attack window against a partner it had
   already betrayed. The breaker now gets the same note as the wronged side; its runner drops the
   dead deal and says nothing about it.
-- **Deal durations read in one unit.** Your "turns" are rounds of the table; the ledger lapses a deal
-  at a fixed table turn. A struck deal now reads `alliance, 3 turns (through table turn 31)` instead of
-  two bare numbers, and asking for more than three turns says so: `alliance, 3 turns (max 3; you
-  asked 4)` instead of quietly cutting the offer down.
+- **Turns and rounds are different things now.** A *turn* is one player's turn on the game's turn
+  counter; a *round* is one turn for every player. Until now the deal grammar read "N turns" as N
+  rounds. Now `@urza truce 3 turns` buys three single player turns from the moment Urza accepts (at a
+  table of four it ends before he is up again), `@urza truce 1 round` comes back to you, and
+  `until turn 22` names the counter directly. Every duration is labelled in its own unit:
+  `truce, 3 turns (through turn 22)`, `alliance, 2 rounds (through turn 27)`. Rounds are capped at 3,
+  turns at 12 (three rounds at a full table); asking for more says so, `alliance, 3 rounds (max 3
+  rounds; you asked 4)`, instead of quietly cutting the offer down. The seats may counter and
+  propose in turns too, and their brief explains both units. A deal accepted after its named turn has
+  passed is recorded as expired, not struck. The seats' pre-recorded "peace for a turn?" lines are
+  flavour and keep their wording.
 - **The observer snapshot names its game** (`gameId`, the same id every seat request carries),
   so a moved or repurposed log still says which game it belongs to.
 - Under the hood: one flat-JSON reader behind the offer pane, the control files and the voice

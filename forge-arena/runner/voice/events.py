@@ -411,8 +411,9 @@ class EventsMixin:
             self.record("noted", kind="deal", why="offer lapsed unanswered at the seat", seat=seat, offer_id=offer_id)
             return
         if deal.get("accept"):
-            self.strike_deal(seat, other, terms["kind"], t, by=seat, rounds=terms.get("rounds"), until_turn=terms.get("until_turn"),
-                             offer_id=offer_id, source="brain")
+            if self.strike_deal(seat, other, terms["kind"], t, by=seat, rounds=terms.get("rounds"), until_turn=terms.get("until_turn"),
+                                turns=terms.get("turns"), offer_id=offer_id, source="brain") is None:
+                return                                                # accepted after its named turn: expired, no line
             what = "accept"
         elif counter:
             cterms = deal_terms(counter, default_kind=terms["kind"])
@@ -508,8 +509,9 @@ class EventsMixin:
                 if c.get("proposal"):
                     self._deal_note(a, {"kind": "deal-refused", "between": [a, b], "by": self.human_seat, "deal": dict(terms), "offer_id": oid, "turn": t})
                 continue
-            self.strike_deal(a, b, terms.get("kind", "truce"), turn, by=self.human_seat, rounds=terms.get("rounds"),
-                             until_turn=terms.get("until_turn"), offer_id=oid, source="player")
+            if self.strike_deal(a, b, terms.get("kind", "truce"), turn, by=self.human_seat, rounds=terms.get("rounds"), turns=terms.get("turns"),
+                                until_turn=terms.get("until_turn"), offer_id=oid, source="player") is None:
+                continue                                              # the counter named a turn already behind us
             if a != self.human_seat and self.library_for_seat(a) and self.barks_mode != "off" and not self.final_locked:
                 self._bark(a, DEAL_ANSWER_LINE["accept"], turn=turn, source="brain", p=1.0, ctx={"targets": [b]})
 

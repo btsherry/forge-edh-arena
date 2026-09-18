@@ -111,6 +111,7 @@ DEAL_KINDS = ("truce", "no-target", "alliance")
 DEAL_ATTACK_KINDS = frozenset({"truce", "alliance"})          # broken by combat (an attack event across it)
 DEAL_TARGET_KINDS = frozenset({"no-target", "alliance"})      # broken by a spell or ability targeting the other party
 DEAL_MAX_ROUNDS = 3                                           # §2: "for one turn" up to three of the seat's own turns
+DEAL_MAX_TURNS = 12                                           # three rounds' worth of single player turns (2026-09-18)
 DEAL_TURNS = 8            # the OLD memory (a truce remembered for two rounds): an int in an old checkpoint upgrades to struck + DEAL_TURNS
 DEALS_LEDGER = "deals.jsonl"                                  # logs/deals.jsonl, archived by scripts/arena-stop.sh
 DEAL_CONTROL_DIR = "deal"                                     # logs/control/deal/<ts>-accept.json {"offer_id"} — the player accepts a seat's counter (the advisor writes it)
@@ -219,14 +220,25 @@ def normalize_deal(v, struck_default=None) -> dict | None:
 
 
 def deal_terms(terms, default_kind: str = "truce") -> dict:
-    """The contract's terms — {"kind", "rounds"} | {"kind", "until_turn"} — cleaned: an unknown kind is a
-    truce, rounds are clamped to 1..DEAL_MAX_ROUNDS, exactly one duration (until_turn wins when both)."""
+    """The contract's terms — {"kind", "rounds"} | {"kind", "turns"} | {"kind", "until_turn"} — cleaned: an unknown
+    kind is a truce, rounds clamped to 1..DEAL_MAX_ROUNDS, turns to 1..DEAL_MAX_TURNS, one duration (until_turn wins,
+    then turns, then rounds). A turn is one player's turn on the game's turn counter; a round is one turn each."""
     t = terms if isinstance(terms, dict) else {}
     kind = str(t.get("kind") or default_kind)
     out: dict = {"kind": kind if kind in DEAL_KINDS else "truce"}
     if t.get("until_turn") is not None:
         try:
             out["until_turn"] = int(t["until_turn"])
+            if t.get("turns") is not None:
+                out["turns"] = max(1, min(DEAL_MAX_TURNS, int(t["turns"])))   # a struck turns deal: the end and the count
+            elif t.get("rounds") is not None:
+                out["rounds"] = max(1, min(DEAL_MAX_ROUNDS, int(t["rounds"])))  # a struck rounds deal likewise (Gemini F2)
+            return out
+        except (TypeError, ValueError):
+            pass
+    if t.get("turns") is not None:
+        try:
+            out["turns"] = max(1, min(DEAL_MAX_TURNS, int(t["turns"])))
             return out
         except (TypeError, ValueError):
             pass
@@ -830,7 +842,7 @@ class SchedulerMixin:
             self.record("noted", kind="deal", why=f"note {kind} for seat {seat} not written ({str(e)[:80]})")
             return False
 
-    def strike_deal(self, a, b, kind: str, turn, by, rounds=None, until_turn=None, offer_id=None, source: str = "") -> dict:
+    def strike_deal(self, a, b, kind: str, turn, by, rounds=None, until_turn=None, offer_id=None, source: str = "", turns=None) -> dict:
         """A deal struck between `a` and `b`: the live map both ways, a `struck` ledger record and a deal-struck
         note to both parties (the eligible ones). `rounds` N = N of the seat's own turns from the strike, resolved
         here to an absolute until_turn (turn + N x the living seats) so the lapse check is one comparison;
@@ -846,14 +858,33 @@ class SchedulerMixin:
                 until = None
         else:
             until = None
-        if until is None:
+        if until is None and turns is not None:
+            try:
+                n = max(1, min(DEAL_MAX_TURNS, int(turns)))    # N single player turns from the strike (Ben, 2026-09-18)
+            except (TypeError, ValueError):
+                n = 1
+            until = t + n
+            terms["turns"] = n
+        elif until is None:
             try:
                 n = max(1, min(DEAL_MAX_ROUNDS, int(rounds or 1)))
             except (TypeError, ValueError):
                 n = 1
-            until = t + n * self._living_count()
+            until = t + n * self._living_count()                # N rounds = N turns for every living player
             terms["rounds"] = n
+        elif turns is not None:
+            try:
+                terms["turns"] = max(1, int(turns))           # both known (a re-strike): keep the count for the wording
+            except (TypeError, ValueError):
+                pass
         terms["until_turn"] = until
+        if t is not None and until < t:
+            # a named turn already behind us (the seat answered a turn late): nothing to strike — the ledger says so and
+            # nobody is told they have a pact (2026-09-18 edge case; turns and rounds resolve at the strike, so only an
+            # explicit until_turn can arrive dead)
+            self._ledger("expired", (a, b), by=by, deal=terms, offer_id=offer_id, turn=t, source=source or None)
+            self.record("noted", kind="deal", why=f"accepted at turn {t} but it ran until turn {until}: expired, not struck", offer_id=offer_id)
+            return None
         deal = {"kind": kind, "until_turn": until, "struck": t, "offer_id": str(offer_id) if offer_id is not None else None}
         self._deals[(a, b)] = self._deals[(b, a)] = deal
         self._ledger("struck", (a, b), by=by, deal=terms, offer_id=offer_id, turn=t, source=source or None)

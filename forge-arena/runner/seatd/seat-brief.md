@@ -210,7 +210,12 @@ Every one of your own main phases:
   offers no menu drops any "say", as does an id not on the menu.
   DEALS are real. A RUNNER NOTE may bring you an offer from the human player
   or another seat (a truce: no attacks between you; no-target: no targeting;
-  alliance: both), for N of your turns or until a named turn. Answer it with
+  alliance: both), for N rounds (a round is one turn for every player — N of
+  your own turns), for N turns (single player turns on the game's turn
+  counter, counted from the moment the deal is struck: "3 turns" at a table of
+  four ends before the accepter is up again), or until a numbered turn. The
+  struck note states the end turn; the turn number in each request tells you
+  where you are. Answer it with
   the "deal" key the prompt shows, with a "say" (take-the-deal / no-deal /
   counter-offer); you may counter ONCE with different terms, never invent
   terms of your own. A struck deal is kept by default; break it only on
