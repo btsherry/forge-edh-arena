@@ -327,7 +327,7 @@
    "category": "arc",
    "when": "accepts a truce",
    "text": [
-    "[laughs] Deal. For one turn. Then you're mine.",
+    "[laughs] Deal. Then you're mine.",
     "[smug] Fine. Deal. Don't push it.",
     "[laughs] Okay, okay. Truce. For now."
    ],
@@ -522,7 +522,7 @@
    "category": "deal",
    "when": "accepts the player's offer of a deal (addressed to Player One)",
    "text": [
-    "[laughs] Deal, Player One. One turn. Then you're mine.",
+    "[laughs] Deal, Player One. Then you're mine.",
     "[smug] Fine, Player One. We have a deal.",
     "[laughs] Alright, Player One. Truce. Don't push it.",
     "[excited] Deal! You and me, Player One. For now."
@@ -1031,6 +1031,446 @@
     "[scoffs] Ten cards."
    ],
    "source": "table-2026-09-10"
+  },
+  "terms-turns-1": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 1 single player turn(s)",
+   "text": [
+    "[smug] One turn."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-2": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 2 single player turn(s)",
+   "text": [
+    "[smug] Two turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-3": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 3 single player turn(s)",
+   "text": [
+    "[smug] Three turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-4": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 4 single player turn(s)",
+   "text": [
+    "[smug] Four turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-5": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 5 single player turn(s)",
+   "text": [
+    "[smug] Five turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-6": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 6 single player turn(s)",
+   "text": [
+    "[smug] Six turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-7": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 7 single player turn(s)",
+   "text": [
+    "[smug] Seven turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-8": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 8 single player turn(s)",
+   "text": [
+    "[smug] Eight turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-9": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 9 single player turn(s)",
+   "text": [
+    "[smug] Nine turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-10": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 10 single player turn(s)",
+   "text": [
+    "[smug] Ten turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-11": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 11 single player turn(s)",
+   "text": [
+    "[smug] Eleven turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-12": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 12 single player turn(s)",
+   "text": [
+    "[smug] Twelve turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-rounds-1": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 1 round(s), one turn per player",
+   "text": [
+    "[smug] One round."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-rounds-2": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 2 round(s), one turn per player",
+   "text": [
+    "[smug] Two rounds."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-rounds-3": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 3 round(s), one turn per player",
+   "text": [
+    "[smug] Three rounds."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-1": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 1 of the game",
+   "text": [
+    "[smug] Until turn one."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-2": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 2 of the game",
+   "text": [
+    "[smug] Until turn two."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-3": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 3 of the game",
+   "text": [
+    "[smug] Until turn three."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-4": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 4 of the game",
+   "text": [
+    "[smug] Until turn four."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-5": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 5 of the game",
+   "text": [
+    "[smug] Until turn five."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-6": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 6 of the game",
+   "text": [
+    "[smug] Until turn six."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-7": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 7 of the game",
+   "text": [
+    "[smug] Until turn seven."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-8": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 8 of the game",
+   "text": [
+    "[smug] Until turn eight."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-9": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 9 of the game",
+   "text": [
+    "[smug] Until turn nine."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-10": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 10 of the game",
+   "text": [
+    "[smug] Until turn ten."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-11": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 11 of the game",
+   "text": [
+    "[smug] Until turn eleven."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-12": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 12 of the game",
+   "text": [
+    "[smug] Until turn twelve."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-13": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 13 of the game",
+   "text": [
+    "[smug] Until turn thirteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-14": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 14 of the game",
+   "text": [
+    "[smug] Until turn fourteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-15": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 15 of the game",
+   "text": [
+    "[smug] Until turn fifteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-16": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 16 of the game",
+   "text": [
+    "[smug] Until turn sixteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-17": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 17 of the game",
+   "text": [
+    "[smug] Until turn seventeen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-18": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 18 of the game",
+   "text": [
+    "[smug] Until turn eighteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-19": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 19 of the game",
+   "text": [
+    "[smug] Until turn nineteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-20": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 20 of the game",
+   "text": [
+    "[smug] Until turn twenty."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-21": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 21 of the game",
+   "text": [
+    "[smug] Until turn twenty-one."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-22": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 22 of the game",
+   "text": [
+    "[smug] Until turn twenty-two."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-23": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 23 of the game",
+   "text": [
+    "[smug] Until turn twenty-three."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-24": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 24 of the game",
+   "text": [
+    "[smug] Until turn twenty-four."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-25": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 25 of the game",
+   "text": [
+    "[smug] Until turn twenty-five."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-26": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 26 of the game",
+   "text": [
+    "[smug] Until turn twenty-six."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-27": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 27 of the game",
+   "text": [
+    "[smug] Until turn twenty-seven."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-28": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 28 of the game",
+   "text": [
+    "[smug] Until turn twenty-eight."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-29": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 29 of the game",
+   "text": [
+    "[smug] Until turn twenty-nine."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-30": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 30 of the game",
+   "text": [
+    "[smug] Until turn thirty."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-31": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 31 of the game",
+   "text": [
+    "[smug] Until turn thirty-one."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-32": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 32 of the game",
+   "text": [
+    "[smug] Until turn thirty-two."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-33": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 33 of the game",
+   "text": [
+    "[smug] Until turn thirty-three."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-34": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 34 of the game",
+   "text": [
+    "[smug] Until turn thirty-four."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-35": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 35 of the game",
+   "text": [
+    "[smug] Until turn thirty-five."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-36": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 36 of the game",
+   "text": [
+    "[smug] Until turn thirty-six."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-37": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 37 of the game",
+   "text": [
+    "[smug] Until turn thirty-seven."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-38": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 38 of the game",
+   "text": [
+    "[smug] Until turn thirty-eight."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-39": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 39 of the game",
+   "text": [
+    "[smug] Until turn thirty-nine."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-40": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 40 of the game",
+   "text": [
+    "[smug] Until turn forty."
+   ],
+   "source": "table-terms-2026-09-18"
   },
   "hit-giada": {
    "category": "address",

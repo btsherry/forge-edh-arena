@@ -410,9 +410,11 @@ class EventsMixin:
             self._ledger("expired", (other, seat), by=seat, deal=terms, offer_id=offer_id, turn=t)
             self.record("noted", kind="deal", why="offer lapsed unanswered at the seat", seat=seat, offer_id=offer_id)
             return
+        struck = None
         if deal.get("accept"):
-            if self.strike_deal(seat, other, terms["kind"], t, by=seat, rounds=terms.get("rounds"), until_turn=terms.get("until_turn"),
-                                turns=terms.get("turns"), offer_id=offer_id, source="brain") is None:
+            struck = self.strike_deal(seat, other, terms["kind"], t, by=seat, rounds=terms.get("rounds"), until_turn=terms.get("until_turn"),
+                                      turns=terms.get("turns"), offer_id=offer_id, source="brain")
+            if struck is None:
                 return                                                # accepted after its named turn: expired, no line
             what = "accept"
         elif counter:
@@ -443,6 +445,8 @@ class EventsMixin:
                 self.record("skipped", kind="bark", why="the seat's say already spoke for this answer", stock=line, seat=seat, source="brain")
                 return
             if self._bark(seat, line, turn=t, source="brain", p=1.0, ctx={"targets": [other]}):
+                if struck is not None:
+                    self.say_terms(seat, terms, struck, t, other=other)   # "Three turns." / "One round." / "Until turn twenty-two."
                 for s in twins:
                     self._turn_said().add((seat, s))                                # a `say` twin read later stays quiet
 
@@ -509,11 +513,13 @@ class EventsMixin:
                 if c.get("proposal"):
                     self._deal_note(a, {"kind": "deal-refused", "between": [a, b], "by": self.human_seat, "deal": dict(terms), "offer_id": oid, "turn": t})
                 continue
-            if self.strike_deal(a, b, terms.get("kind", "truce"), turn, by=self.human_seat, rounds=terms.get("rounds"), turns=terms.get("turns"),
-                                until_turn=terms.get("until_turn"), offer_id=oid, source="player") is None:
+            struck = self.strike_deal(a, b, terms.get("kind", "truce"), turn, by=self.human_seat, rounds=terms.get("rounds"), turns=terms.get("turns"),
+                                      until_turn=terms.get("until_turn"), offer_id=oid, source="player")
+            if struck is None:
                 continue                                              # the counter named a turn already behind us
             if a != self.human_seat and self.library_for_seat(a) and self.barks_mode != "off" and not self.final_locked:
-                self._bark(a, DEAL_ANSWER_LINE["accept"], turn=turn, source="brain", p=1.0, ctx={"targets": [b]})
+                if self._bark(a, DEAL_ANSWER_LINE["accept"], turn=turn, source="brain", p=1.0, ctx={"targets": [b]}):
+                    self.say_terms(a, terms, struck, turn, other=b)
 
     def _deal_broken(self, breaker: int, victims: list[int], how: str, turn) -> None:
         """`breaker` broke its deal with each of `victims` (how = attack | target): the scheduler forgets it,

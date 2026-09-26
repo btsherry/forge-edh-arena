@@ -29,8 +29,13 @@ here changes how the table plays.
   turns at 12 (three rounds at a full table); asking for more says so, `alliance, 3 rounds (max 3
   rounds; you asked 4)`, instead of quietly cutting the offer down. The seats may counter and
   propose in turns too, and their brief explains both units. A deal accepted after its named turn has
-  passed is recorded as expired, not struck. The seats' pre-recorded "peace for a turn?" lines are
-  flavour and keep their wording.
+  passed is recorded as expired, not struck.
+- **The seats say how long.** Right after "Deal, Player One", the seat that struck the deal states
+  its duration in its own voice: "Three turns.", "One round.", "Until turn twenty-two." — 55 new
+  takes per voice (turns 1–12, rounds 1–3, turns 1–40 of the game). The fixed deal lines no longer
+  say "one turn" or "this turn" for what is a round: the offers now ask "Peace for a round?", the
+  accepts are duration-neutral, and Joshua's Executive "Agreed. One turn." became "Agreed. Terms
+  noted." Every changed wording was re-rendered.
 - **The observer snapshot names its game** (`gameId`, the same id every seat request carries),
   so a moved or repurposed log still says which game it belongs to.
 - Under the hood: one flat-JSON reader behind the offer pane, the control files and the voice

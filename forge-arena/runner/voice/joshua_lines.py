@@ -85,7 +85,7 @@ BASE: dict[str, list[str]] = {
     "low-life-jab": ["[dryly] That life total is precarious.", "[calmly] Low life. Interesting position.", "[softly] Careful, now."],
     "kill-that": ["[calmly] That should die.", "[dryly] Someone remove that.", "[calmly] Recommend removal. Immediately."],
     "deal": ["[calmly] A proposal. You leave me be; I leave you be.", "[dryly] Truce? It benefits us both.",
-             "[calmly] Peace for a turn. Consider it.", "[softly] Shall we not hit each other?", "[calmly] A deal. Terms are simple."],
+             "[calmly] Peace for a round. Consider it.", "[softly] Shall we not hit each other?", "[calmly] A deal. Terms are simple."],
     "promise": ["[calmly] Agreed. I keep my word.", "[dryly] Very well. A promise.", "[calmly] Deal. Logged.", "[softly] I promise. Probably."],
     "play-faster": ["[dryly] Any time now.", "[calmly] The clock is running."],
     "thinking-hard": ["[calmly] They are computing.", "[dryly] Still thinking. Interesting.", "[softly] Deep thought, over there.",
@@ -144,7 +144,7 @@ TABLE: dict[str, list[str]] = {
     "early-game": ["[calmly] Early game. Everyone alive.", "[dryly] Turn one. Nothing has gone wrong yet.", "[softly] A quiet start."],
     "long-game": ["[dryly] This is taking a while.", "[calmly] Turn fourteen and counting.", "[sighs] A long game."],
     "someone-wins": ["[calmly] Someone can win next turn. Act.", "[dryly] Lethal is on the board. Do something.", "[softly] This ends soon unless you move."],
-    "take-the-deal": ["[calmly] Deal. One turn.", "[dryly] Agreed. For now.", "[softly] Very well. A truce."],
+    "take-the-deal": ["[calmly] Deal. Terms noted.", "[dryly] Agreed. For now.", "[softly] Very well. A truce."],
     "no-deal": ["[calmly] No deal.", "[dryly] Declined. You are the threat.", "[softly] I think not."],
     "you-promised": ["[calmly] You promised. Logged.", "[dryly] A broken word. Noted.", "[softly] You said you would not."],
     # mulligan
@@ -168,7 +168,7 @@ TABLE: dict[str, list[str]] = {
     "still-waiting": ["[dryly] Still waiting.", "[calmly] The window remains open.", "[dryly] Any time now.", "[softly] We are patient. Mostly."],
     "there-you-are": ["[calmly] There you are.", "[dryly] Ah. A decision.", "[softly] Welcome back.", "[calmly] Proceeding at last."],
     # deals (addressed to Player One)
-    "deal-with-you": ["[calmly] Deal, Player One. One turn.", "[dryly] Agreed, Player One. For now.", "[calmly] Accepted, Player One.", "[softly] Very well, Player One."],
+    "deal-with-you": ["[calmly] Deal, Player One. Terms noted.", "[dryly] Agreed, Player One. For now.", "[calmly] Accepted, Player One.", "[softly] Very well, Player One."],
     "no-deal-with-you": ["[calmly] No deal, Player One.", "[dryly] Declined, Player One. You are the threat.", "[calmly] I must refuse, Player One.", "[softly] Not this time, Player One."],
     "counter-offer": ["[calmly] Not those terms, Player One. Try mine.", "[dryly] Counter-proposal, Player One.", "[calmly] Different terms, Player One.", "[softly] Close, Player One. Consider this instead."],
     "deal-over": ["[calmly] Our truce is done.", "[dryly] The deal has expired.", "[calmly] Terms concluded. Watch yourself.", "[softly] That is the end of our peace."],
@@ -182,7 +182,7 @@ ADDRESS = {
     "hit": "[calmly] Recommend we all attack {say}.",
     "threat": "[calmly] {Say} is the threat. For the record.",
     "leave-me": "[dryly] Leave me be, {voc}.",
-    "deal": "[calmly] {Voc}. A truce this turn?",
+    "deal": "[calmly] {Voc}. A truce, this round?",
 }
 
 
@@ -316,7 +316,7 @@ def write_base() -> None:
     ref = json.loads((here / "harry" / "manifest.json").read_text())
     out = here / "joshua"
     out.mkdir(parents=True, exist_ok=True)
-    m = {"schema": "arena.voice-stock/1", "library": "joshua", "seat": 0,
+    m = {"schema": "arena.voice-stock/1", "library": "joshua", "seat": 0, "role": "advisor",   # never seated where a human plays (voice/table.py)
          "voice": "Joshua - W.O.P.R. (Ben's ElevenLabs account), eleven_v3 stability 0.5 speed 0.92",
          "voice_id": "SBbMtfucc8NAkpyzIRvP", "voice_name": "Joshua - W.O.P.R.",
          "temperament": ("the calm machine: measured, dry, precise, faintly amused; never shouts; short declaratives and the "

@@ -56,7 +56,13 @@ class TableLibraries(unittest.TestCase):
             self.assertEqual(cats["mulligan"], 9, f"{lib}: keep-seven, mull-to-six/five/four, pity, dig, screw, risky, gloat")
             self.assertEqual(cats["loop"], 2, f"{lib}: loop (the table) and looping (the owner)")
             self.assertEqual(cats["heckle"], 3, f"{lib}: waiting-on-you, still-waiting, there-you-are (Ben, 2026-09-14: heckles at the player)")
-            self.assertEqual(cats["deal"], 6, f"{lib}: deal-with-you, no-deal-with-you, counter-offer, deal-over, you-broke-it, i-broke-it (2026-09-16)")
+            terms = [pid for pid in m["phrases"] if pid.startswith("terms-")]
+            self.assertEqual(len(terms), 12 + 3 + 40, f"{lib}: terms-turns-1..12, terms-rounds-1..3, terms-until-1..40 (2026-09-18)")
+            self.assertEqual(cats["deal"] - len(terms), 6, f"{lib}: deal-with-you, no-deal-with-you, counter-offer, deal-over, you-broke-it, i-broke-it (2026-09-16)")
+            tag = {"harry": "[smug]", "bill": "[calmly]", "lily": "[gently]", "joshua": "[calmly]"}[lib]
+            self.assertEqual(m["phrases"]["terms-turns-1"]["text"], [f"{tag} One turn."])
+            self.assertEqual(m["phrases"]["terms-rounds-3"]["text"], [f"{tag} Three rounds."])
+            self.assertEqual(m["phrases"]["terms-until-22"]["text"], [f"{tag} Until turn twenty-two."])
             self.assertEqual(cats["killshot"], 2, f"{lib}: table-kill, all-of-us (2026-09-16)")
         for n in list(range(1, 41)) + [45, 50, 60, 80, 100]:
             self.assertIn(f"life-{n}", ids)
@@ -131,7 +137,7 @@ class RenderedTable(unittest.TestCase):
                     if (REAL_VOICES / lib / "table" / "raw").is_dir():        # the dry takes left the tree 2026-09-17 (Ben)
                         self.assertTrue((REAL_VOICES / lib / "table" / "raw" / f"{stem}.wav").exists(), f"{lib}/table/raw/{stem}.wav")
                     n += 1
-            self.assertEqual(n, 290 + 30 + 27 + 6 + 12 + 24 + 8, lib)
+            self.assertEqual(n, 290 + 30 + 27 + 6 + 12 + 24 + 8 + 55, lib)   # + the terms family: 12 turns, 3 rounds, 40 named turns (2026-09-18)
 
 
 class _TableCase(_TreeCase):

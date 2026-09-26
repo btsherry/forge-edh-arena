@@ -567,7 +567,9 @@ class SchedulerMixin:
             # other, so both brains are told (§4 source ii); an attack across it earns "you promised!"
             a, b = int(link0["origin"]), speaker
             if a != b:
-                self.strike_deal(a, b, "truce", turn if turn is not None else self._last_snapshot.get("turn"), by=speaker, rounds=1, source="voice")
+                t_now = turn if turn is not None else self._last_snapshot.get("turn")
+                deal = self.strike_deal(a, b, "truce", t_now, by=speaker, rounds=1, source="voice")
+                self.say_terms(speaker, {"rounds": 1}, deal, t_now, other=a, source="chain")   # "One round." — the audio said so
         # a hit is followed by the total ("Take five. I'm at sixteen." — every table does it)
         p_follow = LIFE_FOLLOWUP.get(item.get("stock", ""), 0.0) * self.table_mult
         if p_follow and not (chain and chain.get("followup")):
@@ -841,6 +843,31 @@ class SchedulerMixin:
         except (OSError, TypeError, ValueError) as e:
             self.record("noted", kind="deal", why=f"note {kind} for seat {seat} not written ({str(e)[:80]})")
             return False
+
+    @staticmethod
+    def terms_pid(terms: dict | None, deal: dict | None) -> str | None:
+        """The spoken duration of a struck deal (table sub-library, 2026-09-18): terms-turns-N / terms-rounds-N from the
+        offer's unit, else terms-until-N from the resolved end when a take exists for it; None when nothing fits."""
+        t = terms or {}
+        try:
+            if t.get("turns") is not None:
+                return f"terms-turns-{max(1, min(DEAL_MAX_TURNS, int(t['turns'])))}"
+            if t.get("rounds") is not None:
+                return f"terms-rounds-{max(1, min(DEAL_MAX_ROUNDS, int(t['rounds'])))}"
+            until = (deal or {}).get("until_turn", t.get("until_turn"))
+            if until is not None and 1 <= int(until) <= 40:
+                return f"terms-until-{int(until)}"
+        except (TypeError, ValueError):
+            pass
+        return None
+
+    def say_terms(self, seat: int, terms: dict | None, deal: dict | None, turn, other=None, source: str = "brain") -> bool:
+        """The duration, spoken by the seat that struck the deal, queued behind its accept line (never evicting it)."""
+        pid = self.terms_pid(terms, deal)
+        if pid is None or deal is None or not self.library_for_seat(seat) or pid not in self.table_ids:
+            return False
+        return self.maybe_bark(seat, pid, turn=turn, source=source, p=1.0, evict=False,
+                               ctx={"targets": [other] if other is not None else []})
 
     def strike_deal(self, a, b, kind: str, turn, by, rounds=None, until_turn=None, offer_id=None, source: str = "", turns=None) -> dict:
         """A deal struck between `a` and `b`: the live map both ways, a `struck` ledger record and a deal-struck

@@ -24,6 +24,7 @@ from test_barks_runtime import silent_wav  # noqa: E402
 from test_table_lines import _TableCase, REAL_VOICES, LIBS  # noqa: E402
 
 DEAL_IDS = tuple(table_lines.DEALS)
+TERMS_IDS = ("terms-rounds-1", "terms-rounds-2", "terms-turns-3", "terms-until-11")   # the spoken durations (2026-09-18)
 JOSHUA_IDS = ("joshua-deal-yes", "joshua-deal-no", "joshua-deal-counter")
 
 
@@ -37,7 +38,7 @@ class _DealCase(_TableCase):
         for lib in ("harry", "bill"):
             d = vr.VOICES_DIR / lib / "table"
             m = json.loads((d / "manifest.json").read_text())
-            for pid in DEAL_IDS:
+            for pid in DEAL_IDS + TERMS_IDS:
                 m["phrases"][pid] = {"text": ["x"]}
                 (d / f"{pid}.wav").write_bytes(silent_wav())
             (d / "manifest.json").write_text(json.dumps(m))
@@ -116,7 +117,8 @@ class ADealFromTheSeat(_DealCase):
         self.assertFalse((self.mailbox / "seat-0" / "notes").exists(), "the human has no runner: no note to seat 0 while the Executive is off")
         q = [x for x in self.r.queue if x["kind"] == "bark"]
         self.assertEqual([(x["stock"], x["library"], x["seat"], x["source"], x["prio"], x["ctx"]["targets"]) for x in q],
-                         [("deal-with-you", "harry/table", 1, "brain", sch.ANCHORED_PRIO, [0])], "the seat's answer, anchored, addressed to the player")
+                         [("deal-with-you", "harry/table", 1, "brain", sch.ANCHORED_PRIO, [0]), ("terms-rounds-1", "harry/table", 1, "brain", sch.ANCHORED_PRIO, [0])],
+                         "the seat's answer, anchored, addressed to the player — then the duration it struck (2026-09-18)")
         self.assertEqual(self._records("noted", "deal")[-1]["why"], "deal struck: 1<->0 by 1")
 
     def test_executive_on_the_seat_zero_runner_is_a_party_and_gets_the_note(self):
@@ -155,7 +157,7 @@ class ADealFromTheSeat(_DealCase):
         rec = self._ledger("struck")[0]
         self.assertEqual((rec["by"], rec["between"], rec["deal"], rec["source"]), (0, [1, 0], {"kind": "no-target", "rounds": 2, "until_turn": 11}, "player"))
         self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"])
-        self.assertEqual(self._queue(), [("deal-with-you", "harry/table", 1)], "the seat confirms the pact aloud")
+        self.assertEqual(self._queue(), [("deal-with-you", "harry/table", 1), ("terms-rounds-2", "harry/table", 1)], "the seat confirms the pact aloud, then says how long")
 
     def test_turns_resolve_at_the_strike_and_a_dead_until_turn_expires_instead(self):
         """Ben, 2026-09-18: a TURN is one player's turn on the turn counter, a ROUND one turn each. '3 turns' struck at
@@ -224,7 +226,7 @@ class ADealFromTheSeat(_DealCase):
     def test_the_seats_say_twin_and_the_deal_record_speak_once_whichever_comes_first(self):
         self._deal_record(1, True, terms={"kind": "truce", "rounds": 1})
         self._game({"seat": 1, "turn": 3, "type": "CAST_SPELL", "source": "model", "answer": {"choice": 0}, "say": "take-the-deal"})
-        self.assertEqual(self._seat_lines(), [("deal-with-you", "harry/table", 1)], "the DEAL record spoke; the say twin stays quiet")
+        self.assertEqual(self._seat_lines(), [("deal-with-you", "harry/table", 1), ("terms-rounds-1", "harry/table", 1)], "the DEAL record spoke; the say twin stays quiet")
         self.assertEqual(self._records("skipped", "bark")[-1]["why"], "the DEAL answer already spoke (deal-with-you)")
         self.r.queue.clear()
         self._snap(4, 2, events=self.ring); self.r.queue.clear()
@@ -462,7 +464,8 @@ class TheWordings(unittest.TestCase):
                     if pid in table_lines.DEALS_ADDRESSED:
                         self.assertIn("Player One", t, f"{lib}/{pid}: spoken to the player")
                     self.assertNotIn("{", t, "fixed lines: no fills")
-            self.assertEqual(sum(1 for p in ph.values() if p["category"] == "deal"), 6)
+            self.assertEqual(sum(1 for pid, p in ph.items() if p["category"] == "deal" and not pid.startswith("terms-")), 6)
+            self.assertEqual(sum(1 for pid in ph if pid.startswith("terms-")), 55, "the spoken durations: 12 turns, 3 rounds, 40 named turns (2026-09-18)")
 
 
 class ASeatsOwnOffer(_DealCase):
@@ -488,7 +491,7 @@ class ASeatsOwnOffer(_DealCase):
         self._deal_record(2, True, terms=terms, with_=1, offer_id="p1")
         self.assertEqual(self.r._deals[(1, 2)]["kind"], "truce")
         self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"]); self.assertEqual([n["kind"] for n in self._notes(2)], ["deal-struck"])
-        self.assertEqual(self._seat_lines(), [("deal-with-you", "bill/table", 2)])
+        self.assertEqual(self._seat_lines(), [("deal-with-you", "bill/table", 2), ("terms-rounds-2", "bill/table", 2)])
 
     def test_a_seats_refusal_is_told_to_the_proposer(self):
         self.r.rng.random = lambda: 0.99
@@ -520,7 +523,7 @@ class ASeatsOwnOffer(_DealCase):
         self.r.scan_deal_control()
         self.assertEqual(self.r._deals[(0, 2)]["kind"], "truce")
         self.assertEqual(self._ledger("struck")[-1]["by"], 0)
-        self.assertEqual(self._seat_lines(), [("deal-with-you", "bill/table", 2)])
+        self.assertEqual(self._seat_lines(), [("deal-with-you", "bill/table", 2), ("terms-rounds-1", "bill/table", 2)])
         self.assertEqual(sorted(p.name for p in d.iterdir()), [], "both files consumed")
 
     def test_the_executive_answering_the_offer_leaves_nothing_for_the_player_to_type(self):

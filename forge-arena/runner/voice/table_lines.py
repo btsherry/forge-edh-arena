@@ -237,8 +237,8 @@ ARC: dict[str, tuple[str, dict[str, list[str]]]] = {
         "bill": ["[calmly] Someone wins next turn unless we act.", "[dryly] The end approaches. Any answers?", "[calmly] That board is lethal. Respond, or lose."],
         "lily": ["[gasps] Someone's about to win, dears.", "[gently] This is the turn, loves. Do something.", "[softly] That board ends us, dears."]}),
     "take-the-deal": ("accepts a truce", {
-        "harry": ["[laughs] Deal. For one turn. Then you're mine.", "[smug] Fine. Deal. Don't push it.", "[laughs] Okay, okay. Truce. For now."],
-        "bill": ["[calmly] Agreed. This turn only.", "[dryly] A truce. I'll hold you to it.", "[calmly] Very well. We have terms."],
+        "harry": ["[laughs] Deal. Then you're mine.", "[smug] Fine. Deal. Don't push it.", "[laughs] Okay, okay. Truce. For now."],
+        "bill": ["[calmly] Agreed. To the letter.", "[dryly] A truce. I'll hold you to it.", "[calmly] Very well. We have terms."],
         "lily": ["[warmly] Deal, love. Be good.", "[gently] Peace it is, dear.", "[softly] Agreed, dear. For now."]}),
     "no-deal": ("refuses a truce", {
         "harry": ["[laughs] No deal! You're the threat!", "[scoffs] Deal? With you? Never.", "[shouting] No truce! Not with that board!"],
@@ -338,10 +338,10 @@ HECKLE: dict[str, tuple[str, dict[str, list[str]]]] = {
 # generic take-the-deal / no-deal / promise / you-promised keep serving seat-to-seat.
 DEALS: dict[str, tuple[str, dict[str, list[str]]]] = {
     "deal-with-you": ("accepts the player's offer of a deal (addressed to Player One)", {
-        "harry": ["[laughs] Deal, Player One. One turn. Then you're mine.", "[smug] Fine, Player One. We have a deal.",
+        "harry": ["[laughs] Deal, Player One. Then you're mine.", "[smug] Fine, Player One. We have a deal.",
                   "[laughs] Alright, Player One. Truce. Don't push it.", "[excited] Deal! You and me, Player One. For now."],
         "bill": ["[calmly] Agreed, Player One. We have terms.", "[dryly] Very well, Player One. I'll hold you to it.",
-                 "[calmly] Deal, Player One. This turn only.", "[calmly] Accepted, Player One. Do keep your word."],
+                 "[calmly] Deal, Player One. To the letter.", "[calmly] Accepted, Player One. Do keep your word."],
         "lily": ["[warmly] Deal, Player One. Be good, dear.", "[gently] Peace it is, Player One.",
                  "[softly] Agreed, Player One. For now, love.", "[warmly] You have a deal, Player One."]}),
     "no-deal-with-you": ("refuses the player's offer of a deal (addressed to Player One)", {
@@ -395,6 +395,24 @@ def life_line(lib: str, n: int) -> str:
     return f"{NUMBER_TAGS[lib](n)} I'm at {words(n)}."
 
 
+# ---- deal terms, spoken (Ben, 2026-09-18: "this turn, turn x, one turn, and this round, round x, one round") -------
+# A TURN is one player's turn on the game's turn counter; a ROUND is one turn for each player. The seat that strikes a
+# deal says its duration right after its accept line: "Three turns." / "One round." / "Until turn twenty-two."
+TERMS_TURNS = list(range(1, 13))          # the turns cap (three rounds at a full table)
+TERMS_ROUNDS = list(range(1, 4))          # the rounds cap
+TERMS_UNTIL = list(range(1, 41))          # named turns a game reaches
+TERMS_TAGS = {"harry": "[smug]", "bill": "[calmly]", "lily": "[gently]", "joshua": "[calmly]"}
+
+
+def terms_line(lib: str, unit: str, n: int) -> str:
+    tag = TERMS_TAGS[lib]
+    if unit == "until":
+        return f"{tag} Until turn {words(n)}."
+    if unit == "turns":
+        return f"{tag} {words(n).capitalize()} turn{'s' if n != 1 else ''}."
+    return f"{tag} {words(n).capitalize()} round{'s' if n != 1 else ''}."
+
+
 def hand_line(lib: str, n: int) -> str:
     tag = {"harry": "[scoffs]", "bill": "[calmly]", "lily": "[gently]", "joshua": "[calmly]"}[lib]
     if n == 0:
@@ -416,8 +434,8 @@ ADDRESS = {
         "harry": "[angry] Leave me alone, {voc}!", "bill": "[dryly] Do leave me be, {voc}.", "lily": "[gently] Leave me be, {voc} dear.",
         "joshua": "[dryly] Leave me be, {voc}."}),
     "deal": ("offers a named player a truce", {
-        "harry": "[laughs] Deal, {voc}? Don't hit me, I don't hit you.", "bill": "[calmly] {Voc}. A truce, this turn?", "lily": "[warmly] Peace for a turn, {voc}?",
-        "joshua": "[calmly] {Voc}. A truce this turn?"}),
+        "harry": "[laughs] Deal, {voc}? Don't hit me, I don't hit you.", "bill": "[calmly] {Voc}. A truce, this round?", "lily": "[warmly] Peace for a round, {voc}?",
+        "joshua": "[calmly] {Voc}. A truce, this round?"}),
 }
 
 
@@ -460,6 +478,12 @@ def build_manifest(lib: str) -> dict:
         ph[f"life-{n}"] = {"category": "number", "when": f"announces or answers its life total: {n}", "text": [life_line(lib, n)], "source": "table-2026-09-10"}
     for n in HAND_NUMBERS:
         ph[f"hand-{n}"] = {"category": "number", "when": f"announces or answers its hand size: {n}", "text": [hand_line(lib, n)], "source": "table-2026-09-10"}
+    for n in TERMS_TURNS:
+        ph[f"terms-turns-{n}"] = {"category": "deal", "when": f"the duration of a deal it just struck: {n} single player turn(s)", "text": [terms_line(lib, "turns", n)], "source": "table-terms-2026-09-18"}
+    for n in TERMS_ROUNDS:
+        ph[f"terms-rounds-{n}"] = {"category": "deal", "when": f"the duration of a deal it just struck: {n} round(s), one turn per player", "text": [terms_line(lib, "rounds", n)], "source": "table-terms-2026-09-18"}
+    for n in TERMS_UNTIL:
+        ph[f"terms-until-{n}"] = {"category": "deal", "when": f"the duration of a deal it just struck: through turn {n} of the game", "text": [terms_line(lib, "until", n)], "source": "table-terms-2026-09-18"}
     for who, info in address_targets().items():
         fill = {"say": info["say"], "voc": info["voc"], "Say": info["say"][0].upper() + info["say"][1:], "Voc": info["voc"][0].upper() + info["voc"][1:]}
         for fam, (when, by) in ADDRESS.items():

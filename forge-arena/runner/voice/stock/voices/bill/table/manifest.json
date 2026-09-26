@@ -327,7 +327,7 @@
    "category": "arc",
    "when": "accepts a truce",
    "text": [
-    "[calmly] Agreed. This turn only.",
+    "[calmly] Agreed. To the letter.",
     "[dryly] A truce. I'll hold you to it.",
     "[calmly] Very well. We have terms."
    ],
@@ -524,7 +524,7 @@
    "text": [
     "[calmly] Agreed, Player One. We have terms.",
     "[dryly] Very well, Player One. I'll hold you to it.",
-    "[calmly] Deal, Player One. This turn only.",
+    "[calmly] Deal, Player One. To the letter.",
     "[calmly] Accepted, Player One. Do keep your word."
    ],
    "source": "table-deal-2026-09-16"
@@ -1032,6 +1032,446 @@
    ],
    "source": "table-2026-09-10"
   },
+  "terms-turns-1": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 1 single player turn(s)",
+   "text": [
+    "[calmly] One turn."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-2": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 2 single player turn(s)",
+   "text": [
+    "[calmly] Two turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-3": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 3 single player turn(s)",
+   "text": [
+    "[calmly] Three turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-4": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 4 single player turn(s)",
+   "text": [
+    "[calmly] Four turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-5": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 5 single player turn(s)",
+   "text": [
+    "[calmly] Five turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-6": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 6 single player turn(s)",
+   "text": [
+    "[calmly] Six turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-7": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 7 single player turn(s)",
+   "text": [
+    "[calmly] Seven turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-8": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 8 single player turn(s)",
+   "text": [
+    "[calmly] Eight turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-9": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 9 single player turn(s)",
+   "text": [
+    "[calmly] Nine turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-10": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 10 single player turn(s)",
+   "text": [
+    "[calmly] Ten turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-11": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 11 single player turn(s)",
+   "text": [
+    "[calmly] Eleven turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-turns-12": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 12 single player turn(s)",
+   "text": [
+    "[calmly] Twelve turns."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-rounds-1": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 1 round(s), one turn per player",
+   "text": [
+    "[calmly] One round."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-rounds-2": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 2 round(s), one turn per player",
+   "text": [
+    "[calmly] Two rounds."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-rounds-3": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: 3 round(s), one turn per player",
+   "text": [
+    "[calmly] Three rounds."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-1": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 1 of the game",
+   "text": [
+    "[calmly] Until turn one."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-2": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 2 of the game",
+   "text": [
+    "[calmly] Until turn two."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-3": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 3 of the game",
+   "text": [
+    "[calmly] Until turn three."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-4": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 4 of the game",
+   "text": [
+    "[calmly] Until turn four."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-5": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 5 of the game",
+   "text": [
+    "[calmly] Until turn five."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-6": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 6 of the game",
+   "text": [
+    "[calmly] Until turn six."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-7": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 7 of the game",
+   "text": [
+    "[calmly] Until turn seven."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-8": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 8 of the game",
+   "text": [
+    "[calmly] Until turn eight."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-9": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 9 of the game",
+   "text": [
+    "[calmly] Until turn nine."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-10": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 10 of the game",
+   "text": [
+    "[calmly] Until turn ten."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-11": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 11 of the game",
+   "text": [
+    "[calmly] Until turn eleven."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-12": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 12 of the game",
+   "text": [
+    "[calmly] Until turn twelve."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-13": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 13 of the game",
+   "text": [
+    "[calmly] Until turn thirteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-14": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 14 of the game",
+   "text": [
+    "[calmly] Until turn fourteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-15": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 15 of the game",
+   "text": [
+    "[calmly] Until turn fifteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-16": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 16 of the game",
+   "text": [
+    "[calmly] Until turn sixteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-17": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 17 of the game",
+   "text": [
+    "[calmly] Until turn seventeen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-18": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 18 of the game",
+   "text": [
+    "[calmly] Until turn eighteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-19": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 19 of the game",
+   "text": [
+    "[calmly] Until turn nineteen."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-20": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 20 of the game",
+   "text": [
+    "[calmly] Until turn twenty."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-21": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 21 of the game",
+   "text": [
+    "[calmly] Until turn twenty-one."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-22": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 22 of the game",
+   "text": [
+    "[calmly] Until turn twenty-two."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-23": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 23 of the game",
+   "text": [
+    "[calmly] Until turn twenty-three."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-24": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 24 of the game",
+   "text": [
+    "[calmly] Until turn twenty-four."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-25": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 25 of the game",
+   "text": [
+    "[calmly] Until turn twenty-five."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-26": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 26 of the game",
+   "text": [
+    "[calmly] Until turn twenty-six."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-27": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 27 of the game",
+   "text": [
+    "[calmly] Until turn twenty-seven."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-28": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 28 of the game",
+   "text": [
+    "[calmly] Until turn twenty-eight."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-29": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 29 of the game",
+   "text": [
+    "[calmly] Until turn twenty-nine."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-30": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 30 of the game",
+   "text": [
+    "[calmly] Until turn thirty."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-31": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 31 of the game",
+   "text": [
+    "[calmly] Until turn thirty-one."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-32": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 32 of the game",
+   "text": [
+    "[calmly] Until turn thirty-two."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-33": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 33 of the game",
+   "text": [
+    "[calmly] Until turn thirty-three."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-34": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 34 of the game",
+   "text": [
+    "[calmly] Until turn thirty-four."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-35": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 35 of the game",
+   "text": [
+    "[calmly] Until turn thirty-five."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-36": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 36 of the game",
+   "text": [
+    "[calmly] Until turn thirty-six."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-37": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 37 of the game",
+   "text": [
+    "[calmly] Until turn thirty-seven."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-38": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 38 of the game",
+   "text": [
+    "[calmly] Until turn thirty-eight."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-39": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 39 of the game",
+   "text": [
+    "[calmly] Until turn thirty-nine."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
+  "terms-until-40": {
+   "category": "deal",
+   "when": "the duration of a deal it just struck: through turn 40 of the game",
+   "text": [
+    "[calmly] Until turn forty."
+   ],
+   "source": "table-terms-2026-09-18"
+  },
   "hit-giada": {
    "category": "address",
    "when": "tells the table to attack a named player (commander: Giada)",
@@ -1060,7 +1500,7 @@
    "category": "address",
    "when": "offers a named player a truce (commander: Giada)",
    "text": [
-    "[calmly] Giada. A truce, this turn?"
+    "[calmly] Giada. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1092,7 +1532,7 @@
    "category": "address",
    "when": "offers a named player a truce (commander: Liberator)",
    "text": [
-    "[calmly] Liberator. A truce, this turn?"
+    "[calmly] Liberator. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1124,7 +1564,7 @@
    "category": "address",
    "when": "offers a named player a truce (commander: Purphoros)",
    "text": [
-    "[calmly] Purphoros. A truce, this turn?"
+    "[calmly] Purphoros. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1156,7 +1596,7 @@
    "category": "address",
    "when": "offers a named player a truce (commander: Selvala)",
    "text": [
-    "[calmly] Selvala. A truce, this turn?"
+    "[calmly] Selvala. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1188,7 +1628,7 @@
    "category": "address",
    "when": "offers a named player a truce (commander: Sheoldred)",
    "text": [
-    "[calmly] Sheoldred. A truce, this turn?"
+    "[calmly] Sheoldred. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1220,7 +1660,7 @@
    "category": "address",
    "when": "offers a named player a truce (commander: Rev)",
    "text": [
-    "[calmly] Rev. A truce, this turn?"
+    "[calmly] Rev. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1252,7 +1692,7 @@
    "category": "address",
    "when": "offers a named player a truce (commander: Sythis)",
    "text": [
-    "[calmly] Sythis. A truce, this turn?"
+    "[calmly] Sythis. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1284,7 +1724,7 @@
    "category": "address",
    "when": "offers a named player a truce (commander: Urza)",
    "text": [
-    "[calmly] Urza. A truce, this turn?"
+    "[calmly] Urza. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1316,7 +1756,7 @@
    "category": "address",
    "when": "offers a named player a truce (commander: Y'shtola)",
    "text": [
-    "[calmly] Y'shtola. A truce, this turn?"
+    "[calmly] Y'shtola. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1348,7 +1788,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: mono-white)",
    "text": [
-    "[calmly] Mono-white. A truce, this turn?"
+    "[calmly] Mono-white. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1380,7 +1820,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: mono-blue)",
    "text": [
-    "[calmly] Mono-blue. A truce, this turn?"
+    "[calmly] Mono-blue. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1412,7 +1852,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: mono-black)",
    "text": [
-    "[calmly] Mono-black. A truce, this turn?"
+    "[calmly] Mono-black. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1444,7 +1884,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: mono-red)",
    "text": [
-    "[calmly] Mono-red. A truce, this turn?"
+    "[calmly] Mono-red. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1476,7 +1916,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: mono-green)",
    "text": [
-    "[calmly] Mono-green. A truce, this turn?"
+    "[calmly] Mono-green. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1508,7 +1948,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: the artifact deck)",
    "text": [
-    "[calmly] Artifacts. A truce, this turn?"
+    "[calmly] Artifacts. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1540,7 +1980,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Azorius)",
    "text": [
-    "[calmly] Azorius. A truce, this turn?"
+    "[calmly] Azorius. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1572,7 +2012,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Boros)",
    "text": [
-    "[calmly] Boros. A truce, this turn?"
+    "[calmly] Boros. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1604,7 +2044,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Dimir)",
    "text": [
-    "[calmly] Dimir. A truce, this turn?"
+    "[calmly] Dimir. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1636,7 +2076,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Golgari)",
    "text": [
-    "[calmly] Golgari. A truce, this turn?"
+    "[calmly] Golgari. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1668,7 +2108,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Gruul)",
    "text": [
-    "[calmly] Gruul. A truce, this turn?"
+    "[calmly] Gruul. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1700,7 +2140,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Izzet)",
    "text": [
-    "[calmly] Izzet. A truce, this turn?"
+    "[calmly] Izzet. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1732,7 +2172,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Orzhov)",
    "text": [
-    "[calmly] Orzhov. A truce, this turn?"
+    "[calmly] Orzhov. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1764,7 +2204,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Rakdos)",
    "text": [
-    "[calmly] Rakdos. A truce, this turn?"
+    "[calmly] Rakdos. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1796,7 +2236,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Selesnya)",
    "text": [
-    "[calmly] Selesnya. A truce, this turn?"
+    "[calmly] Selesnya. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1828,7 +2268,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Simic)",
    "text": [
-    "[calmly] Simic. A truce, this turn?"
+    "[calmly] Simic. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1860,7 +2300,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Abzan)",
    "text": [
-    "[calmly] Abzan. A truce, this turn?"
+    "[calmly] Abzan. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1892,7 +2332,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Bant)",
    "text": [
-    "[calmly] Bant. A truce, this turn?"
+    "[calmly] Bant. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1924,7 +2364,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Esper)",
    "text": [
-    "[calmly] Esper. A truce, this turn?"
+    "[calmly] Esper. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1956,7 +2396,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Grixis)",
    "text": [
-    "[calmly] Grixis. A truce, this turn?"
+    "[calmly] Grixis. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -1988,7 +2428,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Jeskai)",
    "text": [
-    "[calmly] Jeskai. A truce, this turn?"
+    "[calmly] Jeskai. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2020,7 +2460,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Jund)",
    "text": [
-    "[calmly] Jund. A truce, this turn?"
+    "[calmly] Jund. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2052,7 +2492,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Mardu)",
    "text": [
-    "[calmly] Mardu. A truce, this turn?"
+    "[calmly] Mardu. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2084,7 +2524,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Naya)",
    "text": [
-    "[calmly] Naya. A truce, this turn?"
+    "[calmly] Naya. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2116,7 +2556,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Sultai)",
    "text": [
-    "[calmly] Sultai. A truce, this turn?"
+    "[calmly] Sultai. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2148,7 +2588,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: Temur)",
    "text": [
-    "[calmly] Temur. A truce, this turn?"
+    "[calmly] Temur. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2180,7 +2620,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: the Glint deck)",
    "text": [
-    "[calmly] Glint. A truce, this turn?"
+    "[calmly] Glint. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2212,7 +2652,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: the Dune deck)",
    "text": [
-    "[calmly] Dune. A truce, this turn?"
+    "[calmly] Dune. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2244,7 +2684,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: the Ink deck)",
    "text": [
-    "[calmly] Ink. A truce, this turn?"
+    "[calmly] Ink. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2276,7 +2716,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: the Witch deck)",
    "text": [
-    "[calmly] Witch. A truce, this turn?"
+    "[calmly] Witch. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2308,7 +2748,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: the Yore deck)",
    "text": [
-    "[calmly] Yore. A truce, this turn?"
+    "[calmly] Yore. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   },
@@ -2340,7 +2780,7 @@
    "category": "address",
    "when": "offers a named player a truce (color: five-colour)",
    "text": [
-    "[calmly] Five-colour. A truce, this turn?"
+    "[calmly] Five-colour. A truce, this round?"
    ],
    "source": "table-2026-09-10"
   }
