@@ -681,7 +681,8 @@ class SchedulerMixin:
         last = self._seat_last_class().get(int(seat))
         deal_line = (pid in DEAL_ANSWER_LINE.values() or pid in JOSHUA_DEAL_LINE.values() or pid == "deal-over"
                      or (pid == DEAL_PROPOSE_LINE and source == "brain"))
-        if since < self.barks_cooldown and pid not in OWN_ACTION_LINES and (last is None or last == cls):
+        own_words = pid in OWN_ACTION_LINES or pid.startswith("terms-")      # the duration is the tail of the accept line, not a new line (game 63)
+        if since < self.barks_cooldown and not own_words and (last is None or last == cls):
             if deal_line:
                 # game 55: "Deal, Selvala?" died to the guard 3 s after the seat's own line while the offer stood.
                 # A deal line is state: it waits out the guard instead of being dropped.

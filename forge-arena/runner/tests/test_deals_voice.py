@@ -159,6 +159,15 @@ class ADealFromTheSeat(_DealCase):
         self.assertEqual([n["kind"] for n in self._notes(1)], ["deal-struck"])
         self.assertEqual(self._queue(), [("deal-with-you", "harry/table", 1), ("terms-rounds-2", "harry/table", 1)], "the seat confirms the pact aloud, then says how long")
 
+    def test_the_spoken_duration_skips_the_seat_guard(self):
+        """Game 63: 'Deal.' then 'One round.' — the terms line came 0 s after the accept line and the seat guard
+        dropped it as 'optional after optional'. It is the tail of the same utterance and skips the guard."""
+        self.r._bark_spoken_at[1] = self.r.clock()                           # seat 1 just spoke
+        self.r._seat_last_class()[1] = "optional"
+        self.assertTrue(self.r.say_terms(1, {"rounds": 1}, {"until_turn": 7}, 3, other=0, source="chain"))
+        self.assertEqual(self._queue()[-1][:2], ("terms-rounds-1", "harry/table"))
+        self.assertEqual([r for r in self._records("skipped", "bark") if r.get("stock") == "terms-rounds-1"], [])
+
     def test_turns_resolve_at_the_strike_and_a_dead_until_turn_expires_instead(self):
         """Ben, 2026-09-18: a TURN is one player's turn on the turn counter, a ROUND one turn each. '3 turns' struck at
         turn 3 runs through turn 6; a named turn already behind us when the seat finally accepts is expired, not struck."""
