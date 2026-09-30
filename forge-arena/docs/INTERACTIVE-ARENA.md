@@ -2070,6 +2070,22 @@ Hard-won from two live sessions; read before optimizing anything.
     tracebacks. Shipped with `packaging/ship-release.sh`: dated + `-latest`,
     both byte-exact. Tag `v4.1` = 7ed30c62210.
 
+105. **v4.2.1 SHIPPED (2026-09-30 ~16:2x PDT) — the voices and the deals graduate to `-latest`.**
+    Built from `2be3a6344f9 (arena)` with `packaging/cut-release.sh` (new: the clean-tree check,
+    the builder, the packaging checks and the tar in one committed script). 54,728 entries, 843 MB
+    unpacked, **515,362,674 bytes**, sha256
+    `3f9cc5afc02fc0fdb4add1b29f169b09266201b7c79354f31d5e3fa6d02f092b`. Gate 485/485 on JDK 17,
+    Python suite 719. Checks: one fat jar (2.0.15), no home paths, no key shapes, ten decks, four
+    voice libraries, every manifest phrase baked, preflight OK from the package root. Acceptance:
+    an all-AI game FROM THE PACKAGE ROOT at the shipping defaults (chatter normal, barks some, no
+    ElevenLabs key): Giada t39, 397 decisions, 0 punts / timeouts / tracebacks, 5.5 seat lines a
+    minute. Shipped with `packaging/ship-release-s3.py … --latest`: dated object uploaded, `-latest`
+    set by server-side copy (its first live use), both downloaded back byte-exact. Since 4.2
+    Experimental: turns vs rounds, the spoken deal durations (55 takes a voice), the breaker's
+    note, the board staying put on the human's turn, the Treasure colour dialog (BL-60), rowdy a
+    tad louder, `gameId` in the snapshot. Bucket (Ben): v3.4, v4.0 and 4.2 Experimental removed —
+    it holds v4.1 dated, v4.2.1 dated and `-latest`, 1.1 GB. Tag `v4.2.1` = 2be3a6344f9.
+
 104. **v4.2 EXPERIMENTAL SHIPPED (2026-09-17 ~16:3x PDT).** Built from `c1d1dd1bcdc (arena)`
     after the fast-forward of `experimental/voicework2` (110 commits; revert tag
     `pre-voicework2-ff-20260917` = 3e037fdc9a9): the table's voices, card lines, deals both
