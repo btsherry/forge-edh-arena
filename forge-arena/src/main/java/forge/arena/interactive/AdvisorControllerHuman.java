@@ -604,6 +604,14 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
             if (!colors.hasAnyColor(mono)) {
                 return 0;
             }
+            // Game 63 (Ben, 2026-09-25): Tergrid had handed him Weathered Wayfarer, he sacrificed a Treasure for the
+            // {W} to activate it, and this auto-pick floated black — the play was gone. Off-colour mana is worthless
+            // only while everything he controls is in his commander's colour; a stolen or borrowed permanent
+            // outside it (or one in hand) brings the dialog back for the rest of the game.
+            if (controlsOffColor(getPlayer().getCardsIn(ZoneType.Battlefield), mono)
+                    || controlsOffColor(getPlayer().getCardsIn(ZoneType.Hand), mono)) {
+                return 0;
+            }
             if (feed != null && !colorPickNoted) {
                 colorPickNoted = true; // one receipt per game, then silent
                 feed.publishNote(getGame().getPhaseHandler().getTurn(),
@@ -614,6 +622,26 @@ public class AdvisorControllerHuman extends PlayerControllerHuman {
         } catch (RuntimeException failOpen) {
             return 0;
         }
+    }
+
+    /** True when any of {@code cards} carries a colour outside {@code mono} in its colour identity (its rules'
+     *  identity when it has rules, else its current colour — a token). Colourless cards never count. */
+    static boolean controlsOffColor(final Iterable<Card> cards, final byte mono) {
+        if (cards == null) {
+            return false;
+        }
+        for (final Card c : cards) {
+            forge.card.ColorSet cs = null;
+            try {
+                cs = c.getRules() != null ? c.getRules().getColorIdentity() : c.getColor();
+            } catch (RuntimeException ignored) {
+                cs = null;
+            }
+            if (cs != null && cs.countColors() > 0 && cs.getColor() != (cs.getColor() & mono)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
