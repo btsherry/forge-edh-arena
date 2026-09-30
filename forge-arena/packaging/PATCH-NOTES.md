@@ -1,9 +1,12 @@
 # forge-light-llm — Patch Notes
 
-## Unreleased — after v4.2 Experimental (2026-09-18)
+## v4.2.1 — 2026-09-30
 
-Small corrections from games 59–61, each verified against the archive that showed it; nothing
-here changes how the table plays.
+The voices and the deals graduate: this build is `-latest`. Everything 4.2 Experimental carried,
+plus the corrections below from games 59–63, each verified against the archive that showed it.
+It ships at the defaults it was tuned for — `ARENA_CHATTER=normal` (about three seat lines a
+minute at a human table; `rowdy` is opt-in and about twice that), `ARENA_BARKS=some`, the voices
+on, Joshua's live lines when an ElevenLabs key is set. One tarball, every voice bundled.
 
 - **The board stays put on your turn.** The match screen no longer brings a talking seat's tab
   forward while it is your turn (game 59: a seat spoke as you were paying for a spell and the
