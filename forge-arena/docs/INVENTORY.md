@@ -16,8 +16,8 @@ package), `packaging/PATCH-NOTES.md` (release history), `../BUILDING.md`
 
 The original "no parent-module patches" rule was deliberately dropped
 (first for the vanished-commander engine fix, 2026-08-17). The full delta
-outside `forge-arena/` (2026-10-02 recount against the base `a5f4f9e4796`:
-`git diff --name-status a5f4f9e4796..HEAD -- . ':(exclude)forge-arena'`) is
+outside `forge-arena/` (2026-10-02 recount; unchanged by the second sync, base
+now `fb4d8091126`: `git diff --name-status fb4d8091126..HEAD -- . ':(exclude)forge-arena'`) is
 **14 modified upstream files** (10 upstream Java files; plus `match.xml`, root
 `pom.xml`, root `.gitignore`, root `.gitattributes`), **14 new code files**
 parked in parent modules (1b), 10 `runs/*.json` batch templates + the

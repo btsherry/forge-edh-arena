@@ -1,28 +1,29 @@
 # UPSTREAM-SYNC — taking Card-Forge updates without harm
 
 *2026-08-17; re-audited 2026-08-24 against the full fork delta; rewritten
-2026-10-02 after a dry run of the second sync (reconnaissance only, nothing
-merged). Companion to [INVENTORY.md](INVENTORY.md) §1 (the authoritative
+2026-10-02 after a dry run of the second sync, which was then executed the
+same afternoon (the record is below). Companion to [INVENTORY.md](INVENTORY.md) §1 (the authoritative
 divergence list). Read both before ANY merge from upstream.*
 
-## The situation, plainly (as of 2026-10-02)
+## The situation, plainly (as of 2026-10-02, after the second sync)
 
 - We are a fork of [Card-Forge/forge](https://github.com/Card-Forge/forge)
   (`origin`), working on branch `arena`, pushed to `private`
   (btsherry/forge-edh-arena). **Never push to `origin`.** The local `master`
   branch is an upstream mirror; never commit to it.
-- Upstream base: **`a5f4f9e4796` (origin/master, 2026-09-10)** since the first
-  sync (branch `sync-20260910`, merged 2026-09-10; the original fork point was
-  `0eec0a16d0a`, 2026-07-15). `arena` (`3a10dafdf9b`, the game-64 fixes) is
-  **660 commits ahead** of that base (`git rev-list --count a5f4f9e4796..arena`).
-- Upstream head at the dry run: **`fb4d8091126` (2026-10-02)**, **356 commits**
-  past our base, 3,579 files changed (2,957 of them card scripts),
-  `<versionCode>` **2.0.15 → 2.0.16** (the stale-jar trap, below).
+- Upstream base: **`fb4d8091126` (origin/master, 2026-10-02)** since the
+  second sync (branch `sync-20261002`, merged 2026-10-02 at `81d7cea3d0f`,
+  tag `post-sync-20261002`; rollback tag `pre-sync-20261002` = `461735a2c48`).
+  Earlier bases: `a5f4f9e4796` (first sync, 2026-09-10) and the fork point
+  `0eec0a16d0a` (2026-07-15). `arena` is **663 commits ahead** of the base
+  (`git rev-list --count fb4d8091126..arena`). That sync took 356 upstream
+  commits, 3,579 files (2,957 card scripts), `<versionCode>` 2.0.15 → 2.0.16.
   `UpstreamMarkerTest` takes the live merge base with `origin/master` and
-  falls back to the constant `a5f4f9e4796`; after a sync the merge base moves
+  falls back to the constant `fb4d8091126`; after a sync the merge base moves
   by itself.
-- The divergence outside `forge-arena/` (INVENTORY §1, recounted 2026-10-02:
-  `git diff --name-status a5f4f9e4796..arena -- . ':(exclude)forge-arena'`):
+- The divergence outside `forge-arena/` (INVENTORY §1, recounted 2026-10-02 —
+  unchanged by the sync, every patch auto-merged:
+  `git diff --name-status fb4d8091126..arena -- . ':(exclude)forge-arena'`):
   - **14 modified upstream files**: 10 upstream Java files — `ComputerUtil`,
     `ComputerUtilMana`, `AiCostDecision`, `MyRandom`, `Combat`,
     `StaticAbilityTurnPhaseReversed`, `MagicStack`, `EDocID`, `CMatchUI`,
@@ -202,6 +203,7 @@ merge can invalidate without a conflict. The arbiter is the test; the column
 | `manaAbilityYield`, `producedColors`, `manaSources` (W-4) | `SpellAbility.metConditions()` (falls back to the host's controller when no activator is set — the "Did not have activator set" line), `AbilityManaPart`, `AbilityUtils.calculateAmount`; the two-part shape of `gemstone_caverns.txt` | a chained Mana part with an unmet condition adds nothing; the stock payer taps a luck-counter Caverns on its own | `ManaTableTest` (both Caverns tests) | `SpellAbilityCondition`, `AbilityManaPart` unchanged; `gemstone_caverns.txt` unchanged |
 | `mailboxManaX` / `announceRequirements` | `SpellAbility.getPayCosts().hasXInAnyCostPart`, `ComputerUtilMana.determineLeftoverMana` | a loyalty X is not a mana X | `ManaTableTest.loyaltyXIsNotAManaX` | `ComputerUtilMana` unchanged upstream |
 | the FIZZLE / TARGETLOSS diagnostics | our `MagicStack` patch, `SpellAbilityStackInstance` | the fizzle branch still exists where we re-add the print | (log) | `MagicStack` +79 −77: the undo stack moved to its own service; the patched hunk auto-merged |
+| `chooseNewTargetsForCopy` (our verbatim port, since this sync) | `PlayerControllerAi.chooseNewTargetsForCopy` (private upstream) | the copy branch of `orderAndPlaySimultaneousSa` matches stock's | `ScepterCopyCastTest` (reading) | ported from `f12cd05dbe1`; re-diff at every sync |
 | `AdvisorControllerHuman` (the human seat: auto-pick colour, off-colour guard, BL-60) | `PlayerControllerHuman` (overridden methods' signatures) | overrides still match | `OffColorControlTest`, `ColorChoiceWindowTest` | `PlayerControllerHuman` +139 −83 — compiled clean in the probe |
 | every `PlayerController` subclass of ours (`MailboxController`, `AdvisorControllerHuman`, `ComboAwareLobbyPlayer`, `GoldfishLobbyPlayer`) | `PlayerController` abstract surface | no new abstract method is left unimplemented | (compile) | **three new abstract methods** (`chooseSticker`, `chooseStickerNamePosition`, `chooseCardToKeepStickers`, `5e3caa29a7d` Unfinity stickers) — implemented in `PlayerControllerAi`/`Human` upstream, so ours inherit them; compiled clean |
 | Test fixtures on real cards | `res/cardsfolder`: Frost Breath, Tezzeret the Seeker, Shatterskull Smashing, Bogardan Hellkite, Electrolyze, Gemstone Caverns, Savannah Lions, Llanowar Elves, Grizzly Bears, Hill Giant, Gray Ogre, Mind Stone, Grim Monolith, Sol Ring, Mox Opal, Walking Ballista, Generous Gift, Winter Orb, Rhystic Study, Tidespout Tyrant, Counterspell | the scripts keep their target shape and costs | the tests themselves | all unchanged between the base and `fb4d8091126` |
@@ -278,13 +280,14 @@ those, no shipped deck plays stickers).
 **5) Gates, in order — all must pass before touching `arena`:**
 ```sh
 export JAVA_HOME=/usr/local/Cellar/openjdk@17/17.0.18/libexec/openjdk.jdk/Contents/Home
-mvn -q -pl forge-gui-desktop clean                      # BL-47: upstream bumped <versionCode>; drop the old fat jar first
+rm forge-gui-desktop/target/forge-gui-desktop-<OLD rev>-SNAPSHOT*.jar forge-arena/target/forge-arena-<OLD rev>-SNAPSHOT.jar   # BL-47: the old revision's jars (mvn -o clean may fail offline)
 mvn -pl forge-arena -am package -Darena.excluded.groups=headless-scenario; echo "GATE $?"
 #   ONLINE the first time after a sync (new upstream dependencies), -o again afterwards;
 #   no -DskipTests: the sync must re-run the upstream modules' tests too (BUILDING.md gate policy);
 #   then: grep -o 'testng-results[^>]*' forge-arena/target/surefire-reports/testng-results.xml  and check the file's timestamp
 ( cd forge-arena/runner && python3 -m unittest discover -s tests ); echo "PY $?"      # 744 — our code, but the brief/help text pins it
 ls forge-gui-desktop/target/*.jar                       # exactly one revision's jars
+mvn -o -q -pl forge-arena -am -DskipTests prepare-package   # ONLY if the gate was red: it regenerates target/classpath.txt, which the ingest needs
 for d in forge-arena/decks/*/; do echo $d; done         # re-ingest every shipped deck (card scripts moved):
 #   forge-arena/scripts/arena-add-deck.py <dck> --slug <slug> --manifest-only   (four decks need --slug, 2026-09-10)
 forge-arena/runner/run_table.sh --preflight
@@ -323,21 +326,35 @@ the gate: BL-47 — upstream's `<revision>` bump left a stale fat jar beside the
 new one and the launcher's first-match glob loaded it (`NoSuchMethodError`
 mid-game). Budget: about six hours wall-clock including games.
 
-## The second sync — dry run only (2026-10-02), what it adds to the record
+## The second sync, as it happened (2026-10-02 15:25–16:10) — the record
 
-- The trial merge was clean and the probe gate green for every interactive
-  class (details in the reconnaissance section). Expect: one online Maven
-  run; `mvn clean` of `forge-gui-desktop` for the 2.0.16 jar; the
-  `chooseNewTargetsForCopy` port into our `orderAndPlaySimultaneousSa` copy;
-  a re-read of `handlePlayingSpellAbility` (our rollback hook's host moved
-  +73 −38); re-ingest of the decks (2,957 card scripts changed).
-- Semantics worth a deliberate look in the first live game after the merge:
-  the target lifecycle (`resetOnceResolved` no longer resets targets), the
-  copy-targeting branch, and `SpellAbility.canCastTiming`'s reordering
-  (`activator.canCastSorcery()` is now checked last) — none of them failed a
-  test, all of them sit under seams the brains use every turn.
-- Nothing in `forge-arena/` needs re-applying; the game-64 fixes
-  (`3a10dafdf9b`) are entirely inside it and passed on the merged tree.
+Dry run in the morning (the reconnaissance section), executed on Ben's go
+the same afternoon, by the lean plan: push + tag `pre-sync-20261002` →
+branch, merge (clean; tree = the dry run's plus the docs commit, so no
+textual review) → hand work: `chooseNewTargetsForCopy` ported verbatim into
+our `orderAndPlaySimultaneousSa` copy, the rollback hook's new surroundings
+read (intact, it clears targets itself), `UpstreamMarkerTest.UPSTREAM_BASE`
+→ `fb4d8091126`, stale 2.0.15 jars deleted by hand → gate 493/494: the one
+red was `UrzaManaLoopTest` (a seeded scenario, storm stage 0 casts after the
+engine upgrade) → fenced `headless-scenario` as **HL-22**, never patched →
+Python 744 → ten decks re-ingested `--manifest-only`, every card resolved →
+certification gate 493/493, exit 0 → one all-AI smoke game (game 65: Urza won
+at turn 15 with an Aetherflux Reservoir loop, 885 decisions, 0 punts / 0
+deviations / 0 Java exceptions / 0 lost windows; voice 5.6 lines/min) →
+fast-forward, tag, push. Budget: 45 minutes of work plus a 14-minute game.
+Two lessons, both now in the procedure above:
+- **`forge-arena/target/classpath.txt` is written at `prepare-package`.** A
+  gate that fails at the test phase never reaches it, so the file stays
+  stale — and `arena-add-deck.py` then starts Forge with the OLD jars
+  (`ClassNotFoundException: forge.GuiDesktop` after the 2.0.15 jars were
+  deleted). Regenerate with `mvn -o -pl forge-arena -am -DskipTests
+  prepare-package` before any re-ingest that follows a red gate.
+- **`mvn -o clean` can fail offline** (the clean plugin was never cached);
+  deleting the old revision's jars by hand is equivalent and quicker.
+- The smoke game never played an "up to N" card, so the new multi-target
+  window was exercised on the upgraded engine by `OptionalAndMultiTargetTest`
+  (7 cases, all green), not live; the first live Tezzeret +1 or Shatterskull
+  Smashing on this base is still to be seen.
 
 ## Seeded scenario tests drift under engine upgrades (learned 2026-09-10)
 
