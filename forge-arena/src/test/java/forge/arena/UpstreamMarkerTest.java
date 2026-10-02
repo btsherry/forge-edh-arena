@@ -24,8 +24,8 @@ import org.testng.annotations.Test;
 public class UpstreamMarkerTest {
 
     /** Fallback when origin/master is not fetched: the upstream commit of the
-     *  latest sync (2026-09-10). Prefer the live merge base with origin/master. */
-    static final String UPSTREAM_BASE = "a5f4f9e4796";
+     *  latest sync (2026-10-02). Prefer the live merge base with origin/master. */
+    static final String UPSTREAM_BASE = "fb4d8091126";
 
     @Test
     public void everyModifiedUpstreamSourceCarriesAMarker() throws Exception {

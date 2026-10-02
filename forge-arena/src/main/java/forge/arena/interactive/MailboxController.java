@@ -3420,13 +3420,48 @@ public final class MailboxController extends PlayerControllerAi
                         }
                     }
                     if (sa.isMayChooseNewTargets()) {
-                        forge.game.spellability.TargetChoices tc = sa.getTargets();
-                        if (!sa.setupTargets()) {
-                            sa.setTargets(tc);
-                        }
+                        chooseNewTargetsForCopy(sa); // upstream's branch, ported at the 2026-10-02 sync
                     }
                 }
                 game.getStack().add(sa);
+            }
+        }
+    }
+
+    /**
+     * Verbatim port of stock {@code PlayerControllerAi.chooseNewTargetsForCopy}
+     * (upstream f12cd05dbe1, "AI: give spell copies useful new targets", taken
+     * at the 2026-10-02 sync — the method is private there): a copy that may
+     * choose new targets is re-aimed by the AI heuristics (mandatory for a
+     * copy of an opponent's spell, optional for our own) and keeps its old
+     * targets when they fail. Stock, not the seat, aims copies for now — a
+     * candidate mailbox surface (BUG-LOG W-23).
+     */
+    private void chooseNewTargetsForCopy(final SpellAbility copy) {
+        List<forge.game.spellability.TargetChoices> oldTargets = new ArrayList<>();
+        boolean targetingPlayer = false;
+        for (SpellAbility s = copy; s != null; s = s.getSubAbility()) {
+            oldTargets.add(s.getTargets());
+            targetingPlayer |= s.hasParam("TargetingPlayer");
+        }
+        boolean chosen;
+        if (targetingPlayer) {
+            chosen = copy.setupTargets(); // another player picks the targets
+        } else {
+            for (SpellAbility s = copy; s != null; s = s.getSubAbility()) {
+                s.clearTargets();
+            }
+            Card original = copy.getHostCard().getCopiedPermanent();
+            boolean ownSpell = (original != null ? original : copy.getHostCard()).getController().equals(getPlayer());
+            chosen = getAi().doTrigger(copy, !ownSpell);
+            for (SpellAbility s = copy; chosen && s != null; s = s.getSubAbility()) {
+                chosen = !s.usesTargeting() || s.isTargetNumberValid();
+            }
+        }
+        if (!chosen) {
+            int i = 0; // keep the old targets, even if illegal (stock's rule)
+            for (SpellAbility s = copy; s != null; s = s.getSubAbility()) {
+                s.setTargets(oldTargets.get(i++));
             }
         }
     }
