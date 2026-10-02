@@ -24,9 +24,9 @@ block is "no blocks". The table is in `forge-arena/runner/seatd/seat-brief.md`
 and pinned by a test; `PATCH-NOTES.md` lists every surface.
 
 **Download:** [forge-light-llm-latest.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-latest.tar.gz)
-(the current release; **v4.2.1**, 2026-09-30, ~480 MB — every voice bundled). Each release also
+(the current release; **v4.3**, 2026-10-02, ~490 MB — every voice bundled). Each release also
 keeps its dated object, this one
-[forge-light-llm-20260930.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-20260930.tar.gz);
+[forge-light-llm-20261002.tar.gz](https://pub-6a4e610a9fd04c94b51eb95344c3013f.r2.dev/forge-light-llm-20261002.tar.gz);
 `PATCH-NOTES.md` inside says which version you have. Unpack anywhere:
 `tar xzf forge-light-llm-latest.tar.gz`.
 

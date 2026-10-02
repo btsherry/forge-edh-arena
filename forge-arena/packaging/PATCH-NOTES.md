@@ -1,5 +1,45 @@
 # forge-light-llm — Patch Notes
 
+## v4.3 — 2026-10-02
+
+Every target is the seat's, and the engine is current. Two days of work on one all-AI game
+(64, watched play by play) and a second sync with upstream Forge, each verified against the
+archive that showed it and on the merged engine. Defaults unchanged: `ARENA_CHATTER=normal`,
+`ARENA_BARKS=some`, the voices on, Joshua's live lines when an ElevenLabs key is set.
+
+- **Optional and multiple targets reach the brain.** A spell or ability with "up to N" or
+  "any number of" targets used to resolve at nothing, with no window and no log line: Urza's
+  Tezzeret the Seeker untapped no artifacts (game 64, turn 15) and Purphoros's Shatterskull
+  Smashing dealt no damage to the one blocker in its way (turn 36). Every targeting part now
+  opens one window with the legal picks, `[]` is a legal answer when the minimum is zero, and a
+  divided amount is split by the seat itself, one number per target but the last. A required
+  divided spell (Electrolyze and its kind) was never aimed either; it is now. With no usable
+  answer an optional aim proceeds untargeted and a required one is aimed by stock and checked.
+- **The pass memo sees a new spell.** A seat that passed with a spell on the stack, passed again
+  with an opponent's response above it, and then saw the same stack once the response resolved
+  was answered from memory without a model call (game 64, turn 21: Kabira Takedown fizzled on a
+  hexproof the memo could not see). A stack object the seat has not seen this turn now clears
+  the memory; loops and cascades keep theirs.
+- **Small talk opens no deals.** Two of game 64's three truces came from a filler "Deal?" neither
+  brain chose; one of them was struck four seconds after the replier's attack had been declared
+  and was marked broken at once. The filler pool no longer says "deal" (a seat's own line still
+  can), a spoken truce is settled only after the table has been read again, never between the
+  last two seats and never across an attack that came after the words, and its "One round." is
+  always spoken and never after the deal has ended.
+- **Gemstone Caverns is one mana.** The seat's mana table summed the card's two conditional
+  parts and told the brain two mana, with "[currently adds 2 mana]" on the option; Giada planned
+  a seven-mana Final Showdown on six (game 64, turn 22). One part is live at a time.
+- **Seats may offer a deal once a round** (the cooldown was six turns, now four): at a table of
+  four that is one offer per own turn instead of every other.
+- **Engine: upstream Forge of 2026-10-02** (356 commits, about 3,000 card scripts, Forge
+  2.0.16): the sticker rules, the AI's new targeting for spell copies, the reworked equipment
+  and aura statics, and the cards of the sets since mid-September. Every arena patch and every
+  interactive test came through unchanged; the decks were re-verified card by card.
+
+Known limits, logged: a second object with a name the memo has already seen this turn does not
+clear it; a loop that includes a multi-target ability is not fast-forwarded; a Spree spell's
+option shows its base cost only.
+
 ## v4.2.1 — 2026-09-30
 
 The voices and the deals graduate: this build is `-latest`. Everything 4.2 Experimental carried,
