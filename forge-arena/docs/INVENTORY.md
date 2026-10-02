@@ -16,14 +16,15 @@ package), `packaging/PATCH-NOTES.md` (release history), `../BUILDING.md`
 
 The original "no parent-module patches" rule was deliberately dropped
 (first for the vanished-commander engine fix, 2026-08-17). The full delta
-outside `forge-arena/` (2026-09-10 recount after the first upstream sync, against the NEW base: `git diff --name-status
-a5f4f9e4796..HEAD -- . ':(exclude)forge-arena'`) is 12 modified upstream files
-(9 upstream Java files; plus `match.xml`, root `pom.xml`, root `.gitignore`),
-10 new code files parked in parent modules (1b — `HotkeyGuard` joined 09-06),
-10 `runs/*.json` batch templates + the historical `UPSTREAM-PATCHES.md` at
-root. Every modified upstream Java file and `pom.xml` now carries an
-`[arena]`/`ARENA-PATCH` marker (the last three were marked 2026-09-09), and
-`UpstreamMarkerTest` fails the gate if one is missing.
+outside `forge-arena/` (2026-10-02 recount against the base `a5f4f9e4796`:
+`git diff --name-status a5f4f9e4796..HEAD -- . ':(exclude)forge-arena'`) is
+**14 modified upstream files** (10 upstream Java files; plus `match.xml`, root
+`pom.xml`, root `.gitignore`, root `.gitattributes`), **14 new code files**
+parked in parent modules (1b), 10 `runs/*.json` batch templates + the
+historical `UPSTREAM-PATCHES.md` at root. Every modified upstream Java file and
+`pom.xml` carries an `[arena]`/`ARENA-PATCH` marker (all 11 since 2026-09-09),
+and `UpstreamMarkerTest` fails the gate if one is missing. The game-64 work of
+2026-10-02 touched no parent-module file.
 
 ### 1a. MODIFIED upstream files (merge-conflict surface — see UPSTREAM-SYNC.md)
 
@@ -36,10 +37,13 @@ root. Every modified upstream Java file and `pom.xml` now carries an
 | `forge-core/.../MyRandom.java` | +36 −6 | **BEHAVIORAL** | Seedable RNG (`setSeed`) for reproducible headless batches (Project 1). | ✓ (ARENA-PATCH) | `SeedDeterminismTest` |
 | `forge-game/.../Combat.java` | +6 −1 | Defensive fix | `getAttackers` snapshot vs concurrent modification crash. Upstream-worthy. | ✓ | (crash class) |
 | `forge-game/.../StaticAbilityTurnPhaseReversed.java` | +34 −7 | Defensive fix | Crash guard + value-based pair choice. Upstream-worthy. | ✓ | PR-49 tests |
-| `forge-gui-desktop/.../EDocID.java` | +2 | GUI wiring | Registers the Advisor + AI-panel dock tabs. | **unmarked** | (compile) |
-| `forge-gui-desktop/.../CMatchUI.java` | +6 | GUI wiring | Instantiates the two arena dock tabs. | **unmarked** | (compile) |
+| `forge-gui-desktop/.../EDocID.java` | +2 | GUI wiring | Registers the Advisor + AI-panel dock tabs. | ✓ (2) | (compile) |
+| `forge-gui-desktop/.../CMatchUI.java` | +7 | GUI wiring | Instantiates the two arena dock tabs. | ✓ (3) | (compile) |
 | `forge-gui-desktop/.../sound/AudioClip.java` | +7 −1 | **BEHAVIORAL** (audio) | **BL-56 (2026-09-17):** `getAudioClips` decodes effect MP3s to 16-bit PCM (`Converter.withTargetFormat`) instead of the converter's 8-bit default — 8-bit forced Java Sound's software mixer (impulses, held samples, overlapping effects summed to overload) and a 48 dB quantization floor. Measured through a loopback. Upstream-worthy (Card-Forge #8857). | ✓ | `AudioDecodeFormatTest` (device-free: asserts the decoded format); the loopback probe under `scripts/research/sound/` is manual research only |
 | `forge-gui/res/defaults/match.xml` | — | GUI layout | Pilot-tuned default match layout (the only `res/` divergence). | — | (none) |
+| root `.gitattributes` | +3 | Repo infra | `*.wav` / `*.mp3` marked binary (voice takes, 2026-09-14). Union-merge. | — | (none) |
+| root `.gitignore` | block | Repo infra | The arena transient-output block. Union-merge. | — | (none) |
+| root `pom.xml` | +2 | Build | `<module>forge-arena</module>` in the reactor. Union-merge; upstream bumps `<versionCode>` here (stale-jar trap, BL-47). | ✓ | `UpstreamMarkerTest` |
 
 ### 1b. NEW files in parent modules (zero merge-conflict surface)
 
@@ -52,8 +56,12 @@ root. Every modified upstream Java file and `pom.xml` now carries an
 | `forge-gui-desktop/.../forge/arena/interactive/AdvisorLogTail.java` | gui-desktop | Advisor tab's log tailer. |
 | `forge-gui-desktop/.../controllers/CAiControl.java` + `views/VAiControl.java` | gui-desktop | AI dock tab (steppers, telemetry, ELO). |
 | `forge-gui-desktop/.../controllers/CAdvisor.java` + `views/VAdvisor.java` | gui-desktop | Advisor dock tab (+ three-state pause button: OFF-not-attached / ON / PAUSED, 2026-08-31). |
+| `forge-gui-desktop/.../forge/arena/interactive/HotkeyGuard.java` | gui-desktop | Hotkey guard for the match screen (2026-09-06). |
+| `forge-gui-desktop/.../forge/arena/interactive/DealQuestion.java` + `views/VDealOffer.java` | gui-desktop | The offer pane (a seat's deal to the player: Accept / Refuse / Counter…, 2026-09-16) and its question file. |
+| `forge-gui-desktop/.../forge/arena/interactive/FlatJson.java` | gui-desktop | The one flat-JSON reader the desktop files share (2026-09-18). |
+| `forge-gui-desktop/.../forge/arena/interactive/VoiceFocus.java` | gui-desktop | `followsNow(active, humanGame)`: the tab follows the speaking seat except on the human's turn (2026-09-18). |
 
-Nine files in eight rows (the two dock tabs are a controller + view pair each).
+Fourteen files in twelve rows (the two dock tabs and the offer pane are controller + view pairs).
 
 ### 1c. ArchUnit boundary
 `src/test/java/forge/arena/ArchitectureTest.java` enforces two rules. (1) No
