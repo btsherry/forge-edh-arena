@@ -373,6 +373,7 @@ class FastpathHandoff(unittest.TestCase):
         r = make_runner()
         r.handle(cast(0))                                  # the turn boundary clears the memo: set the turn first
         r.react_seen.add(r._react_signature(react(1)))
+        r._stack_names_seen |= {str(n) for n in react(1)["state"].get("stack") or []}   # BL-62: a memoised pass has seen its stack
         r.handle(react(1))
         self.assertEqual(r.records[-1][2], "memo")
         offer(r)
@@ -433,7 +434,7 @@ class TermsAndNames(unittest.TestCase):
 
 class SeatOffers(unittest.TestCase):
     """Ben, 2026-09-16: seats offer each other, and the player, deals. The propose key is offered on a
-    main-phase window from turn 3, one open offer at a time, six turns apart; the proposal is a
+    main-phase window from turn 3, one open offer at a time, four turns apart (six until 2026-10-02); the proposal is a
     deal-offer note in the other party's mailbox plus a DEAL record with "propose"; the answer comes
     back as a deal-struck or deal-refused note."""
 
@@ -467,8 +468,10 @@ class SeatOffers(unittest.TestCase):
         self.assertEqual(r._mine(), {}, "unanswered for a turn: forgotten (the other side lapsed it)")
         self.assertIn("went unanswered", "\n".join(r.log_lines))
         self.assertNotIn("DEAL OFFER", r.brain.last_prompt, "two turns on: the cooldown holds")
-        r.handle(cast(6, turn=11))
-        self.assertIn("DEAL OFFER", r.brain.last_prompt, "six turns on: it may offer again")
+        r.handle(cast(6, turn=8))
+        self.assertNotIn("DEAL OFFER", r.brain.last_prompt, "three turns on: still held (both archive drops sat here)")
+        r.handle(cast(7, turn=9))
+        self.assertIn("DEAL OFFER", r.brain.last_prompt, "four turns on — one round at a four-seat table: it may offer again")
 
     def test_a_proposal_off_its_window_or_malformed_is_dropped_with_a_log_line(self):
         r = make_runner()

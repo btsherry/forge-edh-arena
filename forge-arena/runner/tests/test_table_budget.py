@@ -194,7 +194,8 @@ class LeanerBags(_TreeCase):
         w = {pid: wgt for _, pid, _, wgt in cands}
         self.assertAlmostEqual(w["nothing-happening"], 0.125); self.assertAlmostEqual(w["this-is-fine"], 0.125)
         self.assertAlmostEqual(w["good-hand"], 0.05); self.assertAlmostEqual(w["what-turn"], 0.075)
-        self.assertAlmostEqual(w["deal"], 0.25); self.assertAlmostEqual(w["pass-already"], 0.5)
+        self.assertNotIn("deal", w, "the filler pool opens no deal (Ben, 2026-10-02: game 64's two patter truces)")
+        self.assertAlmostEqual(w["pass-already"], 0.5)
 
     def test_the_chain_table_is_pruned_but_the_anchored_openers_keep_their_replies(self):
         table = json.loads((Path(__file__).resolve().parents[1] / "voice" / "stock" / "voices" / "chains.json").read_text())

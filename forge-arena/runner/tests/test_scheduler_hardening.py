@@ -355,7 +355,8 @@ class FloorPool(_TableCase):
 
     def test_the_anchored_set(self):
         self.assertTrue({"whats-your-life", "cards-in-hand", "low-life-jab", "empty-hand", "youre-the-threat", "kill-that", "someone-wins",
-                         "pass-already", "deal"} <= sch.ANCHORED_PATTER)
+                         "pass-already"} <= sch.ANCHORED_PATTER)
+        self.assertNotIn("deal", sch.ANCHORED_PATTER, "the patter clock opens no deal (2026-10-02)")
         self.assertFalse(set(FILLER) & sch.ANCHORED_PATTER)
 
 
@@ -524,7 +525,7 @@ HEAD_TRACE_60S = [
     None, None, None,                                                      # three proposals: three different retorts from the subject
     True, False,                                                           # the afterthought, then the same
     False,                                                                 # 59 s: the filler is still spent
-    10,                                                                    # the pool at 60 s
+    8,                                                                     # the pool at 60 s (10 until 2026-10-02: the two filler "deal" candidates left the pool)
     [("land-go", 2), ("im-not-the-threat", 2), ("clapback", 2), ("you-wish", 2), ("slow-turn", 2)],
     [("nothing-happening", 1, ""), ("nothing-happening", 1, "already said this turn"), ("nothing-happening", 1, "evicted by land-go"),
      ("land-go", 2, ""), ("land-go", 2, "already said this turn"),

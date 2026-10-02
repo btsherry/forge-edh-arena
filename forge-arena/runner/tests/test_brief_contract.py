@@ -37,6 +37,8 @@ class BriefMatchesSafeDefault(unittest.TestCase):
              {"chosen": [11]}),
             ("nothing when min is 0", req("CHOOSE_ENTITIES", [11, 12], {"min": 0, "max": 2}),
              {"chosen": []}),
+            ("the engine's stock aim — a punt never aims your spell",
+             req("CHOOSE_ENTITIES", [1, 2, 3], {"min": 1, "max": 2, "purpose": "TARGETS"}), {"chosen": [1], "punt": True}),
             ('"none" when offered', req("CHOOSE_ENTITY", [0, 11, 12], {"min": 0, "max": 1}),
              {"chosenId": 0}),
             ("else the FIRST legal option", req("CHOOSE_CARD", [11, 12], {"min": 1, "max": 1}),

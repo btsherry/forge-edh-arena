@@ -89,6 +89,7 @@ class SeatRunner:
         # Consumed locally under the four-part guard; discarded on any divergence.
         self.plan: dict | None = None
         self.react_seen: set[tuple] = set()
+        self._stack_names_seen: set[str] = set()   # BL-62: every stack object name shown to this seat this turn
         # Repeat rule (2026-09-07, game 25 t23): the last MODEL pass of a
         # resourceless, tap-only REACT window this turn — (turn, option set,
         # own life). Cleared with the turn.
@@ -580,7 +581,7 @@ class SeatRunner:
                          for c in (o.get("battlefield") or []) if isinstance(c, dict)}
                 for cid in chosen or []:
                     m = self._SEAT_IN_LABEL.search(str((opts.get(cid) or {}).get("label", "")))
-                    if cid in perms or (m and int(m.group(1)) == other):
+                    if cid in perms or (m and int(m.group(1) or m.group(2)) == other):      # "(seat n)" or the engine's "-S<n>"
                         return f"target {self._party_name(other, req)}"
         return None
 
@@ -878,6 +879,31 @@ class SeatRunner:
         tgts = json.dumps(st.get("stackTargets"), sort_keys=True, default=str)
         return (req.get("turn"), req.get("phase"), stack, opts, lives, pool,
                 combat, tgts)
+
+    def _note_stack_names(self, req: dict) -> None:
+        """BL-62 (game 64 t21): the memo's signature cannot see that something RESOLVED between two
+        windows that look alike. Giada passed with her Kabira Takedown on the stack, passed again with
+        Collective Resistance above it (meaning to answer once it resolved), and the window after it
+        resolved matched the first one: memo-passed, the model never asked, Takedown fizzled on the new
+        hexproof. Rule: a stack object whose NAME this seat has not seen on the stack this turn is a new
+        spell or ability that may change the board when it resolves, so every pass memoised before it
+        is forgotten. A loop or a cascade repeats names it has already shown and keeps its memo
+        (BL-52's Ignus loop, the myriad cascade); the turn boundary clears both sets. The auto-yield (and
+        its engine mirror) and the tap-pass repeat are passes remembered the same way and are forgotten
+        with it (review 2026-10-02: a yielded trigger under a new spell was yielded again once it resolved).
+        Known limit: a SECOND object with a name already seen this turn (the same ability activated twice)
+        is not new by this rule; a rule that also caught it would clear on every lap of a loop."""
+        names = {str(n) for n in ((req.get("state") or {}).get("stack") or [])}
+        seen = getattr(self, "_stack_names_seen", None)
+        if seen is None:
+            seen = self._stack_names_seen = set()          # a runner built without __init__ (offline tests)
+        if names - seen:
+            seen |= names
+            self.react_seen.clear()
+            self._tap_pass = None
+            if getattr(self, "_yielded", None):
+                self._yielded = {}
+                self._publish_yields()
 
     @staticmethod
     def _life_bucket(life):
@@ -1997,6 +2023,7 @@ class SeatRunner:
             self.plan = None
             self.hold = None
             self.react_seen.clear()
+            self._stack_names_seen = set()
             self.order_memo.clear()
             self.cycle = None
             self._hist = []
@@ -2016,6 +2043,7 @@ class SeatRunner:
             self._last_turn = req.get("turn")
             self._maybe_rotate()   # turn boundary: the preferred moment
             self.react_seen.clear()
+            self._stack_names_seen = set()
             self.order_memo.clear()
             self._tap_pass = None
             self._yielded = {}
@@ -2055,6 +2083,7 @@ class SeatRunner:
         # used to persist across fastpath/plan/cycle/punt records (no model
         # call) and get stamped onto every one of them.
         self._deviation = None
+        self._note_stack_names(req)                    # BL-62: every window, before any memo or cycle replay
 
         # Guard #4: any opponent instant-speed action during our own turn shows
         # up as a REACT req — it invalidates the executable plan wholesale (the

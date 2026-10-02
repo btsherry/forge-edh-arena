@@ -2070,6 +2070,26 @@ Hard-won from two live sessions; read before optimizing anything.
     tracebacks. Shipped with `packaging/ship-release.sh`: dated + `-latest`,
     both byte-exact. Tag `v4.1` = 7ed30c62210.
 
+106. **Game 64 and its fixes (2026-10-02) — every target is the seat's, however many.**
+    An all-AI watch game on v4.2.1 (Giada at turn 45 from 2 life) showed one
+    seam gap twice: a spell or ability with OPTIONAL targets ("up to two target
+    artifacts", "up to two target creatures") was never aimed and resolved at
+    nothing, with no window and no log line; and anything with more than one
+    target was aimed by stock. Now the cast path asks whenever a targeting part
+    holds no target, and a part with several targets opens ONE
+    `CHOOSE_ENTITIES` window (`state.purpose = "TARGETS"`, `min..max`, `[]`
+    legal at min 0). A divided amount (`state.divide`) is split by the seat in
+    `CHOOSE_NUMBER` "DIVIDE" windows, one per pick but the last. An optional aim
+    with no usable answer proceeds untargeted; a required one goes to stock and
+    is checked. Same round: the pass memo forgets its passes when a new spell
+    name appears on the stack; the small-talk truce is settled after the
+    snapshot (held through the active party's attack declaration) and the
+    filler pool no longer says "deal"; the spoken duration is state; Gemstone
+    Caverns counts as one mana; `PROPOSE_EVERY_TURNS` 6 → 4. Reviewed by one
+    Fable 5.1 agent and Gemini 3.1 Pro (BUG-LOG, closed 2026-10-02; limits in
+    W-22). Tests: `OptionalAndMultiTargetTest`, `ManaTableTest`,
+    `test_game64_fixes.py`; runner suite 744, Maven gate 494.
+
 105. **v4.2.1 SHIPPED (2026-09-30 ~16:2x PDT) — the voices and the deals graduate to `-latest`.**
     Built from `2be3a6344f9 (arena)` with `packaging/cut-release.sh` (new: the clean-tree check,
     the builder, the packaging checks and the tar in one committed script). 54,728 entries, 843 MB

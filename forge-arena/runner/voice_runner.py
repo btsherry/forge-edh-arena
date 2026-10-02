@@ -958,6 +958,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             self.scan_observer()
             self.scan_game_log(voice=False)
             self.scan_deal_control()
+            self.settle_smalltalk_truce()                # a truce spoken just before the mute is still struck or dropped
             skipped = len(self._tail(self.logs / "advisor-0.jsonl", "advisor"))
             if skipped:
                 self.record("dropped", kind="advice", why=f"voice disabled: {skipped} advisor record(s) not read")
@@ -975,6 +976,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.scan_observer()
         self.scan_game_log()
         self.scan_deal_control()                     # the player's acceptance of a seat's counter (logs/control/deal/, §11)
+        self.settle_smalltalk_truce()                # BL-63: after the snapshot that follows the reply, and after any deal a brain or the player struck
         self.mutter()
         self.heckle_human()                          # "we're waiting on you" (Ben: heckles are welcome; Joshua never answers)
         self.patter()

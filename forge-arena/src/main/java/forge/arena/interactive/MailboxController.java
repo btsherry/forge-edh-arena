@@ -1054,8 +1054,26 @@ public final class MailboxController extends PlayerControllerAi
         Card host = sa.getHostCard();
         boolean requiredTargets = tgt != null && host != null
                 && tgt.getMinTargets(host, sa) > 0;
-        if (requiredTargets && !sa.isTargetNumberValid()) {
-            if (!chooseTargetsFor(sa)) {
+        // BL-61 (game 64, 2026-10-02): an OPTIONAL root target ("up to N target …",
+        // TargetMin 0) was never aimed — this gate asked only when a target was
+        // required, and the AI cast path runs no chooser — so Tezzeret the Seeker's
+        // "+1: Untap up to two target artifacts" and Shatterskull Smashing resolved
+        // at nothing, with no window and no log line. The root is now aimed like
+        // the sub-parts below: asked whenever it targets and holds no target yet;
+        // only a REQUIRED target left unanswered keeps the card in hand. (A part
+        // whose targets another player chooses stays with the engine.)
+        // A REQUIRED target is asked for when none is chosen as well as when the
+        // count is invalid: Forge's isTargetNumberValid() reads a DIVIDED part as
+        // valid until its amount has been computed, so Electrolyze-class spells
+        // ("divided among one or two targets") skipped this gate and fizzled
+        // untargeted — found by this change's own punt test, 2026-10-02.
+        boolean noTargets = sa.getTargets() == null || sa.getTargets().isEmpty();
+        boolean optionalUnaimed = tgt != null && host != null && !requiredTargets
+                && sa.usesTargeting() && !sa.hasParam("TargetingPlayer") && noTargets;
+        if (requiredTargets && (noTargets || !sa.isTargetNumberValid()) || optionalUnaimed) {
+            boolean aimed = chooseTargetsFor(sa);
+            if (requiredTargets && (!aimed || sa.getTargets() == null || sa.getTargets().isEmpty()
+                    || !sa.isTargetNumberValid())) {
                 sa.resetTargets();
                 return true;
             }
@@ -1334,6 +1352,256 @@ public final class MailboxController extends PlayerControllerAi
     }
 
     /**
+     * BL-61 (game 64, 2026-10-02): the seat aims a part with SEVERAL targets
+     * ("up to two target artifacts", "any number of target creatures", "two
+     * target players"). One CHOOSE_ENTITIES window, purpose TARGETS, over the
+     * same candidates and labels as the single-target window; the answer is a
+     * list of DISTINCT option ids, in the seat's order, {@code min..max} long
+     * ({@code []} = no targets when the minimum is 0, or a decline of the
+     * seat's own optional trigger). Each pick is re-checked against the picks
+     * before it with the engine's own {@code canTarget} — "different
+     * controllers", "same creature type", total-CMC and the other relational
+     * restrictions are all decided there — and a pick it rejects is dropped,
+     * the rest stand. With no usable answer an OPTIONAL aim proceeds untargeted
+     * and a REQUIRED one goes to stock, checked. A divided amount ({@code DividedAsYouChoose}: Shatterskull
+     * Smashing, Polukranos) is then split by the seat ({@link #divideViaSeat}).
+     *
+     * @return TRUE aimed (possibly at nothing, legally); FALSE inside trigger
+     *         aiming only — declined, or no usable answer (lastAimOutcome
+     *         says which); null = hand the aim to stock (logged).
+     */
+    private Boolean multiTargetsViaSeat(SpellAbility sa,
+            forge.game.spellability.TargetRestrictions tgt, Card host, int minT, int maxT) {
+        if (tgt.isRandomTarget()) {
+            stockSurface("chooseTargetsFor(random targets)");
+            return Boolean.valueOf(super.chooseTargetsFor(sa)); // rolled, never chosen: exactly as before
+        }
+        final boolean divided = sa.isDividedAsYouChoose();
+        if (divided) {
+            sa.clearTargets(); // also (re)computes the amount to divide (X is announced by now)
+        } else {
+            sa.resetTargets();
+        }
+        final int total = divided && sa.getDividedValue() != null ? sa.getDividedValue() : 0;
+        List<forge.game.GameObject> candidates = targetCandidates(sa, tgt);
+        int hi = Math.min(maxT, candidates.size());
+        if (divided) {
+            hi = Math.min(hi, total); // every target takes at least 1 (CR 601.2d)
+        }
+        if (hi <= 0) {
+            if (minT == 0) {
+                if (divided && total <= 0 && !candidates.isEmpty()) {
+                    System.err.println("[mailbox seat " + seatIndex + "] " + host.getName()
+                            + ": nothing to divide (amount " + total + ") — it proceeds untargeted");
+                }
+                return Boolean.TRUE; // nothing to aim at: the part proceeds untargeted
+            }
+            stockSurface("chooseTargetsFor(multi: no candidates)");
+            return null;
+        }
+        if (hi < minT) {
+            stockSurface("chooseTargetsFor(multi: " + hi + " legal < min " + minT + ")");
+            return null;
+        }
+        final boolean declinable = triggerAimDepth > 0 && aimingOptionalTrigger && minT > 0;
+        Game game = getGame();
+        int turn = game.getPhaseHandler().getTurn();
+        Map<String, Object> state = buildState(turn);
+        state.put("min", minT);
+        state.put("max", hi);
+        state.put("purpose", "TARGETS");
+        if (declinable) {
+            state.put("declinable", true); // rules.validate: [] is legal beside min..max
+        }
+        if (divided) {
+            state.put("divide", total);
+        }
+        String count = minT == hi ? String.valueOf(hi) : (minT + " to " + hi);
+        MailboxProtocol.Request req = req(turn, "CHOOSE_ENTITIES",
+                "Choose the TARGETS for " + host.getName() + " (" + sa + "): pick "
+                        + count + " of the options"
+                        + (minT == 0 ? "; [] = no targets (it then does nothing to anything)" : "")
+                        + (declinable ? "; [] = DECLINE this optional trigger (it will do nothing)" : "")
+                        + (divided ? ". " + total + " is DIVIDED as you choose among your picks, at least 1"
+                            + " each — list them in the order you want to be asked the split" : "")
+                        + ". (answer {\"chosen\": [ids]})")
+                .state(state);
+        Map<Integer, forge.game.GameObject> byId = new LinkedHashMap<>();
+        int id = 1;
+        for (forge.game.GameObject e : candidates) {
+            String[] lk = targetOption(e);
+            req.option(id, lk[0], null, lk[1]);
+            byId.put(id, e);
+            id++;
+        }
+        if (triggerAimDepth > 0) {
+            lastAimOutcome = AimOutcome.NO_ANSWER; // until a usable answer lands
+        }
+        JsonNode resp = exchange(req);
+        JsonNode chosen = resp != null ? resp.get("chosen") : null;
+        boolean punt = resp != null && resp.get("punt") != null && resp.get("punt").asBoolean(false);
+        if (chosen != null && chosen.isArray() && !punt) {
+            if (chosen.size() == 0) {
+                if (minT == 0) {
+                    lastAimOutcome = AimOutcome.ANSWERED;
+                    return Boolean.TRUE; // legal: no targets
+                }
+                if (declinable) {
+                    lastAimOutcome = AimOutcome.DECLINED;
+                    return Boolean.FALSE; // the caller auto-aims and auto-declines
+                }
+            } else if (chosen.size() <= hi) {
+                // The picks are taken in the seat's order; one the engine rejects
+                // GIVEN THE PICKS BEFORE IT (different controllers, same type,
+                // total mana value …) is dropped with a log line and the rest
+                // stand — the seat's legal picks beat a stock re-aim.
+                int dropped = 0;
+                for (JsonNode n : chosen) {
+                    forge.game.GameObject pick = n != null && n.isInt() ? byId.get(n.asInt()) : null;
+                    boolean legal = pick != null && !sa.getTargets().contains(pick)
+                            && (pick instanceof SpellAbility
+                                ? sa.canTargetSpellAbility((SpellAbility) pick)
+                                : sa.canTarget(pick));
+                    if (!legal || !sa.getTargets().add(pick)) {
+                        dropped++;
+                    }
+                }
+                if (dropped > 0) {
+                    System.err.println("[mailbox seat " + seatIndex + "] targets for " + host.getName()
+                            + ": " + dropped + " pick(s) illegal with the picks before them — kept "
+                            + sa.getTargets());
+                }
+                if (!sa.getTargets().isEmpty() && sa.getTargets().size() >= minT && sa.isTargetNumberValid()) {
+                    if (divided) {
+                        divideViaSeat(sa, host, total);
+                    }
+                    lastAimOutcome = AimOutcome.ANSWERED;
+                    return Boolean.TRUE;
+                }
+                if (divided) {
+                    sa.clearTargets();
+                } else {
+                    sa.resetTargets();
+                }
+            }
+        }
+        if (triggerAimDepth > 0) {
+            lastAimOutcome = AimOutcome.NO_ANSWER; // the caller falls to STOCK aiming (item 1)
+            return Boolean.FALSE;
+        }
+        if (minT == 0) {
+            return proceedUntargeted(sa, punt ? "the seat punted" : "no usable answer");
+        }
+        stockSurface("chooseTargetsFor(multi: " + (punt ? "punt" : "no usable answer") + ")");
+        return null;
+    }
+
+    /**
+     * The split of a divided amount among the targets the seat just chose, in
+     * its order: one CHOOSE_NUMBER per target but the last (which takes what is
+     * left), each bounded so every later target still gets at least 1; a single
+     * target takes it all with no window. A failed exchange gives that target an
+     * even share — the seat chose the targets, the engine never re-aims them.
+     */
+    private void divideViaSeat(SpellAbility sa, Card host, int total) {
+        List<forge.game.GameObject> picks = new ArrayList<>(sa.getTargets());
+        int remaining = total;
+        for (int i = 0; i < picks.size(); i++) {
+            forge.game.GameObject t = picks.get(i);
+            int after = picks.size() - 1 - i; // targets still to be served
+            int amount;
+            if (after == 0) {
+                amount = remaining;
+            } else {
+                int max = remaining - after;
+                amount = 1;
+                if (max > 1) {
+                    Integer n = numberViaSeat("DIVIDE " + total + " for " + host.getName()
+                            + ": how much goes to " + targetOption(t)[0] + "? " + remaining
+                            + " left; the " + after + " target(s) after it need at least 1 each",
+                            1, max, false);
+                    amount = n != null ? n : Math.max(1, Math.min(max, remaining / (after + 1)));
+                }
+            }
+            sa.addDividedAllocation(t, amount);
+            remaining -= amount;
+        }
+    }
+
+    /** The legal targets for {@code sa} right now, as the seat is offered them:
+     *  players and cards for ordinary targeting, STACK ITEMS (the SpellAbility
+     *  objects, never the host cards in the Stack zone) for spell/ability
+     *  targeting. Shared by the single- and the multi-target window. */
+    private List<forge.game.GameObject> targetCandidates(SpellAbility currentAbility,
+            forge.game.spellability.TargetRestrictions tgt) {
+        Game game = getGame();
+        boolean stackTargeting = tgt.getZone() != null
+                && tgt.getZone().contains(ZoneType.Stack);
+        List<forge.game.GameObject> candidates = new ArrayList<>();
+        if (stackTargeting) {
+            for (forge.game.spellability.SpellAbilityStackInstance si
+                    : game.getStack()) {
+                SpellAbility onStack = si.getSpellAbility();
+                if (onStack != null && onStack != currentAbility
+                        && currentAbility.canTargetSpellAbility(onStack)) {
+                    candidates.add(onStack);
+                }
+            }
+            // "target spell or permanent"-style: keep any non-stack
+            // GameEntity candidates too (never the stack-zone cards).
+            List<forge.game.GameEntity> ents = tgt.getAllCandidates(currentAbility);
+            if (ents != null) {
+                for (forge.game.GameEntity e : ents) {
+                    if (e instanceof Card && ((Card) e).isInZone(ZoneType.Stack)) {
+                        continue;
+                    }
+                    candidates.add(e);
+                }
+            }
+        } else {
+            List<forge.game.GameEntity> ents = tgt.getAllCandidates(currentAbility);
+            if (ents != null) {
+                candidates.addAll(ents);
+            }
+        }
+        return candidates;
+    }
+
+    /** {label, kind} for one target candidate (kind: STACK | CARD | PLAYER). */
+    private static String[] targetOption(forge.game.GameObject e) {
+        String label;
+        String kind;
+        if (e instanceof SpellAbility) {
+            SpellAbility s = (SpellAbility) e;
+            Card sh = s.getHostCard();
+            Player ap = s.getActivatingPlayer();
+            String desc;
+            try {
+                desc = s.getStackDescription();
+            } catch (RuntimeException ignore) {
+                desc = "";
+            }
+            label = (sh != null ? sh.getName() : "?")
+                    + (s.isSpell() ? " (spell)" : s.isTrigger() ? " (trigger)" : " (ability)")
+                    + " [" + (ap != null ? ap.getName() : "?") + "]"
+                    + (desc != null && !desc.isEmpty()
+                        ? " — " + (desc.length() > 90 ? desc.substring(0, 90) : desc) : "");
+            kind = "STACK";
+        } else if (e instanceof Card) {
+            Card c = (Card) e;
+            label = c.getName()
+                    + (c.isCreature() ? " " + c.getNetPower() + "/"
+                        + c.getNetToughness() : "")
+                    + " [" + c.getController().getName() + "]";
+            kind = "CARD";
+        } else {
+            label = ((forge.game.GameEntity) e).getName();
+            kind = "PLAYER";
+        }
+        return new String[] {label, kind};
+    }
+
+    /**
      * Targeting for mailbox-originated plays (field note 14). Stock's
      * chooseTargetsFor re-runs the api-specific AI heuristics the mailbox
      * path deliberately bypassed — and those heuristics can DECLINE
@@ -1359,8 +1627,18 @@ public final class MailboxController extends PlayerControllerAi
             }
             int minT = tgt.getMinTargets(host, currentAbility);
             int maxT = tgt.getMaxTargets(host, currentAbility);
-            if (maxT != 1) {
-                return super.chooseTargetsFor(currentAbility); // multi-target: stock
+            if (maxT != 1 || currentAbility.isDividedAsYouChoose()) {
+                // BL-61: several targets (or "any number") are the seat's too —
+                // a bounded multi-pick, then the split when the amount is divided
+                // (a divided part goes this way even with one target: its amount
+                // must be allocated, or the effect reads no value at resolution).
+                // null = the engine's stock aim (random targets, an unsatisfiable
+                // count, no usable answer outside trigger aiming), always logged.
+                Boolean aimed = multiTargetsViaSeat(currentAbility, tgt, host, minT, maxT);
+                if (aimed != null) {
+                    return aimed;
+                }
+                return stockAimChecked(currentAbility, minT);
             }
             Game game = getGame();
             // Candidates are GameObjects: players/cards for ordinary
@@ -1374,36 +1652,11 @@ public final class MailboxController extends PlayerControllerAi
             // no-op (Fierce Guardianship + Swan Song vs Generous Gift, game 7
             // 2026-08-17; the game-5 fizzle). Stock CounterAi and the human
             // TargetSelection both target si.getSpellAbility(); so do we now.
-            boolean stackTargeting = tgt.getZone() != null
-                    && tgt.getZone().contains(ZoneType.Stack);
-            List<forge.game.GameObject> candidates = new ArrayList<>();
-            if (stackTargeting) {
-                for (forge.game.spellability.SpellAbilityStackInstance si
-                        : game.getStack()) {
-                    SpellAbility onStack = si.getSpellAbility();
-                    if (onStack != null && onStack != currentAbility
-                            && currentAbility.canTargetSpellAbility(onStack)) {
-                        candidates.add(onStack);
-                    }
-                }
-                // "target spell or permanent"-style: keep any non-stack
-                // GameEntity candidates too (never the stack-zone cards).
-                List<forge.game.GameEntity> ents = tgt.getAllCandidates(currentAbility);
-                if (ents != null) {
-                    for (forge.game.GameEntity e : ents) {
-                        if (e instanceof Card && ((Card) e).isInZone(ZoneType.Stack)) {
-                            continue;
-                        }
-                        candidates.add(e);
-                    }
-                }
-            } else {
-                List<forge.game.GameEntity> ents = tgt.getAllCandidates(currentAbility);
-                if (ents != null) {
-                    candidates.addAll(ents);
-                }
-            }
+            List<forge.game.GameObject> candidates = targetCandidates(currentAbility, tgt);
             if (candidates.isEmpty()) {
+                if (minT == 0 && triggerAimDepth == 0) {
+                    return true; // BL-61: an optional target with nothing to aim at — proceed untargeted, no stock heuristics
+                }
                 return super.chooseTargetsFor(currentAbility);
             }
             int turn = game.getPhaseHandler().getTurn();
@@ -1430,36 +1683,8 @@ public final class MailboxController extends PlayerControllerAi
             Map<Integer, forge.game.GameObject> byId = new LinkedHashMap<>();
             int id = 1;
             for (forge.game.GameObject e : candidates) {
-                String label;
-                String kind;
-                if (e instanceof SpellAbility) {
-                    SpellAbility s = (SpellAbility) e;
-                    Card sh = s.getHostCard();
-                    Player ap = s.getActivatingPlayer();
-                    String desc;
-                    try {
-                        desc = s.getStackDescription();
-                    } catch (RuntimeException ignore) {
-                        desc = "";
-                    }
-                    label = (sh != null ? sh.getName() : "?")
-                            + (s.isSpell() ? " (spell)" : s.isTrigger() ? " (trigger)" : " (ability)")
-                            + " [" + (ap != null ? ap.getName() : "?") + "]"
-                            + (desc != null && !desc.isEmpty()
-                                ? " — " + (desc.length() > 90 ? desc.substring(0, 90) : desc) : "");
-                    kind = "STACK";
-                } else if (e instanceof Card) {
-                    Card c = (Card) e;
-                    label = c.getName()
-                            + (c.isCreature() ? " " + c.getNetPower() + "/"
-                                + c.getNetToughness() : "")
-                            + " [" + c.getController().getName() + "]";
-                    kind = "CARD";
-                } else {
-                    label = ((forge.game.GameEntity) e).getName();
-                    kind = "PLAYER";
-                }
-                req.option(id, label, null, kind);
+                String[] lk = targetOption(e);
+                req.option(id, lk[0], null, lk[1]);
                 byId.put(id, e);
                 id++;
             }
@@ -1487,7 +1712,10 @@ public final class MailboxController extends PlayerControllerAi
                 }
             }
         } catch (RuntimeException anything) {
-            // targeting must never crash the seat — stock is the floor
+            // targeting must never crash the seat — stock is the floor (and the
+            // reason is logged: a silent catch here hid a real defect, 2026-10-02)
+            System.err.println("[mailbox seat " + seatIndex + "] targeting threw: " + anything
+                    + (anything.getStackTrace().length > 0 ? " at " + anything.getStackTrace()[0] : ""));
         }
         if (triggerAimDepth > 0) {
             // inside trigger aiming: no usable answer. Report failure and let
@@ -1495,7 +1723,99 @@ public final class MailboxController extends PlayerControllerAi
             lastAimOutcome = AimOutcome.NO_ANSWER;
             return false;
         }
+        if (optionalAim(currentAbility)) {
+            return proceedUntargeted(currentAbility, "no usable answer");
+        }
         return super.chooseTargetsFor(currentAbility);
+    }
+
+    /** True when {@code sa} targets and its minimum is 0 ("up to N target …"). */
+    private static boolean optionalAim(SpellAbility sa) {
+        try {
+            forge.game.spellability.TargetRestrictions tr = sa.getTargetRestrictions();
+            return tr != null && sa.getHostCard() != null && tr.getMinTargets(sa.getHostCard(), sa) == 0;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * An OPTIONAL aim the seat did not answer (timeout, punt, a list the engine
+     * rejects) proceeds with no targets — what the single-target window's punt
+     * ("none") has always meant. Stock is not asked: its aim is the MANDATORY
+     * one ({@code doTrigger(sa, true)}), which for a 0-minimum part can pick
+     * more targets than the maximum, leave a divided amount unallocated, or
+     * turn the spell on the seat's own permanents (review 2026-10-02).
+     */
+    private boolean proceedUntargeted(SpellAbility sa, String why) {
+        if (sa.isDividedAsYouChoose()) {
+            sa.clearTargets();
+        } else {
+            sa.resetTargets();
+        }
+        Card h = sa.getHostCard();
+        System.err.println("[mailbox seat " + seatIndex + "] optional targets for "
+                + (h != null ? h.getName() : sa) + ": " + why + " — it proceeds untargeted");
+        return true;
+    }
+
+    /** Writes an even split of the divided amount over the chosen targets (the
+     *  last takes the remainder); false when there are more targets than points. */
+    private static boolean allocateEvenly(SpellAbility sa) {
+        int total = sa.getDividedValue() != null ? sa.getDividedValue() : 0;
+        int n = sa.getTargets().size();
+        if (n == 0 || total < n) {
+            return false;
+        }
+        int left = total;
+        int i = 0;
+        for (forge.game.GameObject t : new ArrayList<>(sa.getTargets())) {
+            int share = i == n - 1 ? left : total / n;
+            sa.addDividedAllocation(t, share);
+            left -= share;
+            i++;
+        }
+        return true;
+    }
+
+    /**
+     * Stock's aim for a REQUIRED multi-target part, checked before it is
+     * trusted: the count must be legal and a divided amount fully allocated
+     * (an even split is written when stock chose targets but no allocation —
+     * {@code DamageDealEffect} unboxes the value at resolution). Anything else
+     * is "not aimed": the targets are cleared and the caller keeps the card.
+     */
+    private boolean stockAimChecked(SpellAbility sa, int minT) {
+        if (minT == 0 && triggerAimDepth == 0) {
+            return proceedUntargeted(sa, "left to the engine");
+        }
+        boolean ok;
+        try {
+            ok = super.chooseTargetsFor(sa);
+        } catch (RuntimeException e) {
+            ok = false;
+        }
+        boolean legal = sa.isTargetNumberValid();
+        if (legal && sa.isDividedAsYouChoose() && !sa.getTargets().isEmpty()) {
+            int total = sa.getDividedValue() != null ? sa.getDividedValue() : 0;
+            boolean allocated = sa.getTotalDividedValue() == total;
+            for (forge.game.GameObject t : sa.getTargets()) {
+                Integer v = sa.getDividedValue(t);
+                allocated &= v != null && v > 0;
+            }
+            if (!allocated) {
+                legal = allocateEvenly(sa);
+            }
+        }
+        if (!legal) {
+            if (sa.isDividedAsYouChoose()) {
+                sa.clearTargets();
+            } else {
+                sa.resetTargets();
+            }
+            return minT == 0;
+        }
+        return ok || minT == 0;
     }
 
     @Override
@@ -2590,7 +2910,11 @@ public final class MailboxController extends PlayerControllerAi
                 return super.chooseNewTargetsFor(ability, filter, optional);
             }
             old = sa.getTargets();
-            if (old == null || old.size() != 1 || sa.isDividedAsYouChoose()) {
+            if (old == null || old.size() != 1 || sa.isDividedAsYouChoose()
+                    || sa.getMaxTargets() != 1) {
+                // (BL-61: an "up to two" spell holding one target would now open
+                // the multi-target window here, and any answer but exactly one
+                // target was discarded — it keeps the old behaviour)
                 return super.chooseNewTargetsFor(ability, filter, optional);
             }
             sa.clearTargets();
@@ -3185,20 +3509,39 @@ public final class MailboxController extends PlayerControllerAi
                 // instead: aim the first legal candidate so the trigger
                 // stacks LEGALLY, and honor the decline intent at resolve
                 // time (confirmTrigger auto-answers NO, zero model calls).
-                List<forge.game.GameEntity> cands =
-                        tr.getAllCandidates(s);
-                if (cands == null || cands.isEmpty()) {
+                // (Gemini review 2026-10-02: the same candidates the windows offer —
+                // a spell-targeting trigger must hold the stack's SpellAbility, never
+                // its host card, or it "targets" something CounterEffect never sees)
+                List<forge.game.GameObject> cands = targetCandidates(s, tr);
+                if (cands.isEmpty()) {
                     return false; // no legal targets: trigger doesn't stack (603.3d)
                 }
-                s.resetTargets();
-                if (!s.getTargets().add(cands.get(0))) {
+                if (s.isDividedAsYouChoose()) {
+                    s.clearTargets();
+                } else {
+                    s.resetTargets();
+                }
+                // BL-61: a multi-target part (minT > 1) can be declined now too —
+                // stack it with its first minT legal candidates, not just one
+                for (forge.game.GameObject c : cands) {
+                    if (s.getTargets().size() >= minT) {
+                        break;
+                    }
+                    if (c instanceof SpellAbility ? s.canTargetSpellAbility((SpellAbility) c) : s.canTarget(c)) {
+                        s.getTargets().add(c);
+                    }
+                }
+                if (!s.isTargetNumberValid() || s.getTargets().isEmpty()) {
                     return false;
+                }
+                if (s.isDividedAsYouChoose() && !allocateEvenly(s)) {
+                    return false; // fewer points than targets: it cannot stack legally
                 }
                 if (!aimed) {
                     pendingTriggerDecline.add(sa);
                     System.err.println("[mailbox seat " + seatIndex + "] trigger "
                             + (h != null ? h.getName() : "?") + " declined at aim — "
-                            + "auto-aimed " + cands.get(0) + " to stack legally; "
+                            + "auto-aimed " + s.getTargets() + " to stack legally; "
                             + "will auto-decline at resolve");
                 }
             } else if (minT == 0 && aimed && !s.isTargetNumberValid()) {
@@ -3274,7 +3617,10 @@ public final class MailboxController extends PlayerControllerAi
             // stock path's targeting lived inside the yes/no heuristic we
             // just bypassed, and an untargeted copy fizzles
             for (SpellAbility s = tgtSA; s != null; s = s.getSubAbility()) {
-                if (!s.usesTargeting() || s.isTargetNumberValid()) {
+                // BL-61: a part whose targets are OPTIONAL is "valid" with none chosen,
+                // so it was skipped and resolved at nothing; skip only what is aimed
+                if (!s.usesTargeting() || s.isTargetNumberValid()
+                        && s.getTargets() != null && !s.getTargets().isEmpty()) {
                     continue;
                 }
                 Card h = s.getHostCard();
@@ -4562,19 +4908,31 @@ public final class MailboxController extends PlayerControllerAi
 
     /** Current total mana yield of a mana-ability chain evaluated against the
      *  live board (e.g. Selvala's {G},{T}: add X = 12 with a Dreadnought out);
-     *  -1 if it can't be evaluated. Works for any host, not just lands. */
+     *  -1 if it can't be evaluated. Works for any host, not just lands.
+     *
+     *  <p>A Mana part whose own CONDITION is unmet right now adds nothing
+     *  (W-4, proven on game 64): Gemstone Caverns is scripted as two parts
+     *  with opposite conditions — {C} without a luck counter, any colour with
+     *  one — and summing both told the seat "yield 2", "[currently adds 2
+     *  mana]" and one mana too many in manaAvailableNow; Giada planned a
+     *  seven-mana Final Showdown on six. Exactly what {@code producedColors}
+     *  already does for the colour. When no part's condition holds, the first
+     *  part's amount stands (the old answer for a single conditional part). */
     private static int manaAbilityYield(SpellAbility sa, Card host) {
         int total = 0;
+        int first = -1;
         boolean sawManaPart = false;
         try {
             for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
                 if (cur.getApi() != null && "Mana".equals(cur.getApi().toString())) {
                     sawManaPart = true;
                     String amt = cur.getParam("Amount");
-                    if (amt == null) {
-                        total += 1;
-                    } else {
-                        total += AbilityUtils.calculateAmount(host, amt, cur);
+                    int add = amt == null ? 1 : AbilityUtils.calculateAmount(host, amt, cur);
+                    if (first < 0) {
+                        first = add;
+                    }
+                    if (cur.metConditions()) {
+                        total += add;
                     }
                 } else if (cur.getParam("Amount") != null && cur == sa) {
                     // root carries the amount for simple one-part scripts
@@ -4585,6 +4943,9 @@ public final class MailboxController extends PlayerControllerAi
             }
         } catch (RuntimeException e) {
             return -1; // evaluation failed — treat as strategic, show it
+        }
+        if (sawManaPart && total == 0 && first > 0) {
+            return first; // every part conditional and none met: keep the first part's amount
         }
         return sawManaPart ? total : 1; // no explicit part: plain single mana
     }

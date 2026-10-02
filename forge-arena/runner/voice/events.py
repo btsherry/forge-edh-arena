@@ -897,6 +897,7 @@ class EventsMixin:
                     seat = int(e.get("seat"))
                     big = int(e.get("power", 0)) >= self.barks_swing or int(e.get("attackers", 0)) >= 3
                     defenders = [int(x) for x in (e.get("defenders") or [])]
+                    self.note_attack(seat, defenders, seq)                     # BL-63: a small-talk truce is not struck across it
                     open_ = [x for x in defenders if x != self.human_seat and self.library_for_seat(x) and self._open_to_attack(self._seat_rec(x, d))]
                     power = int(e.get("power", 0))
                     betrayed = [x for x in defenders if x != seat and self.deal_forbids(seat, x, "attack")]

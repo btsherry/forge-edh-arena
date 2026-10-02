@@ -167,10 +167,10 @@ class _TableCase(_TreeCase):
         bf += [{"name": name, "types": "Artifact", "tapped": False} for name in extra]
         return {"seat": i, "name": f"s{i}", "eliminated": False, "life": life, "handSize": hand, "battlefield": bf}
 
-    def _snap(self, turn, active, seats=None, events=(), stack=()):
+    def _snap(self, turn, active, seats=None, events=(), stack=(), phase="MAIN1"):
         seats = seats or [self._seat(i) for i in range(4)]
         (self.mailbox / "observer-state.json").write_text(json.dumps(
-            {"turn": turn, "phase": "MAIN1", "activeSeat": active, "gameOver": False, "seats": seats, "events": list(events), "stackDetail": list(stack)}))
+            {"turn": turn, "phase": phase, "activeSeat": active, "gameOver": False, "seats": seats, "events": list(events), "stackDetail": list(stack)}))
         self.r.scan_observer()
 
     def _barks(self):
@@ -262,6 +262,10 @@ class MemoryAndArc(_TableCase):
         self.assertEqual((q["stock"], q["library"]), ("promise", "bill"), "the first reply on the table (promise; take-the-deal and no-deal are the others)")
         self.r.queue.clear()
         self._spoken(2, "promise", ctx=q["ctx"], chain=q["chain"])
+        self.assertEqual(self.r._deals, {}, "BL-63: the strike waits for the snapshot that follows the reply")
+        self.assertIsNone(self.r.settle_smalltalk_truce(), "seat 1 is active and has not declared its attack: held")
+        self._snap(3, 1, phase="MAIN2"); self.r.queue.clear()
+        self.r.settle_smalltalk_truce()
         # 2026-09-16 (table deals §11): the live map holds the contract's dict — a one-round truce struck at turn 3, four living
         # seats, so until the end of turn 7 — both ways; the old "= struck turn" int upgrades on restore (test_deals_voice)
         struck = {"kind": "truce", "until_turn": 7, "struck": 3, "offer_id": None}

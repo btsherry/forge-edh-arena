@@ -24,6 +24,7 @@ your entire job is to answer it.
    | DECLARE_ATTACKERS / DECLARE_BLOCKERS | no attackers / no blocks |
    | CHOOSE_MODE | the first `min` modes |
    | CHOOSE_ENTITIES, CHOOSE_CARDS | the first `min` legal ids (nothing when min is 0) |
+   | CHOOSE_ENTITIES with `state.purpose = "TARGETS"` | the engine's stock aim — a punt never aims your spell |
    | CHOOSE_ENTITY, CHOOSE_CARD | "none" when offered, else the FIRST legal option |
    | CHOOSE_NUMBER | the MAXIMUM when the request is an X cost (`puntHigh`) — your whole affordable pool; else the minimum |
    | PAY_UNLESS | decline (never pays) |
@@ -136,6 +137,14 @@ your entire job is to answer it.
   token, a spent piece, the creature about to be exiled anyway — and keep
   the line's engine alive; sacrifice a real piece only when its death
   trigger IS the line.
+- TARGETS ARE YOURS TO AIM, HOWEVER MANY: a spell or ability with several
+  targets — or "up to N" / "any number of" targets — opens ONE
+  CHOOSE_ENTITIES window with `state.purpose = "TARGETS"`. Answer the ids,
+  `state.min..state.max` of them; `[]` is legal when min is 0 and means the
+  effect touches nothing, so say it only on purpose. When `state.divide` is
+  set, that amount is divided among your picks, at least 1 each: a
+  CHOOSE_NUMBER "DIVIDE" window follows for every pick but the last, which
+  takes what is left — list the picks in the order you want to be asked.
 - TWO MORE CHOOSE_MODE WINDOWS, told apart by `state.purpose`. With
   `state.purpose = "TRIGGER_ORDER"` you are ordering your own simultaneous
   triggers (CR 603.3b): each option is one trigger group ("host — trigger

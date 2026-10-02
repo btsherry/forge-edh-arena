@@ -130,15 +130,23 @@ THREAT_WINNING = 6.0      # ...and this high earns "someone's about to win"
 THREAT_DECAY = 0.5        # per turn roll
 # The floor's pool (plan 4.2, 2026-09-14): the patter candidates ANCHORED to the board — the numbers
 # (a life or hand question, the low-life and empty-hand jabs), the threat calls, a slow seat, the big
-# board, the long game, "pass already" at the active seat, a deal — speak ahead of filler when the
+# board, the long game, "pass already" at the active seat — speak ahead of filler when the
 # silence floor fires; an empty or filler-only pool spends a non-verbal atom instead (4.5), when the
 # runner has them. An atom re-arms the floor at its full length and at most FLOOR_ATOM_MAX_RUN play in a
 # row: _said_at is table-wide per id and PATTER_REPEAT_S is 300 s, so ~7 lines exhaust the filler pool —
 # a sigh every 0.6 × floor until the board re-seeded a candidate was a tic, not presence (critic, 2026-09-14).
 # A content line (any spoken line) resets the run.
 ANCHORED_PATTER = {"play-faster", "thinking-hard", "youre-the-threat", "whats-your-life", "low-life-jab", "cards-in-hand",
-                   "empty-hand", "kill-that", "someone-wins", "board-envy", "long-game", "pass-already", "deal"}
+                   "empty-hand", "kill-that", "someone-wins", "board-envy", "long-game", "pass-already"}
+# "deal" left the pool on 2026-10-02 (Ben, after game 64): a filler "Deal?" answered by the chain's "take the
+# deal" struck a real truce neither brain had chosen (two of that game's three). A seat still opens the small-talk
+# truce with its own `say` (source brain); the patter clock never does.
 FLOOR_ATOM_MAX_RUN = 2
+TERMS_TTL_S = 60.0        # a spoken deal duration waits this long behind its accept line (bark default: 20 s)
+SMALLTALK_TRUCE_MIN_LIVING = 3   # two seats left: a truce between them is no deal at all (game 64 t36)
+SMALLTALK_TERMS_WITHIN_S = 10.0  # a held small-talk truce struck later than this says no "One round.": it is no longer the reply's tail
+# while the active seat is in one of these it has not declared its attack: a small-talk truce with it waits
+PRE_ATTACK_PHASES = ("UNTAP", "UPKEEP", "DRAW", "MAIN1", "COMBAT_BEGIN", "COMBAT_DECLARE_ATTACKERS")
 EXEC_MEMO_S = 1.0         # human_turn() re-reads control/executive.json at most this often (A6; the governor asks several times a step)
 IDLE_S = 150.0            # the board unchanged this long (a human away from the keyboard): the patter clock slows to a third
 IDLE_SLOWDOWN = 3.0       # Ben (2026-09-11): "a little patter during the human turn, especially if I idle, is okay"
@@ -567,9 +575,11 @@ class SchedulerMixin:
             # other, so both brains are told (§4 source ii); an attack across it earns "you promised!"
             a, b = int(link0["origin"]), speaker
             if a != b:
-                t_now = turn if turn is not None else self._last_snapshot.get("turn")
-                deal = self.strike_deal(a, b, "truce", t_now, by=speaker, rounds=1, source="voice")
-                self.say_terms(speaker, {"rounds": 1}, deal, t_now, other=a, source="chain")   # "One round." — the audio said so
+                # BL-63 (game 64 t36): struck here, at the end of the reply, the truce landed 4 s after the replier's
+                # attack on the other party was declared — the ring event sat unread behind the audio — and was
+                # marked `broken` 110 ms later. The strike now waits for the next snapshot (settle_smalltalk_truce).
+                self._smalltalk_truce = {"a": a, "b": b, "at": self.clock(), "seq": self._event_seq if self._event_seq is not None else -1,
+                                         "turn": self._turn_int(turn if turn is not None else self._last_snapshot.get("turn"))}
         # a hit is followed by the total ("Take five. I'm at sixteen." — every table does it)
         p_follow = LIFE_FOLLOWUP.get(item.get("stock", ""), 0.0) * self.table_mult
         if p_follow and not (chain and chain.get("followup")):
@@ -697,7 +707,8 @@ class SchedulerMixin:
         ungoverned = (pid in MULL_LINE.values() or (source == "patter" and p == 1.0) or source == "procedural"
                       or pid in DEAL_ANSWER_LINE.values() or pid in JOSHUA_DEAL_LINE.values()    # a deal's answer is state (game 51: a 4 % miss)
                       or (pid == DEAL_PROPOSE_LINE and source == "brain")                          # ...and so is a seat's own offer
-                      or (pid == "deal-over" and p == 1.0))                                       # ...and so is its end for the player (game 51: p=0.93 lost it)
+                      or (pid == "deal-over" and p == 1.0)                                        # ...and so is its end for the player (game 51: p=0.93 lost it)
+                      or pid.startswith("terms-"))                                               # ...and so is how long it runs (game 64: diced away twice)
         # a mulligan is always worth the breath; so is breaking a silence; so is a seat narrating its own turn
         # ("land, go", "no blocks" — game 48: thirty of them died to the budget while filler lived; the seat guard,
         # the once-a-turn rule and table_p still apply)
@@ -867,8 +878,84 @@ class SchedulerMixin:
         pid = self.terms_pid(terms, deal)
         if pid is None or deal is None or not self.library_for_seat(seat) or pid not in self.table_ids:
             return False
-        return self.maybe_bark(seat, pid, turn=turn, source=source, p=1.0, evict=False,
-                               ctx={"targets": [other] if other is not None else []})
+        if not self.maybe_bark(seat, pid, turn=turn, source=source, p=1.0, evict=False,
+                               ctx={"targets": [other] if other is not None else []}):
+            return False
+        for q in reversed(self.queue):
+            if q.get("stock") == pid and q.get("seat") == int(seat):
+                # the tail of the accept line: it outlives the wait its head may serve (game 64 t17: "Deal with you"
+                # was held 13 s for the seat guard and the duration expired on its 20 s) and follows it closely
+                q["expires"] = self.clock() + TERMS_TTL_S
+                q["gap"] = 0.3
+                break
+        return True
+
+    def note_attack(self, attacker, defenders, seq) -> None:
+        """Who attacked whom, stamped with the ring event's seq — read by settle_smalltalk_truce. The seq, not
+        the turn: an attack EARLIER in the turn than the words is no reason to refuse a truce spoken after
+        combat (Gemini review, 2026-10-02); one read after them is."""
+        try:
+            s = int(seq)
+        except (TypeError, ValueError):
+            return
+        book = self.__dict__.setdefault("_attacked", {})
+        for d in defenders or []:
+            try:
+                book[(int(attacker), int(d))] = s
+            except (TypeError, ValueError):
+                continue
+
+    def settle_smalltalk_truce(self) -> dict | None:
+        """The seats' small-talk truce ("Deal?" — "Take the deal.", one round), struck once it can no longer
+        collide with an attack that is already decided. It waits while a party is the ACTIVE seat and that seat's
+        attackers are not declared yet (the brain answering DECLARE_ATTACKERS reads its notes when the request
+        opens: a truce struck after that would be "broken" by a seat that never heard of it — review 2026-10-02),
+        and it is struck only when the snapshot read AFTER the reply shows no attack between the two since the
+        words were said. Dropped — one `noted` record says why — when the game is over, it went stale (more than
+        one turn roll), a party is gone, fewer than SMALLTALK_TRUCE_MIN_LIVING seats live, a deal already stands
+        between them, or one attacked the other: the words were said, nobody is bound, nobody is a traitor."""
+        pend = self.__dict__.get("_smalltalk_truce")
+        if not pend:
+            return None
+        a, b, said = int(pend["a"]), int(pend["b"]), pend.get("turn")
+        snap = self._last_snapshot or {}
+        now_t = self._turn_int(snap.get("turn"))
+        attacked = self.__dict__.get("_attacked", {})
+        why = None
+        if self.final_locked or snap.get("gameOver"):
+            why = "the game is over"
+        elif said is None or now_t is None or not (said <= now_t <= said + 1):
+            why = f"it went stale (said on turn {said}, now turn {now_t})"
+        elif a in self.eliminated or b in self.eliminated:
+            why = "a party is out of the game"
+        elif self._living_count() < SMALLTALK_TRUCE_MIN_LIVING:
+            why = f"only {self._living_count()} seats live"
+        elif self.deal_between(a, b) is not None:
+            why = "a deal already stands between them"
+        elif any(attacked.get(k, -1) > int(pend.get("seq", -1)) for k in ((a, b), (b, a))):
+            why = "one of them attacked the other since it was said"
+        if why:
+            self.__dict__.pop("_smalltalk_truce", None)
+            self.record("noted", kind="deal", why=f"small-talk truce {a}<->{b} not struck: {why}")
+            return None
+        if snap.get("activeSeat") in (a, b) and str(snap.get("phase") or "") in PRE_ATTACK_PHASES:
+            return None                                                    # held: the active party has not declared its attack yet
+        self.__dict__.pop("_smalltalk_truce", None)
+        deal = self.strike_deal(a, b, "truce", now_t, by=b, rounds=1, source="voice")
+        if self.clock() - float(pend.get("at") or -1e9) <= SMALLTALK_TERMS_WITHIN_S:
+            self.say_terms(b, {"rounds": 1}, deal, now_t, other=a, source="chain")   # "One round." — while it is still the tail of the reply
+        return deal
+
+    def _drop_queued_terms(self, a, b, why: str) -> None:
+        """A deal's spoken duration still waiting in the queue dies with the deal (it lives up to TERMS_TTL_S)."""
+        pair, keep = {int(a), int(b)}, []
+        for q in self.queue:
+            targets = set((q.get("ctx") or {}).get("targets") or [])
+            if str(q.get("stock") or "").startswith("terms-") and q.get("seat") in pair and targets and targets <= pair:
+                self.record("dropped", kind="bark", why=why, stock=q.get("stock"), seat=q.get("seat"))
+                continue
+            keep.append(q)
+        self.queue = keep
 
     def strike_deal(self, a, b, kind: str, turn, by, rounds=None, until_turn=None, offer_id=None, source: str = "", turns=None) -> dict:
         """A deal struck between `a` and `b`: the live map both ways, a `struck` ledger record and a deal-struck
@@ -934,6 +1021,7 @@ class SchedulerMixin:
         t = self._turn_int(turn)
         self._ledger("broken", (breaker, victim), by=breaker, deal={"kind": deal["kind"], "until_turn": deal["until_turn"]},
                      offer_id=deal["offer_id"], turn=t, how=how)
+        self._drop_queued_terms(breaker, victim, "the deal it described was broken")
         note = {"kind": "deal-broken", "between": [breaker, victim], "by": breaker, "how": how, "turn": t}
         self._deal_note(victim, dict(note))
         self._deal_note(breaker, dict(note))            # the seat renders nothing for its own break; the map is cleared
@@ -962,6 +1050,7 @@ class SchedulerMixin:
                 self._deals.pop((a, b), None)
                 self._deals.pop((b, a), None)
                 lapsed.append((int(a), int(b)))
+                self._drop_queued_terms(a, b, "the deal it described has lapsed")
                 self._ledger("lapsed", (a, b), deal={"kind": deal["kind"], "until_turn": deal["until_turn"]}, offer_id=deal["offer_id"], turn=t)
                 for s in (a, b):
                     self._deal_note(s, {"kind": "deal-lapsed", "between": [int(a), int(b)], "turn": t})
@@ -1070,9 +1159,6 @@ class SchedulerMixin:
             out.append((sp, "this-is-fine", None, 0.25 / len(living)))
             out.append((sp, "good-hand", None, 0.1 / len(living)))
             out.append((sp, "what-turn", None, 0.15 / len(living)))
-            tgt = [t for t in living if t != sp]
-            if tgt:
-                out.append((sp, "deal", self.rng.choice(tgt), 0.5 / len(living)))
         if active is not None and int(active) in living:
             add("pass-already", int(active), 0.5)
         now = self.clock()

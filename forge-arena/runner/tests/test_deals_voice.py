@@ -382,6 +382,9 @@ class SeatToSeatAndTheChains(_DealCase):
         self.assertIn(q["stock"], ("promise", "take-the-deal"))
         self.r.queue.clear()
         self._spoken(2, q["stock"], ctx=q["ctx"], chain=q["chain"])
+        self.assertEqual(self.r._deals, {}, "BL-63: nothing is struck until the next snapshot has been read")
+        self._snap(3, 1, events=self.ring, phase="MAIN2")          # past seat 1's declare-attackers step, no attack on seat 2
+        self.r.settle_smalltalk_truce()
         struck = {"kind": "truce", "until_turn": 7, "struck": 3, "offer_id": None}
         self.assertEqual(self.r._deals, {(1, 2): struck, (2, 1): struck})
         rec = self._ledger("struck")[0]

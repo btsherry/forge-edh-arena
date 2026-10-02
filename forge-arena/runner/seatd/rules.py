@@ -37,7 +37,9 @@ ANSWER_CONTRACT = {
     "CHOOSE_ENTITY": ('Answer: {"chosenId": <option id>} — 0 (choose none) only if '
                       'offered in options.'),
     "CHOOSE_ENTITIES": ('Answer: {"chosen": [<option id>, ...]} — unique ids, count '
-                        'within state.min..state.max. SACRIFICE/DESTROY prompts '
+                        'within state.min..state.max. TARGETS prompts pick what your '
+                        'spell or ability hits ([] = no targets when min is 0; a divided '
+                        'amount is split in the next window). SACRIFICE/DESTROY prompts '
                         '(edicts, sac-outlet payments) pick what YOU lose: feed '
                         'expendable bodies (tokens, spent pieces) unless your line '
                         'wants a death trigger to fire.'),
@@ -217,7 +219,11 @@ def validate_deal(raw, pending: dict, turn) -> tuple[dict | None, str]:
 # "propose" so the voice runner (the ledger, the spoken line) and the advisor (the panel) see it.
 PROPOSE_WINDOWS = ("CAST_SPELL", "DECLARE_ATTACKERS")
 PROPOSE_MIN_TURN = 3
-PROPOSE_EVERY_TURNS = 6
+# 6 -> 4 (Ben, 2026-10-02, after game 64): a seat's own turns come one round apart, so 5 and 6 both meant
+# "every other own turn" at a four-seat table; 4 is the first value that changes anything — one offer per
+# round at four seats, every other own turn at three or two. Across the archive the cooldown bound twice
+# in 21 attempts, both 3 turns after the seat's last offer; those stay blocked (no back-to-back offers).
+PROPOSE_EVERY_TURNS = 4
 
 
 def deal_propose_line(parties: list[tuple[int, str]]) -> str:
@@ -380,6 +386,8 @@ def validate(req: dict, out) -> dict | None:
         arr = out.get("chosen")
         lo, hi = _bounds(req, 0, len(ids))
         pool = [i for i in ids if i != 0]
+        if arr == [] and (req.get("state", {}) or {}).get("declinable"):
+            return {"chosen": []}        # BL-61: [] declines the seat's own optional trigger whatever its minimum
         if not isinstance(arr, list):
             # game 55: a brain answered a one-card discard with {"chosenId": 135} and was punted to a
             # different card. The single form is the list of one when the window allows one pick.
@@ -449,7 +457,13 @@ def safe_default(req: dict) -> dict:
         return {"chosen": list(range(lo))}       # first `min` indices
     if dtype in ("CHOOSE_ENTITIES", "CHOOSE_CARDS"):
         lo, _ = _bounds(req, 0, len(ids))
-        return {"chosen": [i for i in ids if i != 0][:lo]}
+        out = {"chosen": [i for i in ids if i != 0][:lo]}
+        if (req.get("state", {}) or {}).get("purpose") == "TARGETS":
+            # BL-61 (2026-10-02): a punt never AIMS a spell — the first `min` options of a target window may be the
+            # seat's own permanents, and [] would resolve an "up to N" spell at nothing. The marker hands the aim back
+            # to the engine's stock logic, as a timeout does; the list keeps the answer shape-valid.
+            out["punt"] = True
+        return out
     if dtype == "CONFIRM":
         # Item 10 (2026-09-03): a punt never spends and never acts for anyone
         # but the seat. The engine states the two facts that decide it —

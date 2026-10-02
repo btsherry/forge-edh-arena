@@ -235,6 +235,76 @@ public class ManaTableTest {
         }
     }
 
+    /** W-4, proven on game 64 (2026-10-02): Gemstone Caverns is scripted as two
+     *  mana parts with opposite conditions ({C} without a luck counter, any
+     *  colour with one). The yield summed both — the seat was told "yield 2",
+     *  "[currently adds 2 mana]" and one mana too many payable now; Giada
+     *  planned a seven-mana Final Showdown on six. One part is live at a time. */
+    @Test(timeOut = 120_000)
+    public void aManaPartWhoseConditionIsUnmetAddsNothing() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            Card caverns = MailboxTestKit.put("Gemstone Caverns", k.seat, ZoneType.Battlefield);
+            String[] colours = {"colorless", "any"};
+            for (int luck = 0; luck <= 1; luck++) {
+                caverns.setCounters(forge.game.card.CounterEnumType.LUCK, luck);
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> rows = (List<Map<String, Object>>) MailboxController.buildState(k.seat, k.seat.getId(), 3).get("manaSources");
+                Assert.assertEquals(rows.size(), 1, String.valueOf(rows));
+                Assert.assertEquals(rows.get(0).get("yield"), Integer.valueOf(1), "luck " + luck + ": one mana per tap — " + rows);
+                Assert.assertEquals(rows.get(0).get("colors"), colours[luck], String.valueOf(rows));
+                Assert.assertEquals(MailboxController.manaAvailableNow(k.seat, rows), 1, "luck " + luck);
+            }
+            // a plain multi-mana source still counts every part it produces
+            MailboxTestKit.put("Sol Ring", k.seat, ZoneType.Battlefield);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> rows = (List<Map<String, Object>>) MailboxController.buildState(k.seat, k.seat.getId(), 3).get("manaSources");
+            Assert.assertEquals(MailboxController.manaAvailableNow(k.seat, rows), 3, "Caverns 1 + Sol Ring 2: " + rows);
+        }
+    }
+
+    /** …and the stock payer taps a luck-counter Caverns for coloured mana on its
+     *  own (the seat's "float Caverns first; the auto-payer skips it" was a habit
+     *  the misread yield taught it): one spell is paid, the second is refused. */
+    @Test(timeOut = 240_000)
+    public void thePayerTapsALuckCounterCavernsOnce() throws Exception {
+        try (MailboxTestKit k = new MailboxTestKit(false)) {
+            Card caverns = MailboxTestKit.put("Gemstone Caverns", k.seat, ZoneType.Battlefield);
+            caverns.setCounters(forge.game.card.CounterEnumType.LUCK, 1);
+            MailboxTestKit.put("Savannah Lions", k.seat, ZoneType.Hand);    // {W}
+            MailboxTestKit.put("Llanowar Elves", k.seat, ZoneType.Hand);    // {G}
+            for (int i = 0; i < 4; i++) {
+                MailboxTestKit.put("Plains", k.seat, ZoneType.Library);
+                MailboxTestKit.put("Forest", k.opp, ZoneType.Library);
+            }
+            java.util.concurrent.atomic.AtomicInteger casts = new java.util.concurrent.atomic.AtomicInteger();
+            List<String> windows = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+            k.startBrain(body -> {
+                if (!body.contains("\"decisionType\":\"CAST_SPELL\"")) {
+                    return "{\"chosenId\": 0}";
+                }
+                int n = casts.incrementAndGet();
+                windows.add(body);
+                String id = n == 1 ? MailboxTestKit.idOf(body, "Savannah Lions")
+                        : n == 2 ? MailboxTestKit.idOf(body, "Llanowar Elves") : null;
+                return "{\"chosenId\": " + (id != null ? id : "0") + "}";
+            });
+            k.run(() -> casts.get() >= 3, 200);
+            k.stopBrain();
+            Assert.assertTrue(windows.size() >= 3, "three cast windows, saw " + windows.size());
+            Assert.assertNull(MailboxTestKit.idOf(windows.get(0), "Gemstone Caverns"),
+                    "a one-mana land is not a float option, like every other land");
+            boolean lions = false;
+            boolean elves = false;
+            for (Card c : k.seat.getCardsIn(ZoneType.Battlefield)) {
+                lions |= c.getName().equals("Savannah Lions");
+                elves |= c.getName().equals("Llanowar Elves");
+            }
+            Assert.assertTrue(lions, "the payer tapped Caverns for {W} without the seat floating it");
+            Assert.assertFalse(elves, "one land, one mana: the second spell is not paid");
+            Assert.assertTrue(windows.get(2).contains("\"lastRefused\":{"), "and its refusal is reported");
+        }
+    }
+
     /** Games 27-28: a mana ability whose activation restriction fails now
      *  (Mox Opal, metalcraft) is listed but flagged dormant and never summed
      *  into manaAvailableNow; with metalcraft it is a normal source. */
