@@ -2070,6 +2070,24 @@ Hard-won from two live sessions; read before optimizing anything.
     tracebacks. Shipped with `packaging/ship-release.sh`: dated + `-latest`,
     both byte-exact. Tag `v4.1` = 7ed30c62210.
 
+107. **v4.3 SHIPPED (2026-10-03 ~15:3x PDT) — every target is the seat's, on the
+    Forge of 2026-10-02.** `forge-light-llm-20261003.tar.gz` (500,548,035 bytes,
+    sha256 `25748615902d…4d430f`) from `7e7315acae9 (arena)`; `-latest` points
+    at it (server-side copy, both verified byte-exact). Carries the game-64
+    fixes (BL-61/62/63, W-4, the limiter at 4), the second upstream sync
+    (base `fb4d8091126`, Forge 2.0.16, HL-22 fenced) and BL-64. Cut twice: the
+    first cut's acceptance game (10-02 evening) ran across a laptop sleep —
+    17 punts, all in the sleep hours — and surfaced BL-64 (a hand card's stale
+    target, left by stock's evaluation in a slept-through window, rendered in
+    the offer and trusted by the aim gate: Counterspell at a long-exiled
+    Vandalblast, no window, fizzle). Fixed, gated (494/494, 744), re-cut from
+    the package root, second acceptance game clean: all-AI, normal chatter,
+    Urza at turn 19 (Reversal/Chalice loop), 578 decisions, 0 punts / timeouts /
+    lost windows / exceptions / target losses, 2 legitimate deviations, voice
+    5.2 lines/min. Bucket pruned to v4.2.1 dated + v4.3 dated + `-latest` (the
+    v4.1 object removed; the local copy stays). Shipping defaults unchanged
+    (`ARENA_CHATTER=normal`, `ARENA_BARKS=some`, voices on).
+
 106. **Game 64 and its fixes (2026-10-02) — every target is the seat's, however many.**
     An all-AI watch game on v4.2.1 (Giada at turn 45 from 2 life) showed one
     seam gap twice: a spell or ability with OPTIONAL targets ("up to two target
