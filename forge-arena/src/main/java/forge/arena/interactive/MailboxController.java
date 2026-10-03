@@ -331,6 +331,14 @@ public final class MailboxController extends PlayerControllerAi
     private enum AimOutcome { ANSWERED, DECLINED, NO_ANSWER }
     private AimOutcome lastAimOutcome = AimOutcome.ANSWERED;
 
+    /** The SpellAbility the SEAT picked in the last CAST_SPELL / REACT window
+     *  (null when stock decided). Targets already sitting on it are stale —
+     *  left by stock's evaluation in some earlier window, or by an earlier
+     *  failed play — and are cleared before the aim gate asks. A stock-chosen
+     *  play keeps the targets stock chose for it. (2026-10-03: Counterspell
+     *  cast at a Vandalblast exiled turns earlier, no window, fizzle.) */
+    private SpellAbility seatPick;
+
     /** Item 4 (review 2026-09-03): the last cast this controller REFUSED
      *  (unaffordable, or a modal cast that failed). Reported in the NEXT
      *  window's state as {@code lastRefused} plus a prompt sentence, and that
@@ -454,6 +462,7 @@ public final class MailboxController extends PlayerControllerAi
 
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
+        seatPick = null;
         // Advisor Executive: this controller is the override on the human's
         // seat and the toggle went off -> remove ourselves and hand this
         // decision back to the human controller (next-decision semantics).
@@ -879,6 +888,7 @@ public final class MailboxController extends PlayerControllerAi
             }
         }
         JsonNode resp = exchange(req);
+        seatPick = null; // set again below only when the seat's own pick is returned
         // item 4: the refusal has been reported and suppressed once; a fresh
         // refusal (below, in playChosenSpellAbility) re-arms it for the next window
         lastRefused = null;
@@ -906,6 +916,7 @@ public final class MailboxController extends PlayerControllerAi
             pendingTapPreference.put(pick, symPiece);
             pendingTapPreference.put(pick.getRootAbility(), symPiece);
         }
+        seatPick = pick; // playChosenSpellAbility: the seat chose this one — its targets are aimed afresh
         return Collections.singletonList(pick);
     }
 
@@ -948,6 +959,17 @@ public final class MailboxController extends PlayerControllerAi
                         + (lastRefused != null ? lastRefused.get("payableNow") : "?")
                         + " (kept in zone; the next window says so)");
                 return true; // keep priority; the next window reports the refusal (item 4)
+            }
+        }
+        if (sa == seatPick) {
+            seatPick = null;
+            for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
+                if (s.usesTargeting() && s.getTargets() != null && !s.getTargets().isEmpty()) {
+                    System.err.println("[mailbox seat " + seatIndex + "] "
+                            + (sa.getHostCard() != null ? sa.getHostCard().getName() : sa)
+                            + ": stale targets " + s.getTargets() + " cleared before the aim");
+                    s.resetTargets();
+                }
             }
         }
         // (1) Announce mana X on the cast path (601.2b) — the stock AI path never
@@ -5039,9 +5061,15 @@ public final class MailboxController extends PlayerControllerAi
         // (2026-08-24 game). Prefer the printed rules text whenever any part
         // of the chain still wants targets it doesn't have; either source
         // falls back to the other when empty.
+        // v4.3 acceptance game (2026-10-03 t28): a REACT option read "Counterspell —
+        // Counter Vandalblast (265)" long after Vandalblast was gone — stock's
+        // evaluation of the hand card during an earlier stock-decided window had
+        // left its targets set. At offer time a targeting part never holds REAL
+        // targets (the seat aims at cast time), so any targeting part means the
+        // printed text, never the stale stack description.
         boolean wantsUnchosenTargets = false;
         for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
-            if (s.usesTargeting() && s.getTargets().size() == 0) {
+            if (s.usesTargeting()) {
                 wantsUnchosenTargets = true;
                 break;
             }

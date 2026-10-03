@@ -1,6 +1,6 @@
 # forge-light-llm — Patch Notes
 
-## v4.3 — 2026-10-02
+## v4.3 — 2026-10-03
 
 Every target is the seat's, and the engine is current. Two days of work on one all-AI game
 (64, watched play by play) and a second sync with upstream Forge, each verified against the
@@ -26,6 +26,12 @@ archive that showed it and on the merged engine. Defaults unchanged: `ARENA_CHAT
   can), a spoken truce is settled only after the table has been read again, never between the
   last two seats and never across an attack that came after the words, and its "One round." is
   always spoken and never after the deal has ended.
+- **A spell is never aimed at a ghost.** The first v4.3 acceptance game offered Urza
+  "Counterspell — Counter Vandalblast" turns after Vandalblast was exiled: stock's evaluation of
+  the hand card during a window it had decided (the laptop had slept through it) left a target
+  on the ability, the offer showed it, and the cast trusted it — no target window, a fizzle, and
+  Razorkin Needlehead resolved. An offer now shows the printed text for anything that targets, and
+  a play the seat chose has its leftover targets cleared before the seat is asked where it goes.
 - **Gemstone Caverns is one mana.** The seat's mana table summed the card's two conditional
   parts and told the brain two mana, with "[currently adds 2 mana]" on the option; Giada planned
   a seven-mana Final Showdown on six (game 64, turn 22). One part is live at a time.
