@@ -128,6 +128,13 @@
                              stop paying live-game pacing. Live launches never
                              set this property and keep the 75ms default. -->
                         <arena.mailbox.poll.ms>5</arena.mailbox.poll.ms>
+                        <!-- The default mailbox dir is RELATIVE (forge-arena/mailbox) and
+                             the fork's cwd is this module, so any test that reaches the
+                             default (ExecutiveSwitchTest installs a seat-0 bus) spooled a
+                             doubled forge-arena/forge-arena/mailbox tree beside the real one
+                             (2026-10-16). Root every test's default under target/ instead;
+                             tests that want their own dir still pass one explicitly. -->
+                        <arena.mailbox.dir>${project.build.directory}/test-mailbox</arena.mailbox.dir>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

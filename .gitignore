@@ -115,9 +115,7 @@ forge-gui/tools/build
 # voice dry takes (raw/ under every seat library and sub-library): rendered locally,
 # baked into the shipped <id>.wav beside them — never committed again (plan §4.6)
 /forge-arena/runner/voice/stock/voices/**/raw/
-# defensive: the doubled-path spool dir if a test ever writes it again
-/forge-arena/forge-arena/
 forge-gui-ios/robovm.properties
 
 # transcript corpus for timing priors (analysis input only; never committed — 2026-09-16)
-/forge-arena/research/corpus/
+/forge-arena/docs/research/play-transcripts-for-audio/

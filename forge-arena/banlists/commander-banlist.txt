@@ -1,14 +1,21 @@
-# version: 2026-07-15-approx
-# Commander banned list — PINNED data file (plan §3 Gate 1: bans change; the
-# run manifest records which version a batch used).
-# NOTE: seeded from model knowledge at project setup; VERIFY against the
-# official list (mtgcommander.net / WotC) and bump the version line when
-# updating. Lint is mechanism; this file is policy.
+# version: 2026-02-09
+# Commander banned list - PINNED data file (plan section 3 Gate 1: bans change; the
+# run manifest records which version a batch used). Lint is mechanism; this
+# file is policy. One card name per line; '#' lines are ignored.
+#
+# Source: Wizards of the Coast, "Commander Banned Cards" section of
+#   https://magic.wizards.com/en/banned-restricted-list
+# Version = effective date of the last change to the format's list
+#   (2026-02-09: Biorhythm unbanned; Lutri, the Spellchaser unbanned as a
+#   card but still banned as a companion - the lint has no companion check).
+# Checked against the page 2026-10-16. The 2026-10-12 announcement made no
+#   Commander change; the next scheduled announcement is 2026-11-30.
+# Card names below are copied from the page in its order (42 cards).
 Ancestral Recall
 Balance
-Biorhythm
 Black Lotus
 Chaos Orb
+Channel
 Dockside Extortionist
 Emrakul, the Aeons Torn
 Erayo, Soratami Ascendant
@@ -19,12 +26,11 @@ Golos, Tireless Pilgrim
 Griselbrand
 Hullbreacher
 Iona, Shield of Emeria
-Jeweled Lotus
 Karakas
+Jeweled Lotus
 Leovold, Emissary of Trest
 Library of Alexandria
 Limited Resources
-Lutri, the Spellchaser
 Mana Crypt
 Mox Emerald
 Mox Jet
@@ -35,6 +41,8 @@ Nadu, Winged Wisdom
 Paradox Engine
 Primeval Titan
 Prophet of Kruphix
+Recurring Nightmare
+Rofellos, Llanowar Emissary
 Shahrazad
 Sundering Titan
 Sylvan Primordial
@@ -42,5 +50,6 @@ Time Vault
 Time Walk
 Tinker
 Tolarian Academy
+Trade Secrets
 Upheaval
 Yawgmoth's Bargain

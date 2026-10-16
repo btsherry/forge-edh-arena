@@ -17,7 +17,7 @@ them.
 **Reproduce:**
 
 ```
-forge-arena/scripts/research/pod_timing.py forge-arena/research/corpus
+forge-arena/scripts/research/pod_timing.py forge-arena/docs/research/play-transcripts-for-audio
 forge-arena/scripts/research/pod_timing.py --runner-log \
   forge-arena/runner/logs/archive/20260916-111916-stop/voice-0.jsonl \
   forge-arena/runner/logs/archive/20260916-132428-stop/voice-0.jsonl
@@ -32,7 +32,7 @@ environment).
 
 Captions only — **no audio and no video was downloaded**, and the captions
 themselves are **never committed**: they live under
-`forge-arena/research/corpus/`, which is gitignored (`.gitignore:123`, verified
+`forge-arena/docs/research/play-transcripts-for-audio/`, which is gitignored (`.gitignore:123`, verified
 with `git check-ignore`). Total on disk: 7.9 MB of VTT. Nothing from the
 transcripts is quoted in this doc beyond one five-word fragment used to show
 the caption shape.

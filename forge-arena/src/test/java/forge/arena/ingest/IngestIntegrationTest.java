@@ -85,7 +85,7 @@ public class IngestIntegrationTest {
         var lint = forge.arena.prep.DeckLint.run(r.dossierDir(),
                 Path.of("banlists", "commander-banlist.txt"));
         assertTrue("real deck must lint clean, errors: " + lint.errors(), lint.pass());
-        assertEquals("2026-07-15-approx", lint.banlistVersion());
+        assertEquals("2026-02-09", lint.banlistVersion());
     }
 
     @Test

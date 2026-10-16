@@ -11,7 +11,7 @@ against priors.  It reads YouTube captions (auto or manual) from a corpus tree
 
 and writes one JSON per video plus a markdown summary per source and pooled.
 
-The corpus itself is never committed (forge-arena/research/corpus/ is
+The corpus itself is never committed (forge-arena/docs/research/play-transcripts-for-audio/ is
 gitignored); only this script and the numbers it produces live in the repo.
 
 Usage

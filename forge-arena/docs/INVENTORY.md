@@ -264,7 +264,7 @@ two rules digests named below.
 | `docs/working-plan-Aug-3.md` | historical | 2026-08-03 ingestion working plan (post-compaction anchor) |
 | `docs/research/` (16 files) | reference | surveys, audits (`SEAM-AUDIT-2026-08-28.md`), DeckCheck protocol notes, and the two brain-loaded digests `mtg-rules-summary.md` + `mtg-rules-digest-conversion.md` (the only `research/` files that ship) |
 | `docs/reviews/` (4 files) | maintainers | 2026-09-03 full review + interactive plan; 2026-09-04 round-two comparison + interactive cleanup plan |
-| `docs/archive/` (8 files) | historical | completed-milestone docs (note 43) |
+| `docs/archive/` (5 files) | historical | completed-milestone docs (note 43) |
 | `docs/primers/<slug>-deckcheck.md` (10) | brains | per-deck strategy primers; Urza gained a mana-discipline section 08-17 |
 
 ## 8. Known strays / cleanup candidates
