@@ -728,14 +728,25 @@ class SeatRunner:
                 why: str | None = None, consumed: bool = True,
                 say: str | None = None, deal: dict | None = None) -> None:
         stamp = self.board_stamp(req)
+        # BL-59 (2026-10-16): `model` is the CONCRETE id the transport reported
+        # (seatd/brain.py resolved_model) — the Elo ladder keys on it; the alias
+        # the seat was launched with rides along only when it differs.
+        model_id = getattr(self.brain, "model_id", None)
+        model_name = getattr(self.brain, "resolved_model", None) or self.brain.model
+        if model_id and getattr(self, "_model_id_logged", None) != model_id:
+            self._model_id_logged = model_id
+            self._say(f"[seat {self.seat}] model resolved: {model_id} (asked {self.brain.model}; "
+                      f"claude code {getattr(self.brain, 'cli_version', None) or '?'})")
         rec = {"ts": time.time(), "seat": self.seat, "gameId": req.get("gameId"),
                "seq": req.get("seq"),
                "turn": req.get("turn"), "phase": req.get("phase"),
                "type": req.get("decisionType"), "source": source,
-               "model": self.brain.model,
+               "model": model_name,
                "effort": (meta or {}).get("effort") or self.brain.effort,
                "answer": answer, "why": why, "consumed": consumed,
                "board": stamp}
+        if model_name != self.brain.model:
+            rec["model_alias"] = self.brain.model
         # Log the FULL option list for model/plan/hold decisions (the 08-10
         # forensics fought the old 9-entry truncation: seq85 chose id 13 with
         # only 9 recorded). ~80 chars/label keeps a 40-option board <4KB.
@@ -763,6 +774,13 @@ class SeatRunner:
             v = getattr(self.brain, k, None)
             if isinstance(v, int):
                 cum[k] = v
+        cum["model"] = self.brain.model                       # the alias asked for
+        cum["cost_basis"] = "per-call"                        # M1 (2026-10-16): earlier archives summed a running ledger
+        if model_id:
+            cum["model_id"] = model_id                        # BL-59: what answered
+        ver = getattr(self.brain, "cli_version", None)
+        if isinstance(ver, str) and ver:
+            cum["cli_version"] = ver
         if self.brain.backend is not None:
             cum["backend"] = self.brain.backend.kind      # additive (plan §8)
             if self.brain.backend.cap_unenforceable:
@@ -787,7 +805,7 @@ class SeatRunner:
                 "gameId": req.get("gameId"),
                 "turn": rec["turn"], "phase": rec["phase"],
                 "type": rec["type"], "seq": rec["seq"], "source": source,
-                "model": self.brain.model, "effort": rec["effort"],
+                "model": model_name, "effort": rec["effort"],
                 "answer": answer, "why": why,
                 "deviation": rec.get("deviation"),
                 "latency_s": rec.get("latency_s"), "board": stamp}

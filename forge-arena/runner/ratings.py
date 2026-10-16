@@ -43,6 +43,74 @@ RUNNER = Path(__file__).resolve().parent
 START_ELO = 1000.0
 WINDOW_SLACK_S = 30.0
 
+# BL-59 / five-lens round two (2026-10-16): the runners used to record the CLI
+# alias (`opus`), which resolved to two different releases across the corpus.
+# New records carry the concrete id (seatd/brain.py resolved_model); a record
+# that still carries an alias is resolved by its own timestamp from
+# ratings-aliases.json beside this file:
+#   {"opus": [{"until": "2026-09-25T00:00:00-07:00", "id": "claude-opus-5"},
+#             {"id": "claude-opus-5-5"}], ...}
+# `until` is exclusive; the last entry (no `until`) is the current resolution.
+# The ladders key on the resolved id, so one alias is two rated players.
+ALIASES_PATH = RUNNER / "ratings-aliases.json"
+_ALIASES_CACHE: dict | None = None
+
+
+def compile_aliases(raw: dict) -> dict:
+    """{alias: [(until_epoch_or_None, id), ...]} with ISO `until` parsed."""
+    import datetime
+    out = {}
+    for alias, rows in (raw or {}).items():
+        if alias.startswith("_") or not isinstance(rows, list):
+            continue
+        chain = []
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get("id"), str):
+                continue
+            until = row.get("until")
+            t = None
+            if isinstance(until, str) and until:
+                try:
+                    t = datetime.datetime.fromisoformat(until).timestamp()
+                except ValueError:
+                    continue
+            chain.append((t, row["id"]))
+        if chain:
+            out[alias] = chain
+    return out
+
+
+def load_aliases(path: Path = ALIASES_PATH) -> dict:
+    """The compiled alias table from disk; a missing or malformed file is an
+    empty table (records then rate under the name they carry)."""
+    global _ALIASES_CACHE
+    if _ALIASES_CACHE is not None and path == ALIASES_PATH:
+        return _ALIASES_CACHE
+    try:
+        table = compile_aliases(json.loads(path.read_text()))
+    except (OSError, ValueError):
+        table = {}
+    if path == ALIASES_PATH:
+        _ALIASES_CACHE = table
+    return table
+
+
+def resolve_model(name, ts, aliases: dict | None = None) -> str:
+    """The rated-player key for a record's `model`: a concrete id passes
+    through; an alias resolves by the record's ts (None = the current
+    resolution, the chain's last entry)."""
+    if not isinstance(name, str) or not name:
+        return name
+    table = aliases if aliases is not None else load_aliases()
+    chain = table.get(name)
+    if not chain:
+        return name
+    if isinstance(ts, (int, float)):
+        for until, model_id in chain:
+            if until is None or ts < until:
+                return model_id
+    return chain[-1][1]
+
 
 def k_factor(games: int) -> float:
     return 40.0 if games < 10 else 20.0
@@ -101,6 +169,12 @@ def slice_game_log(game_log: Path, t0: float, t1: float) -> list[dict]:
             if p.is_symlink():
                 continue
             files.append(p)
+        if not files:
+            # Pre-BL-21 archives (2026-08-13 -> 09-04) hold no game log at all:
+            # the shared line lived in a flat file the stop did not move. The
+            # per-seat records (seat-N.jsonl) are the same decisions with the
+            # same ts/seat/seq/type/source/model fields, so they rate the same.
+            files = [p for p in sorted(game_log.parent.glob("seat-*.jsonl")) if not p.is_symlink()]
     elif game_log.exists():
         files.append(game_log)
     out = []
@@ -153,10 +227,11 @@ def slice_archived_game(game_log: Path, game_id, t0: float, t1: float) -> list[d
     return out
 
 
-def attribute(spool: dict, window_recs: list[dict], log=print):
+def attribute(spool: dict, window_recs: list[dict], log=print, aliases: dict | None = None):
     """Per-seat pilot resolution. Returns (seat->pilot|None, seat->counts,
     error string or None). AI seats attribute by model-decision majority and
-    cross-check the deck slug; human seats attribute by control field."""
+    cross-check the deck slug; human seats attribute by control field.
+    Model names are resolved through the alias table (BL-59) before counting."""
     pilots, counts = {}, {}
     by_seat: dict = {}
     for r in window_recs:
@@ -174,9 +249,10 @@ def attribute(spool: dict, window_recs: list[dict], log=print):
             return None, None, (f"seat {seat}: runner records say deck="
                                 f"{wrong[0].get('deck')!r} but result says "
                                 f"{slug!r} — roster drift, game NOT rated")
-        model_recs = [r for r in recs if r.get("source") == "model"
+        model_recs = [(resolve_model(r["model"], r.get("ts"), aliases), r)
+                      for r in recs if r.get("source") == "model"
                       and isinstance(r.get("model"), str)]
-        c = Counter(r["model"] for r in model_recs)
+        c = Counter(m for m, _ in model_recs)
         counts[seat] = dict(c)
         if not c:
             pilots[seat] = None  # deck ladder only (plan F-22)
@@ -186,9 +262,9 @@ def attribute(spool: dict, window_recs: list[dict], log=print):
         if len(leaders) == 1:
             pilots[seat] = leaders[0]
         else:  # tie -> earliest model-sourced record among leaders
-            first = min((r for r in model_recs if r["model"] in leaders),
-                        key=lambda r: r.get("ts") or 0)
-            pilots[seat] = first["model"]
+            first = min((mr for mr in model_recs if mr[0] in leaders),
+                        key=lambda mr: mr[1].get("ts") or 0)
+            pilots[seat] = first[0]
     return pilots, counts, None
 
 
@@ -278,7 +354,7 @@ def _rename_quiet(p: Path, suffix: str, log=print) -> bool:
 
 
 def process_spool(spool: dict, tables: dict, game_log: Path, log=print,
-                  events: list[dict] | None = None):
+                  events: list[dict] | None = None, aliases: dict | None = None):
     """Rate one game. Returns the history record, or None if skipped."""
     seats = {s["seat"]: s for s in spool.get("seats", [])}
     groups = spool.get("placementGroups") or []
@@ -300,7 +376,7 @@ def process_spool(spool: dict, tables: dict, game_log: Path, log=print,
         # a spool the sweep could not rate then (lock busy, a crash) must still
         # find its game — by game id, in the archive, one exact file.
         recs = slice_archived_game(game_log, spool.get("gameId"), t0, t1)
-    pilots, counts, err = attribute(spool, recs, log=log)
+    pilots, counts, err = attribute(spool, recs, log=log, aliases=aliases)
     if err:
         log(f"[ratings] SKIP: {err}")
         return None
@@ -358,7 +434,7 @@ def write_digests(tables: dict, record: dict, elo_dir: Path) -> None:
 
 
 def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
-          game_log: Path, elo_dir: Path, log=print) -> int:
+          game_log: Path, elo_dir: Path, log=print, aliases: dict | None = None) -> int:
     # BL-26: the listing happens UNDER the lock (below) — a sweep that listed
     # first could rename a spool a concurrent sweeper had already moved.
     if not results_dir.is_dir():
@@ -405,7 +481,7 @@ def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
                 _rename_quiet(p, ".skipped", log)
                 continue
             rec = process_spool(spool, tables, game_log, log=log,
-                                events=events)
+                                events=events, aliases=aliases)
             if rec is None:
                 _rename_quiet(p, ".skipped", log)
                 continue
@@ -438,12 +514,96 @@ def sweep(results_dir: Path, ratings_path: Path, history_path: Path,
         lf.close()
 
 
+def rebuild(archive_dir: Path, ratings_path: Path, history_path: Path,
+            elo_dir: Path, log=print, aliases: dict | None = None,
+            keep_backups: bool = True) -> int:
+    """Re-rate every archived game from scratch (BL-59 re-key, 2026-10-16).
+
+    Walks archive/<stamp>-stop/ in stamp order and rates each
+    game-*.json.rated / .voided spool against THAT archive's own game logs and
+    transport events, exactly as the live sweep did, then REPLACES ratings.json
+    and ratings-history.jsonl (the previous files are kept as *.bak-<stamp>).
+    Spools are never renamed. With an empty alias table the result equals the
+    live ladder; with the alias table, one alias becomes its concrete ids.
+    Returns the number of games (rated + voided) in the new history."""
+    tables = {"version": 1, "models": {}, "decks": {}, "combos": {}}
+    records = []
+    try:
+        dirs = sorted(p for p in archive_dir.iterdir() if p.is_dir())
+    except OSError:
+        dirs = []
+    for d in dirs:
+        spools = sorted(list(d.glob("game-*.json.rated")) + list(d.glob("game-*.json.voided")),
+                        key=lambda p: p.name)
+        if not spools:
+            continue
+        game_log = d / "game.jsonl"
+        events = load_transport_events(game_log)
+        for p in spools:
+            try:
+                spool = json.loads(p.read_text())
+            except (OSError, ValueError) as e:
+                log(f"[ratings] rebuild SKIP {d.name}/{p.name}: unreadable ({e})")
+                continue
+            problem = spool_problem(spool)
+            if problem:
+                log(f"[ratings] rebuild SKIP {d.name}/{p.name}: malformed ({problem})")
+                continue
+            rec = process_spool(spool, tables, game_log, log=log, events=events,
+                                aliases=aliases)
+            if rec is None:
+                log(f"[ratings] rebuild SKIP {d.name}/{p.name}: not rateable")
+                continue
+            rec["spool"] = p.name.split(".json", 1)[0] + ".json"
+            rec["archive"] = d.name
+            records.append(rec)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    if keep_backups:
+        for src in (ratings_path, history_path):
+            if src.exists():
+                src.replace(src.with_name(src.name + f".bak-{stamp}"))
+    ratings_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = ratings_path.with_name(ratings_path.name + ".tmp")
+    tmp.write_text(json.dumps(tables, indent=1, sort_keys=True))
+    tmp.replace(ratings_path)
+    with history_path.open("w") as f:
+        for rec in records:
+            f.write(json.dumps(rec) + "\n")
+    last = next((r for r in reversed(records) if not r.get("voided")), None)
+    if last:
+        write_digests(tables, last, elo_dir)
+    rated = sum(1 for r in records if not r.get("voided"))
+    log(f"[ratings] rebuilt from {len(dirs)} archive(s): {rated} rated, "
+        f"{len(records) - rated} voided; players: "
+        + ", ".join(f"{k} {v['elo']:.0f}/{v['games']}" for k, v in sorted(tables["models"].items())))
+    return len(records)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runner-dir", default=str(RUNNER),
                     help="runner/ root (results/, logs/, ratings.json live here)")
+    ap.add_argument("--rebuild", action="store_true",
+                    help="re-rate every archived game from scratch (BL-59 re-key); "
+                         "replaces ratings.json + ratings-history.jsonl, keeps .bak copies")
+    ap.add_argument("--archive-dir", default=None,
+                    help="with --rebuild: the archive root (default <runner-dir>/logs/archive)")
+    ap.add_argument("--out-dir", default=None,
+                    help="with --rebuild: write the rebuilt files here instead of over the live ones (a dry run)")
+    ap.add_argument("--no-aliases", action="store_true",
+                    help="with --rebuild: rate under the names the records carry (no alias resolution)")
     a = ap.parse_args()
     root = Path(a.runner_dir)
+    if a.rebuild:
+        out = Path(a.out_dir) if a.out_dir else root
+        aliases = {} if a.no_aliases else None
+        n = rebuild(archive_dir=Path(a.archive_dir) if a.archive_dir else root / "logs" / "archive",
+                    ratings_path=out / "ratings.json",
+                    history_path=out / "ratings-history.jsonl",
+                    elo_dir=out / "logs" / "elo", aliases=aliases,
+                    keep_backups=not a.out_dir)
+        print(f"[ratings] rebuild complete — {n} game(s) in the new history")
+        return 0
     n = sweep(results_dir=root / "results",
               ratings_path=root / "ratings.json",
               history_path=root / "ratings-history.jsonl",

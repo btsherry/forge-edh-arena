@@ -1,0 +1,14 @@
+{
+  "_comment": "BL-59 / five-lens round two (2026-10-16). Records written before 2026-10-16 carry the CLI alias the seat was launched with, not the model that answered. Each alias lists its resolutions oldest first; `until` is exclusive (ISO 8601 with offset, the game record's ts is compared to it); the last entry has no `until` and is the current resolution. Evidence: the local CLI transcripts under ~/.claude/projects for this repo (per-day model census, 2026-10-16) and BUG-LOG BL-59 (game 63 on 2026-09-25 was the first on claude-opus-5-5; games 46-62 were claude-opus-5). Records that already carry a concrete id pass through untouched.",
+  "opus": [
+    {"until": "2026-09-25T00:00:00-07:00", "id": "claude-opus-5"},
+    {"id": "claude-opus-5-5"}
+  ],
+  "fable": [
+    {"until": "2026-09-11T00:00:00-07:00", "id": "claude-fable-5"},
+    {"id": "claude-fable-5-1"}
+  ],
+  "sonnet": [
+    {"id": "claude-sonnet-5"}
+  ]
+}

@@ -184,9 +184,12 @@ def report(d: str) -> tuple[str, bool]:
         punts = src.get("punt", 0)
         fast = {k: v for k, v in src.items() if k not in ("model", "punt")}
         n = len(rows)
+        # BL-59: the ids that actually answered (concrete since 2026-10-16; the alias in older archives)
+        ids = sorted({str(r.get("model")) for r in rows if r.get("source") == "model" and r.get("model")})
         out.append(f"  game {str(gid)[:8]}: decisions {n} | model {model} ({100 * model // max(n, 1)}%) | "
                    f"runner-answered {sum(fast.values())} ({', '.join(f'{k} {v}' for k, v in sorted(fast.items(), key=lambda kv: -kv[1]))})"
-                   f" | punts {punts} | deviations {sum(1 for r in rows if r.get('deviation'))}")
+                   f" | punts {punts} | deviations {sum(1 for r in rows if r.get('deviation'))}"
+                   + (f" | model id {', '.join(ids)}" if ids else ""))
         if punts:
             bad["punts (game log)"] = punts
         lat = [r.get("latency_s") for r in rows if r.get("source") == "model" and isinstance(r.get("latency_s"), (int, float))]

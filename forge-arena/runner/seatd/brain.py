@@ -130,6 +130,23 @@ class PersistentClaude:
         self._reader = None
         self._err = None
         self.last_timeout = False   # the last call() ended in a deadline kill (B3/W-18: the brain counts these)
+        # Five-lens round two (Maintainer M1, 2026-10-16): the `result` event's
+        # total_cost_usd is a running LEDGER, not the turn's cost — summing the
+        # raw totals had the archives up to 70x over. The per-turn figure is the
+        # delta from the previous result. The ledger does not start at zero: a
+        # process started with --resume restores the total the transcript last
+        # saved (a one-shot `claude -p` saves on its clean exit; a process we
+        # kill never saves). The brain seeds `cost_base` with that saved total
+        # before start(); a restart on the same object re-seeds from it.
+        # Measured 2026-10-16 on CLI 2.1.300 (a resumed spawn that cost $0.005
+        # reported a total of $0.058; the resumed process started from $0.058).
+        self.cost_base = 0.0
+        self.cost_seen = 0.0
+        self._ledger_warned = False
+        # The concrete model id and CLI version the process reports in its
+        # system/init event (BL-59: the alias `opus` was two releases).
+        self.model_id: str | None = None
+        self.cli_version: str | None = None
 
     def alive(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
@@ -156,6 +173,7 @@ class PersistentClaude:
             self.proc = None
             return False
         self._q = queue.Queue()
+        self.cost_seen = self.cost_base      # what a --resume restores; 0.0 for a new session
         proc, q = self.proc, self._q
 
         def drain():
@@ -226,8 +244,33 @@ class PersistentClaude:
                 ev = json.loads(line)
             except ValueError:
                 continue
-            if isinstance(ev, dict) and ev.get("type") == "result":
+            if not isinstance(ev, dict):
+                continue
+            if ev.get("type") == "system" and ev.get("subtype") == "init":
+                if isinstance(ev.get("model"), str) and ev["model"]:
+                    self.model_id = ev["model"]
+                if isinstance(ev.get("claude_code_version"), str):
+                    self.cli_version = ev["claude_code_version"]
+                continue
+            if ev.get("type") == "result":
                 self.turns += 1
+                total = ev.get("total_cost_usd")
+                # An error result may carry zeroed figures (CLI schema): leave the
+                # ledger alone so the turn's cost lands in the next real result.
+                if isinstance(total, (int, float)) and not ev.get("is_error"):
+                    if total >= self.cost_seen:
+                        delta = total - self.cost_seen
+                    else:
+                        # The ledger fell below our seed: the transcript held a
+                        # smaller saved total than the brain assumed. Count the raw
+                        # figure (an overcount of at most the stale base) and say so once.
+                        delta = total
+                        if not self._ledger_warned:
+                            self._ledger_warned = True
+                            self.log(f"persistent claude cost ledger {total:.4f} below the seeded "
+                                     f"{self.cost_seen:.4f} — counting the raw figure this once")
+                    self.cost_seen = total
+                    ev["cost_usd_call"] = delta   # additive: total_cost_usd stays as reported
                 return ev
 
 
@@ -247,6 +290,15 @@ class SeatBrain:
         self.allowed_tools = list(allowed_tools) if allowed_tools else None
         self.deck = deck
         self.model = model
+        # BL-59: `model` is what the operator asked for (an alias such as
+        # `opus`); `model_id` is what actually answered, from the transport's
+        # modelUsage / init event. Records and the Elo ladder key on the id.
+        self.model_id: str | None = None
+        self.cli_version: str | None = None
+        # M1: the cost ledger the session's transcript holds — the total the last
+        # cleanly-exited one-shot `claude -p` (init, rotation, a spawn fallback)
+        # saved. A `--resume` starts from it, so per-call dollars subtract it.
+        self._cli_saved_cost = 0.0
         self.effort = effort  # pinned — never inherit the user's saved default
         self.log = log
         # session_id is CLAUDE session state only. Backend transports keep
@@ -354,6 +406,8 @@ class SeatBrain:
         Cost totals and latches are never touched here (plan §4)."""
         old_kind, _ = backends.parse_model(self.model)
         new_kind, new_id = backends.parse_model(model)
+        if model != self.model:
+            self.model_id = None             # BL-59: a re-dial resolves afresh at its next answer
         self.model = model
         if new_kind == old_kind:
             if self.backend is not None and new_id != self.backend.model_id:
@@ -450,6 +504,14 @@ class SeatBrain:
             self.log(f"[seat {self.seat}] model error envelope: "
                      f"{str(env.get('result'))[:200]}")
             return None
+        # M1: a one-shot's total_cost_usd is the ledger it restored (a --resume:
+        # the transcript's saved total) plus this call; it saves the sum on its
+        # clean exit, which is what the NEXT --resume will restore.
+        total = env.get("total_cost_usd")
+        if isinstance(total, (int, float)):
+            base = self._cli_saved_cost if (resume and self.session_id) else 0.0
+            env["cost_usd_call"] = total - base if total >= base else total
+            self._cli_saved_cost = total
         return env
 
     def _track_child(self, proc) -> None:
@@ -482,6 +544,9 @@ class SeatBrain:
                 pass
             err_path = str(self.root / "forge-arena" / "runner" / "logs" / f"claude-persistent-seat-{self.seat}.err")
             p = PersistentClaude(start_cmd, self.session_id, str(self.root), self.log, stderr_path=err_path)
+            # M1: the process resumes the session, so its ledger starts at the
+            # total the transcript saved (an attribute, not a ctor arg: test fakes)
+            p.cost_base = self._cli_saved_cost if self.session_id else 0.0
             if not p.start():
                 self.persistent_fallbacks += 1
                 return None
@@ -513,6 +578,14 @@ class SeatBrain:
             self.session_id = env["session_id"]
         self.persistent_calls += 1
         self.last_effort_used = self._persistent_key[1]   # what the answer was really produced at
+        # BL-59: the process's init event names the model it answers with and
+        # the CLI version; _accumulate takes the hint over modelUsage.
+        pid_model = getattr(p, "model_id", None)
+        if isinstance(pid_model, str) and pid_model:
+            env["model_id_hint"] = pid_model
+        ver = getattr(p, "cli_version", None)
+        if isinstance(ver, str) and ver:
+            self.cli_version = ver
         return env
 
     def stop_persistent(self) -> None:
@@ -545,9 +618,52 @@ class SeatBrain:
             v = u.get(k)
             if isinstance(v, (int, float)):
                 self.totals[k] += int(v)
-        c = env.get("total_cost_usd")
+        # Per-call dollars: a Claude envelope carries the call's own cost as
+        # cost_usd_call (PersistentClaude.call for the process, _call for a
+        # spawn — both subtract the ledger the session already held); a backend
+        # envelope's total_cost_usd IS that one request's cost.
+        c = env.get("cost_usd_call")
+        if not isinstance(c, (int, float)):
+            c = env.get("total_cost_usd")
         if isinstance(c, (int, float)):
             self.totals["cost_usd"] = round(self.totals["cost_usd"] + c, 6)
+        self._note_model_id(env)
+
+    def _note_model_id(self, env: dict) -> None:
+        """BL-59: what answered. A persistent process names its model in its
+        init event (stamped on the envelope as model_id_hint by _persistent_call)
+        and that wins — it is the process's own flag resolved. Otherwise the
+        envelope's modelUsage: it is restored with the session and cumulative,
+        so after a mid-game re-dial the biggest entry can be the OLD model;
+        entries of the alias's own family (`opus` in `claude-opus-5-5`) are
+        preferred, then the most output tokens."""
+        hint = env.get("model_id_hint")
+        if isinstance(hint, str) and hint:
+            self.model_id = hint
+            return
+        mu = env.get("modelUsage")
+        if not isinstance(mu, dict) or not mu:
+            return
+        family = str(self.model or "").lower()
+        best, best_key = None, None
+        for name, row in mu.items():
+            if not isinstance(name, str) or not name:
+                continue
+            out = row.get("outputTokens") if isinstance(row, dict) else None
+            out = out if isinstance(out, (int, float)) else 0
+            canon = row.get("canonicalModel") if isinstance(row, dict) else None
+            ident = canon if isinstance(canon, str) and canon else name
+            key = (1 if family and family in ident.lower() else 0, out)
+            if best_key is None or key > best_key:
+                best, best_key = ident, key
+        if best:
+            self.model_id = best
+
+    @property
+    def resolved_model(self) -> str:
+        """The concrete model id when the transport has reported one, else
+        the alias the seat was launched with."""
+        return self.model_id or self.model
 
     # ---- lifecycle -------------------------------------------------------------
 
@@ -653,6 +769,7 @@ class SeatBrain:
         self._fail_streak_t0 = None
         self.stalls = 0
         self._rejoin_pending = False
+        self._cli_saved_cost = 0.0     # M1: no session, no saved ledger
         self.totals = {k: (0.0 if k == "cost_usd" else 0) for k in self.totals}
         # Per-game backend state: model-class latches (incl. cost/call caps)
         # clear; auth-class latches persist — a bad key does not heal between

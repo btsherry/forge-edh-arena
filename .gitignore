@@ -112,6 +112,9 @@ forge-gui/tools/build
 /forge-arena/runner/ratings.json
 /forge-arena/runner/ratings-history.jsonl
 /forge-arena/runner/ratings.lock
+# ratings.py --rebuild keeps the previous ladder beside the new one (BL-59 re-key, 2026-10-16)
+/forge-arena/runner/ratings.json.bak-*
+/forge-arena/runner/ratings-history.jsonl.bak-*
 # voice dry takes (raw/ under every seat library and sub-library): rendered locally,
 # baked into the shipped <id>.wav beside them — never committed again (plan §4.6)
 /forge-arena/runner/voice/stock/voices/**/raw/

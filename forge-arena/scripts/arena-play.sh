@@ -223,6 +223,19 @@ ARENA_MAILBOX_TIMEOUT="$TIMEOUT" ARENA_ADVISOR="$ADVISOR" ARENA_RELAY="$RELAY" A
   "$DIR/run-pilot-match.sh" "$GUI_ARG" >>"$LOGS/gui.out" 2>&1 &
 echo $! > "$LOGS/pids/gui.pid"   # run-pilot-match execs java, so this IS the JVM
 
+# 3.1) sleep guard (five-lens round two, 2026-10-16): eleven of the nineteen punts
+# in twenty-one games sat on the laptop waking up — every deadline in the seam is
+# wall-clock, so a sleep spends every open window, the seats count stalls and the
+# ratings void the game (game 63, Ben's own win). caffeinate -i -s holds idle and
+# system sleep for exactly the GUI JVM's lifetime (-w): it exits with the game, so
+# it needs no PID file and no stop hook. macOS only; elsewhere this is a no-op.
+CAFF_PID=""
+if command -v caffeinate >/dev/null 2>&1; then
+  nohup caffeinate -i -s -w "$(cat "$LOGS/pids/gui.pid")" >/dev/null 2>&1 &
+  CAFF_PID=$!
+  echo "[arena] sleep guard: caffeinate -i -s pid $CAFF_PID for the GUI's lifetime" >>"$LOGS/gui.out"
+fi
+
 # 4) wait until the match is actually live — or until the engine refuses the
 # launch (item 7: a seat short of 100 real cards writes launch-status.json
 # with ok:false and exits; say so at once instead of after the 150 s wait)
@@ -246,6 +259,7 @@ if [ -f "$ROOT/mailbox/observer-state.json" ]; then
   [ "$MODE" = human ] && echo "  advisor: $([ "$ADVISOR" = 1 ] && echo on || echo "off (table relay on — deals and table talk still work)")"
   [ "$VOICE" = "off" ] && echo "  voice: MUTED at start (--no-voice) — the runner still keeps the deal ledger; unmute from the Advisor tab"
   [ "$VOICE" != "off" ] && echo "  voice: baked takes on$([ -n "${ELEVENLABS_API_KEY:-}" ] && echo ", live lines on" || echo ", live lines off (no ELEVENLABS_API_KEY)"), chatter ${ARENA_CHATTER:-normal}, seat barks ${ARENA_BARKS:-some} (--no-voice to silence)"
+  [ -n "$CAFF_PID" ] && echo "  sleep guard: caffeinate -i -s while the GUI runs (pid $CAFF_PID) — the Mac stays awake for the game"
   # 6) auto-teardown once the match has clearly concluded (Ben, 2026-09-04):
   # a plain sleep-loop watcher (no scheduler) waits for the engine's gameOver
   # flag or the GUI JVM to vanish, lingers, then runs arena-stop.sh exactly as
