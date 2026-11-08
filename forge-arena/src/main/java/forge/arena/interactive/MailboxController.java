@@ -347,6 +347,12 @@ public final class MailboxController extends PlayerControllerAi
      *  a model-call livelock on the same pick. */
     private Map<String, Object> lastRefused = null;
     private Card refusedHost = null;
+    /** v5: ARENA_SELF_SPELL_WINDOW=off|0|no restores the W-14 clean pass; read once per process. */
+    static final boolean SELF_SPELL_WINDOW;
+    static {
+        String knob = String.valueOf(System.getenv("ARENA_SELF_SPELL_WINDOW")).trim().toLowerCase();
+        SELF_SPELL_WINDOW = !("off".equals(knob) || "0".equals(knob) || "no".equals(knob));
+    }
 
     @Override
     public CardCollection preferredTapCards(SpellAbility ability) {
@@ -458,6 +464,74 @@ public final class MailboxController extends PlayerControllerAi
         return out;
     }
 
+    /** v5 (W-14 watch condition): can {@code sa} COPY one of the seat's own
+     *  objects on the stack? True when the ability's chain — its sub-abilities
+     *  and, for a Charm, each mode's chain — holds a {@code CopySpellAbility}
+     *  part AND a Stack-zone target restriction that legally targets an item of
+     *  {@code own} right now (the copy may ride a redirect root, Wild Ricochet:
+     *  "choose new targets for target spell, then copy it"). For a spell the
+     *  host card's triggers count too (a flash Dualcaster Mage's ETB), probed
+     *  on a copy that carries the seat as activator so a "you control"
+     *  restriction (Naru Meha, Lutri) reads correctly. Effect class and target
+     *  restrictions only, never names; an engine hiccup answers false and the
+     *  window stays shut. */
+    static boolean aimsAtOwnStack(SpellAbility sa, List<SpellAbility> own) {
+        try {
+            if (chainCopiesOwn(sa, own)) {
+                return true;
+            }
+            Card host = sa.getHostCard();
+            Player who = sa.getActivatingPlayer();
+            if (sa.isSpell() && host != null && who != null) {
+                for (forge.game.trigger.Trigger tr : host.getTriggers()) {
+                    SpellAbility ta = tr.ensureAbility();
+                    if (ta != null && chainCopiesOwn(ta.copy(who), own)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (RuntimeException e) {
+            // a mis-evaluated restriction must never open or crash a window
+        }
+        return false;
+    }
+
+    private static boolean chainCopiesOwn(SpellAbility root, List<SpellAbility> own) {
+        // The COPY part itself must reach an own object: through its own
+        // Stack-zone restriction (Flare, Reiterate, Naru Meha's trigger), or —
+        // when it copies "Defined$ Targeted" — through an ancestor part of the
+        // same chain that targets one (Wild Ricochet: redirect root, copy sub).
+        // Two loose booleans over the chain would let an unrelated copy part
+        // ride on a counter's targeting (Gemini round two).
+        boolean ancestorTargetsOwn = false;
+        for (SpellAbility p = root; p != null; p = p.getSubAbility()) {
+            if (p.getApi() == forge.game.ability.ApiType.Charm) {
+                for (AbilitySub mode : forge.game.ability.effects.CharmEffect.makePossibleOptions(p)) {
+                    if (chainCopiesOwn(mode, own)) {
+                        return true;
+                    }
+                }
+            }
+            boolean targetsOwn = false;
+            forge.game.spellability.TargetRestrictions tgt = p.getTargetRestrictions();
+            if (tgt != null && tgt.getZone() != null && tgt.getZone().contains(ZoneType.Stack)) {
+                for (SpellAbility o : own) {
+                    if (p.canTargetSpellAbility(o)) {
+                        targetsOwn = true;
+                        break;
+                    }
+                }
+            }
+            if (p.getApi() == forge.game.ability.ApiType.CopySpellAbility
+                    && (targetsOwn || (tgt == null && ancestorTargetsOwn
+                                       && "Targeted".equals(p.getParam("Defined"))))) {
+                return true;
+            }
+            ancestorTargetsOwn |= targetsOwn;
+        }
+        return false;
+    }
+
     // ---- decision hooks ----------------------------------------------------
 
     @Override
@@ -536,7 +610,35 @@ public final class MailboxController extends PlayerControllerAi
                 }
             }
         }
-        if (!ownMainEmpty && !reactive && !tactical && !selfTrigger) {
+        // v5 (game 20261107-184934 t33, the W-14 watch condition): SELF-SPELL
+        // windows — the stack holds only the seat's OWN non-trigger objects
+        // (its spell or activation; an opponent object makes it reactive) and
+        // the seat holds a COPY effect that can target one of them (Flare of
+        // Duplication on its own Devastating Onslaught, a flash Dualcaster
+        // Mage whose ETB copies it, Lithoform Engine on its own activation).
+        // Decided from the effect class and the target restriction below
+        // (aimsAtOwnStack), never by name. Counters and redirects are NOT a
+        // reason: countering or re-aiming your own spell the moment you cast
+        // it is no line, and a seat holding a Counterspell or a free
+        // Deflecting Swat would otherwise open a dead window on every cast.
+        // Without a copy answer the window stays the clean pass W-14 chose,
+        // so the flood cost is one enumeration per own cast and a window
+        // only for a real line.
+        List<SpellAbility> ownOnStack = new ArrayList<>();
+        if (!ownMainEmpty && !reactive && !tactical && !selfTrigger
+                && !game.getStack().isEmpty()) {
+            for (forge.game.spellability.SpellAbilityStackInstance si : game.getStack()) {
+                SpellAbility onStack = si.getSpellAbility();
+                if (onStack != null && !onStack.isTrigger()
+                        && onStack.getActivatingPlayer() == me) {
+                    ownOnStack.add(onStack);
+                }
+            }
+        }
+        // ARENA_SELF_SPELL_WINDOW=off restores the W-14 clean pass (kill switch
+        // while the flood cost is measured; the banner and README list it).
+        boolean selfSpell = !ownOnStack.isEmpty() && SELF_SPELL_WINDOW;
+        if (!ownMainEmpty && !reactive && !tactical && !selfTrigger && !selfSpell) {
             // v3: stock NEVER casts for a mailbox seat anymore. Windows not
             // worth the brain's time are a clean pass — the brain owns this
             // hand. (Stock still takes over wholesale on brain timeout, via
@@ -590,12 +692,12 @@ public final class MailboxController extends PlayerControllerAi
                     // tap the Forest on purpose — bare land taps are hidden. When
                     // the seat controls a READY land-untapper, ONE float option per
                     // land name is offered and labelled as the enabler.
-                    if (reactive || tactical || !landUntapperReady(me)
+                    if (reactive || tactical || selfSpell || !landUntapperReady(me)
                             || !floatOfferedNames.add(host.getName())) {
                         continue;
                     }
                     floatEnabled.add(sa);
-                } else if (reactive || tactical) {
+                } else if (reactive || tactical || selfSpell) {
                     continue;
                 }
             }
@@ -608,13 +710,31 @@ public final class MailboxController extends PlayerControllerAi
                 // the seat can truly act. Main-phase and self-trigger keep canPlay()
                 // alone, since a mana line in the option list may itself enable the
                 // cost (float, then sink).
-                boolean affordable = !(reactive || tactical)
+                boolean affordable = !(reactive || tactical || selfSpell)
                         || ComputerUtilCost.canPayCost(sa, me, false);
                 if (sa.canPlay() && affordable) {
                     playable.add(sa);
                 }
             } catch (RuntimeException canPlayThrew) {
                 // a mis-evaluated canPlay must not crash the seat — skip it
+            }
+        }
+        if (selfSpell) {
+            // v5: the window exists for an answer that can aim at the seat's
+            // own stack object; with none affordable it is the clean pass of
+            // old (never stock), whatever else the seat could cast.
+            boolean aims = false;
+            for (SpellAbility sa : playable) {
+                if (refusedHost != null && sa.getHostCard() == refusedHost) {
+                    continue; // it sits out this window (item 4): it cannot be the reason to open it
+                }
+                if (aimsAtOwnStack(sa, ownOnStack)) {
+                    aims = true;
+                    break;
+                }
+            }
+            if (!aims) {
+                return null;
             }
         }
         // v4-redesign (2026-08-10): a self-trigger window opens whenever there
@@ -726,7 +846,7 @@ public final class MailboxController extends PlayerControllerAi
         if (playable.isEmpty() && symOffers.isEmpty()) {
             // Instant windows with nothing real to do are a clean pass (never
             // stock); an empty own-main keeps the v1 stock fallthrough.
-            return (reactive || tactical || selfTrigger)
+            return (reactive || tactical || selfTrigger || selfSpell)
                     ? null : super.chooseSpellAbilityToPlay();
         }
 
@@ -748,6 +868,11 @@ public final class MailboxController extends PlayerControllerAi
                     + "body is still on the battlefield, or protect a piece. Act "
                     + "now, or pass to let it resolve. You keep priority after "
                     + "acting, so you can chain several responses.";
+        } else if (selfSpell) {
+            prompt = "YOUR OWN spell or ability is on the stack (see state.stack) and "
+                    + "you hold something that can COPY it. This is your window to act on "
+                    + "your own spell before it resolves — passing resolves it unless an "
+                    + "opponent responds. You keep priority after acting.";
         } else {
             prompt = "Instant-speed window — respond to what's on the stack, or pass.";
         }
@@ -894,12 +1019,15 @@ public final class MailboxController extends PlayerControllerAi
         lastRefused = null;
         refusedHost = null;
         if (resp == null) {
-            // timeout / IO / silent brain — never hang; let stock decide
-            return super.chooseSpellAbilityToPlay();
+            // timeout / IO / silent brain — never hang; let stock decide.
+            // v5: a self-spell window was a guaranteed pass before it existed,
+            // so a silent brain there passes rather than handing stock a turn
+            // with the seat's own spell on the stack.
+            return selfSpell ? null : super.chooseSpellAbilityToPlay();
         }
         JsonNode chosen = resp.get("chosenId");
         if (chosen == null || !chosen.isInt()) {
-            return super.chooseSpellAbilityToPlay();
+            return selfSpell ? null : super.chooseSpellAbilityToPlay(); // v5: never stock over an own spell
         }
         int chosenId = chosen.asInt();
         if (chosenId == 0) {
@@ -908,7 +1036,7 @@ public final class MailboxController extends PlayerControllerAi
         SpellAbility pick = byId.get(chosenId);
         if (pick == null) {
             // unknown id — treat as unparseable and fall back to stock
-            return super.chooseSpellAbilityToPlay();
+            return selfSpell ? null : super.chooseSpellAbilityToPlay(); // v5: never stock over an own spell
         }
         Card symPiece = symPieceById.get(chosenId);
         if (symPiece != null) {
@@ -942,7 +1070,10 @@ public final class MailboxController extends PlayerControllerAi
         // stack->stack and invalidates it (upstream FIXME: "stuck on stack
         // zone ... nowhere to be found"). Mana abilities are exempt (they ARE
         // the payment). Fail-open: if the check itself throws, play as before.
-        if (sa.isSpell() && !sa.isManaAbility()) {
+        // v5 (BL-65, critic round two): ACTIVATED abilities too — a failed
+        // activation's rollback refunds cost parts and mana but never life, so
+        // an unpayable Phyrexian activation must be refused here, not tried.
+        if ((sa.isSpell() || sa.isActivatedAbility()) && !sa.isManaAbility()) {
             boolean payable = true;
             try {
                 sa.setActivatingPlayer(getPlayer());

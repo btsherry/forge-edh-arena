@@ -799,6 +799,47 @@ Hard-won from two live sessions; read before optimizing anything.
     but a new decision is correct" hole. Cross-turn adaptive suppression was
     considered and REJECTED (most state can change across turns; too likely to
     eat a line).
+    **21c — SELF-SPELL window (2026-11-07, game `20261107-184934` t33; BUG-LOG
+    W-14's watch condition).** The gate passed the seat's own priority whenever
+    the stack held only its own NON-trigger objects (its spell or activation),
+    so a seat could never copy its own spell: seat 3 cast Devastating Onslaught
+    meaning to copy it with Flare of Duplication (its turn intent said "hold
+    priority") and the spell resolved with no window — the deck's loop died.
+    A fifth kind `selfSpell` now opens that window, but ONLY when an
+    AFFORDABLE playable option is a `CopySpellAbility` effect — in its own
+    chain (Flare, Reiterate, Lithoform Engine on an own activation) or in a
+    trigger of the spell's host card (a flash Dualcaster Mage's ETB) — whose
+    Stack-zone target restriction can legally target one of the own objects
+    (`aimsAtOwnStack`: effect class + target restriction, never a name).
+    Counters and redirects do not qualify: countering or re-aiming your own
+    spell as you cast it is no line, and a Counterspell or a free Deflecting
+    Swat in hand would otherwise open a dead window on every cast. The CHAIN
+    decides, not the root API: a copy inside a Charm mode (Return the Favor)
+    or behind a redirect root (Wild Ricochet) counts; a trigger's ability is
+    probed on a copy carrying the seat as activator so "spell you control"
+    (Naru Meha, Lutri) reads — both gaps found by the adversarial critic
+    before landing. Inside the window mana abilities are dropped and options
+    must pass `canPayCost`, as in a reactive window; a card refused in the
+    previous window cannot be the reason to open it; a silent brain passes
+    (never stock, since this window used to be a guaranteed pass); with no
+    copy answer the controller returns null exactly as before.
+    The copy part must itself reach an own object, or copy `Defined$
+    Targeted` under an ancestor that does (Gemini, round two: two loose
+    booleans over the chain would let a counter's targeting carry an
+    unrelated copy part). A malformed or silent answer in this window
+    passes, never stock. `ARENA_SELF_SPELL_WINDOW=off` is the kill switch.
+    Flood cost: one playable enumeration per own cast, PLUS a window on every
+    own non-mana activation while a Lithoform Engine or a castable Return the
+    Favor is live (their "ability you control" modes) — accepted as a real
+    line for now; the runner logs `own-spell window:` and hygiene counts it
+    under runner signals, which is the number to read after the next games.
+    Paired payer rule (BL-65): the pre-cast affordability guard now covers
+    activated abilities, because a failed activation's rollback refunds mana
+    and cost parts but never life; the payer itself spends life only when
+    the sources can pay everything else, colour by colour. The knob is read
+    once per process (`SELF_SPELL_WINDOW`). The brief tells the brains the rule (no
+    copy answer and no own trigger → no window → never plan to "hold
+    priority"). `SelfSpellWindowTest`.
 22. **COMBAT BLOCK/ATTACK LEGALITY: aggregate rules were bypassed** (2026-08-11,
     caught live by Ben: Urza blocked a menace Snarling Gorehound with ONE
     creature and it resolved — Gorehound died, Urza took 0). Root cause:

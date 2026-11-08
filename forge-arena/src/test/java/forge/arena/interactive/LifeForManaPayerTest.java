@@ -58,6 +58,10 @@ public class LifeForManaPayerTest {
     }
 
     private void board(boolean krrik, int swamps) {
+        // a failed REAL payment leaves the tapped sources' mana floating (the
+        // engine's rollback refunds it; this fixture has no rollback): empty
+        // the pool so one case's leftovers never pay the next case's shards
+        me.getManaPool().resetPool();
         for (Card c : new ArrayList<>(me.getCardsIn(ZoneType.Battlefield))) {
             me.getZone(ZoneType.Battlefield).remove(c);
         }
@@ -148,5 +152,139 @@ public class LifeForManaPayerTest {
         Assert.assertFalse(ComputerUtilCost.canPayCost(mikaeus3, me, false),
                 "without the keyword three Swamps cannot pay {3}{B}{B}{B}");
         Assert.assertEquals(me.getLife(), 40);
+    }
+
+    private long tapped(String name) {
+        return me.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(c -> c.getName().equals(name) && c.isTapped()).count();
+    }
+
+    /** BL-65 (game 20261107-184934 t26): a PHYREXIAN shard goes to life only
+     *  when the sources are short of the remaining shards — the shard type is
+     *  the gate, no keyword and no card name. Dismember {1}{B/P}{B/P} is the
+     *  general shape; Solphim's {1}{R/P}{R/P} activation is the live one. */
+    @Test(timeOut = 240_000)
+    public void phyrexianShardsGoToLifeOnlyWhenSourcesAreShort() throws Exception {
+        ArenaBootstrap.initialize(new File("..", "forge-gui"));
+        List<RegisteredPlayer> players = Lists.newArrayList();
+        Deck d = new Deck();
+        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("opp", null)));
+        players.add(new RegisteredPlayer(d).setPlayer(new LobbyPlayerAi("me", null)));
+        GameRules rules = new GameRules(GameType.Commander);
+        game = new Game(players, rules, new Match(rules, players, "t"));
+        me = game.getPlayers().get(1);
+        game.setAge(GameStage.Play);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, me);
+        game.getPhaseHandler().onStackResolved();
+
+        // two Swamps, 40 life: {1} and one {B/P} from the Swamps, the other {B/P} from life
+        me.setLife(40, null);
+        board(false, 2);
+        SpellAbility dismember = inHand("Dismember");
+        Assert.assertTrue(ComputerUtilCost.canPayCost(dismember, me, false),
+                "two Swamps + 2 life is a legal payment for {1}{B/P}{B/P}");
+        Assert.assertTrue(ComputerUtilMana.payManaCost(dismember.getPayCosts(), me, dismember, false),
+                "the real payment succeeds");
+        Assert.assertEquals(me.getLife(), 38, "exactly one Phyrexian pip was paid with life");
+        Assert.assertEquals(tapped("Swamp"), 2L, "both Swamps were spent");
+
+        // three Swamps: sources suffice, no life spent
+        me.setLife(40, null);
+        board(false, 3);
+        SpellAbility dismember2 = inHand("Dismember");
+        Assert.assertTrue(ComputerUtilCost.canPayCost(dismember2, me, false));
+        Assert.assertTrue(ComputerUtilMana.payManaCost(dismember2.getPayCosts(), me, dismember2, false));
+        Assert.assertEquals(me.getLife(), 40, "a cost mana alone can pay never costs life");
+
+        // one Swamp: {1} from the Swamp, both {B/P} from life
+        me.setLife(40, null);
+        board(false, 1);
+        SpellAbility dismember3 = inHand("Dismember");
+        Assert.assertTrue(ComputerUtilCost.canPayCost(dismember3, me, false));
+        Assert.assertTrue(ComputerUtilMana.payManaCost(dismember3.getPayCosts(), me, dismember3, false));
+        Assert.assertEquals(me.getLife(), 36, "two Phyrexian pips to life, the generic to the Swamp");
+
+        // at 2 life, life cannot pay: two Swamps alone cannot cover three shards
+        me.setLife(2, null);
+        board(false, 2);
+        SpellAbility dismember4 = inHand("Dismember");
+        Assert.assertFalse(ComputerUtilCost.canPayCost(dismember4, me, false),
+                "life at 2 cannot pay a Phyrexian pip, and two Swamps cannot pay three shards");
+        Assert.assertEquals(me.getLife(), 2);
+
+        // the sources cannot cover the non-Phyrexian shards: the payment fails
+        // WITHOUT spending life (a rollback refunds mana, never life) — stock's
+        // behaviour kept (critic, round two): {3}{U/P} with two Islands
+        me.setLife(40, null);
+        board(false, 0);
+        for (int i = 0; i < 2; i++) {
+            put("Island", me, ZoneType.Battlefield);
+        }
+        SpellAbility metamorph = inHand("Phyrexian Metamorph");
+        Assert.assertFalse(ComputerUtilCost.canPayCost(metamorph, me, false),
+                "two Islands cannot pay {3}{U/P} even with life");
+        Assert.assertFalse(ComputerUtilMana.payManaCost(metamorph.getPayCosts(), me, metamorph, false),
+                "the real payment fails");
+        Assert.assertEquals(me.getLife(), 40, "no life spent on a payment that was going to fail");
+        // ... and with three Islands life bridges exactly the one Phyrexian pip
+        me.setLife(40, null);
+        board(false, 0);
+        for (int i = 0; i < 3; i++) {
+            put("Island", me, ZoneType.Battlefield);
+        }
+        SpellAbility metamorph2 = inHand("Phyrexian Metamorph");
+        Assert.assertTrue(ComputerUtilCost.canPayCost(metamorph2, me, false));
+        Assert.assertTrue(ComputerUtilMana.payManaCost(metamorph2.getPayCosts(), me, metamorph2, false));
+        Assert.assertEquals(me.getLife(), 38);
+
+        // colours count, not just mana (Gemini, round three): Tamiyo {2}{G}{G/U/P}{U}
+        // with Forest, Forest, Sol Ring has four mana for four non-life shards but no
+        // blue source — the payment fails WITHOUT life; add an Island and life
+        // bridges exactly the Phyrexian pip
+        me.setLife(40, null);
+        board(false, 0);
+        put("Forest", me, ZoneType.Battlefield);
+        put("Forest", me, ZoneType.Battlefield);
+        put("Sol Ring", me, ZoneType.Battlefield);
+        game.getAction().checkStateEffects(true);
+        SpellAbility tamiyo = inHand("Tamiyo, Compleated Sage");
+        Assert.assertFalse(ComputerUtilCost.canPayCost(tamiyo, me, false), "no blue source: unpayable");
+        Assert.assertFalse(ComputerUtilMana.payManaCost(tamiyo.getPayCosts(), me, tamiyo, false));
+        Assert.assertEquals(me.getLife(), 40, "no life bled on a colour-starved payment");
+        me.setLife(40, null);
+        board(false, 0);
+        put("Forest", me, ZoneType.Battlefield);
+        put("Island", me, ZoneType.Battlefield);
+        put("Sol Ring", me, ZoneType.Battlefield);
+        game.getAction().checkStateEffects(true);
+        SpellAbility tamiyo2 = inHand("Tamiyo, Compleated Sage");
+        Assert.assertTrue(ComputerUtilCost.canPayCost(tamiyo2, me, false), "Forest, Island, Sol Ring + 2 life pays it");
+        Assert.assertTrue(ComputerUtilMana.payManaCost(tamiyo2.getPayCosts(), me, tamiyo2, false));
+        Assert.assertEquals(me.getLife(), 38);
+
+        // the live shape: Solphim's {1}{R/P}{R/P}, Discard two cards with two Mountains
+        me.setLife(37, null);
+        board(false, 0);
+        for (int i = 0; i < 2; i++) {
+            put("Mountain", me, ZoneType.Battlefield);
+        }
+        Card solphim = put("Solphim, Mayhem Dominus", me, ZoneType.Battlefield);
+        game.getAction().checkStateEffects(true);
+        inHand("Gnoll War Band");
+        put("Gemstone Caverns", me, ZoneType.Hand); // two cards to discard
+        SpellAbility counter = null;
+        for (SpellAbility a : solphim.getSpellAbilities()) {
+            if (a.isActivatedAbility()) {
+                counter = a;
+            }
+        }
+        Assert.assertNotNull(counter, "Solphim's activated ability");
+        counter.setActivatingPlayer(me);
+        Assert.assertTrue(ComputerUtilCost.canPayCost(counter, me, false),
+                "two Mountains + 2 life + two discards is a legal payment");
+        Assert.assertTrue(ComputerUtilMana.payManaCost(counter.getPayCosts(), me, counter, false),
+                "the mana part is paid: one {R/P} from life, the rest from the Mountains");
+        Assert.assertEquals(me.getLife(), 35);
+        Assert.assertEquals(tapped("Mountain"), 2L);
     }
 }

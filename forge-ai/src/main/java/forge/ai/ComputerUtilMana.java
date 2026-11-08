@@ -745,8 +745,22 @@ public class ComputerUtilMana {
             // the black pips first and then reported {3}{B}{B}{B} unpayable with
             // three Swamps and 40 life. Fires only when sources are short, so a
             // cost payable by mana alone never costs life.
-            if (chosenPayment != null && lifeKeywordCovers(ai, toPay)
+            // ARENA-PATCH (BL-65, 2026-11-07): the same for a PHYREXIAN shard.
+            // Stock pays {C/P} from sources before generic ("pay phyrexian, keep
+            // mana for colorless") and only considers life once a shard has no
+            // source left, so {1}{R/P}{R/P} with two Mountains and 37 life spent
+            // both Mountains on the {R/P}s and reported "Didn't find what to pay
+            // for {1}" (Solphim, game 20261107-184934 t26). The life branch below
+            // already pays a Phyrexian shard and honours AIPhyrexianPayment.
+            // Only when life can BRIDGE the gap (the sources cover every shard
+            // life cannot pay): a live payment pays life at once and a failed
+            // payment's rollback refunds cost parts and mana, never life, so
+            // {2}{B/P} with one Swamp must fail without spending 2 life, as
+            // stock did (adversarial critic, round two).
+            if (chosenPayment != null
+                    && (lifeKeywordCovers(ai, toPay) || toPay.isPhyrexian())
                     && sourcesShortOfShards(cost, sourcesForShards)
+                    && lifeBridgesTheGap(cost, sourcesForShards, ai)
                     && ai.canPayLife(phyLifeToPay, false, sa)
                     && (ai.getLife() > phyLifeToPay || ai.cantLoseForZeroOrLessLife())) {
                 chosenPayment = null; // route this shard into the life branch below
@@ -1171,8 +1185,66 @@ public class ComputerUtilMana {
      *  "unpayable". */
     private static boolean sourcesShortOfShards(final ManaCostBeingPaid cost,
             final Multimap<ManaCostShard, SpellAbility> sources) {
+        return countSourceMana(sources) < cost.getUnpaidShards().size();
+    }
+
+    /** ARENA-PATCH (BL-65): can life cover the shortfall? Route as many
+     *  life-payable shards (Phyrexian, or covered by the keyword) to life as
+     *  the life total allows (2 each, staying above zero), then ask whether
+     *  the SOURCES can pay what is left: enough mana in all, and for every
+     *  remaining coloured shard at least as many distinct sources able to
+     *  produce it as there are copies of it (a plain {U} with no blue source
+     *  fails here — Gemini round three). False means the payment is going to
+     *  fail anyway: then no life is spent on it, as stock did. */
+    private static boolean lifeBridgesTheGap(final ManaCostBeingPaid cost,
+            final Multimap<ManaCostShard, SpellAbility> sources, final Player ai) {
+        final List<ManaCostShard> unpaid = cost.getUnpaidShards();
+        int lifePayable = 0;
+        for (ManaCostShard shard : unpaid) {
+            if (shard.isPhyrexian() || lifeKeywordCovers(ai, shard)) {
+                lifePayable++;
+            }
+        }
+        if (!ai.cantLoseForZeroOrLessLife()) {
+            lifePayable = Math.min(lifePayable, Math.max(0, (ai.getLife() - 1) / 2));
+        }
+        // what the sources must still pay, after the life-payable shards go to life
+        final java.util.Map<ManaCostShard, Integer> remaining = new java.util.HashMap<>();
+        int toLife = lifePayable;
+        int remainingCount = 0;
+        for (ManaCostShard shard : unpaid) {
+            if (toLife > 0 && (shard.isPhyrexian() || lifeKeywordCovers(ai, shard))) {
+                toLife--;
+                continue;
+            }
+            remaining.merge(shard, 1, Integer::sum);
+            remainingCount++;
+        }
+        if (countSourceMana(sources) < remainingCount) {
+            return false;
+        }
+        for (java.util.Map.Entry<ManaCostShard, Integer> e : remaining.entrySet()) {
+            final ManaCostShard shard = e.getKey();
+            if (shard == ManaCostShard.GENERIC || shard == ManaCostShard.X || shard.isGeneric()) {
+                continue; // any mana pays these; the total above covers them
+            }
+            final Set<Card> able = new HashSet<>();
+            for (SpellAbility ma : sources.get(shard)) {
+                final Card host = ma.getHostCard();
+                if (host != null && !(host.isTapped() && ma.getPayCosts() != null && ma.getPayCosts().hasTapCost())) {
+                    able.add(host);
+                }
+            }
+            if (able.size() < e.getValue()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int countSourceMana(final Multimap<ManaCostShard, SpellAbility> sources) {
         if (sources == null) {
-            return true;
+            return 0;
         }
         final Set<Card> seen = new HashSet<>();
         int mana = 0;
@@ -1200,7 +1272,7 @@ public class ComputerUtilMana {
             }
             mana += yield;
         }
-        return mana < cost.getUnpaidShards().size();
+        return mana;
     }
 
     private static ManaCostShard getNextShardToPay(ManaCostBeingPaid cost, Multimap<ManaCostShard, SpellAbility> sourcesForShards) {
