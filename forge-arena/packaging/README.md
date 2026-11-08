@@ -502,6 +502,10 @@ Selvala); `--model opus` (`haiku|sonnet|opus|fable`); `--effort medium`
 | `ARENA_MAILBOX_TIMEOUT` | `90` | seconds the engine waits for a seat before stock answers (arena-play --timeout) |
 | `ARENA_BRAIN_TRANSPORT` | `persistent` | persistent = one long-lived claude process per seat; spawn = a process per call |
 | `ARENA_REACT_LOW_EFFORT` | `on` | unthreatened reaction windows are answered at low effort |
+| `ARENA_TALK_REPLY` | `on` | a seat answers `@<seat>` table talk itself, in words, in the Advisor panel (off: the words ride into its next decision) |
+| `ARENA_SAY_MENU` | `contextual` | the brain's table-line menu: `contextual` = the window's situations, with glosses (`voices/say-menu.json`) \| `fixed` = one short line of ids |
+| `ARENA_STANCES` | `on` | a brain may arm a reflex (`on_hit`, `on_gc`, …) that its voice performs at the event without a call; `off` = the key is not offered |
+| `ARENA_SELF_SPELL_WINDOW` | `on` | a seat holding a copy effect (Flare, Reiterate, a flash Dualcaster) gets a priority window over its OWN spell before it resolves; `off` = the old clean pass (a seat never holds priority over its own spell) |
 | `ARENA_ROTATE_TOKENS` | `250000` | fresh session (dossier + game record) at the next turn boundary past this many tokens |
 | `ARENA_ROTATE_HARD` | `600000` | rotate mid-turn past this many tokens |
 | `ARENA_SEAT_DECKS` | the table roster (Urza, Giada, Purphoros, Selvala) | four deck slugs in seat order (the table roster) |

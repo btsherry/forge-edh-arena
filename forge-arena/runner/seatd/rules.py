@@ -19,6 +19,8 @@ Traps encoded here (from the source-extracted contract, docs/INTERACTIVE-ARENA.m
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 import os
 
 # What the model must emit, per decisionType (fed into the prompt by brain.py).
@@ -113,13 +115,102 @@ REACT_HOLD_HINT = (
 
 
 # §4.4 (hardening plan 2026-09-14): the brain may add ONE table line to a non-procedural
-# answer. Every id below is a phrase id in the seat libraries (harry/manifest.json or
-# harry/table/manifest.json; bill and lily carry the same ids) — test_say_key pins that.
-# The runner validates against SAY_MENU, keeps the key out of the engine answer
-# (validate() strips it) and records it beside "why" for the voice runner to tail.
-SAY_MENU = ("taunt", "respect", "nice-play", "kill-that", "youre-the-threat", "im-not-the-threat",
-            "deal", "no-deal", "promise", "looping", "big-swing", "that-hurt", "gg", "heads-up",
-            "nothing-happening", "this-is-fine", "take-the-deal", "counter-offer")
+# answer. Since 2026-10-18 (docs/reviews/2026-10-16-brain-authored-talk-plan.md) the menu is
+# DATA: runner/voice/stock/voices/say-menu.json — a quiet window shows the eight `core` ids,
+# a charged window the active situations' ids first (the seat runner detects them from the
+# window and the observer's event ring), `max_ids` in all, each with a gloss; `deal` ids ride
+# only beside a deal line, `looping` only with the loop offer. The seat runner validates an
+# answer against the ids OFFERED ON THAT WINDOW, keeps the key out of the engine answer
+# (validate() strips it) and records it beside "why" for the voice runner to tail. SAY_MENU is
+# kept as the tuple of every id the file names (older callers and tests); SAY_OFFER is the
+# quiet-window line.
+SAY_MENU_PATH = Path(__file__).resolve().parents[1] / "voice" / "stock" / "voices" / "say-menu.json"
+SAY_MENU_SCHEMA = "arena.say-menu/1"
+_SAY_MENU_CACHE: dict = {}
+
+
+def load_say_menu(path: Path | None = None) -> dict:
+    """say-menu.json as a dict with every group normalised to [{"id", "gloss", "to"}] (cached per path).
+    A missing or malformed file is a packaging fault: it raises, like voices/tuning.json."""
+    p = Path(path) if path else SAY_MENU_PATH
+    key = str(p)
+    if key in _SAY_MENU_CACHE:
+        return _SAY_MENU_CACHE[key]
+    data = json.loads(p.read_text())
+    if not isinstance(data, dict) or data.get("schema") != SAY_MENU_SCHEMA:
+        raise RuntimeError(f"say menu {p}: expected schema {SAY_MENU_SCHEMA!r}")
+
+    def group(entries) -> list[dict]:
+        out = []
+        for e in entries or []:
+            if isinstance(e, str):
+                e = {"id": e}
+            out.append({"id": str(e["id"]), "gloss": str(e.get("gloss") or e["id"].replace("-", " ")), "to": bool(e.get("to"))})
+        return out
+
+    menu = {"core": group(data.get("core")),
+            "situations": {str(k): group(v) for k, v in (data.get("situations") or {}).items()},
+            "deal": group(data.get("deal")), "loop": group(data.get("loop")),
+            "needs_target": set(data.get("needs_target") or []),
+            "held": {str(k): str(v) for k, v in (data.get("held") or {}).items()},
+            "stances": {str(k): [e["id"] for e in group(v)] for k, v in (data.get("stances") or {}).items()},
+            "max_ids": int(data.get("max_ids") or 14), "max_says_per_turn": int(data.get("max_says_per_turn") or 2)}
+    ids = []
+    for g in [menu["core"], *menu["situations"].values(), menu["deal"], menu["loop"]]:
+        for e in g:
+            if e["id"] not in ids:
+                ids.append(e["id"])
+    menu["ids"] = tuple(ids)
+    _SAY_MENU_CACHE[key] = menu
+    return menu
+
+
+SAY_MENU = load_say_menu()["ids"]
+SAY_QUESTIONS = ("whats-your-life", "cards-in-hand")   # questions: never aimed at the human, who cannot answer (voice/scheduler.QUESTION_LINES; test_say_menu pins it)
+
+
+def card_in_label(label) -> str:
+    """The card name an option label starts with: "Sol Ring  {1} — mana rock" -> "Sol Ring"."""
+    text = str(label or "").strip()
+    m = re.match(r"(.*?)(?:\s{2,}|\s*\{|\s+—|\s+-\s|$)", text)
+    return (m.group(1) if m else text).strip()
+
+
+def label_cmc(label) -> int:
+    """A mana value read from the cost braces in an option label: {3}{G}{G} -> 5, X counts nothing."""
+    total = 0
+    for sym in re.findall(r"\{([^}]*)\}", str(label or "")):
+        sym = sym.strip().upper()
+        if sym.isdigit():
+            total += int(sym)
+        elif sym and sym not in ("X", "Y", "Z", "T", "Q", "E", "S"):
+            total += 1
+    return total
+SAY_HELD = load_say_menu()["held"]          # own-action ids: held by the voice for the seat's next matching event
+STANCE_TRIGGERS = ("on_hit", "on_attacked", "on_counter", "on_gc", "on_commander", "on_big_spell", "on_removal", "on_sweep")
+
+
+def stance_block() -> str:
+    """The stance offer (plan step 4): a reflex the voice performs without a call, armed on any say window."""
+    return ('OPTIONAL "stance": a reflex your voice performs without asking you, once per trigger, when it next happens — '
+            '{"on_hit": "<id>", "on_gc": {"id": "<id>", "to": <seat>}, …}; triggers: ' + ", ".join(STANCE_TRIGGERS) + '; '
+            'any id from the lines above that fits the trigger; "to" is whoever caused it unless you name a seat. '
+            'It lives until it fires, you replace it, or your own turn begins.')
+
+
+def say_menu_block(entries: list[dict], charged: bool) -> str:
+    """The prompt text for an offered menu: one line of ids on a quiet window (today's shape), or
+    the glossed block on a charged one. `to` ids carry an arrow."""
+    if not charged:
+        aimed = [e["id"] for e in entries if e.get("to")]
+        return ('OPTIONAL "say": one of [' + ", ".join(e["id"] for e in entries) + '] — a table line your seat speaks '
+                'aloud. Only when it fits this moment, at most one, otherwise omit the key.'
+                + (' Give "<id>", or {"id": "<id>", "to": <seat number>} for a line that names a seat ('
+                   + ", ".join(aimed) + ').' if aimed else ''))
+    lines = " | ".join(f"{e['id']}{'→' if e['to'] else ''} — {e['gloss']}" for e in entries)
+    return ('OPTIONAL "say": a table line your seat speaks aloud — at most one, only when it fits this moment, else omit. '
+            'Give "<id>" or {"id": "<id>", "to": <seat number>} (→ = names a seat). Lines that fit now:\n  ' + lines)
+
 
 # Table deals (docs/reviews/2026-09-16-table-deals-plan.md §11): the player offers a deal through
 # the Advisor chat; the offer reaches this seat as a notes file; the brain answers with a "deal"
@@ -263,8 +354,7 @@ def validate_proposal(raw, seat: int, alive, turn) -> tuple[dict | None, str]:
 # Windows the offer goes on: casts, reactions (counters), attacks, blocks and target picks.
 # A mulligan, a mode/number/colour pick, a confirm or a pay-unless is procedural.
 SAY_WINDOWS = ("CAST_SPELL", "REACT", "DECLARE_ATTACKERS", "DECLARE_BLOCKERS", "CHOOSE_ENTITY", "CHOOSE_ENTITIES")
-SAY_OFFER = ('OPTIONAL "say": one of [' + ", ".join(SAY_MENU) + '] — a table line your seat speaks '
-             'aloud. Only when it fits this moment, at most one, otherwise omit the key.')
+SAY_OFFER = say_menu_block(load_say_menu()["core"], charged=False)      # the quiet-window line (ARENA_SAY_MENU=fixed: every say window)
 
 
 def all_ai_table() -> bool:
@@ -539,7 +629,8 @@ def build_user_prompt(req: dict, plan: str | None = None,
                       speculative: bool = False, react_hold: bool = False,
                       combo_status: str | None = None,
                       runner_note: str | None = None, seat: int | None = None,
-                      deal_offer: str | None = None) -> str:
+                      deal_offer: str | None = None, say_menu: str | None = None,
+                      stance_offer: str | None = None) -> str:
     """Per-decision prompt for the seat's model session (dossier already lives
     in the session's first message — this carries only the fresh decision).
 
@@ -581,7 +672,9 @@ def build_user_prompt(req: dict, plan: str | None = None,
             and req.get("phase") in ("MAIN1", "MAIN2")):
         tail += "\n" + PLAN_KEY_INSTRUCTION
     if say_offer(req, seat):
-        tail += "\n" + SAY_OFFER
+        tail += "\n" + (say_menu if say_menu else SAY_OFFER)     # the runner's contextual block, else the quiet line
+        if stance_offer:
+            tail += "\n" + stance_offer                          # step 4: the pre-armed reflex, beside the menu
     if deal_offer:
         tail += "\n" + deal_offer       # table deals: only while an offer is pending (deal_offer_line)
     parts.append(tail)

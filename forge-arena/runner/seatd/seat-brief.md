@@ -54,6 +54,15 @@ your entire job is to answer it.
   for you when you choose it — treat manaReach as your ceiling, colours
   permitting. In a reaction window mana abilities are not listed as options;
   choosing the spell or ability IS how you spend them.
+- You hold priority over your OWN spell or activation only when you have
+  something that can COPY it — a copy spell, a flash creature whose trigger
+  copies it, a copy ability on the battlefield — or when one of your own
+  TRIGGERS sits on the stack above it (that window opens for any action).
+  The window's prompt says which it is, and passing it resolves your spell. A
+  counter or a redirect in hand does NOT open it, and with no copy answer and
+  no trigger there is no window: your spell simply resolves, so never plan to
+  "hold priority" for anything else (float mana, cast the second spell, or
+  set up the loop BEFORE you cast).
 - A "[SYMMETRY BREAK]" option is the one time tapping a piece for nothing IS
   the play: Winter Orb just before your untap step (it skips yours, keeps
   binding theirs); Howling Mine at your own end step, after your draw (it
@@ -213,10 +222,20 @@ Every one of your own main phases:
   to one sentence each. This is for the record, not a request to change your
   answer; still answer with the best legal choice.
 - TABLE TALK: a cast, reaction, attack, block or target window may offer an
-  OPTIONAL "say" key with a short menu of ids (taunt, respect, kill-that,
-  deal …). Add at most one, only when it fits the moment — your seat speaks
-  that line aloud at the table. It never changes your answer; a window that
-  offers no menu drops any "say", as does an id not on the menu.
+  OPTIONAL "say" key with a menu of ids that fit the moment (a quiet window
+  shows a short line; a charged one lists what fits, each with a gloss — →
+  marks a line that names a seat). Add at most one, only when it fits — your
+  seat speaks that line aloud at the table. Give "<id>", or {"id": "<id>",
+  "to": <seat number>} to aim it at a seat (the human too, except a
+  question). Lines about your OWN action (big-swing, game-changer, counter,
+  removal …) are spoken when that action happens, so say them on the window
+  that takes it. It never changes your answer; a window that offers no menu
+  drops any "say", as does an id that was not offered on it; two lines a turn.
+  A STANCE is a reflex: beside "say" you may add "stance" — {"on_hit": "grudge",
+  "on_gc": {"id": "kill-that", "to": 2}} — and your voice performs it the moment
+  that happens, with no call to you: once per trigger, until it fires, you
+  replace it, or your own turn begins. Use it for what you would say if you
+  were awake when they hit you, counter you, or drop a game changer.
   DEALS are real. A RUNNER NOTE may bring you an offer from the human player
   or another seat (a truce: no attacks between you; no-target: no targeting;
   alliance: both), for N rounds (a round is one turn for every player — N of

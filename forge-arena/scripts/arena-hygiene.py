@@ -32,6 +32,7 @@ SEAT_LOG_SIGNALS = [
     ("deviations", re.compile(r"DEVIATION"), False),
     ("rotations", re.compile(r"session rotated #"), False),
     ("restarts", re.compile(r"RESTART mid-game"), False),
+    ("own-spell windows", re.compile(r"own-spell window:"), False),
 ]
 # run_table.out echoes every seat log line (stdout of the seat loops), so it is
 # read ONLY for the supervisor's own restart line. C3 (2026-09-14): the voice and
@@ -48,7 +49,7 @@ try:
     sys.path.insert(0, RUNNER_DIR)
     from voice.scheduler import ANCHORED_SOURCES, classify_source  # noqa: E402
 except Exception:                                                   # a package without the runner beside the script: the same mapping, mirrored
-    ANCHORED_SOURCES = ("event", "card", "procedural", "opener", "brain")   # keep in step with voice/scheduler.py (tested)
+    ANCHORED_SOURCES = ("event", "card", "procedural", "opener", "brain", "stance")   # keep in step with voice/scheduler.py (tested)
 
     def classify_source(source):
         if source == "chain":
@@ -182,7 +183,7 @@ def report(d: str) -> tuple[str, bool]:
         src = collections.Counter(r.get("source") for r in rows)
         model = src.get("model", 0)
         punts = src.get("punt", 0)
-        fast = {k: v for k, v in src.items() if k not in ("model", "punt")}
+        fast = {k: v for k, v in src.items() if k not in ("model", "punt", "chat")}   # chat = table talk, a model call (2026-10-16)
         n = len(rows)
         # BL-59: the ids that actually answered (concrete since 2026-10-16; the alias in older archives)
         ids = sorted({str(r.get("model")) for r in rows if r.get("source") == "model" and r.get("model")})
@@ -196,6 +197,24 @@ def report(d: str) -> tuple[str, bool]:
         if lat:
             lat.sort()
             out.append(f"     model latency: median {lat[len(lat) // 2]:.1f}s  p90 {lat[int(len(lat) * 0.9) - 1 if len(lat) > 1 else 0]:.1f}s  max {lat[-1]:.1f}s")
+        says = [r for r in rows if r.get("source") == "model" and r.get("say")]
+        offered = [r for r in rows if isinstance(r.get("say_offered"), list)]
+        if says or offered:
+            ids = collections.Counter(str(r.get("say")) for r in says)
+            addressed = [r for r in says if r.get("say_to") is not None]
+            tail = 0
+            for r in offered:                                   # did the brain pick from the tail of the list? (plan decision 5)
+                if r.get("say") in r["say_offered"]:
+                    tail += 1 if r["say_offered"].index(r["say"]) >= len(r["say_offered"]) // 2 else 0
+            out.append(f"     says: {len(says)} brain lines ({', '.join(f'{k} {v}' for k, v in ids.most_common(8))})"
+                       f" | addressed {len(addressed)} (human {sum(1 for r in addressed if r.get('say_to') == 0)})"
+                       f" | from the list's second half {tail}" + (f" of {len([r for r in offered if r.get('say')])}" if offered else ""))
+        chat = [r for r in rows if r.get("source") == "chat"]
+        if chat:
+            answered = [r for r in chat if isinstance(r.get("answer"), dict) and r["answer"].get("text")]
+            cl = sorted(r["latency_s"] for r in chat if isinstance(r.get("latency_s"), (int, float)))
+            out.append(f"     table talk: {len(chat)} heard, {len(answered)} answered, {len(chat) - len(answered)} silent/none"
+                       + (f" | reply median {cl[len(cl) // 2]:.1f}s max {cl[-1]:.1f}s" if cl else ""))
         for seat in sorted({r.get("seat") for r in rows}):
             mine = [r for r in rows if r.get("seat") == seat]
             s = collections.Counter(r.get("source") for r in mine)
@@ -242,6 +261,12 @@ def report(d: str) -> tuple[str, bool]:
         vc = collections.Counter(v.get("event") for v in voice)
         bk = collections.Counter(v.get("event") for v in voice if v.get("kind") == "bark")
         spoke_barks = [v for v in voice if v.get("event") == "spoke" and v.get("kind") == "bark"]
+        st = collections.Counter(v.get("why") for v in voice if v.get("event") == "noted" and v.get("kind") == "stance")
+        if st:
+            fired = collections.Counter(v.get("trigger") for v in voice if v.get("event") == "noted" and v.get("kind") == "stance" and v.get("why") == "fired")
+            out.append(f"  stances: armed {st.get('armed', 0)}, fired {st.get('fired', 0)}"
+                       + (f" ({', '.join(f'{k} {n}' for k, n in fired.most_common())})" if fired else "")
+                       + f", expired {st.get('expired', 0)}, replaced {st.get('replaced', 0)}, capped {st.get('capped', 0)}, dropped {st.get('dropped', 0)}")
         n_anchored = sum(1 for v in spoke_barks if anchored(v))
         duties = [v["duty"] for v in voice if v.get("event") == "spoke" and isinstance(v.get("duty"), (int, float))]
         if spoke_barks:

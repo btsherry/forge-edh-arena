@@ -39,6 +39,8 @@ import os
 import re
 import time
 from pathlib import Path
+from seatd import rules as _seat_rules      # the say menu's `held` map is the seat side's data (voices/say-menu.json)
+from voice import renderer as _voice_renderer  # VOICES_DIR read at call time: the tests swap the tree binding
 
 from voice.scheduler import (DEAL_ANSWER_LINE, DEAL_CONTROL_DIR, DEAL_PROPOSE_LINE, I_BROKE_IT_P, JOSHUA_DEAL_LINE, MULL_DIG_WORDS, MULL_LINE, MULL_P,
                              MULL_SCREW_WORDS, PRIORITY, deal_terms)
@@ -51,11 +53,16 @@ LOOP_CASTS = 4            # ANY card cast this often by one seat in one turn is 
 INTENT_MAX_AGE_S = 10.0   # a brain's declaration older than this (read after a mute or a restart) is history, not a line
 HECKLE_S = 30.0           # the board unchanged this long on the human's turn with no AI seat thinking: "we're waiting on you"
 HECKLE_AGAIN_S = 90.0     # ...and this long: "still waiting"
-# §4.4: the seat brain's optional "say" key — the seat runner validates it against seatd.rules.SAY_MENU before it lands in
-# game.jsonl; this copy is pinned equal by test_events_hardening so the two cannot drift. Three of the ids address someone.
-SAY_MENU = ("taunt", "respect", "nice-play", "kill-that", "youre-the-threat", "im-not-the-threat", "deal", "no-deal", "promise",
-            "looping", "big-swing", "that-hurt", "gg", "heads-up", "nothing-happening", "this-is-fine", "take-the-deal", "counter-offer")
-SAY_TARGETED = ("deal", "kill-that", "youre-the-threat")     # spoken to the life leader among the OTHER seats, else not at all
+# §4.4: the seat brain's optional "say" key. Since 2026-10-18 (plan step 2) the seat runner validates it against the menu it
+# OFFERED on that window (voices/say-menu.json); this side keeps no copy and accepts any id the seat's own library carries.
+# `say_to` on the record is the brain's addressee; an addressed id without one goes to the life leader among the other
+# seats (the proposal / question / address families), else nowhere. `held` ids are the seat's OWN-ACTION lines (big-swing,
+# game-changer, counter, removal…): they are not spoken when the record lands but kept for the seat's next matching ring
+# event and spoken THERE, with that event's ctx, replacing the dice line — a line for an action that never happens expires
+# unspoken at the turn change (the plan's F6/F7). Brain lines are state (ungoverned) and never evict a queued line.
+SAY_HELD = dict(_seat_rules.SAY_HELD)                        # id -> the event it waits for: attack | damage | cast | countered-by | left-by
+SAY_LEADER_FALLBACK = ("deal", "kill-that", "youre-the-threat", "archenemy", "attack-them", "whats-your-life", "cards-in-hand",
+                       "low-life-jab", "empty-hand")          # addressed ids: no `say_to` -> the leader (the old SAY_TARGETED, widened)
 # §11: a brain answering the player's offer adds a `say` beside its DEAL record; the DEAL record voices the addressed line
 # (deal-with-you / no-deal-with-you / counter-offer). Whichever record is read first speaks; the twin is then "said this turn".
 DEAL_SAY_TWINS = {"take-the-deal": "deal-with-you", "promise": "deal-with-you", "no-deal": "no-deal-with-you", "counter-offer": "counter-offer",
@@ -340,9 +347,13 @@ class EventsMixin:
         (the seat runner already validated; this is the second lock)."""
         answer = r.get("answer") if isinstance(r.get("answer"), dict) else {}
         say = str(r.get("say") or answer.get("say") or "").strip().lower()
+        snap_turn = self._last_snapshot.get("turn")
+        if isinstance(r.get("stance"), dict) and r.get("source") == "model":
+            # step 4: a reflex read late is still armed; one from a past turn is history
+            if not (snap_turn is not None and turn and turn < snap_turn):
+                self.arm_stances(seat, r["stance"], turn)
         if not say and r.get("source") != "cycle":
             return
-        snap_turn = self._last_snapshot.get("turn")
         age = time.time() - float(r.get("ts") or time.time())
         if (snap_turn is not None and turn and turn < snap_turn) or age > INTENT_MAX_AGE_S:
             # read late (a mute, a restart): a declaration from a past turn or older than a few seconds is history, not a line
@@ -353,22 +364,197 @@ class EventsMixin:
             return
         if not say:
             return
-        if say not in SAY_MENU:
-            self.record("skipped", kind="bark", why="say id not on the menu", stock=say, seat=seat, source="brain")
+        if not self.seat_carries(seat, say):
+            self.record("skipped", kind="bark", why="say id not in the seat's library", stock=say, seat=seat, source="brain")
             return
         twin = DEAL_SAY_TWINS.get(say)
         if twin and self.said_this_turn(seat, twin, optional=False):
             self.record("skipped", kind="bark", why=f"the DEAL answer already spoke ({twin})", stock=say, seat=seat, source="brain")
             return
+        to = r.get("say_to")
+        try:
+            to = int(to) if to is not None else None
+        except (TypeError, ValueError):
+            to = None
+        if to is not None and (to == seat or to in self.eliminated):
+            to = None
         ctx: dict = {"targets": []}
-        if say in SAY_TARGETED:
+        if to is not None:
+            ctx = {"targets": [to], "aggressor": to}
+        elif say in SAY_LEADER_FALLBACK:
             leader = getattr(self, "leader_of", None)
             target = leader(seat) if callable(leader) else None
             if target is None:
                 self.record("skipped", kind="bark", why="say needs a target and no other seat is standing", stock=say, seat=seat, source="brain")
                 return
             ctx = {"targets": [int(target)]}
-        self._bark(seat, say, turn=turn, source="brain", p=1.0, ctx=ctx)
+        card = r.get("say_card")
+        if isinstance(card, str) and card:
+            ctx.update(self.card_ctx(seat, card))
+        if say in SAY_HELD:
+            self.hold_say(seat, say, SAY_HELD[say], turn, ctx)
+            return
+        self._bark(seat, say, turn=turn, source="brain", p=1.0, ctx=ctx, evict=False)
+        if to is not None and say in ("youre-the-threat", "archenemy"):
+            # step 3: the table's threat pin follows the brain's politics — raised AFTER the bark (whose turn roll
+            # decays every pin by half), high enough to outlast one more roll
+            self.raise_threat(to, 3.0, f"named by seat {seat}")
+
+    # -- the brain's held own-action lines (plan step 2, 2026-10-18)
+    def seat_carries(self, seat: int, pid: str) -> bool:
+        """The seat's own voice has a take for this id: its base library, or the table / cards sub-libraries."""
+        if pid in self.table_ids or pid in self.card_ids:
+            return bool(self.library_for_seat(seat))
+        lib = self.library_for_seat(seat)
+        if not lib:
+            return False
+        base = self.__dict__.setdefault("_base_ids", {})
+        if lib not in base:
+            try:
+                base[lib] = set(json.loads((_voice_renderer.VOICES_DIR / lib / "manifest.json").read_text()).get("phrases") or {})
+            except (OSError, ValueError, TypeError):
+                base[lib] = set()
+        return pid in base[lib] or bool(self.renderer.variants(pid, lib))     # the manifest, or a take on disk
+
+    def card_ctx(self, seat: int, card: str) -> dict:
+        """The ctx that lets card_swap play the NAMED line for a brain's cast: a game changer of the seat's deck, its
+        commander (the address slug), else nothing."""
+        if card in self.game_changers.get(int(seat), set()):
+            return {"card": card_slug(card), "card_kind": "gc"}
+        who = (getattr(self, "_who", None) or {}).get(int(seat), "")
+        decks = getattr(self, "_seat_decks", None) or {}
+        address = getattr(self, "address", None) if isinstance(getattr(self, "address", None), dict) else {}
+        cmd = ((address.get("commanders") or {}).get(decks.get(int(seat), "")) or {}).get("name")
+        if who and cmd and card == cmd:
+            return {"card": who, "card_kind": "cmd"}
+        return {}
+
+    def hold_say(self, seat: int, pid: str, event: str, turn, ctx: dict) -> None:
+        """Keep the brain's own-action line for the seat's next matching event (one per seat; a new one replaces)."""
+        held = self.__dict__.setdefault("_held_say", {})
+        old = held.get(int(seat))
+        if old:
+            self.record("noted", kind="say", why="replaced", stock=old["id"], seat=seat, source="brain")
+        held[int(seat)] = {"id": pid, "event": event, "turn": turn, "ctx": dict(ctx or {}), "clock": self.clock()}
+        self.record("noted", kind="say", why="held", stock=pid, seat=seat, source="brain", waits=event)
+
+    def take_held(self, seat: int, event: str, fits=None) -> str | None:
+        """The seat's held line for this event kind, consumed — when `fits(id)` says the line is true of the event
+        (a `game-changer` for a game changer, `cast-big` for six-plus…); else it stays held."""
+        held = self.__dict__.get("_held_say") or {}
+        h = held.get(int(seat))
+        if not h:
+            return None
+        cur = self._last_snapshot.get("turn")
+        if h.get("turn") is not None and isinstance(cur, int) and h["turn"] < cur:
+            # a past turn's line: the action it waited for never came (the first bark of a turn rolls the
+            # counters only after this check, so the turn is read from the snapshot here)
+            del held[int(seat)]
+            self.record("noted", kind="say", why="expired", stock=h["id"], seat=seat, source="brain", waits=h["event"])
+            return None
+        if h["event"] != event:
+            return None
+        if fits is not None and not fits(h["id"]):
+            return None
+        del held[int(seat)]
+        self.record("noted", kind="say", why="fired", stock=h["id"], seat=seat, source="brain", waits=event)
+        return h["id"]
+
+    # -- stances: the brain's pre-armed reflexes (plan step 4, 2026-10-18)
+    STANCE_TRIGGERS = ("on_hit", "on_attacked", "on_counter", "on_gc", "on_commander", "on_big_spell", "on_removal", "on_sweep")
+    STANCE_REPLY = {"big-swing": "on_attacked", "poke": "on_attacked", "attack-you": "on_attacked", "removal": "on_removal",
+                    "counter": "on_counter", "game-changer": "on_gc", "commander-cast": "on_commander", "cast-big": "on_big_spell"}
+    STANCE_BYSTANDER = ("on_gc", "on_commander", "on_big_spell")      # the holders are every other voiced seat, not the line's targets
+
+    def arm_stances(self, seat: int, stance: dict, turn) -> None:
+        """Arm the record's reflexes for the seat: {trigger: {"id", "to"}}; an id the seat cannot speak is dropped,
+        a trigger already armed is replaced."""
+        st = self.__dict__.setdefault("_stances", {}).setdefault(int(seat), {})
+        for trigger, v in stance.items():
+            if trigger not in self.STANCE_TRIGGERS or not isinstance(v, dict):
+                continue
+            sid, to = str(v.get("id") or ""), v.get("to")
+            if not sid or not self.seat_carries(seat, sid):
+                self.record("noted", kind="stance", why="dropped", stock=sid, seat=seat, source="brain", trigger=trigger)
+                continue
+            if trigger in st:
+                self.record("noted", kind="stance", why="replaced", stock=st[trigger]["id"], seat=seat, source="brain", trigger=trigger)
+            st[trigger] = {"id": sid, "to": int(to) if isinstance(to, int) else None, "turn": turn, "clock": self.clock()}
+            self.record("noted", kind="stance", why="armed", stock=sid, seat=seat, source="brain", trigger=trigger)
+
+    def _stance_alive(self, seat: int, h: dict) -> bool:
+        """Until it fires, is replaced, or the holder's own turn begins (a later turn with the holder active)."""
+        cur, active = self._last_snapshot.get("turn"), self._last_snapshot.get("activeSeat")
+        if h.get("turn") is not None and isinstance(cur, int) and cur > h["turn"] and active is not None and int(active) == int(seat):
+            return False
+        return True
+
+    def take_stance(self, seat: int, trigger: str | None, cause=None):
+        """The seat's armed reflex for this trigger, consumed: (id, to) with `to` the brain's seat or the cause;
+        None when nothing is armed, the stance has expired, the seat cannot speak, or the turn's fire cap is spent."""
+        if not trigger or int(seat) == self.human_seat or int(seat) in self.eliminated or not self.library_for_seat(int(seat)):
+            return None
+        st = (self.__dict__.get("_stances") or {}).get(int(seat)) or {}
+        for trig, old in list(st.items()):
+            if not self._stance_alive(seat, old):            # only the expired reflexes die (Gemini, 2026-11-07: clearing
+                self.record("noted", kind="stance", why="expired", stock=old["id"], seat=seat, source="brain", trigger=trig)
+                del st[trig]                                  # the map wiped a reflex armed on the new turn)
+        h = st.get(trigger)
+        if not h:
+            return None
+        fired = self.__dict__.setdefault("_stance_fired", {})
+        cap = int(getattr(self, "stance_fires_per_turn", 3))
+        if fired.get(int(seat), 0) >= cap:
+            self.record("noted", kind="stance", why="capped", stock=h["id"], seat=seat, source="brain", trigger=trigger)
+            return None
+        fired[int(seat)] = fired.get(int(seat), 0) + 1
+        del st[trigger]
+        self.record("noted", kind="stance", why="fired", stock=h["id"], seat=seat, source="brain", trigger=trigger)
+        to = h.get("to") if h.get("to") is not None else (int(cause) if cause is not None and int(cause) != int(seat) else None)
+        return h["id"], to
+
+    def expire_stances(self, turn) -> None:
+        """At the turn roll: the new active seat's stances from earlier turns die; the fire counters reset."""
+        active = self._last_snapshot.get("activeSeat")
+        stances = self.__dict__.get("_stances") or {}
+        if active is not None and int(active) in stances:
+            st = stances[int(active)]
+            for trig, old in [(t, h) for t, h in st.items() if h.get("turn") is not None and turn is not None and h["turn"] < turn]:
+                self.record("noted", kind="stance", why="expired", stock=old["id"], seat=int(active), source="brain", trigger=trig)
+                del st[trig]
+        self._stance_fired = {}
+
+    def stance_reply(self, item: dict, speaker: int, voiced: dict):
+        """Shape (b): another seat's line just played; a target or bystander that armed the matching reflex answers
+        with it as the hop-1 reply — (who, id, to) or None."""
+        ctx = item.get("ctx") or {}
+        generic = str(ctx.get("generic") or item.get("stock") or "")
+        trig = self.STANCE_REPLY.get(generic)
+        if trig is None:
+            if generic.startswith("gc-") and generic.endswith("-cast"):
+                trig = "on_gc"
+            elif generic.startswith("cmd-") and generic.endswith("-cast"):
+                trig = "on_commander"
+            else:
+                return None
+        if trig in self.STANCE_BYSTANDER:
+            holders = [s for s in voiced if int(s) != speaker and int(s) != self.human_seat]
+        else:
+            holders = [int(t) for t in (ctx.get("targets") or []) if int(t) != speaker and int(t) != self.human_seat and int(t) in voiced]
+        stances = self.__dict__.get("_stances") or {}
+        armed = [s for s in holders if (stances.get(int(s)) or {}).get(trig)]
+        if not armed:
+            return None
+        who = int(self.rng.choice(armed))
+        fired = self.take_stance(who, trig, cause=speaker)
+        return (who, fired[0], fired[1]) if fired else None
+
+    def expire_held(self, turn) -> None:
+        """A held line from an earlier turn whose action never came is dropped unspoken (called from _roll_turn)."""
+        held = self.__dict__.get("_held_say") or {}
+        for seat in [s for s, h in held.items() if h.get("turn") is not None and turn is not None and h["turn"] < turn]:
+            h = held.pop(seat)
+            self.record("noted", kind="say", why="expired", stock=h["id"], seat=seat, source="brain", waits=h["event"])
 
     # -- table deals (§11): the seat's answer, the player's acceptance of a counter, a break
     def deal_answer(self, r: dict, seat: int, turn) -> None:
@@ -541,8 +727,9 @@ class EventsMixin:
                 said = self._bark(who, "you-promised", turn=turn, source="event", p=self.table_p("you-promised"),
                                   ctx={"targets": [], "aggressor": breaker, "human_cause": False})
         if breaker != self.human_seat and self.library_for_seat(breaker) and breaker not in self.eliminated and "i-broke-it" in self.table_ids:
-            self._bark(breaker, "i-broke-it", turn=turn, source="event", p=I_BROKE_IT_P, ctx={"targets": [int(v) for v in victims]},
-                       gap=0.4 if said else None, evict=not said)
+            held = self.take_held(breaker, "attack", fits=lambda i: i == "i-broke-it") if how == "attack" else None
+            self._bark(breaker, "i-broke-it", turn=turn, source="brain" if held else "event", p=1.0 if held else I_BROKE_IT_P,
+                       ctx={"targets": [int(v) for v in victims]}, gap=0.4 if said else None, evict=False if held else not said)
 
     def _target_seats(self, targets: list[str], d: dict, permanents_only: bool = False) -> list[int]:
         """The seats a stack item's `targets` point at, in order, once each: "seat N" is the player, a name
@@ -713,6 +900,11 @@ class EventsMixin:
 
     def _seat_rec(self, seat, snap: dict | None = None) -> dict | None:
         return next((x for x in (snap or self._last_snapshot).get("seats") or [] if x.get("seat") == seat), None)
+
+    def _in_response(self, seat: int, spell: str) -> bool:
+        """An instant of the seat's on another seat's turn (narrate_cast's `in-response` condition)."""
+        active = self._last_snapshot.get("activeSeat")
+        return card_kind(self.cards_of(seat).get(spell)) == "instant" and active is not None and int(active) != int(seat)
 
     def narrate_cast(self, seat: int, spell: str, cmc: int, turn) -> bool:
         """The caster says what kind of thing it just cast (a type, "a big one", "in
@@ -906,18 +1098,28 @@ class EventsMixin:
                         # table — "you promised!" / "you broke it, Player One" / the breaker's own "I lied"
                         self._deal_broken(seat, betrayed, "attack", turn)
                     elif seat != self.human_seat and big:
-                        self._bark(seat, "big-swing", turn=turn, source="event",
+                        held = self.take_held(seat, "attack", fits=lambda i: i in ("big-swing", "attack-you", "poke"))
+                        self._bark(seat, held or "big-swing", turn=turn, source="brain" if held else "event",
+                                        p=1.0 if held else None, evict=not held,
                                         ctx={"targets": defenders, "aggressor": None, "open": open_})
                         self._atom("swing", [int(x) for x in self.seat_libraries if int(x) != seat], actor=seat)
                     elif seat != self.human_seat and self.library_for_seat(seat) and power > 0:
                         # a smaller attack: "just a poke" / "you take this one" (the defender may answer "no blocks")
                         pid = "attack-you" if power * 2 >= self.barks_swing and len(defenders) == 1 else "poke"
-                        self._bark(seat, pid, turn=turn, source="procedural", p=self.table_p(pid),
+                        held = self.take_held(seat, "attack", fits=lambda i: i in ("big-swing", "attack-you", "poke"))
+                        self._bark(seat, held or pid, turn=turn, source="brain" if held else "procedural",
+                                        p=1.0 if held else self.table_p(pid), evict=not held,
                                         ctx={"targets": defenders, "aggressor": None, "open": open_})
                     elif seat == self.human_seat:
                         # the human swings: a defender braces, complains, or admits it has no blocks (round 31)
                         voiced_def = [x for x in defenders if x != self.human_seat and self.library_for_seat(x) and x not in self.eliminated]
-                        if voiced_def and (big or open_):
+                        armed = [(x, f) for x, f in ((x, self.take_stance(x, "on_attacked", cause=seat)) for x in voiced_def) if f]
+                        for x, (sid, to) in armed:
+                            self._bark(x, sid, turn=turn, source="stance", p=1.0, evict=False,
+                                            ctx={"targets": [to] if to is not None else [], "aggressor": seat, "human_cause": True, "open": open_})
+                        if armed:
+                            pass
+                        elif voiced_def and (big or open_):
                             who = int(self.rng.choice(open_ or voiced_def))
                             line = "no-blocks" if who in open_ and "no-blocks" in self.table_ids else self.rng.choice(["brace", "why-me"])
                             self._bark(who, line, turn=turn, source="event", p=self.barks_human_p,
@@ -928,13 +1130,29 @@ class EventsMixin:
                     if froms:
                         self._last_hit_by[victim] = (froms, turn)
                     amount = int(e.get("amount", 0))
-                    if len(froms) == 1 and froms[0] != victim and amount > 0:
-                        n = self._hits_from.setdefault(victim, {}).get(froms[0], 0) + 1
-                        self._hits_from[victim][froms[0]] = n
-                        if n % GRUDGE_EVERY == 0 and victim != self.human_seat and self.library_for_seat(victim) and "grudge" in self.table_ids:
-                            if self._bark(victim, "grudge", turn=turn, source="event", p=self.table_p("grudge"),
-                                               ctx={"targets": [], "aggressor": froms[0], "human_cause": froms[0] == self.human_seat}):
-                                continue                                # "you again?!" stands in for that-hurt / take-it this time
+                    hitter = froms[0] if len(froms) == 1 and froms[0] != victim else None
+                    n = 0
+                    if hitter is not None and amount > 0:
+                        n = self._hits_from.setdefault(victim, {}).get(hitter, 0) + 1
+                        self._hits_from[victim][hitter] = n
+                    # the brain's own words first: a held `take-it` (its blockers window), else an armed on_hit reflex
+                    brain_line, brain_src, brain_to = None, "brain", None
+                    if victim != self.human_seat and amount > 0:
+                        brain_line = self.take_held(victim, "damage")
+                        if not brain_line:
+                            fired = self.take_stance(victim, "on_hit", cause=hitter)
+                            if fired:
+                                brain_line, brain_to, brain_src = fired[0], fired[1], "stance"
+                    if brain_line:
+                        self._bark(victim, brain_line, turn=turn, source=brain_src, p=1.0, evict=False,
+                                        ctx={"targets": [brain_to] if brain_to is not None else [], "aggressor": hitter,
+                                             "human_cause": hitter == self.human_seat})
+                        continue
+                    if (hitter is not None and amount > 0 and n % GRUDGE_EVERY == 0 and victim != self.human_seat
+                            and self.library_for_seat(victim) and "grudge" in self.table_ids):
+                        if self._bark(victim, "grudge", turn=turn, source="event", p=self.table_p("grudge"),
+                                           ctx={"targets": [], "aggressor": hitter, "human_cause": hitter == self.human_seat}):
+                            continue                                # "you again?!" stands in for that-hurt / take-it this time
                     if amount < self.barks_hit:
                         if e.get("combat") and amount > 0 and victim != self.human_seat and self.library_for_seat(victim) and "take-it" in self.table_ids:
                             self._bark(victim, "take-it", turn=turn, source="procedural", p=self.table_p("take-it"),
@@ -977,24 +1195,41 @@ class EventsMixin:
                             line = "sure"                            # "resolves." — the table acknowledges the play
                         else:
                             line = ""
-                        if by and line:
+                        trig = ("on_gc" if card.get("card_kind") == "gc" else "on_commander" if e.get("commander")
+                                else "on_big_spell" if cmc >= 5 else None)
+                        armed = [(x, f) for x, f in ((x, self.take_stance(x, trig, cause=seat)) for x in by) if f] if trig else []
+                        for x, (sid, to) in armed:
+                            self._bark(x, sid, turn=turn, source="stance", p=1.0, evict=False,
+                                            ctx={"targets": [to if to is not None else seat], "aggressor": seat, "human_cause": True, **card})
+                        if by and line and not armed:
                             self._bark(int(self.rng.choice(by)), line, turn=turn, source="event",
                                             p=self.table_p("sure") if line == "sure" else self.barks_human_p,
                                             ctx={"targets": [seat], "aggressor": seat, "human_cause": True, **card})
                     elif self.library_for_seat(seat):
                         if seat in self._turn_start:
                             self._turn_start[seat]["casts"] += 1        # the turn summary: not a "land, go" turn
-                        if spell in self.game_changers.get(seat, set()):
+                        cmc_e = int(e.get("cmc", 0) or 0)
+                        is_gc, is_cmd = spell in self.game_changers.get(seat, set()), bool(e.get("commander"))
+                        held = self.take_held(seat, "cast", fits=lambda i: (i == "game-changer" and is_gc) or (i == "commander-cast" and is_cmd)
+                                              or (i == "cast-big" and cmc_e >= 6 and not is_gc and not is_cmd)
+                                              or (i == "in-response" and self._in_response(seat, spell)))
+                        if is_gc:
                             # one of the bracket's game changers: the caster crows ONCE a game, the table reacts (chain);
                             # a recast is quiet, and the second cast in a turn is a loop (game 47: Urza's Mana Vault, six times a turn)
                             looping = self.loop_tick(seat, spell, turn)
-                            if not looping and (seat, spell) not in self._gc_cast_seen:
-                                self._bark(seat, "game-changer", turn=turn, source="event",
+                            if held or (not looping and (seat, spell) not in self._gc_cast_seen):
+                                self._bark(seat, held or "game-changer", turn=turn, source="brain" if held else "event",
+                                                p=1.0 if held else None, evict=not held,
                                                 ctx={"targets": [], "card": card_slug(spell), "card_kind": "gc"})
                             self._gc_cast_seen.add((seat, spell)); self.raise_threat(int(seat), 2.0, f"{spell} cast")
-                        elif e.get("commander"):
-                            self._bark(seat, "commander-cast", turn=turn, source="event",
+                        elif is_cmd:
+                            self._bark(seat, held or "commander-cast", turn=turn, source="brain" if held else "event",
+                                            p=1.0 if held else None, evict=not held,
                                             ctx={"targets": [], "card": self._who.get(seat, ""), "card_kind": "cmd"})
+                        elif held:
+                            self._bark(seat, held, turn=turn, source="brain", p=1.0, evict=False,
+                                            ctx={"targets": [int(self._last_snapshot.get("activeSeat"))] if held == "in-response"
+                                                 and self._last_snapshot.get("activeSeat") not in (None, seat, self.human_seat) else []})
                         elif not self.narrate_cast(seat, spell, int(e.get("cmc", 0)), turn) and int(e.get("cmc", 0)) >= 5:
                             # no narration: a big spell still draws a bystander's reaction — wow at seven-plus, else admiration / read that / oh no
                             # (when the caster narrates, the reaction comes as the chain's reply to that line)
@@ -1039,10 +1274,18 @@ class EventsMixin:
                         self._sweeps += 1
                         swept = "not-again-sweep" if self._sweeps >= 2 and "not-again-sweep" in self.table_ids else "got-swept"
                         if by is not None and int(by) != self.human_seat and self.library_for_seat(int(by)):
-                            self._bark(int(by), "sweep", turn=turn, source="event", ctx={"targets": [o for o in owners if o != int(by)]})
+                            held = self.take_held(int(by), "left-by", fits=lambda i: i == "sweep")
+                            self._bark(int(by), held or "sweep", turn=turn, source="brain" if held else "event",
+                                            p=1.0 if held else None, evict=not held, ctx={"targets": [o for o in owners if o != int(by)]})
                         self._atom("sweep", [int(x) for x in self.seat_libraries if by is None or int(x) != int(by)], actor=int(by) if by is not None else None)
                         for o in ai_owners:
                             if by is None or o != int(by):
+                                fired = self.take_stance(o, "on_sweep", cause=int(by) if by is not None else None)
+                                if fired:
+                                    self._bark(o, fired[0], turn=turn, source="stance", p=1.0, evict=False,
+                                                    ctx={"targets": [fired[1]] if fired[1] is not None else [], "aggressor": int(by) if by is not None else None,
+                                                         "human_cause": by is not None and int(by) == self.human_seat})
+                                    continue
                                 self._bark(o, swept, turn=turn, source="event", p=self.table_p(swept) if swept != "got-swept" else None,
                                                 ctx={"aggressor": int(by) if by is not None else None, "human_cause": by is not None and int(by) == self.human_seat})
                     elif commanders:
@@ -1053,11 +1296,18 @@ class EventsMixin:
                                                  "card": self._who.get(o, ""), "card_kind": "cmd"})
                     elif by is not None and n > tokens and all(int(by) != o for o in owners) and not said_gone:
                         if int(by) != self.human_seat and self.library_for_seat(int(by)):
-                            self._bark(int(by), "removal", turn=turn, source="event", ctx={"targets": owners})
+                            held = self.take_held(int(by), "left-by", fits=lambda i: i == "removal")
+                            self._bark(int(by), held or "removal", turn=turn, source="brain" if held else "event",
+                                            p=1.0 if held else None, evict=not held, ctx={"targets": owners})
                         elif int(by) == self.human_seat and ai_owners:
-                            # the human's spot removal: the owner objects (round 31)
-                            self._bark(ai_owners[0], "oh-no", turn=turn, source="event", p=self.barks_human_p,
-                                            ctx={"targets": [], "aggressor": int(by), "human_cause": True})
+                            # the human's spot removal: the owner objects (round 31) — with its armed reflex when it has one
+                            armed = [(o, f) for o, f in ((o, self.take_stance(o, "on_removal", cause=int(by))) for o in ai_owners) if f]
+                            for o, (sid, to) in armed:
+                                self._bark(o, sid, turn=turn, source="stance", p=1.0, evict=False,
+                                                ctx={"targets": [to] if to is not None else [], "aggressor": int(by), "human_cause": True})
+                            if not armed:
+                                self._bark(ai_owners[0], "oh-no", turn=turn, source="event", p=self.barks_human_p,
+                                                ctx={"targets": [], "aggressor": int(by), "human_cause": True})
                 elif kind == "gameover":
                     pass   # the final sequence in scan_observer plays the winner's line, then Joshua, then locks
                 elif kind == "countered":
@@ -1071,12 +1321,20 @@ class EventsMixin:
                                         ctx={"targets": [], "aggressor": int(by) if by is not None else None,
                                              "human_cause": by is not None and int(by) == self.human_seat})
                     elif by is not None and int(by) != self.human_seat and self.library_for_seat(int(by)):
-                        self._bark(int(by), "counter", turn=turn, source="event",
+                        held = self.take_held(int(by), "countered-by", fits=lambda i: i == "counter")
+                        self._bark(int(by), held or "counter", turn=turn, source="brain" if held else "event",
+                                        p=1.0 if held else None, evict=not held,
                                         ctx={"targets": [int(victim)] if victim is not None else [], "aggressor": None})
                     elif victim is not None and int(victim) != self.human_seat:
-                        self._bark(int(victim), "got-countered", turn=turn, source="event",
-                                        ctx={"targets": [], "aggressor": int(by) if by is not None else None,
-                                             "human_cause": by is not None and int(by) == self.human_seat})
+                        fired = self.take_stance(int(victim), "on_counter", cause=int(by) if by is not None else None)
+                        if fired:
+                            self._bark(int(victim), fired[0], turn=turn, source="stance", p=1.0, evict=False,
+                                            ctx={"targets": [fired[1]] if fired[1] is not None else [], "aggressor": int(by) if by is not None else None,
+                                                 "human_cause": by is not None and int(by) == self.human_seat})
+                        else:
+                            self._bark(int(victim), "got-countered", turn=turn, source="event",
+                                            ctx={"targets": [], "aggressor": int(by) if by is not None else None,
+                                                 "human_cause": by is not None and int(by) == self.human_seat})
             except (TypeError, ValueError) as ex:
                 self.record("skipped", kind="event", why=f"malformed ring event: {str(ex)[:80]}", seq=seq, event_kind=str(kind))
                 continue

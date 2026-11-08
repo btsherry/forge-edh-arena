@@ -29,5 +29,6 @@
  "chain_decay": 0.5,
  "chain_max_hops": 3,
  "chain_gap_s": 0.25,
- "chain_human_p": 0.5
+ "chain_human_p": 0.5,
+ "stance_fires_per_turn": 3
 }

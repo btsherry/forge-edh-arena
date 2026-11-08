@@ -572,7 +572,9 @@ class WordsToASeat(unittest.TestCase):
         self.ask("@purphoros You dirty bastard!")
         n3 = self.notes(2)                                                     # Purphoros sits at seat 2 in this fixture
         self.assertEqual([p.name.endswith("-table-talk.json") for p in n3], [True])
-        self.assertEqual(json.loads(n3[0].read_text())["text"], "You dirty bastard!")
+        talk = json.loads(n3[0].read_text())
+        self.assertEqual(talk["text"], "You dirty bastard!")
+        self.assertEqual((talk["name"], talk["clock"]), ("Purphoros", "r2-t7"), "the seat echoes these on its reply line (2026-10-16)")
         self.assertIn('\n[r2-t7 · you → Purphoros] "You dirty bastard!"\n', self.panel())
         self.assertEqual(self.r.brain.prompts, [], "Joshua stays out of it")
         self.assertEqual([r["event"] for r in self.records("deal")], ["invite", "talk"])

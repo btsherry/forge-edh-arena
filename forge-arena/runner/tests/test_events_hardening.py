@@ -25,6 +25,25 @@ def cast(seq, seat, spell, turn, cmc=1):
 
 
 class _EventsCase(_TableCase):
+    def setUp(self):
+        """The synthetic tree plus the say menu's base ids for harry and bill (silent takes): since 2026-10-18 the
+        voice validates a brain's id by the seat's own library, not by a copy of the menu."""
+        super().setUp()
+        import voice_runner as vr
+        from test_barks_runtime import silent_wav
+        ids = set(seat_rules.SAY_MENU)
+        for lib in ("harry", "bill"):
+            d = vr.VOICES_DIR / lib
+            m = json.loads((d / "manifest.json").read_text())
+            phrases = m.setdefault("phrases", {})
+            for pid in ids:
+                if pid not in phrases and pid not in self.r.table_ids and pid not in self.r.card_ids:
+                    phrases[pid] = {"text": ["x"], "when": "test"}
+                    if not (d / f"{pid}.wav").exists():
+                        (d / f"{pid}.wav").write_bytes(silent_wav())
+            (d / "manifest.json").write_text(json.dumps(m))
+        self.r.__dict__.pop("_base_ids", None)
+
     def _board(self, turn, active, seats=None, events=(), **kw):
         return {"turn": turn, "phase": "MAIN1", "activeSeat": active, "gameOver": False,
                 "seats": seats or [self._seat(i) for i in range(4)], "events": list(events), **kw}
@@ -239,9 +258,10 @@ class Loops(_EventsCase):
 
 
 class SayKey(_EventsCase):
-    def test_the_menu_matches_the_seat_runners(self):
-        self.assertEqual(ev_mod.SAY_MENU, seat_rules.SAY_MENU, "the voice runner's copy of the menu drifted from seatd.rules")
-        self.assertTrue(set(ev_mod.SAY_TARGETED) <= set(ev_mod.SAY_MENU))
+    def test_the_held_map_is_the_seat_sides_data_and_every_held_id_waits_for_a_real_event(self):
+        self.assertEqual(ev_mod.SAY_HELD, seat_rules.SAY_HELD, "one source: voices/say-menu.json")
+        self.assertEqual(set(ev_mod.SAY_HELD.values()), {"attack", "damage", "cast", "countered-by", "left-by"})
+        self.assertTrue(set(ev_mod.SAY_LEADER_FALLBACK) <= set(seat_rules.SAY_MENU))
 
     def test_a_valid_say_id_is_the_seats_line_with_source_brain_under_its_guard(self):
         self._prime()
@@ -276,7 +296,191 @@ class SayKey(_EventsCase):
         self._log(seat=3, turn=5, say="taunt")
         self.r.scan_game_log()
         self.assertEqual([x for x in self.r.queue if x["kind"] == "bark"], [], "off the menu / the human / a voiceless seat: nothing")
-        self.assertEqual([r["stock"] for r in self._records("skipped", "bark") if r["why"] == "say id not on the menu"], ["dance"])
+        self.assertEqual([r["stock"] for r in self._records("skipped", "bark") if r["why"] == "say id not in the seat's library"], ["dance"])
+
+
+class BrainLinesStep2(_EventsCase):
+    """Plan step 2 (2026-10-18): a brain's say is addressed by `say_to`, never evicts a queued line, is state under
+    the governor, and an own-action id is HELD for the seat's next matching ring event and spoken there."""
+
+    def test_say_to_aims_the_line_and_the_human_may_be_the_addressee(self):
+        self._prime()
+        self._log(seat=1, turn=5, say="taunt", say_to=2)
+        self._log(seat=2, turn=5, say="youre-the-threat", say_to=0)
+        self.r.scan_game_log()
+        q = [(x["ctx"].get("generic", x["stock"]), x["seat"], x["ctx"].get("targets"), x["ctx"].get("aggressor")) for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual(q, [("taunt", 1, [2], 2), ("youre-the-threat", 2, [0], 0)])
+        self.assertEqual([x["stock"] for x in self.r.queue if x["kind"] == "bark"][1], "threat-giada",
+                         "the existing address swap names the human's commander — the step-3 wording, through the mechanism that was already there")
+
+    def test_a_brain_line_never_evicts_what_is_queued(self):
+        self._prime()
+        self._log(seat=2, turn=5, say="respect")
+        self.r.scan_game_log()
+        self._log(seat=1, turn=5, say="taunt")
+        self.r.scan_game_log()
+        self.assertEqual([x["stock"] for x in self.r.queue if x["kind"] == "bark"], ["respect", "taunt"], "both stand (the old anchored eviction would have dropped respect)")
+        self.assertEqual([r for r in self._records("dropped", "bark")], [])
+
+    def test_a_brain_line_is_state_under_the_governor(self):
+        self._prime()
+        self.r.governor = lambda optional: 0.0                      # a table far over its budget
+        self.r.rng.random = lambda: 0.5
+        self._log(seat=1, turn=5, say="taunt")
+        self.r.scan_game_log()
+        self.assertEqual([x["stock"] for x in self.r.queue if x["kind"] == "bark"], ["taunt"], "ungoverned, like a deal line")
+
+    def test_an_own_action_say_is_held_and_spoken_at_the_attack_with_the_events_context(self):
+        self._prime()
+        self._log(seat=1, turn=5, say="big-swing")
+        self.r.scan_game_log()
+        self.assertEqual([x for x in self.r.queue if x["kind"] == "bark"], [], "held, not spoken")
+        self.assertEqual([(n["why"], n["stock"], n["waits"]) for n in self._records("noted", "say")], [("held", "big-swing", "attack")])
+        seats = [self._seat(0), self._seat(1, creatures=(("Bear", False),)), self._seat(2, creatures=(("Wall", True),)), self._seat(3)]
+        self._write(self._board(5, 1, seats=seats, events=[cast(1, 3, "x", 3), {"seq": 2, "kind": "attack", "turn": 5, "seat": 1, "attackers": 1, "power": 2, "defenders": [2]}]))
+        self.r.scan_observer()
+        q = [(x["stock"], x["seat"], x["source"], x["ctx"].get("targets"), x["ctx"].get("open")) for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual(q, [("big-swing", 1, "brain", [2], [2])], "the brain's line, with the ring's defenders and the open list a `no blocks` reply needs")
+        self.assertEqual([n["why"] for n in self._records("noted", "say")], ["held", "fired"])
+
+    def test_a_held_line_whose_action_never_comes_expires_at_the_turn_change(self):
+        self._prime()
+        self._log(seat=1, turn=5, say="poke")
+        self.r.scan_game_log()
+        self._snap(6, 2)                                            # seat 1 never attacked on turn 5
+        self.assertEqual([x for x in self.r.queue if x["kind"] == "bark"], [])
+        seats = [self._seat(0), self._seat(1, creatures=(("Bear", False),)), self._seat(2), self._seat(3)]
+        self._write(self._board(6, 1, seats=seats, events=[cast(1, 3, "x", 3), {"seq": 2, "kind": "attack", "turn": 6, "seat": 1, "attackers": 1, "power": 2, "defenders": [2]}]))
+        self.r.scan_observer()                                      # an attack on the NEXT turn: the ring's own line, not the stale held one
+        q = [(x["stock"], x["source"]) for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual(q, [("poke", "procedural")])
+        self.assertEqual([n["why"] for n in self._records("noted", "say")], ["held", "expired"])
+
+    def test_a_held_cast_line_fits_its_event_or_waits(self):
+        self._prime()
+        self._log(seat=1, turn=5, say="cast-big")
+        self.r.scan_game_log()
+        self._write(self._board(5, 1, events=[cast(1, 3, "x", 3), cast(2, 1, "Sol Ring", 5, cmc=1)]))
+        self.r.scan_observer()
+        self.assertNotIn("cast-big", [x["stock"] for x in self.r.queue if x["kind"] == "bark"], "a one-drop is not the big one: the line waits")
+        self._write(self._board(5, 1, events=[cast(1, 3, "x", 3), cast(2, 1, "Sol Ring", 5, cmc=1), cast(3, 1, "Craterhoof Behemoth", 5, cmc=8)]))
+        self.r.scan_observer()
+        self.assertIn(("cast-big", 1, "brain"), [(x["stock"], x["seat"], x["source"]) for x in self.r.queue if x["kind"] == "bark"])
+
+
+class AddressedLinesStep3(_EventsCase):
+    """Plan step 3 (2026-10-18): a brain that names a seat is heard naming it (no coin flip), `attack-them` is a
+    proposal with a named form, the threat pin follows the brain, and a brain line waits out the seat guard."""
+
+    def test_a_brain_that_names_a_seat_is_named_every_time_and_the_pin_follows(self):
+        self._prime()
+        self.r.rng.random = lambda: 0.99                               # the address roll would fail for any other source
+        self.r._last_snapshot = self._board(5, 1, seats=[self._seat(0, life=40), self._seat(1, life=20), self._seat(2, life=30), self._seat(3, life=35)])
+        self._log(seat=1, turn=5, say="youre-the-threat", say_to=2)
+        self.r.scan_game_log()
+        q = [(x["stock"], x["ctx"].get("generic"), x["ctx"].get("targets")) for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual(q, [("threat-purphoros", "youre-the-threat", [2])], "Purphoros sits at seat 2 in this fixture: named, with certainty")
+        self.assertEqual(self.r.threat_seat(), 2, "the pin follows the brain")
+        self.assertEqual(self.r.leader_of(1), 2, "...so the table's leader is who the brain said, not the life leader (seat 3)")
+        self.r.queue.clear()
+        self.assertFalse(self.r.maybe_bark(3, "youre-the-threat", turn=5, source="event", p=1.0, ctx={"targets": [2]}) and
+                         [x for x in self.r.queue if x["kind"] == "bark"][-1]["stock"].startswith("threat-"), "an event line still rolls for the named form")
+
+    def test_attack_them_is_a_proposal_with_a_named_form(self):
+        from voice import scheduler
+        self.assertIn("attack-them", scheduler.PROPOSAL_LINES)
+        self.assertEqual(scheduler.ADDRESS_SWAP["attack-them"], ("hit", "target"))
+        self._prime()
+        self._log(seat=2, turn=5, say="attack-them", say_to=1)
+        self.r.scan_game_log()
+        self.assertEqual([(x["stock"], x["ctx"].get("generic")) for x in self.r.queue if x["kind"] == "bark"], [("hit-urza", "attack-them")])
+
+    def test_a_brain_line_waits_out_the_seat_guard_instead_of_dying(self):
+        self._prime()
+        self.r._bark_spoken_at[2] = self.clock.t                         # seat 2 just spoke an anchored line
+        self.r._seat_last_class()[2] = "anchored"
+        self.assertFalse(self.r.maybe_bark(2, "that-hurt", turn=5, source="event", p=1.0), "an event line dies to the guard, as before")
+        self.assertTrue(any(r["why"].startswith("seat guard") for r in self._records("skipped", "bark")))
+        self._log(seat=2, turn=5, say="taunt")
+        self.r.scan_game_log()
+        q = [x for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual([(x["stock"], x["source"]) for x in q], [("taunt", "brain")])
+        self.assertGreaterEqual(q[0]["gap"], self.r.barks_cooldown - 0.01, "held for the guard's remainder, like a deal line")
+        self.assertTrue(any(r["why"].startswith("brain line held") for r in self._records("noted", "bark")))
+
+
+class StancesStep4(_EventsCase):
+    """Plan step 4: a brain's pre-armed reflex. Shape (a): when the human acts, the reacting seat's own line is the
+    stance. Shape (b): when another seat acts, the stance is the holder's hop-1 reply to that seat's line. One shot
+    per trigger, a fire cap per turn, expiry when the holder's own turn begins, kept across a checkpoint."""
+
+    def _arm(self, seat, turn=5, **stance):
+        self._log(seat=seat, turn=turn, stance={k: (v if isinstance(v, dict) else {"id": v, "to": None}) for k, v in stance.items()})
+        self.r.scan_game_log()
+
+    def test_shape_a_the_human_swings_and_the_defender_speaks_its_reflex(self):
+        self._prime()
+        self._arm(2, on_attacked="brace")
+        self.assertEqual([n["why"] for n in self._records("noted", "stance")], ["armed"])
+        seats = [self._seat(0, creatures=(("Bear", False),)), self._seat(1), self._seat(2, creatures=(("Wall", False),)), self._seat(3)]
+        self._write(self._board(5, 0, seats=seats, events=[cast(1, 3, "x", 3), {"seq": 2, "kind": "attack", "turn": 5, "seat": 0, "attackers": 1, "power": 9, "defenders": [2]}]))
+        self.r.scan_observer()
+        q = [(x["stock"], x["seat"], x["source"], x["ctx"].get("aggressor"), x["ctx"].get("human_cause")) for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual(q, [("brace", 2, "stance", 0, True)])
+        self.assertEqual([n["why"] for n in self._records("noted", "stance")], ["armed", "fired"])
+        self.r.queue.clear()
+        self._write(self._board(5, 0, seats=seats, events=[cast(1, 3, "x", 3), {"seq": 3, "kind": "attack", "turn": 5, "seat": 0, "attackers": 1, "power": 9, "defenders": [2]}]))
+        self.r.scan_observer()
+        self.assertNotIn("stance", [x["source"] for x in self.r.queue if x["kind"] == "bark"], "one shot: the second swing gets the dice line")
+
+    def test_shape_a_on_hit_replaces_the_victims_dice_line(self):
+        self._prime()
+        self._arm(2, on_hit={"id": "youre-the-threat", "to": 3})
+        self._write(self._board(5, 1, events=[cast(1, 3, "x", 3), {"seq": 2, "kind": "damage", "turn": 5, "seat": 2, "amount": 9, "combat": True, "from": [1]}]))
+        self.r.scan_observer()
+        q = [(x["ctx"].get("generic", x["stock"]), x["seat"], x["source"], x["ctx"].get("targets"), x["ctx"].get("aggressor")) for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual(q, [("youre-the-threat", 2, "stance", [3], 1)], "the brain's words, aimed where it said, with the hitter as the cause")
+        self.assertNotIn("that-hurt", [x["stock"] for x in self.r.queue])
+
+    def test_shape_b_another_seats_line_draws_the_holders_reflex_as_the_reply(self):
+        self._prime()
+        self._arm(2, on_gc="kill-that")
+        self._spoken(1, "game-changer", ctx={"targets": [], "card": "mana-vault", "card_kind": "gc"})
+        q = [(x["ctx"].get("generic", x["stock"]), x["seat"], x["source"], x.get("chain", {}).get("hop"), x["ctx"].get("targets")) for x in self.r.queue if x["kind"] == "bark"]
+        self.assertEqual(q, [("kill-that", 2, "stance", 1, [1])], "the pre-chosen hop-1 reply, through the chain's link")
+        self.assertEqual([x["stock"] for x in self.r.queue if x["kind"] == "bark"], ["hit-urza"],
+                         "aimed at seat 1 (Urza here): the named wording, with certainty, like a brain line")
+        self.assertEqual([n["why"] for n in self._records("noted", "stance")], ["armed", "fired"])
+
+    def test_a_stance_dies_when_the_holders_own_turn_begins_and_the_cap_holds(self):
+        self._prime()
+        self._arm(2, on_hit="grudge")
+        self._snap(6, 2)                                            # seat 2's own turn begins
+        self._write(self._board(6, 2, events=[cast(1, 3, "x", 3), {"seq": 2, "kind": "damage", "turn": 6, "seat": 2, "amount": 9, "combat": False, "from": [1]}]))
+        self.r.scan_observer()
+        self.assertEqual([(x["stock"], x["source"]) for x in self.r.queue if x["kind"] == "bark"], [("that-hurt", "event")], "the old reflex is gone: the dice line")
+        self.assertIn("expired", [n["why"] for n in self._records("noted", "stance")])
+        self.r.stance_fires_per_turn = 1
+        self._arm(2, turn=6, on_hit="grudge", on_counter="scoff")
+        self._write(self._board(6, 1, events=[cast(1, 3, "x", 3), {"seq": 3, "kind": "damage", "turn": 6, "seat": 2, "amount": 9, "combat": False, "from": [1]},
+                                              {"seq": 4, "kind": "countered", "turn": 6, "seat": 2, "by": 0, "spell": "Counterspell"}]))
+        self.r.scan_observer()
+        fired = [x for x in self.r.queue if x["kind"] == "bark" and x["source"] == "stance"]
+        self.assertEqual([x["stock"] for x in fired], ["grudge"], "one fire this turn: the second reflex is capped")
+        self.assertIn("capped", [n["why"] for n in self._records("noted", "stance")])
+
+    def test_stances_and_held_lines_survive_a_checkpoint(self):
+        self._prime()
+        self._arm(2, on_hit="grudge")
+        self._log(seat=1, turn=5, say="big-swing")
+        self.r.scan_game_log()
+        state = self.r._durable_state()
+        self.assertEqual(state["stances"]["2"]["on_hit"]["id"], "grudge")
+        self.assertEqual(state["held_say"]["1"]["id"], "big-swing")
+        self.r._stances, self.r._held_say = {}, {}
+        self.r._restore_state(dict(state), {}, 0.0)
+        self.assertEqual(self.r._stances[2]["on_hit"]["id"], "grudge")
+        self.assertEqual(self.r._held_say[1]["id"], "big-swing")
 
 
 class StaleIntent(_EventsCase):

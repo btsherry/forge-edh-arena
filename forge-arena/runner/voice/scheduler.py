@@ -31,7 +31,7 @@ CHAIN_HOP_PRIORITY = 3.5
 # the patter clock). Eviction (enqueue), the governor (maybe_bark, after_spoken), the seat
 # guard and scripts/arena-hygiene.py's anchored share all read classify()/classify_source();
 # before this each kept its own tuple and Ben's steering figure measured something else.
-ANCHORED_SOURCES = ("event", "card", "procedural", "opener", "brain")
+ANCHORED_SOURCES = ("event", "card", "procedural", "opener", "brain", "stance")   # stance: a brain's pre-armed reflex (plan step 4, 2026-10-18)
 OPTIONAL_SOURCES = ("recap", "advice", "patter", "chain")     # the complement — kept as a name for the re-export; the rule is classify_source
 # The bark ladder (round 31, 2026-09-10): a reaction to something that just happened
 # on the board plays ahead of Joshua's colour and the "your move" cue; the advisor's
@@ -77,7 +77,7 @@ SILENCE_FLOOR_S = {"ai": 12.0, "human": 24.0}
 # PROPOSALS ("we all hit Selvala") draw a yea or nay from every other player, then the subject may retort.
 QUESTION_LINES = {"deal", "whats-your-life", "cards-in-hand", "mull-screw"}
 QUESTION_PREFIXES = ("deal-",)
-PROPOSAL_LINES = {"kill-that", "youre-the-threat", "archenemy", "someone-wins"}
+PROPOSAL_LINES = {"kill-that", "youre-the-threat", "archenemy", "someone-wins", "attack-them"}   # attack-them: a brain's "point the table at X" (step 3)
 PROPOSAL_PREFIXES = ("hit-", "threat-")
 PROPOSAL_P, PROPOSAL_TARGET_P = 0.85, 0.5
 PROPOSAL_REPLIES = ("agree", "disagree")
@@ -97,7 +97,8 @@ OWN_ACTION_LINES = {"keep-seven", "mull-to-six", "mull-to-five", "mull-to-four",
 LIFE_FOLLOWUP = {"that-hurt": 0.6, "take-it": 0.5, "low-life": 0.5}          # the speaker announces its total right after
 STATE_ANSWERS = {"whats-your-life": "life", "low-life-jab": "life", "cards-in-hand": "hand", "empty-hand": "hand"}
 ADDRESS_SWAP = {"kill-that": ("hit", "target"), "archenemy": ("hit", "target"), "youre-the-threat": ("threat", "target"),
-                "deal": ("deal", "target"), "why-me": ("leave-me", "aggressor")}
+                "deal": ("deal", "target"), "why-me": ("leave-me", "aggressor"), "attack-them": ("hit", "target")}
+BRAIN_NAMED_CERTAIN = ("youre-the-threat", "archenemy", "kill-that", "attack-them")   # the calls a brain aims on purpose: named every time (step 3)
 # Table deals (plan 2026-09-16, §11 — the contract). The voice runner OWNS the deal ledger: the live map
 # `_deals: (a, b) -> {"kind", "until_turn", "struck", "offer_id"}` (both directions, checkpointed), the
 # append-only logs/deals.jsonl, and the notes files that tell a seat's brain what was agreed
@@ -622,6 +623,28 @@ class SchedulerMixin:
         recent = {k for k, t in self._seat_said_at.items() if now - t < RECENT_S}
         generic = (item.get("ctx") or {}).get("generic")
         planned = dict(item, stock=generic) if generic else item          # a named wording invites what its generic line invites
+        # step 4, shape (b): a target or bystander that armed a reflex for this line answers with it — the brain's
+        # pre-chosen hop-1 reply, through the same link, gap and ctx a planned reply gets; no dice
+        stance_reply = getattr(self, "stance_reply", None)
+        fired = stance_reply(planned, speaker, voiced) if callable(stance_reply) and not chain else None
+        if fired is not None:
+            who, reply, to = fired
+            link = {"origin": speaker, "hop": 1, "turn": turn, "parent": item.get("stock")}
+            self._turn_said().add((who, reply))
+            rctx = {"targets": [int(to) if to is not None else int(item["seat"])], "aggressor": int(item["seat"])}
+            parent_ctx = item.get("ctx") or {}
+            named = self.card_swap(who, reply, parent_ctx) if parent_ctx.get("card") else ""
+            if not named:
+                # the brain aimed this reflex: named every time, as maybe_bark names a brain line (Gemini, 2026-11-07)
+                named = self.address_swap(who, reply, rctx, certain=reply in BRAIN_NAMED_CERTAIN)
+            if named:
+                self._turn_said().add((who, named))
+                rctx["generic"] = reply
+                reply = named
+            self.enqueue("bark", stock=reply, library=self.lib_for(who, reply), seat=who, ttl=15.0, gap=self.chains.gap_s, ctx=rctx, chain=link, source="stance")
+            self.record("queued", kind="bark", stock=reply, seat=who, source="stance", hop=1, parent=item.get("stock"))
+            self._chain = link
+            return
         # the planner's set-like argument is the optional view: a chain reply comes back after TURN_REPEAT_S (BL-53); chains.py is unchanged
         plan = plan_reply(self.chains, planned, chain, voiced, self.human_seat, self.leader_of, self._turn_said().optional, self.rng, turn, recent)
         if plan is None:
@@ -691,13 +714,15 @@ class SchedulerMixin:
         last = self._seat_last_class().get(int(seat))
         deal_line = (pid in DEAL_ANSWER_LINE.values() or pid in JOSHUA_DEAL_LINE.values() or pid == "deal-over"
                      or (pid == DEAL_PROPOSE_LINE and source == "brain"))
+        state_line = deal_line or source in ("brain", "stance")      # a brain's own line waits out the guard like a deal line (Ben, 2026-10-18)
         own_words = pid in OWN_ACTION_LINES or pid.startswith("terms-")      # the duration is the tail of the accept line, not a new line (game 63)
         if since < self.barks_cooldown and not own_words and (last is None or last == cls):
-            if deal_line:
+            if state_line:
                 # game 55: "Deal, Selvala?" died to the guard 3 s after the seat's own line while the offer stood.
-                # A deal line is state: it waits out the guard instead of being dropped.
+                # A deal line is state: it waits out the guard instead of being dropped. So does a brain's line
+                # (game 20261018-152857: two of seven died here).
                 gap = max(gap or 0.0, self.barks_cooldown - since)
-                self.record("noted", kind="bark", why=f"deal line held {gap:.0f}s for the seat guard", stock=pid, seat=seat, source=source)
+                self.record("noted", kind="bark", why=f"{'deal' if deal_line else 'brain'} line held {gap:.0f}s for the seat guard", stock=pid, seat=seat, source=source)
             else:
                 self.record("skipped", kind="bark", why=f"seat guard ({since:.0f}s < {self.barks_cooldown:.0f}s, {cls} after {last or 'a line'})",
                             stock=pid, seat=seat, source=source)
@@ -705,6 +730,7 @@ class SchedulerMixin:
         # an explicit p (the opener's own number) always applies; otherwise "all" means always, "some" means barks_p (tuning.json)
         chance = p if p is not None else (1.0 if self.barks_mode == "all" else self.barks_p)
         ungoverned = (pid in MULL_LINE.values() or (source == "patter" and p == 1.0) or source == "procedural"
+                      or source in ("brain", "stance")                                                  # a brain's own line is state (Ben, 2026-10-18)
                       or pid in DEAL_ANSWER_LINE.values() or pid in JOSHUA_DEAL_LINE.values()    # a deal's answer is state (game 51: a 4 % miss)
                       or (pid == DEAL_PROPOSE_LINE and source == "brain")                          # ...and so is a seat's own offer
                       or (pid == "deal-over" and p == 1.0)                                        # ...and so is its end for the player (game 51: p=0.93 lost it)
@@ -718,7 +744,8 @@ class SchedulerMixin:
             self.record("skipped", kind="bark", why=f"dice ({source}, p={chance:.2f}, governor {g:.2f})", stock=pid, seat=seat, source=source)
             return False
         self._turn_said().add((int(seat), pid))
-        named = named or self.address_swap(int(seat), pid, ctx)
+        # a brain that NAMED a seat is heard naming it (step 3); the deal lines keep their own odds and ledger regime
+        named = named or self.address_swap(int(seat), pid, ctx, certain=source in ("brain", "stance") and pid in BRAIN_NAMED_CERTAIN)
         if named:
             self._turn_said().add((int(seat), named))
             ctx = dict(ctx or {}); ctx["generic"] = pid                    # the chain plans from the generic line
@@ -747,9 +774,10 @@ class SchedulerMixin:
             return ""
         return named
 
-    def address_swap(self, seat: int, pid: str, ctx: dict | None) -> str:
+    def address_swap(self, seat: int, pid: str, ctx: dict | None, certain: bool = False) -> str:
         """A generic line with one addressee becomes its named wording (hit-urza,
-        threat-mono-red, ...) half the time, when the table library carries it."""
+        threat-mono-red, ...) half the time, when the table library carries it —
+        every time when the brain named the seat itself (`certain`, step 3)."""
         fam_role = ADDRESS_SWAP.get(pid)
         if not fam_role or not ctx:
             return ""
@@ -762,7 +790,7 @@ class SchedulerMixin:
         if who_seat is None or int(who_seat) == seat:
             return ""
         who = self._who.get(int(who_seat), "")
-        if not who or self.rng.random() >= self.table_p("address"):
+        if not who or (not certain and self.rng.random() >= self.table_p("address")):
             return ""
         named = f"{fam}-{who}"
         lib = self.library_for_seat(seat)
@@ -1085,6 +1113,12 @@ class SchedulerMixin:
             self._said_turn = turn
             self._said_this_turn = TurnSaid(self.clock)
             self._chain = None                           # a new turn ends any exchange
+            expire = getattr(self, "expire_held", None)  # a brain's held own-action line from a past turn (plan step 2)
+            if callable(expire):
+                expire(turn)
+            expire_s = getattr(self, "expire_stances", None)   # the new active seat's old reflexes die; the fire counters reset (step 4)
+            if callable(expire_s):
+                expire_s(turn)
             self._card_events_turn = {}                  # the loop counters are per turn too
             self.decay_threat()
         self.lapse_deals(turn)

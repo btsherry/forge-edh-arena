@@ -516,6 +516,7 @@ class WordsFromThePlayer(unittest.TestCase):
 
     def test_an_invitation_lets_the_seat_propose_at_once_and_talk_is_just_talk(self):
         r = make_runner()
+        r.talk_reply = False                                         # ARENA_TALK_REPLY=off: talk rides into the prompt (the tick path is test_table_talk_reply.py)
         r._last_propose_turn = 4                                     # it offered on turn 4: the cooldown would hold until turn 10
         r.handle(cast(1, turn=6))
         self.assertNotIn("DEAL OFFER", r.brain.last_prompt)

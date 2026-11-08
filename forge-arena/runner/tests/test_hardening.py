@@ -384,7 +384,8 @@ class LaunchBanner(unittest.TestCase):
                 self.assertIn(default, seen[name], f"{name}: banner says {default!r}, code says {sorted(seen[name])}")
         missing = {n for n in seen if n not in table and n not in self.IGNORE and not n.startswith("ARENA_PF_")}
         self.assertEqual(missing, set(), "knobs read by the code but absent from the banner (add to KNOBS)")
-        java_read = {"ARENA_AUTOPASS_RESOLVE_OWN", "ARENA_VOICE_FOCUS"}                  # read by the Java side (AutopassPolicy, VAdvisor)
+        java_read = {"ARENA_AUTOPASS_RESOLVE_OWN", "ARENA_VOICE_FOCUS",
+                     "ARENA_SELF_SPELL_WINDOW"}                                           # read by the Java side (AutopassPolicy, VAdvisor, MailboxController)
         stale = {n for n in table if n.startswith("ARENA_") and n not in seen and n not in self.IGNORE and n not in java_read}
         self.assertEqual(stale, set(), "banner rows for knobs nothing reads any more (retire the row; critic 2026-09-16)")
 

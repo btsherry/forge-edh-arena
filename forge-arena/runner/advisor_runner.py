@@ -1295,6 +1295,11 @@ class AdvisorRunner:
         ts_ms = int(time.time() * 1000)
         kind = "deal-invite" if action == "invite" else "table-talk"
         note = {"kind": kind, "from": 0, "to": seat, "text": words[:200], "turn": turn}
+        if kind == "table-talk":
+            # the seat's runner answers table talk itself (2026-10-16) and appends its line to this
+            # panel's stream; it echoes the name and clock label used here so the reply sits under the ask
+            note["name"] = name
+            note["clock"] = self._clock.label(turn if turn is not None else "?")
         try:
             self._write_atomic(self._base / f"seat-{seat}" / "notes" / f"{ts_ms}-{kind}.json", note)
         except OSError as e:

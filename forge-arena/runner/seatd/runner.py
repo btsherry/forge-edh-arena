@@ -134,6 +134,9 @@ class SeatRunner:
         # effort are per-call flags on a transcript-based session).
         self._control_path = log_dir / "control" / f"seat-{seat}.json"
         self._control_mtime = 0.0
+        self.talk_reply = os.environ.get("ARENA_TALK_REPLY", "on").strip().lower() not in ("off", "0", "no")
+        self.say_menu_mode = "fixed" if os.environ.get("ARENA_SAY_MENU", "contextual").strip().lower() == "fixed" else "contextual"
+        self.stances_on = os.environ.get("ARENA_STANCES", "on").strip().lower() not in ("off", "0", "no")
         # Crash-restart spend persistence (plan F-02): run_table.sh restarts a
         # crashed runner in 2s with a fresh brain — the backend cost/call rails
         # must resume, not reset. Backend seats only: the Claude path's totals
@@ -312,18 +315,297 @@ class SeatRunner:
             paths.append(flat.with_name(f"game-{gid}.jsonl"))
         return paths
 
-    def _say_key(self, req: dict, raw) -> str | None:
-        """§4.4: the brain's optional table line. Menu ids only, and only on a window
-        the prompt offered it on; anything else is dropped with a note — never an
-        error, never part of the engine answer (validate() strips the key)."""
-        sid = str(raw).strip().lower()
+    def _say_key(self, req: dict, raw) -> dict | None:
+        """§4.4: the brain's optional table line — `"<id>"` or `{"id": "<id>", "to": <seat>}`. The id must have been
+        offered on THIS window (step 2: the remembered menu; ARENA_SAY_MENU=fixed: any id the file names), the
+        target a living other seat (the human allowed except for a question — nobody answers for him), at most
+        max_says_per_turn per game turn. Anything else is dropped with a note — never an error, never part of the
+        engine answer (validate() strips the key). Returns {"id", "to"} or None."""
+        if isinstance(raw, dict):
+            sid, to = str(raw.get("id") or "").strip().lower(), raw.get("to")
+        else:
+            sid, to = str(raw).strip().lower(), None
         if not rules.say_offer(req, self.seat):
             self._say(f"[seat {self.seat}] say {sid!r} dropped: procedural window ({req.get('decisionType')}) or not a table seat")
             return None
-        if sid not in rules.SAY_MENU:
-            self._say(f"[seat {self.seat}] say {sid!r} dropped: not on the menu")
+        offered = self._say_offered[1] if self._say_offered[0] == req.get("seq") and self.say_menu_mode != "fixed" else None
+        if offered is None:
+            if sid not in rules.SAY_MENU:
+                self._say(f"[seat {self.seat}] say {sid!r} dropped: not on the menu")
+                return None
+        elif sid not in offered:
+            self._say(f"[seat {self.seat}] say {sid!r} dropped: not offered on this window ({', '.join(list(offered)[:6])}…)")
             return None
-        return sid
+        turn, (t, n) = req.get("turn"), self._says_turn
+        n = n if t == turn else 0
+        if n >= rules.load_say_menu()["max_says_per_turn"]:
+            self._say(f"[seat {self.seat}] say {sid!r} dropped: {n} brain lines this turn already (the cap)")
+            return None
+        target = None
+        if to is not None:
+            try:
+                t_seat = int(to)
+            except (TypeError, ValueError):
+                t_seat = None
+            living = {o.get("seat") for o in ((req.get("state") or {}).get("opponents") or []) if isinstance(o, dict)}
+            human = None if self._all_ai() else 0
+            if t_seat is None or t_seat == self.seat or t_seat not in living:
+                self._say(f"[seat {self.seat}] say {sid!r}: target {to!r} dropped (not a living other seat)")
+            elif t_seat == human and sid in rules.SAY_QUESTIONS:
+                self._say(f"[seat {self.seat}] say {sid!r}: target {to!r} dropped (a question the human cannot answer)")
+            else:
+                target = t_seat
+        self._says_turn = (turn, n + 1)
+        return {"id": sid, "to": target}
+
+    def _stance_key(self, req: dict, raw) -> dict | None:
+        """Step 4: `{"on_hit": "grudge", "on_gc": {"id": "kill-that", "to": 2}}` — each trigger's id must be on that
+        trigger's list (say-menu.json `stances`), the target a living other seat; a bad entry is dropped with a note,
+        the rest stand. Returns {trigger: {"id", "to"}} or None."""
+        if not isinstance(raw, dict) or not rules.say_offer(req, self.seat):
+            return None
+        menu = rules.load_say_menu()
+        living = {o.get("seat") for o in ((req.get("state") or {}).get("opponents") or []) if isinstance(o, dict)}
+        out: dict = {}
+        for trigger, v in raw.items():
+            trigger = str(trigger).strip().lower()
+            if trigger not in rules.STANCE_TRIGGERS:
+                self._say(f"[seat {self.seat}] stance {trigger!r} dropped: not a trigger")
+                continue
+            if isinstance(v, dict):
+                sid, to = str(v.get("id") or "").strip().lower(), v.get("to")
+            else:
+                sid, to = str(v).strip().lower(), None
+            if sid not in (menu["stances"].get(trigger) or []):
+                self._say(f"[seat {self.seat}] stance {trigger}={sid!r} dropped: not on that trigger's list")
+                continue
+            target = None
+            if to is not None:
+                try:
+                    t_seat = int(to)
+                except (TypeError, ValueError):
+                    t_seat = None
+                if t_seat is not None and t_seat != self.seat and t_seat in living:
+                    target = t_seat
+                else:
+                    self._say(f"[seat {self.seat}] stance {trigger}: target {to!r} dropped (not a living other seat)")
+            out[trigger] = {"id": sid, "to": target}
+        return out or None
+
+    def _say_meta(self, req: dict, answer: dict, say_obj: dict | None) -> dict:
+        """The record's extra say fields: the target, the card a cast window's chosen option names (so the voice
+        plays the NAMED line), and the ids that were offered (hygiene: do the brains tail the list?)."""
+        meta: dict = {"say_to": (say_obj or {}).get("to")}
+        if req.get("decisionType") in ("CAST_SPELL", "REACT") and isinstance(answer, dict):   # a flash/instant cast names its card too (Gemini, 2026-11-07)
+            cid = answer.get("chosenId")
+            for o in req.get("options") or []:
+                if isinstance(o, dict) and o.get("id") == cid and cid != 0:
+                    meta["say_card"] = rules.card_in_label(o.get("label"))
+                    break
+        if self._say_offered[0] == req.get("seq") and self._say_offered[1]:
+            meta["say_offered"] = list(self._say_offered[1])
+        return meta
+
+    # ---- the contextual say menu (plan step 2, 2026-10-18) ------------------------------------------
+
+    def _lite_window(self, req: dict) -> bool:
+        """A window the brain answers at effort low (the resourceless / own-trigger / unthreatened REACT
+        routings, or a low-effort seat): the quiet line only — a glossed block there is wasted."""
+        if getattr(self.brain, "effort", None) == "low":
+            return True
+        dtype = req.get("decisionType")
+        try:
+            return bool(self._resourceless_react(req) or (dtype == "REACT" and (self._all_own_triggers(req) or self._unthreatened_ability_react(req))))
+        except Exception:  # noqa: BLE001 — the routing helpers read optional fields; a menu never fails for them
+            return False
+
+    def _roster_game_changers(self) -> dict[int, set]:
+        """{seat: game-changer names} for the table's decks (the dossiers the voice reads too), once."""
+        if self._roster_gcs is None:
+            out: dict[int, set] = {}
+            try:
+                from voice.table import game_changers_of, table_from_launcher
+                decks = table_from_launcher(os.environ.get("ARENA_HUMAN_DECK"), os.environ.get("ARENA_SEAT_DECKS"), all_ai=self._all_ai())
+                for seat, deck in decks.items():
+                    out[int(seat)] = set(game_changers_of(deck))
+                out[self.seat] = set(game_changers_of(self.deck))     # this seat's own deck wins over the roster's guess
+            except Exception:  # noqa: BLE001 — a missing dossier means fewer situations, never a failed window
+                pass
+            self._roster_gcs = out
+        return self._roster_gcs
+
+    def _consume_ring(self, observer: dict | None) -> None:
+        """Advance the ring cursor and keep what the next menu needs: a hit on this seat (hitter, amount) and a
+        counter against it since the last window. The first read primes the cursor (history is never replayed)."""
+        events = (observer or {}).get("events") or []
+        seqs = [int(e.get("seq", 0)) for e in events if isinstance(e, dict)]
+        if not seqs:
+            return
+        if self._ring_seq is None:
+            self._ring_seq = max(seqs)
+            return
+        if self._hits_by is None:
+            self._hits_by = {}
+        self._hit_since, self._countered_by = None, None
+        for e in sorted((e for e in events if isinstance(e, dict)), key=lambda e: int(e.get("seq", 0))):
+            seq = int(e.get("seq", 0))
+            if seq <= self._ring_seq:
+                continue
+            self._ring_seq = seq
+            kind = e.get("kind")
+            try:
+                if kind == "damage" and int(e.get("seat", -1)) == self.seat and int(e.get("amount", 0)) > 0:
+                    froms = [int(x) for x in (e.get("from") or []) if int(x) != self.seat]
+                    if froms:
+                        self._hits_by[froms[0]] = self._hits_by.get(froms[0], 0) + 1
+                        self._hit_since = (froms[0], int(e.get("amount", 0)))
+                elif kind == "countered" and int(e.get("seat", -1)) == self.seat:
+                    self._countered_by = int(e["by"]) if e.get("by") is not None else -1
+            except (TypeError, ValueError):
+                continue
+
+    def _situations(self, req: dict, observer: dict | None) -> dict:
+        """The window's active situations -> facts, from the request, the observer (seats, stackDetail, the ring
+        this call consumes) and the deals in force. Pure reads; nothing here opens a file."""
+        self._consume_ring(observer)
+        st = req.get("state") or {}
+        dtype, phase = req.get("decisionType"), req.get("phase")
+        obs = observer or {}
+        seats = {int(x["seat"]): x for x in (obs.get("seats") or []) if isinstance(x, dict) and x.get("seat") is not None and not x.get("eliminated")}
+        my_life = st.get("life")
+        lives = {s: x.get("life") for s, x in seats.items() if isinstance(x.get("life"), int)}
+        if isinstance(my_life, int):
+            lives[self.seat] = my_life
+        others = {s: l for s, l in lives.items() if s != self.seat}
+        out: dict = {}
+        if self._hit_since:
+            out["hit"] = {"by": self._hit_since[0], "again": (self._hits_by or {}).get(self._hit_since[0], 0) >= 2}
+        if dtype == "DECLARE_BLOCKERS":
+            out["blocking"] = {}
+        if dtype == "DECLARE_ATTACKERS":
+            partners = set(self._deals().keys())
+            defenders = {self._seat_of_label(d.get("label")) for d in (st.get("defenders") or []) if isinstance(d, dict)}
+            out["attacking"] = {"deal_partner": bool(partners & defenders)}
+        if self._countered_by is not None:
+            out["countered"] = {"by": self._countered_by}
+        if dtype == "REACT":
+            active = obs.get("activeSeat")
+            gcs = self._roster_game_changers()
+            threat, spell_on_stack = None, False
+            casts = {}
+            for e in obs.get("events") or []:
+                if isinstance(e, dict) and e.get("kind") == "cast":
+                    try:
+                        casts[(int(e.get("seat", -1)), str(e.get("spell") or ""))] = e
+                    except (TypeError, ValueError):
+                        continue                              # a malformed ring entry never takes the seat down
+            for item in obs.get("stackDetail") or []:
+                if not isinstance(item, dict) or item.get("owner") is None:
+                    continue
+                try:
+                    owner, cmc = int(item["owner"]), int((casts.get((int(item["owner"]), str(item.get("name") or ""))) or {}).get("cmc") or 0)
+                except (TypeError, ValueError):
+                    continue
+                if owner == self.seat:
+                    continue
+                name = str(item.get("name") or "")
+                if item.get("kind") == "spell":
+                    spell_on_stack = True
+                ev = casts.get((owner, name)) or {}
+                is_gc = name in gcs.get(owner, set())
+                if is_gc or ev.get("commander") or cmc >= 5:
+                    if threat is None or (is_gc and not threat["gc"]):       # a game changer outranks a later big spell on the stack
+                        threat = {"owner": owner, "name": name, "gc": is_gc, "commander": bool(ev.get("commander"))}
+            if threat:
+                out["stack_threat"] = threat
+            out["_react"] = {"others_turn": active is not None and int(active) != self.seat, "spell_on_stack": spell_on_stack}
+        if dtype == "CAST_SPELL" and phase in ("MAIN1", "MAIN2"):
+            my_gcs = self._roster_game_changers().get(self.seat, set())
+            commander = self._own_commander_name()
+            big = gc = cmd = False
+            for o in req.get("options") or []:
+                if not isinstance(o, dict) or o.get("id") == 0:
+                    continue
+                name = rules.card_in_label(o.get("label"))
+                cost = str(o.get("cost") or "").replace(" ", "")
+                if not cost:                                   # no cost field: the braces that end the label's head
+                    m = re.search(r"\s((?:\{[^}]*\})+)\s*$", str(o.get("label") or "").split(" — ", 1)[0])
+                    cost = m.group(1) if m else ""
+                # a spell's cost is mana symbols only; "{T}, {2}" or "…, Discard two cards" is an activation (Gemini, 2026-11-07)
+                if cost and re.fullmatch(r"(\{[^}]*\})+", cost):
+                    big = big or rules.label_cmc(cost) >= 6
+                gc = gc or name in my_gcs
+                cmd = cmd or (bool(commander) and name == commander)
+            if big or gc or cmd:
+                out["my_cast"] = {"big": big, "gc": gc, "commander": cmd}
+        if isinstance(my_life, int):
+            if my_life <= 10 or (others and my_life < min(others.values())):
+                out["behind"] = {"low": my_life <= 10}
+            top = max(lives.values()) if lives else None
+            if top is not None and lives.get(self.seat) == top and sum(1 for l in lives.values() if l == top) == 1:
+                out["leader"] = {}
+        own_pow = st.get("ownBoardPower")
+        if isinstance(own_pow, int) and own_pow > 0 and all(isinstance(o, dict) and own_pow > int(o.get("creaturePower") or 0) for o in (st.get("opponents") or [])):
+            out.setdefault("leader", {})
+        if not (st.get("stack") or []) and obs.get("activeSeat") is not None and int(obs.get("activeSeat")) != self.seat and dtype != "DECLARE_BLOCKERS":
+            out["quiet"] = {}
+        out["_facts"] = {"low_life": isinstance(my_life, int) and my_life <= 10,
+                         "a_low_seat": any(isinstance(l, int) and 0 < l <= 10 for s, l in others.items()),
+                         "an_empty_hand": any(int(x.get("handSize") or 0) == 0 for s, x in seats.items() if s != self.seat),
+                         "a_full_hand": any(int(x.get("handSize") or 0) >= 7 for s, x in seats.items() if s != self.seat),
+                         "long_game": isinstance(req.get("turn"), int) and req.get("turn") > 14}
+        return out
+
+    def _own_commander_name(self) -> str:
+        try:
+            from voice.table import load_address
+            return str(((load_address().get("commanders") or {}).get(self.deck) or {}).get("name") or "")
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _say_menu(self, req: dict, observer: dict | None, deal_offer: bool = False, loop_offer: bool = False,
+                  lite: bool | None = None) -> str | None:
+        """Build and remember the menu offered on this window; return the prompt block (None: no say window, or
+        ARENA_SAY_MENU=fixed, which remembers nothing and offers today's line). `lite` (a low-effort window:
+        the short line) is computed here when the caller does not say."""
+        if not rules.say_offer(req, self.seat) or self.say_menu_mode == "fixed":
+            self._say_offered = (None, {})
+            return None
+        if lite is None:
+            lite = self._lite_window(req)
+        menu = rules.load_say_menu()
+        sits = self._situations(req, observer)
+        facts = sits.get("_facts") or {}
+        react = sits.get("_react") or {}
+        my_cast = sits.get("my_cast") or {}
+        attacking = sits.get("attacking") or {}
+        gates = {"low-life": facts.get("low_life"), "low-life-jab": facts.get("a_low_seat"), "empty-hand": facts.get("an_empty_hand"),
+                 "cards-in-hand": facts.get("a_full_hand"), "long-game": facts.get("long_game"),
+                 "grudge": (sits.get("hit") or {}).get("again"), "in-response": react.get("others_turn"),
+                 "counter": react.get("spell_on_stack"), "commander-cast": my_cast.get("commander"),
+                 "game-changer": my_cast.get("gc"), "cast-big": my_cast.get("big"),
+                 "gc-react": (sits.get("stack_threat") or {}).get("gc"), "i-broke-it": attacking.get("deal_partner")}
+        charged = any(k in sits for k in self.SAY_CHARGED)
+        entries: list[dict] = []
+        seen: set = set()
+        if charged or not lite:
+            for name in self.SAY_SITUATION_ORDER:
+                if name not in sits:
+                    continue
+                for e in menu["situations"].get(name, []):
+                    if e["id"] not in seen and gates.get(e["id"], True):
+                        entries.append(e); seen.add(e["id"])
+        for e in menu["core"]:
+            if e["id"] not in seen:
+                entries.append(e); seen.add(e["id"])
+        entries = entries[: menu["max_ids"]]
+        offered = {e["id"]: e for e in entries}
+        if deal_offer:
+            offered.update({e["id"]: e for e in menu["deal"]})     # the deal line names its own ids
+        if loop_offer:
+            offered.update({e["id"]: e for e in menu["loop"]})
+        self._say_offered = (req.get("seq"), offered)
+        return rules.say_menu_block(entries, charged=charged and not lite)
 
     # ---- table deals (docs/reviews/2026-09-16-table-deals-plan.md §5, §6, §11) ------------
     # The advisor runner writes the player's offer, the voice runner writes struck/lapsed/
@@ -335,6 +617,39 @@ class SeatRunner:
     NOTE_KINDS = ("deal-offer", "deal-counter", "deal-struck", "deal-broken", "deal-lapsed", "deal-refused", "deal-invite", "table-talk")
     _invited = False         # a deal-invite note lifted the propose cooldown for this seat's next main window
     NOTES_PER_PROMPT = 3
+    # Table talk (2026-10-16, Ben: "I do like the more direct communication path"): a `table-talk`
+    # note is answered by the seat's OWN brain between engine windows — one short plain-text turn
+    # on the same session (so the seat remembers the exchange when it next decides), the reply
+    # appended by this runner straight to the Advisor panel's stream (logs/advisor-0.log, the
+    # file the advisor runner writes and VAdvisor tails) under the player's own line, plus a
+    # `chat` record in game.jsonl. No poll rate changed: the tick costs one os.stat of notes/
+    # per idle loop (the inbox poll already lists a directory every pass) and lists notes/ only
+    # when its mtime moved. ARENA_TALK_REPLY=off restores the old path: the words ride into the
+    # next decision prompt as a RUNNER NOTE and the brain may answer with a `say`.
+    TALK_KINDS = ("table-talk",)
+    TALK_GAP_S = 5.0          # one chat turn per seat per five seconds; later notes wait their turn
+    TALK_TIMEOUT_S = 15.0     # a one-sentence answer; a stall here must not eat an engine window
+    TALK_MAX_CHARS = 200      # the panel shows one row per line
+    # The contextual say menu (docs/reviews/2026-10-16-brain-authored-talk-plan.md, step 2, 2026-10-18): the
+    # window's situations are read from the request and the observer's event ring (one seq cursor, advanced on
+    # model windows only); the menu offered is remembered per seq and is the set a `say` validates against;
+    # two brain lines per seat per game turn (say-menu.json max_says_per_turn). ARENA_SAY_MENU=fixed keeps
+    # the one quiet line on every say window and validates against every id the file names.
+    SAY_SITUATION_ORDER = ("hit", "blocking", "attacking", "countered", "stack_threat", "my_cast", "behind", "leader", "quiet")
+    SAY_CHARGED = ("hit", "blocking", "attacking", "countered", "stack_threat", "my_cast", "behind")
+    say_menu_mode = "contextual"
+    stances_on = True             # ARENA_STANCES (plan step 4): the brain may arm a reflex the voice performs without a call
+    _ring_seq = None          # the observer ring's last seq this runner consumed (None: never read — history is not replayed)
+    _hits_by = None           # {hitter seat: hits on me this game} from the ring (grudge from the second)
+    _hit_since = None         # (hitter, amount) since the last window, for the `hit` situation
+    _countered_by = None      # the seat that countered me since the last window
+    _says_turn = (None, 0)    # (game turn, brain says accepted this turn)
+    _say_offered = (None, {}) # (seq, {id: entry}) — the menu offered on the last say window
+    _roster_gcs = None        # {seat: {game-changer names}} from the roster's dossiers, read once
+    talk_reply = True
+    _talk_last = 0.0
+    _notes_sig = None         # (mtime_ns, inode) of notes/ when it was last listed
+    _notes_dirty = False      # notes seen but not consumed (rate limit): list again next tick
     TARGET_WINDOWS = ("CHOOSE_ENTITY", "CHOOSE_ENTITIES", "CHOOSE_CARD", "CHOOSE_CARDS")
     _SEAT_IN_LABEL = re.compile(r"\(seat (\d+)\)|-S(\d+)\b")            # "(seat 2)" (prose) or the engine's "<commander>-S2" (GuiPilotMatch.seatLabel)
 
@@ -489,7 +804,9 @@ class SeatRunner:
             # then table talk — with three sentences a prompt, a truce behind two chats and an invite was never
             # applied to the maps (pass 2, 2026-09-17)
             rank = {"deal-invite": 1, "table-talk": 2}
-            files = sorted((p for p in d.iterdir() if p.suffix == ".json"),
+            # table talk is the tick's (talk_reply): it is answered in words between windows, never folded into a prompt
+            files = sorted((p for p in d.iterdir() if p.suffix == ".json"
+                            and not (self.talk_reply and p.stem.split("-", 1)[-1] in self.TALK_KINDS)),
                            key=lambda p: (rank.get(p.stem.split("-", 1)[-1], 0), p.name))
         except OSError:
             return
@@ -516,6 +833,124 @@ class SeatRunner:
                     p.unlink()
                 except OSError:
                     pass
+
+    # ---- table talk: the seat answers the player itself (2026-10-16) ----------------------------
+
+    def _talk_tick(self) -> None:
+        """Between engine windows (the caller found no request pending): answer the player's
+        table talk with the seat's own brain. One stat per idle pass; notes/ is listed only when
+        it changed or a rate-limited batch is waiting. Never raises."""
+        if not self.talk_reply:
+            return
+        try:
+            d = self._notes_dir()
+            st = d.stat()
+        except OSError:
+            return                                   # no notes dir yet: nothing was ever said to this seat
+        sig = (st.st_mtime_ns, st.st_ino)
+        if sig == self._notes_sig and not self._notes_dirty:
+            return
+        if time.time() - self._talk_last < self.TALK_GAP_S:
+            self._notes_dirty = True                 # rate-limited: the notes keep; no listing until the gap has passed (Gemini, 2026-11-07)
+            return
+        self._notes_sig, self._notes_dirty = sig, False      # the signature from BEFORE the listing: a note that lands during it moves the mtime again
+        try:
+            files = sorted(p for p in d.iterdir() if p.suffix == ".json" and p.stem.split("-", 1)[-1] in self.TALK_KINDS)
+        except OSError:
+            return
+        if not files:
+            return
+        self._talk_last = time.time()
+        try:
+            self._answer_talk(files[: self.NOTES_PER_PROMPT])
+        except Exception:  # noqa: BLE001 — talk never hurts the game
+            import traceback
+            self._say(f"[seat {self.seat}] table talk: INTERNAL ERROR\n{traceback.format_exc()}")
+
+    def _answer_talk(self, files: list) -> None:
+        """Read the notes (consumed once, answered or not), ask the brain for one plain sentence,
+        post it to the panel under the player's line, record the exchange."""
+        heard, clock, name, turn, typed_at = [], None, None, None, None
+        for p in files:
+            try:
+                note = json.loads(p.read_text())
+                if not isinstance(note, dict):
+                    raise ValueError("not an object")
+                said = " ".join(str(note.get("text") or "").split())[:200]
+                if said:
+                    heard.append((self._party_name(note.get("from")), said))
+                    clock = note["clock"] if isinstance(note.get("clock"), str) and note["clock"] else clock
+                    name = note["name"] if isinstance(note.get("name"), str) and note["name"] else name
+                    turn = note["turn"] if isinstance(note.get("turn"), int) else turn
+                    try:                              # the advisor names the file <ms>-table-talk.json: when it was typed
+                        ts = int(p.name.split("-", 1)[0]) / 1000.0
+                        typed_at = ts if typed_at is None else min(typed_at, ts)
+                    except ValueError:
+                        pass
+            except (OSError, ValueError, TypeError) as e:
+                self._say(f"[seat {self.seat}] note {p.name} dropped: malformed ({e})")
+            finally:
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+        if not heard:
+            return
+        turn = turn if turn is not None else self._last_turn
+        lines = "\n".join(f'{who} says to you: "{said}"' for who, said in heard)
+        prompt = (f"TABLE TALK (turn {turn if turn is not None else '?'}) — not a decision window: nothing to choose, "
+                  f"no game action, no JSON.\n{lines}\n"
+                  f"Answer them at the table in your own voice: one sentence, at most 25 words, plain text. "
+                  f"Keep your hand and your plans to yourself. If you would rather not answer, reply with the single word SILENT.")
+        t0 = time.time()
+        _, meta = self.brain.decide(prompt, timeout_s=self.TALK_TIMEOUT_S)
+        reply = self._talk_text(meta.get("raw"))
+        lat = time.time() - t0
+        since = f", {time.time() - typed_at:.1f}s after it was typed" if typed_at else ""
+        quoted = " / ".join(f'"{s}"' for _, s in heard)
+        if reply is None:
+            self._say(f"[seat {self.seat}] table talk {quoted}: no answer ({lat:.1f}s{since})")
+        elif not reply:
+            self._say(f"[seat {self.seat}] table talk {quoted}: stayed silent ({lat:.1f}s{since})")
+        else:
+            posted = self._post_panel(clock or f"t{turn if turn is not None else '?'}", name or self._own_name(), reply)
+            self._say(f'[seat {self.seat}] table talk {quoted}: "{reply}" ({lat:.1f}s{since}'
+                      + ("" if posted else "; panel stream absent — not shown") + ")")
+        req = {"gameId": getattr(self.mb, "game_id", None), "seq": None, "turn": turn, "phase": None,
+               "decisionType": "TABLE_TALK", "state": {}}
+        self._record(req, {"text": reply or None, "silent": reply == ""}, "chat", meta=meta, why="heard: " + quoted)
+
+    @classmethod
+    def _talk_text(cls, raw) -> str | None:
+        """The panel text from the brain's reply: None when nothing came back, "" when the seat
+        stays silent (SILENT, or a JSON answer — it took the talk for a window), else one trimmed
+        line of at most TALK_MAX_CHARS."""
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        text = " ".join(raw.split()).strip().strip('"\u201c\u201d\'').strip()
+        if not text or text.startswith("{") or text.rstrip(".!").strip().upper() == "SILENT":
+            return ""
+        if len(text) > cls.TALK_MAX_CHARS:
+            text = text[: cls.TALK_MAX_CHARS - 1].rstrip() + "\u2026"
+        return text
+
+    def _post_panel(self, clock: str, name: str, text: str) -> bool:
+        """One line under the player's in the Advisor panel's stream — the file the advisor runner
+        appends to and VAdvisor tails, a single short append and never a read. False when no
+        advisor (or relay-only) runner opened the stream this session."""
+        p = self._jsonl_path.parent / "advisor-0.log"
+        if not p.exists():
+            return False
+        try:
+            with p.open("a") as f:
+                f.write(f"[{clock} \u00b7 {name} \u2192 you] {text}\n")
+            return True
+        except OSError:
+            return False
+
+    def _own_name(self) -> str:
+        """This seat's short name for a panel line when the note carried none (the launch roster's commander)."""
+        return self._party_name(self.seat).split(" (seat")[0].split(",")[0].strip() or f"seat {self.seat}"
 
     def _deal_partner_in(self, req: dict, kinds: tuple, where: str):
         """The first deal partner (seat, deal) whose player or permanents this window offers as a
@@ -726,7 +1161,8 @@ class SeatRunner:
 
     def _record(self, req: dict, answer: dict, source: str, meta=None,
                 why: str | None = None, consumed: bool = True,
-                say: str | None = None, deal: dict | None = None) -> None:
+                say: str | None = None, deal: dict | None = None,
+                say_meta: dict | None = None, stance: dict | None = None) -> None:
         stamp = self.board_stamp(req)
         # BL-59 (2026-10-16): `model` is the CONCRETE id the transport reported
         # (seatd/brain.py resolved_model) — the Elo ladder keys on it; the alias
@@ -765,8 +1201,13 @@ class SeatRunner:
             rec["deviation"] = dev
         if say:
             rec["say"] = say                     # §4.4: the seat's table line, for the voice runner
+            for k, v in (say_meta or {}).items():
+                if v is not None:
+                    rec[k] = v                   # say_to / say_card / say_offered (step 2, 2026-10-18)
         if deal:
             rec["deal"] = deal                   # table deals §11: the brain's answer to an offer
+        if stance:
+            rec["stance"] = stance               # step 4: {trigger: {"id", "to"}} — the voice arms it
         if self.turn_intent and source == "model":
             rec["turn_intent"] = self.turn_intent
         cum = dict(self.brain.totals)  # burn since instantiation
@@ -811,8 +1252,13 @@ class SeatRunner:
                 "latency_s": rec.get("latency_s"), "board": stamp}
             if say:
                 shared["say"] = say
+                for k, v in (say_meta or {}).items():
+                    if v is not None:
+                        shared[k] = v
             if deal:
                 shared["deal"] = deal
+            if stance:
+                shared["stance"] = stance
             line = json.dumps(shared) + "\n"
             for gp in self._game_log_paths(req.get("gameId")):
                 with gp.open("a") as f:
@@ -1910,7 +2356,8 @@ class SeatRunner:
                   f"timeout={self.timeout_s}s transport={getattr(self.brain, 'transport_name', '?')} "
                   f"react-low-effort={os.environ.get('ARENA_REACT_LOW_EFFORT', 'on')} "
                   f"rotate={self.rotate_at // 1000}k/{self.rotate_hard // 1000}k "
-                  f"speculative={'on' if self.speculative else 'off'} react-hold={'on' if self.react_hold else 'off'}"
+                  f"speculative={'on' if self.speculative else 'off'} react-hold={'on' if self.react_hold else 'off'} "
+                  f"talk-reply={'on' if self.talk_reply else 'off'}"
                   + (f" (swept {swept} stale)" if swept else ""))
         self.mb.start_heartbeat_thread()  # item 12: "somebody is home", every 5s,
                                           # beating through the pre-warm below too
@@ -1933,6 +2380,7 @@ class SeatRunner:
             self._apply_control()
             req = self.mb.pending_request()
             if req is None:
+                self._talk_tick()      # the player's table talk, answered while no window waits
                 time.sleep(poll_s)
                 continue
             self.handle(req)
@@ -2048,6 +2496,8 @@ class SeatRunner:
             self._tap_pass = None
             self._yielded = {}
             self._publish_yields()
+            self._ring_seq, self._hits_by, self._hit_since, self._countered_by = None, {}, None, None
+            self._says_turn, self._say_offered = (None, 0), (None, {})
             self._pending_offers, self._deals_in_force, self._deal_notes = {}, {}, []   # deals die with the game
             self._my_offers, self._last_propose_turn, self._invited = {}, None, False
         if req.get("gameId"):
@@ -2184,6 +2634,7 @@ class SeatRunner:
         deadline = mtime + 0.8 * self.timeout_s
         budget = 0.0 if vanished else deadline - time.time()
         answer, source, meta, why, say, deal = None, "punt", None, None, None, None
+        say_obj, stance = None, None
         if budget > 5.0:
             # Advisory: remaining planned cards (if a plan survives) fed as text.
             plan_text = None
@@ -2207,12 +2658,17 @@ class SeatRunner:
                 n["_shown"] = True                    # delivered: the key is on this prompt
             notes = [x for x in (self._runner_note, armed_note, self._loop_offer(req, cyc_sig), *deal_notes, deal_note) if x]
             self._runner_note = None
+            observer = self.mb.read_observer()
+            deal_offer = self._deal_offer_lines(req)
+            say_menu = self._say_menu(req, observer, deal_offer=bool(deal_offer),
+                                      loop_offer=any("LOOP" in str(x) for x in notes))
             prompt = rules.build_user_prompt(
-                req, plan=plan_text, observer=self.mb.read_observer(),
+                req, plan=plan_text, observer=observer,
                 speculative=self.speculative, react_hold=self.react_hold,
                 combo_status=rules.combo_status_line(self.combos, req),
                 runner_note="\nRUNNER NOTE: ".join(notes) if notes else None, seat=self.seat,
-                deal_offer=self._deal_offer_lines(req))
+                deal_offer=deal_offer, say_menu=say_menu,
+                stance_offer=rules.stance_block() if (self.stances_on and rules.say_offer(req, self.seat)) else None)
             # Item 2: the brain gets the DEADLINE, not a duration — init and
             # the decision call each spend only what remains of it (the old
             # min(budget, 240) handed the same budget to both, so a lazy
@@ -2222,6 +2678,10 @@ class SeatRunner:
             # real play) thinks at effort low — full authority retained, never
             # skipped, so a trick in response to your own trigger stays live.
             fast_eff = None
+            if dtype == "REACT" and str(req.get("prompt", "")).startswith("YOUR OWN spell or ability is on the stack"):
+                # v5 self-spell window (W-14): full effort, logged so hygiene can
+                # count the windows the brain passes (the flood cost of the gate)
+                self._say(f"[seat {self.seat}] own-spell window: a copy answer is offered")
             if self.brain.effort != "low":
                 if self._resourceless_react(req):
                     fast_eff = "low"
@@ -2258,7 +2718,10 @@ class SeatRunner:
             if isinstance(out, dict) and isinstance(out.get("why"), str):
                 why = out["why"][:200]
             if isinstance(out, dict) and out.get("say") is not None:
-                say = self._say_key(req, out.get("say"))     # §4.4: validated, logged, never sent
+                say_obj = self._say_key(req, out.get("say"))  # §4.4: validated against the offered menu, logged, never sent
+                say = say_obj["id"] if say_obj else None
+            if isinstance(out, dict) and out.get("stance") is not None and self.stances_on:
+                stance = self._stance_key(req, out.get("stance"))  # step 4: validated per trigger, recorded, performed by the voice
             if clean is not None and isinstance(out, dict) and out.get("deal") is not None:
                 deal = self._deal_key(req, out.get("deal"))  # table deals: validated, recorded, never sent
             # Capture stated intent (normal mode) and surface deviations
@@ -2363,8 +2826,10 @@ class SeatRunner:
                   f"{('  # ' + why) if why else ''}"
                   f"{'' if ok else ' WINDOW LOST'}")
         self._record(req, answer, source, meta, why=why, consumed=ok,
-                     say=say if source == "model" else None,   # a punted answer's line is not spoken
-                     deal=deal if source == "model" else None)
+                     say=say if source == "model" and ok else None,   # a punted or lost answer's line is not spoken
+                     deal=deal if source == "model" else None,
+                     say_meta=self._say_meta(req, answer, say_obj) if (say and source == "model" and ok) else None,
+                     stance=stance if (stance and source == "model" and ok) else None)
         if source == "punt" and getattr(self.brain, "stalls", 0) >= 2:
             # B3 / W-18 (plan 2026-09-14): the resident process timed out twice running
             # with no answer between — re-resuming the same session only waits for

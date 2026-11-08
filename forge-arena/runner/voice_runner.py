@@ -280,6 +280,7 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self.patter_gap = (float(lo), float(hi if hi is not None else lo))
         self.patter_human = float(tune["patter_human"])                                     # rate on the human's turn
         self.patter_after_advice = float(tune["patter_after_advice_s"])
+        self.stance_fires_per_turn = int(tune["stance_fires_per_turn"])                   # a brain's reflexes a seat may fire in one turn (plan step 4)
         self.barks_slow = float(tune["barks_slow_s"])                                       # a seat thinking this long gets told
         self.barks_mana = int(tune["barks_mana"])                                           # floating this much is "big mana"
         self._last_hit_by: dict[int, tuple[list[int], object]] = {}   # seat -> (hitters, turn) from the ring: kill attribution
@@ -541,6 +542,9 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
             "loop_called": {str(s): t for s, t in sorted((self._loop_called or {}).items())},
             "stack_seen": sorted(([str(n), o, list(t)] for n, o, t in self._stack_seen), key=json.dumps),   # hold-on said; owners may be null
             "last_spoken_at": self.last_spoken_at,                 # a spoken line is a checkpoint too
+            "stances": {str(s): {t: dict(h) for t, h in st.items()} for s, st in sorted((self.__dict__.get("_stances") or {}).items()) if st},
+            "held_say": {str(s): dict(h) for s, h in sorted((self.__dict__.get("_held_say") or {}).items())},   # the brain's words (plan steps 2 + 4)
+            "stance_fired": {str(s): int(n) for s, n in sorted((self.__dict__.get("_stance_fired") or {}).items())},   # the turn's reflex cap survives a restart
         }
 
     def _recency_state(self) -> dict:
@@ -656,6 +660,9 @@ class VoiceRunner(SchedulerMixin, EventsMixin, AtomsMixin):
         self._gc_cast_seen = {(int(s), str(c)) for s, c in get("gc_cast_seen", list)}
         self._card_events_turn = {(int(s), str(c)): int(n) for s, c, n in get("card_events_turn", list)}
         self._heads_up_said = bool(state.get("heads_up_said"))
+        self._stances = {int(s): {str(t): dict(h) for t, h in st.items() if isinstance(h, dict)} for s, st in get("stances", dict).items() if isinstance(st, dict)}
+        self._held_say = {int(s): dict(h) for s, h in get("held_say", dict).items() if isinstance(h, dict)}
+        self._stance_fired = {int(s): int(n) for s, n in get("stance_fired", dict).items() if isinstance(n, int)}
         self._sweeps = int(state.get("sweeps") or 0)
         self._countered_n = {int(s): int(n) for s, n in get("countered_n", dict).items()}
         # the deals: the contract's dict, or an OLD checkpoint's int (the struck turn) upgraded to a truce until struck + DEAL_TURNS

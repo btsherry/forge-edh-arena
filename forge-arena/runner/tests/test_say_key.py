@@ -48,9 +48,7 @@ class SayOffer(unittest.TestCase):
         have = set()
         for m in (main, table):
             have |= set((json.loads(m.read_text()).get("phrases") or {}).keys())
-        pending_render = {"counter-offer"}   # table deals plan §7: rendered in the voice lane
-        self.assertEqual([i for i in rules.SAY_MENU if i not in have and i not in pending_render], [],
-                         "every menu id is a phrase harry can speak")
+        self.assertEqual([i for i in rules.SAY_MENU if i not in have], [], "every menu id is a phrase harry can speak")
 
     def test_validate_strips_the_key(self):
         self.assertEqual(rules.validate(_cast(), {"chosenId": 1, "why": "w", "say": "taunt"}), {"chosenId": 1})
@@ -90,7 +88,7 @@ class SayRecorded(unittest.TestCase):
         r.handle(_cast(2))
         self.assertEqual(sent, [{"chosenId": 1}])
         self.assertNotIn("say", self._rows(r)[-1])
-        self.assertIn("say 'trash-talk' dropped: not on the menu", self._log(r))
+        self.assertIn("say 'trash-talk' dropped: not offered on this window", self._log(r))
 
     def test_a_say_on_a_procedural_window_is_dropped(self):
         r, sent = self._runner()

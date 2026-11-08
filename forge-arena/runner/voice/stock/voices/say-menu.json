@@ -1,0 +1,144 @@
+{
+  "schema": "arena.say-menu/1",
+  "note": "The brain's table-line menu (docs/reviews/2026-10-16-brain-authored-talk-plan.md). Loaded by the SEAT side only (seatd/rules.load_say_menu); the voice runner validates a brain's id by the seat's own library and keeps no copy. `core` is the quiet-window line; a charged window shows the active situations' ids first, then core to fill, `max_ids` in all. `held` ids are own-action lines: the seat runner records them, the voice holds them and speaks them at the seat's own next matching event, with that event's context — never at record time (a line for an action that never happens expires unspoken). `deal` is offered only beside a deal line, `loop` only with the loop offer. `to`: the id names a seat. Glosses are the brain-facing text; every id must be a phrase harry, bill, lily and joshua carry (test_say_menu).",
+  "max_ids": 14,
+  "max_says_per_turn": 2,
+  "core": [
+    {"id": "taunt",             "gloss": "a jab at the table"},
+    {"id": "respect",           "gloss": "credit where it is due"},
+    {"id": "nice-play",         "gloss": "admire the last play"},
+    {"id": "gg",                "gloss": "the game is decided, say so"},
+    {"id": "this-is-fine",      "gloss": "deadpan: everything is fine"},
+    {"id": "im-not-the-threat", "gloss": "deflect: not me"},
+    {"id": "youre-the-threat",  "gloss": "name the threat", "to": true},
+    {"id": "kill-that",         "gloss": "call for the table to answer their big thing", "to": true}
+  ],
+  "situations": {
+    "hit": [
+      {"id": "that-hurt",        "gloss": "that one landed"},
+      {"id": "grudge",           "gloss": "the same seat hit you again"},
+      {"id": "bite-me",          "gloss": "light name-calling at the hitter"},
+      {"id": "you-suck",         "gloss": "cruder name-calling"},
+      {"id": "attack-them",      "gloss": "point the table at someone else", "to": true},
+      {"id": "youre-the-threat", "gloss": "name the threat", "to": true},
+      {"id": "low-life",         "gloss": "admit you are low"},
+      {"id": "this-is-fine",     "gloss": "deadpan: everything is fine"}
+    ],
+    "blocking": [
+      {"id": "brace",            "gloss": "bring it"},
+      {"id": "why-me",           "gloss": "why me?"},
+      {"id": "no-blocks",        "gloss": "no blocks, take it"},
+      {"id": "take-it",          "gloss": "I'll take the damage"},
+      {"id": "you-wish",         "gloss": "you wish"},
+      {"id": "attack-them",      "gloss": "point the attacker at someone else", "to": true},
+      {"id": "youre-the-threat", "gloss": "name the threat", "to": true},
+      {"id": "this-is-fine",     "gloss": "deadpan: everything is fine"}
+    ],
+    "attacking": [
+      {"id": "big-swing",        "gloss": "announce a big attack"},
+      {"id": "attack-you",       "gloss": "swinging at you"},
+      {"id": "poke",             "gloss": "just a poke"},
+      {"id": "not-sorry",        "gloss": "not sorry"},
+      {"id": "i-broke-it",       "gloss": "you are breaking a deal on purpose: own it"},
+      {"id": "archenemy",        "gloss": "call out the table leader", "to": true},
+      {"id": "low-life-jab",     "gloss": "needle a seat at ten or less", "to": true},
+      {"id": "empty-hand",       "gloss": "needle a seat with no cards", "to": true},
+      {"id": "taunt",            "gloss": "a jab at the table"}
+    ],
+    "countered": [
+      {"id": "got-countered",    "gloss": "countered, and you felt it"},
+      {"id": "again-countered",  "gloss": "countered again"},
+      {"id": "scoff",            "gloss": "scoff it off"},
+      {"id": "clapback",         "gloss": "a retort"},
+      {"id": "you-cheat",        "gloss": "accuse them of cheating, in jest"},
+      {"id": "nerd",             "gloss": "call them a nerd"},
+      {"id": "bite-me",          "gloss": "light name-calling"},
+      {"id": "youre-the-threat", "gloss": "name the threat", "to": true}
+    ],
+    "stack_threat": [
+      {"id": "oh-no",            "gloss": "alarm"},
+      {"id": "wow",              "gloss": "impressed"},
+      {"id": "read-that",        "gloss": "ask what it does"},
+      {"id": "scoff",            "gloss": "unimpressed"},
+      {"id": "kill-that",        "gloss": "call for the table to answer it", "to": true},
+      {"id": "nice-play",        "gloss": "admire it"},
+      {"id": "gc-react",         "gloss": "react to the game changer by name"},
+      {"id": "hold-on",          "gloss": "wait, which one? (it targets you)"},
+      {"id": "sure",             "gloss": "let it resolve"},
+      {"id": "in-response",      "gloss": "you are casting an instant in response"},
+      {"id": "counter",          "gloss": "you are countering it"}
+    ],
+    "my_cast": [
+      {"id": "commander-cast",   "gloss": "your commander arrives"},
+      {"id": "game-changer",     "gloss": "you are casting a game changer"},
+      {"id": "cast-big",         "gloss": "a six-plus mana spell"},
+      {"id": "removal",          "gloss": "you are removing something of theirs"},
+      {"id": "sweep",            "gloss": "you are sweeping the board"},
+      {"id": "taunt",            "gloss": "a jab at the table"},
+      {"id": "archenemy",        "gloss": "call out the table leader", "to": true}
+    ],
+    "leader": [
+      {"id": "whats-your-life",  "gloss": "ask a seat its life total", "to": true},
+      {"id": "low-life-jab",     "gloss": "needle a seat at ten or less", "to": true},
+      {"id": "empty-hand",       "gloss": "needle a seat with no cards", "to": true},
+      {"id": "cards-in-hand",    "gloss": "remark on a seat's full hand", "to": true},
+      {"id": "you-wish",         "gloss": "you wish"},
+      {"id": "taunt",            "gloss": "a jab at the table"}
+    ],
+    "behind": [
+      {"id": "low-life",         "gloss": "admit you are low"},
+      {"id": "im-not-the-threat", "gloss": "deflect: not me"},
+      {"id": "youre-the-threat", "gloss": "name the threat", "to": true},
+      {"id": "attack-them",      "gloss": "point the table at someone else", "to": true},
+      {"id": "kill-that",        "gloss": "call for the table to answer their big thing", "to": true},
+      {"id": "this-is-fine",     "gloss": "deadpan: everything is fine"}
+    ],
+    "quiet": [
+      {"id": "nothing-happening", "gloss": "nothing is happening"},
+      {"id": "pass-already",     "gloss": "pass already"},
+      {"id": "what-turn",        "gloss": "what turn is it?"},
+      {"id": "long-game",        "gloss": "this game is taking forever"}
+    ]
+  },
+  "deal": [
+    {"id": "take-the-deal",     "gloss": "accept the offer"},
+    {"id": "no-deal",           "gloss": "refuse the offer"},
+    {"id": "counter-offer",     "gloss": "counter the offer"},
+    {"id": "promise",           "gloss": "a promise"},
+    {"id": "deal",              "gloss": "propose a deal"}
+  ],
+  "loop": [
+    {"id": "looping",           "gloss": "declare your loop"}
+  ],
+  "needs_target": ["youre-the-threat", "kill-that", "attack-them", "archenemy", "low-life-jab", "empty-hand", "whats-your-life", "cards-in-hand"],
+  "held": {
+    "big-swing": "attack", "attack-you": "attack", "poke": "attack", "i-broke-it": "attack",
+    "take-it": "damage",
+    "in-response": "cast", "commander-cast": "cast", "game-changer": "cast", "cast-big": "cast",
+    "counter": "countered-by",
+    "removal": "left-by", "sweep": "left-by"
+  },
+  "stances": {
+    "on_hit":       ["grudge", "that-hurt", "bite-me", "youre-the-threat", "attack-them", "this-is-fine"],
+    "on_attacked":  ["brace", "why-me", "you-wish", "youre-the-threat", "this-is-fine"],
+    "on_counter":   ["scoff", "clapback", "you-cheat", "nerd", "bite-me"],
+    "on_gc":        ["gc-react", "kill-that", "oh-no", "scoff", "read-that", "wow"],
+    "on_commander": ["oh-no", "read-that", "wow", "nice-play"],
+    "on_big_spell": ["wow", "nice-play", "read-that", "oh-no", "scoff"],
+    "on_removal":   ["oh-no", "scoff", "you-suck", "clapback", "bite-me"],
+    "on_sweep":     ["got-swept", "not-again-sweep", "this-is-fine"]
+  },
+  "gates": {
+    "low-life": "own life at ten or less",
+    "low-life-jab": "another seat at ten or less",
+    "empty-hand": "another seat with no cards in hand",
+    "cards-in-hand": "another seat with seven or more cards",
+    "long-game": "past turn fourteen",
+    "in-response": "a REACT window on another seat's turn",
+    "counter": "a REACT window with another seat's spell on the stack",
+    "commander-cast": "the window offers your commander",
+    "game-changer": "the window offers one of your game changers",
+    "cast-big": "the window offers a six-plus mana spell",
+    "i-broke-it": "a defender is a deal partner"
+  }
+}

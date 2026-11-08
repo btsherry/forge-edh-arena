@@ -42,6 +42,7 @@ HELD_BY = {
     "chain_p": lambda r: r.chains.first_hop_p, "chain_decay": lambda r: r.chains.decay,
     "chain_max_hops": lambda r: r.chains.max_hops, "chain_gap_s": lambda r: r.chains.gap_s,
     "chain_human_p": lambda r: r.chains.human_mult,
+    "stance_fires_per_turn": lambda r: r.stance_fires_per_turn,        # plan step 4 (2026-10-18)
 }
 # what the operator keeps on the voice path: the dial, the two switches, the bleeps; Joshua's render
 # settings (not tuning); the launch plumbing. ARENA_VOICE_FOCUS is the GUI's and is not read in Python.
