@@ -10,7 +10,7 @@ Usage: arena-config.py [--mode all-ai|human] [--deck SLUG] [--model M] [--effort
                        [--stops quick|full|keep|restore] [--linger N] [--autostop 0|1]
                        [--out FILE]
 
-The DEFAULTS table below mirrors the defaults in the code; tests/test_hardening.py
+The DEFAULTS table below mirrors the defaults in the code; tests/test_scripts.py
 scans the sources and fails when they drift apart. The voice's tuning numbers are
 not knobs: they live in runner/voice/stock/voices/tuning.json (one row below points
 at it; tests/test_tuning.py holds that file to the code).

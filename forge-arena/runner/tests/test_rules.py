@@ -1,14 +1,17 @@
-"""Contract tests (H2 checkpoint): for every fixture — the known-good response
-is accepted, every documented trap is rejected, and safe_default(req) itself
-validates. Run: python3 -m unittest discover -s tests"""
+"""Contract tests for seatd/rules.py: for every fixture the known-good response is accepted, every documented
+trap is rejected and safe_default(req) itself validates; the shape-aware punt table (CONFIRM by engine facts,
+TARGETS with the punt marker, TRIGGER_ORDER / COLOR hand-backs, a single legal defender filled in); the
+X-cancel sentinel; the gated prompt text and the deck-agnostic COMBO STATUS line (2026-08-10); and the seat
+brief's failure table pinned to the function (plan item 14). Run: python3 -m unittest discover -s tests"""
 import copy
 import json
 import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from seatd import rules  # noqa: E402
+
 
 FIX = Path(__file__).parent / "fixtures"
 
@@ -17,14 +20,70 @@ def load(name):
     return json.loads((FIX / f"{name}.json").read_text())
 
 
+def num_req(lo, hi, cancelable=False):
+    r = json.loads((FIX / "choose_number.json").read_text())
+    r["state"]["min"], r["state"]["max"] = lo, hi
+    if cancelable:
+        r["state"]["cancelable"] = True
+    return r
+
+
+COMBOS = [
+    {"id": "a", "cards": [{"name": "Umbral Mantle"},
+                          {"name": "Selvala, Heart of the Wilds"}],
+     "mana_needed": "{2}{G} at most"},
+    {"id": "b", "cards": [{"name": "Staff of Domination"},
+                          {"name": "Selvala, Heart of the Wilds"}]},
+    {"id": "c", "cards": [{"name": "Card Nowhere"}, {"name": "Other Gone"}]},
+]
+
+
+def combo_req(bf=(), hand=(), command=(), grave=()):
+    return {"decisionType": "CAST_SPELL",
+            "state": {"battlefield": [{"name": n} for n in bf],
+                      "hand": [{"name": n} for n in hand],
+                      "command": list(command),
+                      "graveyard": list(grave)}}
+
+
+BRIEF = (Path(__file__).resolve().parents[1] / "seatd" / "seat-brief.md").read_text()
+
+
+def brief_req(dtype, options, state=None):
+    return {"decisionType": dtype, "prompt": "x", "state": state or {},
+            "options": [{"id": i, "label": f"o{i}"} for i in options]}
+
+
 class SafeDefaultAlwaysLegal(unittest.TestCase):
+    """For every fixture — the hand-written ones and the ENGINE-EMITTED ones `ProtocolContractTest`
+    (Java) writes to fixtures/engine/ — the runner knows the decision type and the punt answer it would
+    send is a legal answer for what the engine actually asked."""
+
     def test_every_fixture(self):
-        for f in sorted(FIX.glob("*.json")):
+        files = sorted(FIX.glob("*.json")) + sorted((FIX / "engine").glob("*.json"))
+        self.assertTrue(any(f.parent.name == "engine" for f in files), "no engine fixtures — run the Java suite")
+        for f in files:
+            req = json.loads(f.read_text())
+            with self.subTest(fixture=f"{f.parent.name}/{f.stem}"):
+                self.assertIn(req["decisionType"], rules.ANSWER_CONTRACT, "a decision type the runner does not know")
+                d = rules.safe_default(req)
+                self.assertIsNotNone(rules.validate(req, d), f"safe_default not legal for {f.stem}: {d}")
+
+
+class EngineFixtures(unittest.TestCase):
+    def setUp(self):
+        self.files = sorted((FIX / "engine").glob("*.json")) if (FIX / "engine").is_dir() else []
+        if not self.files:
+            self.skipTest("no engine fixtures — run the Java suite (ProtocolContractTest writes them)")
+
+    def test_engine_requests_carry_identity_and_budget(self):
+        for f in self.files:
             req = json.loads(f.read_text())
             with self.subTest(fixture=f.stem):
-                d = rules.safe_default(req)
-                self.assertIsNotNone(rules.validate(req, d),
-                                     f"safe_default not legal for {f.stem}: {d}")
+                self.assertRegex(req["gameId"], r"^\d+-\d+$")
+                self.assertGreater(req["timeoutSec"], 0)
+                self.assertIn("manaSources", req["state"])
+                self.assertIn("manaAvailableNow", req["state"])
 
 
 class TableDrivenContract(unittest.TestCase):
@@ -234,5 +293,205 @@ class ConfirmDefaultShapeTests(unittest.TestCase):
             self.assertIsNotNone(rules.validate(r, rules.safe_default(r)))
 
 
-if __name__ == "__main__":
-    unittest.main()
+class CancelSentinelTests(unittest.TestCase):
+    def test_cancel_accepted_when_cancelable(self):
+        self.assertEqual(rules.validate(num_req(0, 0, cancelable=True),
+                                        {"chosen": -1}), {"chosen": -1})
+
+    def test_cancel_rejected_when_not_cancelable(self):
+        self.assertIsNone(rules.validate(num_req(0, 5), {"chosen": -1}))
+
+    def test_bounds_still_enforced(self):
+        self.assertIsNone(rules.validate(num_req(0, 5, cancelable=True),
+                                         {"chosen": 6}))
+        self.assertEqual(rules.validate(num_req(0, 5, cancelable=True),
+                                        {"chosen": 5}), {"chosen": 5})
+
+    def test_safe_default_never_cancels(self):
+        # punts must stay engine-legal, never -1. Wave-3 (F3): real mana-X
+        # requests carry puntHigh (max is affordability-capped) and punt max;
+        # un-flagged number requests (bids) punt LOW — still never -1.
+        x_req = num_req(0, 4, cancelable=True)
+        x_req["state"]["puntHigh"] = True
+        self.assertEqual(rules.safe_default(x_req), {"chosen": 4})
+        self.assertEqual(rules.safe_default(num_req(0, 4, cancelable=True)),
+                         {"chosen": 0})
+
+
+class TargetWindowPunt(unittest.TestCase):
+    def _req(self, purpose, lo):
+        return {"decisionType": "CHOOSE_ENTITIES", "seq": 1, "turn": 5,
+                "state": {"min": lo, "max": 2, **({"purpose": purpose} if purpose else {})},
+                "options": [{"id": 1, "label": "Sol Ring [Urza-S0]"}, {"id": 2, "label": "Grim Monolith [Urza-S0]"}, {"id": 3, "label": "Mox Amber [Urza-S0]"}]}
+
+    def test_a_punt_on_a_target_window_is_marked_and_still_valid(self):
+        for lo in (0, 1, 2):
+            req = self._req("TARGETS", lo)
+            out = rules.safe_default(req)
+            self.assertEqual(out, {"chosen": [1, 2][:lo], "punt": True})
+            self.assertIsNotNone(rules.validate(req, out), "the invariant: a safe default validates")
+
+    def test_other_multi_pick_windows_punt_as_before(self):
+        self.assertEqual(rules.safe_default(self._req(None, 1)), {"chosen": [1]})
+        self.assertEqual(rules.safe_default(self._req("SACRIFICE", 0)), {"chosen": []})
+
+    def test_the_seat_may_choose_no_targets_when_the_minimum_is_zero(self):
+        req = self._req("TARGETS", 0)
+        self.assertEqual(rules.validate(req, {"chosen": []}), {"chosen": []})
+        self.assertEqual(rules.validate(req, {"chosen": [3, 1]}), {"chosen": [3, 1]}, "the order is kept: the split follows it")
+        self.assertIsNone(rules.validate(req, {"chosen": [1, 1]}))
+        self.assertIsNone(rules.validate(req, {"chosen": [1, 2, 3]}), "over state.max")
+
+    def test_a_declinable_window_accepts_an_empty_pick_or_the_real_range(self):
+        req = self._req("TARGETS", 2)
+        req["state"]["declinable"] = True
+        self.assertEqual(rules.validate(req, {"chosen": []}), {"chosen": []}, "[] declines the seat's own optional trigger")
+        self.assertIsNone(rules.validate(req, {"chosen": [1]}), "one pick is under the real minimum of two")
+        self.assertEqual(rules.validate(req, {"chosen": [1, 2]}), {"chosen": [1, 2]})
+
+
+class SingleLegalDefender(unittest.TestCase):
+    """BL-23: a missing defender is filled in when exactly one is legal (the
+    engine's chooseDefender rule); with several legal it is still rejected."""
+
+    def _req(self, defenders):
+        return {"decisionType": "DECLARE_ATTACKERS", "prompt": "x",
+                "state": {"defenders": [{"id": d, "label": f"seat {d}", "type": "PLAYER"}
+                                        for d in defenders]},
+                "options": [{"id": 0, "label": "no attack"}, {"id": 302, "label": "Bear"}]}
+
+    def test_one_legal_defender_is_filled_in(self):
+        from seatd import rules
+        out = rules.validate(self._req([2]), {"attackers": [{"attacker": 302}]})
+        self.assertEqual(out, {"attackers": [{"attacker": 302, "defender": 2}]})
+
+    def test_several_legal_defenders_still_require_it(self):
+        from seatd import rules
+        self.assertIsNone(rules.validate(self._req([1, 2]), {"attackers": [{"attacker": 302}]}))
+        # explicit stays explicit
+        out = rules.validate(self._req([1, 2]), {"attackers": [{"attacker": 302, "defender": 1}]})
+        self.assertEqual(out, {"attackers": [{"attacker": 302, "defender": 1}]})
+
+
+class PurposeWindowPunts(unittest.TestCase):
+    """BL-02/03 windows: a punt hands the pick back to the engine's stock
+    logic via the documented empty list; a model may say the same."""
+
+    def test_safe_default_and_validate(self):
+        from seatd import rules
+        order = {"decisionType": "CHOOSE_MODE", "prompt": "x",
+                 "state": {"min": 2, "max": 2, "purpose": "TRIGGER_ORDER"},
+                 "options": [{"id": 0, "label": "a"}, {"id": 1, "label": "b"}]}
+        color = {"decisionType": "CHOOSE_MODE", "prompt": "x",
+                 "state": {"min": 1, "max": 1, "purpose": "COLOR"},
+                 "options": [{"id": 0, "label": "white"}, {"id": 1, "label": "green"}]}
+        plain = {"decisionType": "CHOOSE_MODE", "prompt": "x", "state": {"min": 1, "max": 1},
+                 "options": [{"id": 0, "label": "a"}, {"id": 1, "label": "b"}]}
+        self.assertEqual(rules.safe_default(order), {"chosen": []})
+        self.assertEqual(rules.safe_default(color), {"chosen": []})
+        self.assertEqual(rules.safe_default(plain), {"chosen": [0]}, "ordinary modes keep the first-min rule")
+        self.assertEqual(rules.validate(order, {"chosen": []}), {"chosen": []})
+        self.assertEqual(rules.validate(color, {"chosen": []}), {"chosen": []})
+        self.assertIsNone(rules.validate(plain, {"chosen": []}), "an empty list is not legal for a real mode choice")
+        self.assertEqual(rules.validate(order, {"chosen": [1, 0]}), {"chosen": [1, 0]})
+        self.assertIsNone(rules.validate(order, {"chosen": [1]}), "a partial order is not a permutation")
+
+
+class PromptGatingTests(unittest.TestCase):
+    def _cast_req(self):
+        return json.loads((FIX / "cast_spell.json").read_text())
+
+    def _react_req(self):
+        return json.loads((FIX / "react.json").read_text())
+
+    def test_plan_text_gated_on_speculative(self):
+        req = self._cast_req()
+        req["phase"] = "MAIN1"
+        off = rules.build_user_prompt(req)
+        on = rules.build_user_prompt(req, speculative=True)
+        self.assertNotIn('"plan" key', off)
+        self.assertIn('"plan" key', on)
+
+    def test_hold_hint_gated_on_react_hold(self):
+        req = self._react_req()
+        off = rules.build_user_prompt(req)
+        on = rules.build_user_prompt(req, react_hold=True)
+        self.assertNotIn("hold_turn", off)
+        self.assertIn("hold_turn", on)
+
+    def test_mana_ground_truth_on_cast_windows(self):
+        self.assertIn("MANA GROUND TRUTH",
+                      rules.build_user_prompt(self._cast_req()))
+        self.assertNotIn("MANA GROUND TRUTH",
+                         rules.build_user_prompt(self._react_req()))
+
+
+class ComboStatusTests(unittest.TestCase):
+    def test_executable_now_flagged(self):
+        line = rules.combo_status_line(COMBOS, combo_req(
+            bf=("Umbral Mantle", "Selvala, Heart of the Wilds")))
+        self.assertIn("EXECUTE THIS TURN", line)
+        self.assertIn("needs {2}{G} at most", line)
+
+    def test_one_step_away_in_hand(self):
+        line = rules.combo_status_line(COMBOS, combo_req(
+            bf=("Selvala, Heart of the Wilds",), hand=("Umbral Mantle",)))
+        self.assertIn("Umbral Mantle IN HAND", line)
+        self.assertIn("1 step(s) from live", line)
+
+    def test_command_zone_counts_as_castable(self):
+        line = rules.combo_status_line(COMBOS, combo_req(
+            bf=("Staff of Domination",),
+            command=("Selvala, Heart of the Wilds",)))
+        self.assertIn("IN COMMAND ZONE", line)
+
+    def test_quiet_when_nothing_in_reach(self):
+        self.assertIsNone(rules.combo_status_line(
+            [COMBOS[2]], combo_req(bf=("Forest",))))
+
+    def test_quiet_off_main_windows_and_empty(self):
+        req = combo_req(bf=("Umbral Mantle",))
+        req["decisionType"] = "REACT"
+        self.assertIsNone(rules.combo_status_line(COMBOS, req))
+        self.assertIsNone(rules.combo_status_line([], combo_req()))
+
+
+class BriefMatchesSafeDefault(unittest.TestCase):
+    def test_brief_says_defaults_are_not_a_pass(self):
+        self.assertNotIn("a pass is played for you", BRIEF)
+        self.assertIn("SAFE\n   DEFAULT", BRIEF.replace("SAFE DEFAULT", "SAFE\n   DEFAULT"))
+
+    def test_table_rows_match_the_function(self):
+        # (brief phrase that must be present, request, expected default)
+        cases = [
+            ("| CAST_SPELL, REACT | pass |", brief_req("REACT", [0, 1]), {"chosenId": 0}),
+            ("| MULLIGAN | keep the hand |", brief_req("MULLIGAN", [0, 1]), {"keep": True}),
+            ("no attackers / no blocks", brief_req("DECLARE_ATTACKERS", [5]), {"attackers": []}),
+            ("no attackers / no blocks", brief_req("DECLARE_BLOCKERS", [5]), {"blocks": []}),
+            ("the first `min` modes", brief_req("CHOOSE_MODE", [0, 1, 2], {"min": 2, "max": 2}),
+             {"chosen": [0, 1]}),
+            ("the first `min` legal ids", brief_req("CHOOSE_CARDS", [11, 12, 13], {"min": 1, "max": 2}),
+             {"chosen": [11]}),
+            ("nothing when min is 0", brief_req("CHOOSE_ENTITIES", [11, 12], {"min": 0, "max": 2}),
+             {"chosen": []}),
+            ("the engine's stock aim — a punt never aims your spell",
+             brief_req("CHOOSE_ENTITIES", [1, 2, 3], {"min": 1, "max": 2, "purpose": "TARGETS"}), {"chosen": [1], "punt": True}),
+            ('"none" when offered', brief_req("CHOOSE_ENTITY", [0, 11, 12], {"min": 0, "max": 1}),
+             {"chosenId": 0}),
+            ("else the FIRST legal option", brief_req("CHOOSE_CARD", [11, 12], {"min": 1, "max": 1}),
+             {"chosenId": 11}),
+            ("the MAXIMUM when the request is an X cost",
+             brief_req("CHOOSE_NUMBER", [], {"min": 0, "max": 7, "puntHigh": True}), {"chosen": 7}),
+            ("else the minimum", brief_req("CHOOSE_NUMBER", [], {"min": 2, "max": 7}), {"chosen": 2}),
+            ("| PAY_UNLESS | decline (never pays) |", brief_req("PAY_UNLESS", [0, 1]), {"chosenId": 0}),
+            ("yes ONLY when the effect is yours and free",
+             brief_req("CONFIRM", [0, 1], {"confirmMode": "OptionalChoose", "hasCost": False, "isMine": True}),
+             {"chosenId": 1}),
+            ("otherwise no",
+             brief_req("CONFIRM", [0, 1], {"confirmMode": "OptionalChoose", "hasCost": True, "isMine": True}),
+             {"chosenId": 0}),
+        ]
+        for phrase, r, expected in cases:
+            with self.subTest(dtype=r["decisionType"], phrase=phrase):
+                self.assertIn(phrase, BRIEF, "the brief must state this default")
+                self.assertEqual(rules.safe_default(r), expected)

@@ -1,5 +1,38 @@
 # forge-light-llm — Patch Notes
 
+## Unreleased — after v4.3 (on `arena`, 2026-10-16 → 2026-11-08)
+
+- **The seats talk back.** `@urza you dirty bastard` in the Advisor chat is answered by Urza's own
+  brain, in words, under your line in the tab, within a few seconds — no second brain and no
+  change to the poll rates (`ARENA_TALK_REPLY=off` folds the words into its next decision as
+  before). Deals and invitations still relay as they did.
+- **The brains pick their own lines.** A seat's brain is offered a short menu of table lines that
+  fit the moment (hit, blocking, a threat on the stack, a big cast, the leader) and may answer one,
+  aimed at a seat or at you; its voice speaks it at once, names the addressee every time, or holds
+  an own-action line for the attack that follows. A brain may also arm a reflex ("when I'm hit
+  next: you're the threat, Selvala") that its voice performs at the event with no model call.
+  Two brain lines a seat a turn, three reflex fires. Ben, first game with the menu: "Best run of
+  the voice overs to date." `ARENA_SAY_MENU`, `ARENA_STANCES`.
+- **A seat can copy its own spell.** The engine passed a seat's priority whenever only its own spell
+  sat on the stack, so Flare of Duplication, Reiterate or a flash Dualcaster Mage could never copy
+  it (game of 2026-11-07, turn 33: Devastating Onslaught resolved unmirrored and the loop died).
+  A window now opens over the seat's own spell when it holds an affordable copy effect that can
+  reach it; counters and redirects never open it. `ARENA_SELF_SPELL_WINDOW=off`.
+- **Phyrexian mana is paid with life when the sources are short.** Dismember on two Swamps was
+  refused ("Didn't find what to pay for {1}"); the payer now sends a Phyrexian or life-payable pip
+  to life only when the sources cannot cover the cost and life can bridge the gap, colour by
+  colour, and never bleeds life for a payment that still fails.
+- **The dollar figure is the real one.** The AI panel's cost summed the CLI's running ledger on
+  every answer and showed 6–70× the truth; it is now the per-call figure, across restarts,
+  rotations and fallbacks.
+- **The Elo ladder keys on the model that played.** `claude-opus-5-5`, not `opus`: older archives
+  resolve through a dated alias table and `ratings.py --rebuild` re-rates the corpus (done once:
+  claude-opus-5 42 games, claude-opus-5-5 5).
+- **The laptop stays awake.** Eleven of nineteen punts in twenty-one games sat on the machine
+  waking up; on macOS the launcher now runs `caffeinate` for the GUI's lifetime.
+- **Housekeeping.** Deck lint reads the official Commander banlist; the runner test suite went from
+  59 files to 30 (dev-only, not shipped).
+
 ## v4.3 — 2026-10-03
 
 Every target is the seat's, and the engine is current. Two days of work on one all-AI game

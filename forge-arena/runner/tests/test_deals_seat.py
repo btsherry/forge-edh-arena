@@ -1,76 +1,17 @@
-"""Table deals, seat side (docs/reviews/2026-09-16-table-deals-plan.md §5, §6, §11): the seat
-runner reads notes files into RUNNER NOTE sentences (consumed once, three per prompt), offers
-the "deal" answer key only while an offer is pending, validates and records the answer as its
-own game.jsonl DEAL record, lapses an unanswered offer at the turn change, and hands any
-attack/target window that could break a deal in force to the model — never to a fastpath or
-a replayed cycle. Offline: fake mailbox + fake brain. Run: python3 -m unittest discover -s tests"""
+"""Table deals, seat side (docs/reviews/2026-09-16-table-deals-plan.md §5, §6, §11): the seat runner reads
+notes files into RUNNER NOTE sentences (consumed once, three per prompt), offers the "deal" answer key only
+while an offer is pending, validates and records the answer as its own game.jsonl DEAL record, lapses an
+unanswered offer at the turn change, and hands any attack/target window that could break a deal in force to
+the model — never to a fastpath or a replayed cycle; a pending offer holds every window for the model until
+answered (game 50). Offline: fake mailbox + fake brain. Run: python3 -m unittest discover -s tests"""
 import json
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from seatd import rules  # noqa: E402
-from seatd import runner as runner_mod  # noqa: E402
-
-
-class FakeMailbox:
-    game_reset = False
-
-    def __init__(self, seat_dir: Path):
-        self.responses = []
-        self.inbox = Path("/nonexistent")     # no req file: the runner keeps its window (tests)
-        self.dir = seat_dir                   # notes/ lives under the mailbox dir
-
-    def respond(self, req, answer):
-        self.responses.append((req.get("seq"), answer))
-        return True
-
-    def read_observer(self):
-        return None
-
-
-class FakeBrain:
-    effort = "low"
-    model = "opus"
-
-    def __init__(self):
-        self.script, self.calls, self.prompts = [], 0, []
-
-    def decide(self, prompt, timeout_s=None, effort=None, deadline=None):
-        self.calls += 1
-        self.prompts.append(prompt)
-        self.last_prompt = prompt
-        out = self.script.pop(0) if self.script else {"chosenId": 0}
-        return out, {"latency_s": 0.01, "usage": None, "raw": json.dumps(out)}
-
-    def reset(self):
-        pass
-
-
-def make_runner(seat=3):
-    tmp = Path(tempfile.mkdtemp(prefix="deals-"))
-    r = runner_mod.SeatRunner.__new__(runner_mod.SeatRunner)
-    r.seat, r.deck = seat, "urza-lord-high-artificer"
-    r.mb = FakeMailbox(tmp / f"seat-{seat}")
-    r.brain = FakeBrain()
-    r.timeout_s = 90.0
-    r.speculative = r.react_hold = False
-    r.autopass = ()
-    r.plan = r.hold = r.turn_intent = r.combos = None
-    r.react_seen, r.order_memo = set(), {}
-    r.cycle, r._hist, r._last_turn = None, [], None
-    r._init_loop_state()
-    r._deviation = None
-    r.log_lines = []
-    r._say = r.log_lines.append
-    r.records = []
-    r._record = lambda req, answer, source, meta=None, **k: r.records.append((req.get("seq"), answer, source, k))
-    (tmp / "logs").mkdir()
-    r._game_log = tmp / "logs" / "game.jsonl"
-    r._jsonl_path = tmp / "logs" / f"seat-{seat}.jsonl"      # a punt's transport event needs it
-    return r
+from tests.support import fake_seat_runner as make_runner  # noqa: E402
 
 
 OPPONENTS = [{"seat": 0, "life": 35, "battlefield": [{"id": 78, "name": "Managorger Hydra"}]},
@@ -403,8 +344,22 @@ class FastpathHandoff(unittest.TestCase):
         self.assertEqual((r._deals(), r._pending()), ({}, {}))
 
 
-if __name__ == "__main__":
-    unittest.main()
+class OfferDelivery(unittest.TestCase):
+    def test_a_pending_offer_makes_a_fastpath_window_the_models(self):
+        r = make_runner()
+        r._fastpath = lambda req: ({"chosenId": 0}, "memo")             # a memo would answer this REACT without the brain
+        r.brain.script = [{"chosenId": 0}, {"chosenId": 0}]
+        r.handle(react(1))
+        self.assertEqual(r.brain.calls, 0, "no offer pending: the memo answers")
+        oid = offer(r, 1005, "1005-0-3")
+        r.brain.script = [{"chosenId": 0, "deal": {"offer_id": oid, "accept": True}, "say": "take-the-deal"}]
+        r.handle(react(2))
+        self.assertEqual(r.brain.calls, 1, "game 50: the offer is answered at the seat's NEXT window, not its own turn")
+        self.assertIn("DEAL PENDING", r.brain.last_prompt)
+        self.assertTrue(any("held for the model: an offer is waiting" in l for l in r.log_lines))
+        self.assertEqual(deal_rows(r)[-1]["deal"]["accept"], True)
+        r.handle(react(3))
+        self.assertEqual(r.brain.calls, 1, "answered: the memo may answer again")
 
 
 class TermsAndNames(unittest.TestCase):
@@ -589,3 +544,19 @@ class Game55Fixes(unittest.TestCase):
         self.assertIsNone(rules.validate(rq, {"chosenId": 0}), "none is not a legal count here")
         rq["state"].update({"min": 2, "max": 2})
         self.assertIsNone(rules.validate(rq, {"chosenId": 135}), "two picks wanted: the single form is not an answer")
+
+
+class DealConflictLabels(unittest.TestCase):
+    """Review 2026-10-02: `_deal_conflict` crashed (int(None)) on the label the engine writes for a seat's
+    permanent — "<card> [<commander>-S<n>]" fills the regex's SECOND group — whenever a cycle replay checked a
+    target window under a no-target deal; handle() caught it and punted."""
+
+    def test_an_engine_label_names_the_seat_without_raising(self):
+        r = make_runner(seat=3)
+        r._deals_in_force = {2: {"kind": "no-target", "until_turn": 9}}
+        req = {"decisionType": "CHOOSE_ENTITY", "turn": 5, "state": {"opponents": []},
+               "options": [{"id": 1, "label": "Sol Ring [Urza, Lord High Artificer-S2]"}, {"id": 2, "label": "Island [Giada, Font of Hope-S1]"}]}
+        self.assertTrue(str(r._deal_conflict(req, {"chosenId": 1})).startswith("target "))
+        self.assertIsNone(r._deal_conflict(req, {"chosenId": 2}))
+        req["decisionType"] = "CHOOSE_ENTITIES"
+        self.assertTrue(str(r._deal_conflict(req, {"chosen": [2, 1]})).startswith("target "), "the new TARGETS answer shape too")

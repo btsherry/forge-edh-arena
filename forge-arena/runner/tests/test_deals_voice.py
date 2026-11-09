@@ -7,7 +7,10 @@ a seat brain's DEAL record in game.jsonl (accept / refuse / counter), the player
 across a truce/alliance, a stack item targeting the other party across a no-target/alliance. The lines:
 deal-with-you / no-deal-with-you / counter-offer (anchored, source brain), deal-over, you-broke-it,
 i-broke-it; Joshua's joshua-deal-yes/no/counter when the Executive answers for seat 0.
-Run: python3 -m unittest discover -s tests"""
+Run: python3 -m unittest discover -s tests
+BL-63 (game 64): the seats' small-talk truce is struck after the NEXT snapshot, never between the last two seats
+and never across an attack already declared this turn; the spoken duration is state and outlives the wait behind
+its accept line. Deal-over is certain for the player's deal; a seat's answer to a deal is never rolled."""
 import json
 import os
 import sys
@@ -20,11 +23,16 @@ import voice_runner as vr  # noqa: E402
 from voice import atoms as A  # noqa: E402
 from voice import scheduler as sch  # noqa: E402
 from voice import table_lines  # noqa: E402
-from test_barks_runtime import silent_wav  # noqa: E402
+from tests.support import silent_wav  # noqa: E402
 from test_table_lines import _TableCase, REAL_VOICES, LIBS  # noqa: E402
 
+
 DEAL_IDS = tuple(table_lines.DEALS)
-TERMS_IDS = ("terms-rounds-1", "terms-rounds-2", "terms-turns-3", "terms-until-11")   # the spoken durations (2026-09-18)
+
+
+TERMS_IDS = ("terms-rounds-1", "terms-rounds-2", "terms-turns-3", "terms-until-11")
+
+
 JOSHUA_IDS = ("joshua-deal-yes", "joshua-deal-no", "joshua-deal-counter")
 
 
@@ -422,6 +430,190 @@ class SeatToSeatAndTheChains(_DealCase):
             self.assertEqual(A.atom_class(pid), "proposal", pid)
         for pid in ("you-broke-it", "i-broke-it"):
             self.assertEqual(A.atom_class(pid), "jab", pid)
+
+
+class SmallTalkTruce(_DealCase):
+    """setUp leaves turn 3, seat 1 active, MAIN1: the opener (seat 1) has not declared its attack."""
+
+    def _exchange(self):
+        """Seat 1 says "deal" to seat 2 and seat 2's chain reply is spoken; nothing is struck yet."""
+        self.r.rng.random = lambda: 0.01
+        self._spoken(1, "deal", ctx={"targets": [2]})
+        q = [x for x in self.r.queue if x["kind"] == "bark"][0]
+        self.r.queue.clear()
+        self._spoken(2, q["stock"], ctx=q["ctx"], chain=q["chain"])
+        self.assertEqual(self.r._deals, {})
+
+    def _why(self):
+        return [r["why"] for r in self._records("noted", "deal") if "not struck" in r.get("why", "")]
+
+    def _past_attacks(self, turn=3, active=1):
+        self._snap(turn, active, events=self.ring, phase="MAIN2")
+
+    def test_it_waits_for_the_active_party_to_declare_its_attack_and_is_struck_when_none_came(self):
+        self._exchange()
+        self.assertIsNone(self.r.settle_smalltalk_truce(), "seat 1's DECLARE_ATTACKERS may be open or in flight: not yet")
+        self.assertIsNotNone(self.r.__dict__.get("_smalltalk_truce"), "held, not dropped")
+        self.assertEqual((self.r._deals, self._why()), ({}, []))
+        self._past_attacks()
+        self.assertIsNotNone(self.r.settle_smalltalk_truce())
+        self.assertEqual(sorted(self.r._deals), [(1, 2), (2, 1)])
+        rec = self._ledger("struck")[0]
+        self.assertEqual((rec["by"], rec["source"], rec["deal"]), (2, "voice", {"kind": "truce", "rounds": 1, "until_turn": 7}))
+        self.assertIsNone(self.r.__dict__.get("_smalltalk_truce"))
+
+    def test_on_a_third_seats_turn_it_is_struck_at_once(self):
+        self._snap(3, 3, events=self.ring)
+        self.r.queue.clear()
+        self._exchange()
+        self.assertIsNotNone(self.r.settle_smalltalk_truce(), "neither party can attack this turn: nothing to wait for")
+
+    def test_an_attack_declared_while_the_reply_played_voids_it_and_nobody_is_a_traitor(self):
+        self._snap(3, 2, events=self.ring)             # seat 2's turn
+        self.r.queue.clear()
+        self._exchange()
+        self._attack(2, [1], 3)                        # game 64 t36: the ring event is read after the reply
+        self.assertIsNone(self.r.settle_smalltalk_truce())
+        self.assertEqual((self.r._deals, self._ledger("struck"), self._ledger("broken")), ({}, [], []))
+        self.assertEqual((self._notes(1), self._notes(2)), ([], []), "neither brain is told of a deal that never was")
+        self.assertEqual(self._why(), ["small-talk truce 1<->2 not struck: one of them attacked the other since it was said"])
+        self.assertIsNone(self.r.__dict__.get("_smalltalk_truce"))
+
+    def test_an_attack_before_the_words_does_not_void_a_truce_spoken_after_combat(self):
+        """Gemini review: seat 2 hit seat 1 in combat, THEN they made peace in the second main phase."""
+        self._attack(2, [1], 3)
+        self._snap(3, 2, events=self.ring, phase="MAIN2")
+        self.r.queue.clear()
+        self._exchange()
+        self.assertIsNotNone(self.r.settle_smalltalk_truce(), "the attack came before the words: the truce stands from here")
+        self.assertEqual((sorted(self.r._deals), self._ledger("broken")), ([(1, 2), (2, 1)], []))
+
+    def test_an_attack_on_a_third_seat_does_not_void_it(self):
+        self._snap(3, 2, events=self.ring)
+        self.r.queue.clear()
+        self._exchange()
+        self._attack(2, [3], 3)                        # still COMBAT-less MAIN1 in the test snapshot: held
+        self.assertIsNone(self.r.settle_smalltalk_truce())
+        self._snap(3, 2, events=self.ring, phase="COMBAT_DECLARE_BLOCKERS")
+        self.assertIsNotNone(self.r.settle_smalltalk_truce(), "seat 2 attacked seat 3, not its new partner")
+        self.assertEqual(sorted(self.r._deals), [(1, 2), (2, 1)])
+
+    def test_the_last_two_seats_strike_nothing(self):
+        seats = [dict(self._seat(i), eliminated=(i in (0, 3))) for i in range(4)]
+        self._snap(3, 1, seats=seats, events=self.ring)
+        self.r.queue.clear()
+        self._exchange()
+        self.assertIsNone(self.r.settle_smalltalk_truce())
+        self.assertEqual((self.r._deals, self._ledger("struck")), ({}, []))
+        self.assertEqual(self._why(), ["small-talk truce 1<->2 not struck: only 2 seats live"])
+
+    def test_one_turn_roll_carries_it_and_a_second_drops_it(self):
+        self._exchange()
+        self._snap(4, 3, events=self.ring)             # seat 1 passed the turn without combat; seat 3 is neither party
+        deal = self.r.settle_smalltalk_truce()
+        self.assertIsNotNone(deal, "the words were heard a moment ago: struck on the new turn")
+        self.assertEqual(self._ledger("struck")[0]["deal"]["until_turn"], 8, "one round from turn 4, four seats")
+
+    def test_two_turn_rolls_drop_it(self):
+        self._exchange()
+        self._snap(5, 0, events=self.ring)
+        self.assertIsNone(self.r.settle_smalltalk_truce())
+        self.assertEqual(self._why(), ["small-talk truce 1<->2 not struck: it went stale (said on turn 3, now turn 5)"])
+
+    def test_a_standing_deal_is_not_overwritten_by_small_talk(self):
+        self.r.strike_deal(1, 2, "alliance", 3, by=1, rounds=3)
+        self.r.queue.clear()
+        self.r._smalltalk_truce = {"a": 1, "b": 2, "turn": 3, "at": self.r.clock(), "seq": 1}
+        self._past_attacks()
+        self.assertIsNone(self.r.settle_smalltalk_truce())
+        self.assertEqual(self.r.deal_between(1, 2)["kind"], "alliance")
+        self.assertEqual(len(self._ledger("struck")), 1)
+        self.assertEqual(self._why(), ["small-talk truce 1<->2 not struck: a deal already stands between them"])
+
+    def test_the_duration_is_spoken_whatever_the_dice_say_and_waits_for_its_accept_line(self):
+        self._exchange()
+        self._past_attacks()
+        self.r.queue.clear()
+        self.r.rng.random = lambda: 0.99            # game 64: "One round." was diced away at p = 0.15, twice
+        self.assertIsNotNone(self.r.settle_smalltalk_truce())
+        q = [x for x in self.r.queue if x["stock"] == "terms-rounds-1"]
+        self.assertEqual(len(q), 1)
+        self.assertEqual((q[0]["seat"], q[0]["gap"]), (2, 0.3))
+        self.assertAlmostEqual(q[0]["expires"] - self.r.clock(), sch.TERMS_TTL_S, places=3)
+
+    def test_a_truce_struck_long_after_the_reply_says_no_duration(self):
+        self._exchange()
+        self.clock.t += sch.SMALLTALK_TERMS_WITHIN_S + 1
+        self._past_attacks()
+        self.r.queue.clear()
+        self.assertIsNotNone(self.r.settle_smalltalk_truce())
+        self.assertEqual([x for x in self.r.queue if str(x["stock"]).startswith("terms-")], [], "no stray 'One round.' minutes after the reply")
+
+    def test_a_queued_duration_dies_with_its_deal(self):
+        self._exchange()
+        self._past_attacks()
+        self.r.queue.clear()
+        self.r.settle_smalltalk_truce()
+        self.assertEqual([x["stock"] for x in self.r.queue if str(x["stock"]).startswith("terms-")], ["terms-rounds-1"])
+        self.r.break_deal(1, 2, "attack", 4)
+        self.assertEqual([x for x in self.r.queue if str(x["stock"]).startswith("terms-")], [], "broken before it was said: never said")
+        self.assertTrue([r for r in self._records("dropped", "bark") if r.get("why") == "the deal it described was broken"])
+
+    def test_the_daemon_step_settles_after_reading_the_snapshot_muted_or_not(self):
+        """step() order: the snapshot (and its ring) first, then the settlement — in both branches."""
+        self._snap(3, 2, events=self.ring)             # seat 2's turn
+        self.r.queue.clear()
+        self._exchange()
+        self.ring.append({"seq": len(self.ring) + 1, "kind": "attack", "turn": 3, "seat": 2, "attackers": 1, "power": 2, "defenders": [1]})
+        (self.mailbox / "observer-state.json").write_text(json.dumps(
+            {"turn": 3, "phase": "COMBAT_DECLARE_BLOCKERS", "activeSeat": 2, "gameOver": False,
+             "seats": [self._seat(i) for i in range(4)], "events": self.ring, "stackDetail": []}))
+        self.r.step()                                   # the attack sits unread in the file until this step
+        self.assertEqual((self.r._deals, self._ledger("struck"), self._ledger("broken")), ({}, [], []))
+        self.assertEqual(self._why(), ["small-talk truce 1<->2 not struck: one of them attacked the other since it was said"])
+        # ...and a muted table still strikes one that is due
+        self._snap(4, 3, events=self.ring)
+        self.r.queue.clear()
+        self.r._smalltalk_truce = {"a": 1, "b": 2, "turn": 4, "at": self.r.clock(), "seq": len(self.ring)}
+        self.r.enabled = lambda: False
+        self.r.step()
+        self.assertEqual(sorted(self.r._deals), [(1, 2), (2, 1)], "the muted branch settles too (this runner owns the ledger)")
+
+    def test_nothing_pending_is_a_no_op(self):
+        self.assertIsNone(self.r.settle_smalltalk_truce())
+        self.assertEqual(self._records("noted", "deal"), [])
+
+    def test_the_filler_pool_opens_no_deal(self):
+        seats = [{"seat": i, "life": 40, "handSize": 3, "battlefield": []} for i in range(4)]
+        for living in ([1, 2], [0, 1, 2, 3]):
+            cands = self.r.patter_candidates({"turn": 9, "activeSeat": 1, "seats": seats}, living)
+            self.assertFalse([c for c in cands if c[1] == "deal" or str(c[1]).startswith("deal-")])
+        self.assertNotIn("deal", sch.ANCHORED_PATTER)
+
+
+class DealLinesAreCertain(_TableCase):
+    """Release features (2026-09-16): deal-over is certain for the player's deal and rolled for the seats'; a seat's answer to a deal is never rolled."""
+
+    def test_deal_over_is_certain_for_the_players_deal_and_rolled_for_the_seats(self):
+        r = self.r
+        self._snap(4, 1); r.queue.clear()
+        r.rng.random = lambda: 0.99                                       # the dice miss everything optional
+        r.duty = lambda window=sch.DUTY_WINDOW_S: 1.0                     # and the table is over budget (game 51: p=0.93 lost the lapse)
+        r.strike_deal(0, 1, "truce", 4, by=1, until_turn=5)
+        r.strike_deal(2, 3, "truce", 4, by=3, until_turn=5)
+        r.lapse_deals(6)
+        said = [q["stock"] for q in r.queue if q["kind"] == "bark"]
+        self.assertEqual(said.count("deal-over"), 1, "the player's deal ending is spoken; the seats' may pass unremarked (Ben, game 50)")
+        self.assertEqual([q["ctx"]["targets"] for q in r.queue if q["stock"] == "deal-over"], [[0]])
+
+    def test_a_seats_answer_to_a_deal_is_never_rolled(self):
+        r = self.r
+        self._snap(6, 2); r.queue.clear()
+        r.duty = lambda window=sch.DUTY_WINDOW_S: 1.0                     # far over budget
+        r.rng.random = lambda: 0.97                                       # game 51: "dice (brain, p=0.96)" lost Giada's "Deal, Player One"
+        for pid in ("deal-with-you", "no-deal-with-you", "counter-offer"):
+            r.queue.clear()
+            self.assertTrue(r.maybe_bark(2, pid, turn=6, source="brain", p=1.0, ctx={"targets": [0]}), pid)
 
 
 class TheCheckpoint(_DealCase):

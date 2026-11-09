@@ -13,7 +13,6 @@ Run: python3 -m unittest discover -s tests"""
 import json
 import os
 import sys
-import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -211,7 +210,3 @@ class LeanerBags(_TreeCase):
             if k in ("agree", "disagree", "scoff", "clapback", "brace", "pile-on", "sympathy", "laugh", "you-suck", "you-wish", "shut-it", "bite-me", "not-sorry"):
                 self.assertLessEqual(len(v), 1, f"a reply invites at most one more reply: {k}")
         self.assertNotIn("you-cheat", [o["reply"] for k in ("good-hand", "promise") for o in inv[k]], "fewer cheating accusations (game 45)")
-
-
-if __name__ == "__main__":
-    unittest.main()

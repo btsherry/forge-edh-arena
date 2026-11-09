@@ -225,7 +225,3 @@ class TheText(unittest.TestCase):
         self.assertEqual(S._talk_text('{"say": "taunt"}'), "")
         self.assertEqual(S._talk_text('“Nice try.”'), "Nice try.")
         self.assertEqual(S._talk_text("one\n\ntwo   three"), "one two three")
-
-
-if __name__ == "__main__":
-    unittest.main()

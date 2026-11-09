@@ -348,7 +348,6 @@ class Mulligans(_TableCase):
         self.r.rng.random = lambda: 0.6
         self._log(1, 2, False, "One land"); self.r.scan_game_log()
         self.assertEqual([(x["stock"], x["seat"]) for x in self.r.queue if x["kind"] == "bark"][:1], [("mull-to-five", 1)])
-        self.assertIn("governor 1.00", [r for r in self._records("skipped", "bark") if r.get("stock") == "mull-pity"][-1]["why"] if False else "governor 1.00")
 
     def test_own_action_lines_skip_the_seat_guard_and_the_heckler_is_a_seat_that_has_decided(self):
         """Game 48, 13:54:39: Harry heckled Giada's mulligan and his own 'seven, keeping' one second later
@@ -701,7 +700,3 @@ class TableRuntime(_TableCase):
         self.assertEqual([(q["stock"], q["library"]) for q in r.queue], [("kill-that", "bill")])
         r._last_snapshot = {"turn": 4, "activeSeat": 1, "seats": [self._seat(i) for i in range(4)]}
         self.assertFalse(r.narrate_cast(1, "Arcum Dagsson", 4, 4))
-
-
-if __name__ == "__main__":
-    unittest.main()

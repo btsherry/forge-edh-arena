@@ -109,6 +109,15 @@ ARENA_SEAT_DECKS="swords-plunder purphoros-god-of-the-forge giada-font-of-hope u
 
 Ten decks ship in `forge-light-llm/forge-arena/decks/`.
 
+A seat holds priority over its own spell when it has something that can
+copy it (Flare of Duplication, Reiterate, a flash Dualcaster Mage, Lithoform
+Engine over its own activation): one window opens before the spell resolves,
+counters and redirects never open it, and a silent brain passes
+(`ARENA_SELF_SPELL_WINDOW=off` restores the plain pass). A Phyrexian or
+life-payable mana pip is paid with life only when the seat's sources cannot
+cover the whole cost and life can bridge the gap, so Dismember on two Swamps
+casts instead of being refused.
+
 ## Ingesting a new deck
 
 ```sh
@@ -117,7 +126,7 @@ python3 forge-arena/scripts/arena-add-deck.py path/to/my-deck.dck
 
 Six visible steps, no API keys: parse the `.dck`; resolve oracle text
 (Scryfall); fetch the deck's real combos (Commander Spellbook); lint every
-card against Forge's database (warns on cards the engine may not fully
+card against Forge's database and the official Commander banlist (warns on cards the engine may not fully
 script, `--strict` refuses them); probe the list through Forge's real deck
 loader, which catches format and double-faced-name defects before a launch
 and rewrites the registered `.dck` with Forge's own card names; write the
@@ -168,6 +177,22 @@ tab** of the lower-left dock. On by default in `--human` games;
   stream as `[r3-t12 · you] …` / `[r3-t12 · advisor] …`. One question at a time
   (the button reads *Sending…* until it is picked up), answered even while
   the advisor is paused.
+- **Talking to the table.** A line that starts with a seat's name goes to
+  that seat, not to the advisor. `@urza truce 2 rounds`, `@purphoros no
+  target until turn 12`, `@selvala alliance` (a bare `@selvala` is a
+  one-round truce) offer a deal: a truce forbids attacks, no-target forbids
+  targeting, an alliance both; `N turns`, `N rounds` (max 3) or `until turn
+  N`. The seat answers at its next window, in its own voice and in the tab
+  (`[r2-t7 · Urza] accepts: truce, 2 rounds`), may counter once
+  (`@urza accept` / `@urza no`), and a seat's offer to you opens a pane
+  in the dock with Accept / No and Joshua's one-sentence read. `@urza make
+  me an offer` invites one. Anything else is table talk: the seat's own
+  brain answers it in words, under your line, within a few seconds
+  (`[r2-t7 · Urza → you] Bold words from a man at thirty-five life.`);
+  `ARENA_TALK_REPLY=off` folds the words into its next decision instead.
+  `@joshua deals` prints the grammar. Deals are tracked in
+  `runner/logs/deals.jsonl`; breaking one is called out at the table and
+  the brains are told.
 - **Pause.** The tab's button pauses and resumes the coach mid-game (no
   advice, no model calls) without a teardown; the AI panel's seat-0 row shows
   `advisor paused` meanwhile. An advised game rates as `human+advisor`
@@ -351,6 +376,21 @@ seat's state ("what's your life?") is answered with the true number. A line
 with one addressee becomes its named wording half the time, and a generic
 card line becomes the card's own when the library carries it.
 
+**The brains write their own lines.** Beside its play, each seat's brain may
+name a table line for the moment: the runner offers it a short menu read
+from the request and the observer's event ring (`voices/say-menu.json`:
+a quiet window gets the core eight, a charged one up to fourteen that fit —
+it was just hit, it is blocking, a threat is on the stack, it is casting
+something big), the brain answers `say: {id, to}` (the human may be
+addressed, except with a question), and the voice speaks it at once, names
+the seat it was aimed at every time, or holds an own-action line ("big
+swing") for the attack that follows. Two brain lines a seat a turn. A brain
+may also arm a **stance** — a reflex for the next hit, attack, counter or
+game changer against it — that its voice performs at the event with no
+model call. `ARENA_SAY_MENU=fixed` gives the old one-line offer;
+`ARENA_STANCES=off` drops the key. After a game `arena-hygiene.py` prints
+`says:`, `stances:` and `table talk:` counts.
+
 **How much they talk** is one dial, `ARENA_CHATTER` (quiet, normal, lively,
 rowdy). It sets a talk budget — the fraction of the last minute somebody may
 be speaking — and the runner spends it: optional lines (patter, banter
@@ -383,7 +423,9 @@ brains.
 - **Liveness dot per seat.** Green: decided within the last minute. Yellow:
   within five. Grey: offline or not started.
 - **Usage per seat and for the table.** Calls, output tokens, cache-hit rate
-  and the API-equivalent cost. On the subscription transport that dollar
+  and the API-equivalent cost, summed per call from the CLI's own figures
+  (releases before 2026-10-16 summed its running ledger and showed up to
+  70× the true number). On the subscription transport that dollar
   figure is what the game *would* have cost, not a charge.
 
 The default layout is tuned for piloting: the three opponents share a tabbed
@@ -404,7 +446,11 @@ nothing, inconsistent
 bookkeeping is skipped loudly, and games degraded by transport failure (a
 wedged session, punt pile-ups) are **voided**: recorded with the reason, but
 the ladders never move on a contaminated result (`ARENA_RATE_VOIDED=1`
-overrides). Ratings are per-installation state: package rebuilds preserve
+overrides). The pilot ladder keys on the concrete model id the transport
+reports (`claude-opus-5-5`, not the alias `opus`); older records resolve
+through the dated `runner/ratings-aliases.json`, and `python3
+forge-arena/runner/ratings.py --rebuild` re-rates the whole archive from its
+own logs, backing the live files up first. Ratings are per-installation state: package rebuilds preserve
 them and they never ship in the tarball.
 
 ## What each brain receives at start-up
@@ -437,7 +483,7 @@ Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 
 | File | Contents |
 |---|---|
-| `game.jsonl` | **The dataset.** One JSON object per decision, all seats, one plain append-only file for the whole session (every game since the last stop); the `tail -f` target |
+| `game.jsonl` | **The dataset.** One JSON object per decision, all seats, one plain append-only file for the whole session (every game since the last stop); the `tail -f` target. Each record names the concrete `model` id with the launch `model_alias`; a seat's table-talk reply is a `TABLE_TALK` record with `source: chat`; a seat's deal answer or offer is a `DEAL` record |
 | `game-<gameId>.jsonl` | The same records, one file per game (each record carries its `gameId`); the ratings sweep reads these |
 | `seat-N.log` / `seat-N.jsonl` | Seat N's decision stream, readable and structured (`deviation` and `turn_intent` fields per record), with `DEVIATION` lines whenever the plan met reality ("wanted X — blocked by Y"); `grep DEVIATION` is the fastest play-quality review |
 | `seat-N.usage.json` | Rolling token and cost snapshot: context size of the last call, rotations, persistent-process calls and fallbacks |
@@ -445,7 +491,8 @@ Everything lands in `forge-light-llm/forge-arena/runner/logs/`:
 | `engine-events.jsonl` | Engine-side events: yields the engine mirrored for a seat without opening a window |
 | `claude-persistent-seat-N.err` | Standard error of seat N's long-lived `claude` process |
 | `advisor-0.log` / `advisor-0.jsonl` | The Advisor tab's stream and its structured twin: advice, commentary, autopass notes, your Chat exchanges, and your actual choices paired to their decision seq |
-| `voice-0.log` / `voice-0.jsonl` | The advisor's voice: what it spoke, dropped (stale, expired) or skipped, with live characters used |
+| `voice-0.log` / `voice-0.jsonl` | The table's voice: what it spoke, dropped (stale, expired) or skipped, with live characters used; `voice-state.json` is its checkpoint (a restarted runner forgets nothing), `events.jsonl` / `observer-tape.jsonl` the two tapes a replay drives from |
+| `deals.jsonl` | The deal ledger: offers, strikes, counters, breaks and lapses, with turn and parties; the brains are told through `mailbox/seat-N/notes/` |
 | `gui.out`, `run_table.out`, `ratings.out`, `advisor_runner.out`, `autostop.out` | Engine, runners, ratings sweep, advisor supervisor, auto-teardown watcher |
 | `transport-events.jsonl` | Punt and wedge events; the ratings sweep voids games contaminated inside their window |
 | `elo/seat-N.json` | Per-seat rating digest the AI panel reads |
@@ -664,6 +711,10 @@ running, so a driving agent sees the reminder in the teardown output.
 - **Your opponent-turn stops changed**: the launcher sets them to `quick` for
   human games. `arena-play.sh --stops restore` puts your originals back;
   `--stops keep` stops the launcher touching them.
+- **The laptop went to sleep mid-game**: every deadline in the seam is
+  wall-clock, so a sleep spends every open window and the seats punt. On
+  macOS the launcher runs `caffeinate -i -s` for exactly the GUI's lifetime,
+  so the machine stays awake while a game is on and sleeps as usual after.
 - **`java` errors at launch**: JDK 17+ is required; set `JAVA_HOME` if the
   PATH java is older.
 - **Start the GUI through the scripts**: the engine resolves `res/` (card

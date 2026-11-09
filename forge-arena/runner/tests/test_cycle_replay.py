@@ -1,7 +1,10 @@
-"""Cycle replay (backlog item 3): brain declares repeat_cycle: N on a
-decision identical to an earlier one this turn; the runner replays the
-recorded cycle for matching windows with zero model calls and breaks out on
-any novelty. Offline: fake mailbox + fake brain."""
+"""Cycle replay (backlog item 3): the brain declares repeat_cycle: N on a decision identical to an earlier
+one this turn; the runner replays the recorded cycle for matching windows with zero model calls and breaks
+out on any novelty. Round 31 (Ben, 2026-09-14): `until` beside repeat_cycle, a LOOP OFFER when the tape
+repeats, a parked loop that re-arms. BL-08: cycle rebinding on (label, type, cost); BL-20: a loop containing
+one punted decision never arms. The historical harness: game 47, seat 1 (Urza), turn 20 — 138 decisions
+replayed through the real runner against what the live brain answered. Offline: fake mailbox + fake brain.
+Run: python3 -m unittest discover -s tests"""
 import json
 import sys
 import unittest
@@ -9,68 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from seatd import runner as runner_mod  # noqa: E402
-
-
-class FakeMailbox:
-    game_reset = False
-
-    def __init__(self):
-        self.responses = []
-        self.inbox = Path("/nonexistent")
-
-    def respond(self, req, answer):
-        self.responses.append((req.get("seq"), answer))
-        return True
-
-    def read_observer(self):
-        return None
-
-
-class FakeBrain:
-    effort = "low"
-    model = "opus"
-
-    def __init__(self, script):
-        self.script = list(script)   # answers to hand out, in order
-        self.calls = 0
-
-    def decide(self, prompt, timeout_s=None, effort=None, deadline=None):
-        self.calls += 1
-        self.last_prompt = prompt
-        self.prompts = getattr(self, "prompts", []) + [prompt]
-        out = self.script.pop(0) if self.script else {"chosenId": 0}
-        return out, {"latency_s": 0.01, "usage": None, "cache_read": 1, "raw": json.dumps(out)}
-
-    def reset(self):
-        pass
-
-
-def make_runner():
-    r = runner_mod.SeatRunner.__new__(runner_mod.SeatRunner)
-    r.seat = 3
-    r.deck = "urza-lord-high-artificer"
-    r.mb = FakeMailbox()
-    r.brain = FakeBrain([])
-    r.timeout_s = 90.0
-    r.speculative = False
-    r.react_hold = False
-    r.autopass = ()
-    r.plan = None
-    r.hold = None
-    r.turn_intent = None
-    r.combos = None
-    r.react_seen = set()
-    r.order_memo = {}
-    r.cycle = None
-    r._hist = []
-    r._last_turn = None
-    r._init_loop_state()      # D4: __init__ owns the loop state; a __new__ runner sets it here
-    r._deviation = None
-    r.log_lines = []
-    r._say = r.log_lines.append
-    r._record = lambda *a, **k: None
-    r._seen_seq = set()
-    return r
+from tests.support import fake_seat_runner as make_runner  # noqa: E402
 
 
 def req(seq, dtype, opts, stack=(), pool=0, life=40, phase="MAIN1", turn=5,
@@ -87,7 +29,6 @@ def req(seq, dtype, opts, stack=(), pool=0, life=40, phase="MAIN1", turn=5,
 
 
 SCEPTER = 'Isochron Scepter  {2} — copy imprinted instant'
-CONFIRM_OPTS = None  # CONFIRM uses fixed 0/1 options
 
 
 def confirm_req(seq, turn=5):
@@ -97,6 +38,23 @@ def confirm_req(seq, turn=5):
                       "opponents": [{"life": 40}, {"life": 40}, {"life": 40}],
                       "confirmMode": "TRIGGER", "yesCost": "none"},
             "options": [{"id": 0, "label": "No"}, {"id": 1, "label": "Yes"}]}
+
+
+def own_req(seq, dtype, opts, stack, kinds, turn=7, phase="MAIN1"):
+    """Request whose stack is entirely the seat's own objects (mixed kinds)."""
+    state = {"stack": list(stack), "manaPool": 3, "life": 40,
+             "opponents": [{"life": 40}, {"life": 40}, {"life": 40}],
+             "untappedManaSourceCount": 2,
+             "stackOwners": [3] * len(stack),
+             "stackKinds": list(kinds)}
+    options = [{"id": 0, "label": "Pass (do nothing)"}]
+    options += [{"id": i + 1, "label": lab} for i, lab in enumerate(opts)]
+    return {"seq": seq, "turn": turn, "phase": phase, "decisionType": dtype,
+            "prompt": "t", "state": state, "options": options}
+
+
+def opt(i, label, typ="Ability", cost=None):
+    return {"id": i, "label": label, "type": typ, "cost": cost}
 
 
 class CycleReplayTests(unittest.TestCase):
@@ -172,19 +130,6 @@ class CycleReplayTests(unittest.TestCase):
         self.assertIsNone(r.cycle, "a cycle never survives the turn boundary")
 
 
-def own_req(seq, dtype, opts, stack, kinds, turn=7, phase="MAIN1"):
-    """Request whose stack is entirely the seat's own objects (mixed kinds)."""
-    state = {"stack": list(stack), "manaPool": 3, "life": 40,
-             "opponents": [{"life": 40}, {"life": 40}, {"life": 40}],
-             "untappedManaSourceCount": 2,
-             "stackOwners": [3] * len(stack),
-             "stackKinds": list(kinds)}
-    options = [{"id": 0, "label": "Pass (do nothing)"}]
-    options += [{"id": i + 1, "label": lab} for i, lab in enumerate(opts)]
-    return {"seq": seq, "turn": turn, "phase": phase, "decisionType": dtype,
-            "prompt": "t", "state": state, "options": options}
-
-
 class OwnObjectCollapseTests(unittest.TestCase):
     """Game-12 shape: a declared loop whose OWN trigger pile grows and whose
     own copy-spell interleaves at varying depth must still replay; an
@@ -248,10 +193,6 @@ class OwnObjectCollapseTests(unittest.TestCase):
         self.assertNotIn("OWN-TRIGGERS", str(sig[2]),
                          "mixed kinds must not trigger the memo's own-collapse")
         self.assertEqual(sig[2], ("A", "A", "B"), "memo keeps the exact multiset")
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class StopConditionTests(unittest.TestCase):
@@ -342,7 +283,7 @@ class StopConditionTests(unittest.TestCase):
         self.assertIsNotNone(r.cycle); self.assertIsNone(r._parked)
         self.assertEqual(self.drive(A(8, 70)), {"chosenId": 1}); self.assertEqual(self.drive(B(9, 70)), {"chosenId": 1})
         self.assertEqual(r.brain.calls, 6, "replayed, no model calls")
-        self.assertEqual(self.drive(A(10, 100)), {"chosenId": 0} if False else self.r.mb.responses[-1][1])
+        self.drive(A(10, 100))
         self.assertTrue(any("CYCLE stopped: life 100 meets >= 100" in l for l in r.log_lines), "the target is reached after the resumption")
         # a different answer after a pause discards the parked loop
         r2 = make_runner()
@@ -442,3 +383,237 @@ class StopConditionTests(unittest.TestCase):
         r4.handle(castA(1, 40)); r4.handle(castA(2, 50))
         self.assertEqual(r4.mb.responses[-1][1], {"chosenId": 1}); r4.handle(castC(3, 60))
         self.assertEqual((r4.brain.calls, r4.mb.responses[-1][1]), (2, {"chosenId": 1}), "with a target, the new castable is the loop's own churn: replayed")
+
+
+class CycleRebindIdentity(unittest.TestCase):
+    """BL-08: two abilities on one card, only one costed, must not cross-bind."""
+
+    def test_prefix_match_requires_same_type_and_cost(self):
+        rec = {"options": [opt(0, "Pass (do nothing)", "PASS"),
+                           opt(1, "Foo  {2} — costed: draw a card", cost="{2}"),
+                           opt(2, "Foo  — free: untap Foo")]}
+        shape = runner_mod.SeatRunner._cycle_shape(rec, {"chosenId": 2})
+        self.assertEqual(shape, ("label", ("Foo  — free: untap Foo", "Ability", None)))
+        # next window: ids swapped AND the descriptions drifted (exact match fails)
+        nxt = {"options": [opt(0, "Pass (do nothing)", "PASS"),
+                           opt(7, "Foo  — free: untap Foo (again)"),
+                           opt(8, "Foo  {2} — costed: draw a card (again)", cost="{2}")]}
+        self.assertEqual(runner_mod.SeatRunner._cycle_rebind(shape, nxt), {"chosenId": 7})
+        # the costed sibling alone must never satisfy a free shape
+        only_costed = {"options": [opt(0, "Pass (do nothing)", "PASS"),
+                                   opt(9, "Foo  {2} — costed (again)", cost="{2}")]}
+        self.assertIsNone(runner_mod.SeatRunner._cycle_rebind(shape, only_costed))
+
+    def test_exact_identity_still_wins_over_prefix(self):
+        rec = {"options": [opt(1, "Bar  {1} — a", cost="{1}"), opt(2, "Bar  {1} — b", cost="{1}")]}
+        shape = runner_mod.SeatRunner._cycle_shape(rec, {"chosenId": 2})
+        nxt = {"options": [opt(4, "Bar  {1} — a", cost="{1}"), opt(5, "Bar  {1} — b", cost="{1}")]}
+        self.assertEqual(runner_mod.SeatRunner._cycle_rebind(shape, nxt), {"chosenId": 5})
+        # two same-prefix candidates, neither exact: ambiguous -> no replay
+        amb = {"options": [opt(4, "Bar  {1} — x", cost="{1}"), opt(5, "Bar  {1} — y", cost="{1}")]}
+        self.assertIsNone(runner_mod.SeatRunner._cycle_rebind(shape, amb))
+
+    def test_the_same_play_offered_twice_rebinds_to_the_first(self):
+        """Game 60: Sensei's Top castable off the library through Mystic Forge AND Future Sight — two options
+        with one label, type and cost. The model picked either and the loop went on; the replay called it
+        ambiguous and woke the model every pass (2026-09-18)."""
+        rec = {"options": [opt(0, "Pass (do nothing)", "PASS"), opt(16, "Sensei's Divining Top  {1} — Sensei's Divining Top", cost="{1}"),
+                           opt(17, "Sensei's Divining Top  {1} — Sensei's Divining Top", cost="{1}")]}
+        shape = runner_mod.SeatRunner._cycle_shape(rec, {"chosenId": 17})
+        nxt = {"options": [opt(0, "Pass (do nothing)", "PASS"), opt(18, "Sensei's Divining Top  {1} — Sensei's Divining Top", cost="{1}"),
+                           opt(19, "Sensei's Divining Top  {1} — Sensei's Divining Top", cost="{1}")]}
+        self.assertEqual(runner_mod.SeatRunner._cycle_rebind(shape, nxt), {"chosenId": 18}, "identical twins: the first is the same play")
+        # a costed twin next to a free one is NOT identical: BL-08 still holds
+        mixed = {"options": [opt(0, "Pass (do nothing)", "PASS"), opt(18, "Sensei's Divining Top  {1} — Sensei's Divining Top", cost="{1}"),
+                             opt(19, "Sensei's Divining Top  — Sensei's Divining Top")]}
+        self.assertEqual(runner_mod.SeatRunner._cycle_rebind(shape, mixed), {"chosenId": 18})
+
+
+class PuntsNeverReplay(unittest.TestCase):
+    """BL-20: a loop containing one punted decision never arms."""
+
+    def test_internal_error_clears_the_tape(self):
+        r = make_runner()
+        r.brain.script = [{"chosenId": 1}]
+        r.handle(req(1, "CAST_SPELL", [SCEPTER]))
+        self.assertEqual(len(r._hist), 1)
+        r.brain.decide = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        r.handle(confirm_req(2))
+        self.assertEqual(r._hist, [], "an internal error leaves no tape to arm across")
+        self.assertEqual(r.mb.responses[-1][1], {"chosenId": 1})  # free own trigger: yes
+
+    def test_punt_inside_the_candidate_cycle_refuses_to_arm(self):
+        r = make_runner()
+        r.brain.script = [
+            {"chosenId": 1},                      # seq1 activate (model)
+            None,                                 # seq2 confirm: model failure -> punt
+            {"chosenId": 0},                      # seq3 react pass
+            {"chosenId": 1, "repeat_cycle": 3},   # seq4 activate again + declare
+        ]
+        r.handle(req(1, "CAST_SPELL", [SCEPTER]))
+        r.handle(confirm_req(2))
+        self.assertIn("punt", " ".join(r.log_lines).lower())
+        r.handle(req(3, "REACT", ["Counterspell  {U}{U} — counter"], stack=["Dramatic Reversal"]))
+        r.handle(req(4, "CAST_SPELL", [SCEPTER], pool=2))
+        self.assertIsNone(r.cycle, "a cycle containing a punt must not arm")
+        self.assertTrue(any("non-replayable" in ln for ln in r.log_lines), r.log_lines[-3:])
+
+    def test_clean_cycle_still_arms(self):
+        r = make_runner()
+        r.brain.script = [{"chosenId": 1}, {"chosenId": 1}, {"chosenId": 0},
+                          {"chosenId": 1, "repeat_cycle": 3}]
+        r.handle(req(1, "CAST_SPELL", [SCEPTER]))
+        r.handle(confirm_req(2))
+        r.handle(req(3, "REACT", ["Counterspell  {U}{U} — counter"], stack=["Dramatic Reversal"]))
+        r.handle(req(4, "CAST_SPELL", [SCEPTER], pool=2))
+        self.assertIsNotNone(r.cycle)
+
+
+TAPE = Path(__file__).resolve().parent / "fixtures" / "game47-seat1-turn20.jsonl"
+
+
+SEAT = 1
+
+
+def load_tape():
+    return [json.loads(l) for l in TAPE.read_text().splitlines() if l.strip()]
+
+
+def reconstruct_options(tape):
+    """The live runner logs option lists only for brain-answered windows; a window it replayed
+    itself (source cycle/memo/yield) is given the options of the most recent brain-answered
+    window of the same type and stack — which is what a replayed window IS (the cycle engine
+    only replays into an identical window)."""
+    last = {}
+    out = {}
+    for row in tape:
+        key = (row["type"], tuple(sorted((row.get("board") or {}).get("stack") or [])))
+        if row.get("options"):
+            last[key] = row["options"]
+            out[row["seq"]] = row["options"]
+        else:
+            out[row["seq"]] = last.get(key) or ["Pass (do nothing)", "(recorded window)"]
+    return out
+
+
+OPTIONS = None
+
+
+def request_of(row: dict) -> dict:
+    global OPTIONS
+    if OPTIONS is None:
+        OPTIONS = reconstruct_options(load_tape())
+    labels = OPTIONS.get(row["seq"]) or ["Pass (do nothing)", "(recorded window)"]
+
+    def cost_of(lab):                                   # "Mana Vault  {1} — Mana Vault" -> "{1}"; a real request carries cost/type fields
+        parts = lab.split("  ", 1)
+        return parts[1].split(" — ")[0].strip() if len(parts) > 1 else None
+    options = [{"id": i, "label": lab, "cost": cost_of(lab)} for i, lab in enumerate(labels)]
+    ans = row.get("answer") or {}
+    cid = ans.get("chosenId")
+    if isinstance(cid, int) and cid not in {o["id"] for o in options}:
+        # entity/card ids are object ids, not indices, and a window the live runner replayed itself may have had
+        # one option more than the brain-answered window its list was borrowed from: keep the recorded choice legal
+        options.append({"id": cid, "label": f"(recorded option {cid})", "cost": None})
+    b = row.get("board") or {}
+    lives = {int(k): v for k, v in (b.get("lives") or {}).items()}
+    stack = list(b.get("stack") or [])
+    state = {"stack": stack, "stackOwners": [SEAT] * len(stack), "manaPool": b.get("pool") or 0,
+             "life": lives.get(SEAT, 40), "opponents": [{"seat": s, "life": l} for s, l in lives.items() if s != SEAT],
+             "untappedManaSourceCount": b.get("untappedSrc") or 0}
+    if isinstance(ans.get("chosen"), list):
+        state["min"] = state["max"] = len(ans["chosen"])
+    return {"seq": row["seq"], "turn": row["turn"], "phase": row.get("phase"), "decisionType": row["type"],
+            "prompt": "recorded", "state": state, "options": options, "min": state.get("min"), "max": state.get("max")}
+
+
+class TapeBrain:
+    """Answers each window with what the real brain answered; may accept an offer."""
+    effort = "high"
+    model = "opus"
+
+    def __init__(self, tape, accept: bool):
+        self.by_seq = {r["seq"]: r for r in tape}
+        self.accept = accept
+        self.calls = 0
+        self.offers = 0
+        self.accepted = 0
+        self.prompts = []
+
+    def decide(self, prompt, timeout_s=None, effort=None, deadline=None):
+        self.calls += 1
+        self.prompts.append(prompt)
+        seq = int(prompt.split("seq=")[1].split()[0])
+        out = dict((self.by_seq[seq].get("answer") or {"chosenId": 0}))
+        if "LOOP OFFER" in prompt:
+            self.offers += 1
+            if self.accept:
+                self.accepted += 1
+                out["repeat_cycle"] = 8
+                # the target the real brain would name: its own reason for this window says what the loop is for
+                why = (self.by_seq[seq].get("why") or "").lower()
+                if "life" in why or "reservoir" in why:
+                    out["until"] = {"life": ">=180"}
+        out["why"] = self.by_seq[seq].get("why") or "recorded"
+        return out, {"latency_s": 0.01, "usage": None, "cache_read": 1, "raw": json.dumps(out)}
+
+    def reset(self):
+        pass
+
+
+def run_tape(policy_accept: bool):
+    tape = load_tape()
+    r = make_runner()
+    r.seat = SEAT
+    r.brain = TapeBrain(tape, policy_accept)
+    r.rotate_hard = 0
+    r.rotate_at = 0
+    sources = {}
+    mism = []
+    for row in tape:
+        req = request_of(row)
+        before = len(r.mb.responses)
+        r.handle(req)
+        seq, answer = r.mb.responses[-1]
+        assert len(r.mb.responses) == before + 1
+        src = "model" if r.brain.calls > sources.get("_calls", 0) else "runner"
+        sources["_calls"] = r.brain.calls
+        sources[src] = sources.get(src, 0) + 1
+        rec = row.get("answer") or {}
+        if src == "runner" and row.get("source") == "model" and answer != rec:
+            mism.append((seq, row["type"], answer, rec, (row.get("why") or "")[:60]))
+    return r, sources, mism
+
+
+class Game47Turn20(unittest.TestCase):
+    def test_fixture_is_the_real_turn(self):
+        tape = load_tape()
+        self.assertEqual(len(tape), 138)
+        self.assertEqual({s: sum(1 for t in tape if t["source"] == s) for s in ("model", "cycle", "memo", "yield")}, {"model": 67, "cycle": 63, "memo": 7, "yield": 1})
+
+    def test_offers_accepted_with_a_stop_condition_cut_the_brain_calls_and_replay_what_the_brain_chose(self):
+        r_dec, src_dec, _ = run_tape(policy_accept=False)
+        r_acc, src_acc, mism = run_tape(policy_accept=True)
+        calls_dec, calls_acc = r_dec.brain.calls, r_acc.brain.calls
+        log = "\n".join(l for l in r_acc.log_lines if "CYCLE" in l or "LOOP" in l)
+        msg = (f"\nDECLINE: brain calls {calls_dec} (runner {src_dec.get('runner', 0)}) | offers seen {r_dec.brain.offers}"
+               f"\nACCEPT : brain calls {calls_acc} (runner {src_acc.get('runner', 0)}) | offers {r_acc.brain.offers}, accepted {r_acc.brain.accepted}"
+               f"\nreplayed answers that differ from the recorded brain answer: {len(mism)} -> {mism[:6]}\n{log}")
+        print(msg)
+        self.assertGreaterEqual(r_acc.brain.offers, 1, "the tape shows a repeating loop: at least one offer" + msg)
+        self.assertLess(calls_acc, calls_dec, "accepting the offers must save brain calls" + msg)
+        self.assertTrue(any("CYCLE armed" in l for l in r_acc.log_lines), msg)
+        self.assertGreaterEqual(calls_dec - calls_acc, 20, "the offer in the 20:39 mana loop replays the rounds the live brain declared by hand" + msg)
+        # every replayed answer must be what the brain actually chose in that window: a divergence here is a real bug
+        self.assertEqual(mism, [], msg)
+
+    def test_the_hand_played_reservoir_rounds_were_not_a_clean_repetition(self):
+        """The honest negative: after Ben's Ambush the brain resumed the loop by hand for six rounds but
+        interleaved extra value actions (floating Vault's mana, tapping Sol Ring before its bounce) every other
+        round, so no two consecutive rounds were identical even loosely until the loop's last round — neither
+        the offer nor a declaration could have replayed them. What would have: a target declared on the FIRST
+        cycle, which parks on the interruption and re-arms when one clean round recurs (tested in
+        test_cycle_replay); the tape shows one such round (seq 224-233) before the target was met."""
+        r, src, mism = run_tape(policy_accept=True)
+        offers_after_ambush = [l for l in r.log_lines if "LOOP OFFER" in l]
+        self.assertEqual(len(offers_after_ambush), 1, "one offer, in the 20:39 mana loop; none in the hand-played stretch")

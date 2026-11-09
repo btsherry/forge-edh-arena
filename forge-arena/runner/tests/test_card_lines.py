@@ -237,7 +237,3 @@ class CardRuntime(_TableCase):
         self.assertEqual(r.card_ids, set())
         self.assertEqual(r.card_swap(1, "game-changer", {"card": "rhystic-study", "card_kind": "gc"}), "")
         self.assertEqual(r.lib_for(1, "gc-rhystic-study-cast"), "harry")
-
-
-if __name__ == "__main__":
-    unittest.main()

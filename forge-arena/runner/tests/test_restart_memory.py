@@ -18,7 +18,6 @@ python3 -m unittest discover -s tests
 import json
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -287,7 +286,3 @@ class Replay(_TreeCase):
         self.assertTrue(any("gap median" in l for l in a) or len(spoken) < 2)
         self.assertFalse((self.logs / "voice-0.jsonl").exists(), "the replay logs into its own temp directory")
         self.assertFalse((self.logs / vr.STATE_FILE).exists())
-
-
-if __name__ == "__main__":
-    unittest.main()

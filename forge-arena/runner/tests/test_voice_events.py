@@ -1,17 +1,14 @@
-"""Lane E1 of the voicework2 hardening plan (2026-09-14) — the voice runner's sources:
-stat before parse (§3), the board fingerprint on the ring's seq (A8), one `_tail` for
-both appended logs (A9), a `gap` record when the ring rolls past a poll (B2), the
-event seq on ring barks and the two tapes (C1, §4.3), the three loop triggers (A4)
-and the seat brain's intent from game.jsonl — `cycle` and the `say` key (§4.4).
-
-Everything runs against the synthetic tree of test_table_lines (the REAL table ids,
-silent takes; Giada is the human at seat 0, Urza/Harry seat 1, Purphoros/Bill seat 2,
-Selvala voiceless at seat 3; the dice always pass). Run: python3 -m unittest discover -s tests
-"""
+"""The voice runner's sources (voice/events.py; lane E1 of the 2026-09-14 hardening plan): stat before parse,
+the board fingerprint on the ring's seq, one `_tail` for both appended logs, a `gap` record when the ring rolls
+past a poll, the event seq on ring barks and the two tapes, the three loop triggers, the seat brain's intent
+from game.jsonl — `cycle`, the `say` key, `say_to`, held own-action lines, the stances (2026-10-18) — stale
+intent, the heckles at the player (§5.3, BL-54), the atoms hook, the kill-shot family, threat memory and the
+runner's up/summary records. Everything runs against the synthetic tree of test_table_lines (the REAL table
+ids, silent takes; Giada is the human at seat 0, Urza/Harry seat 1, Purphoros/Bill seat 2, Selvala voiceless
+at seat 3; the dice always pass). Run: python3 -m unittest discover -s tests"""
 import json
 import sys
 import time
-import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -754,5 +751,80 @@ class AtomsHook(_EventsCase):
         self.assertEqual(stopped, [True], "the lock is taken once")
 
 
-if __name__ == "__main__":
-    unittest.main()
+class KillShotAndThreat(_TableCase):
+    """Release features (2026-09-16): two seats falling at once is the kill shot, a single death is not; threat memory names the real threat and decays; the second hit earns the grudge."""
+
+    def test_two_seats_falling_at_once_is_the_kill_shot(self):
+        r = self.r
+        self._snap(9, 1); r.queue.clear()
+        r.rng.random = lambda: 0.0
+        r._last_hit_by = {2: ([1], 9), 3: ([1], 9)}                       # seat 1 (voiced) finished both; seat 3 has no voice in this fixture
+        seats = [self._seat(0), self._seat(1)]                            # seats 2 and 3 vanished from the snapshot together
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 9, "phase": "COMBAT_DAMAGE", "activeSeat": 1, "gameOver": False,
+                                                                        "seats": seats, "events": [], "stackDetail": []}))
+        r.scan_observer()
+        stocks = [q["stock"] for q in r.queue if q["kind"] == "event"]
+        self.assertIn("table-kill", stocks, "the killer: 'and that's the table'")
+        self.assertIn("all-of-us", stocks, "a dying seat: 'all of us? at once?'")
+        self.assertEqual(stocks.count("table-kill"), 1)
+        self.assertNotIn("kill", [q["stock"] for q in r.queue if q["kind"] == "bark"], "the plain kill line yields to the kill-shot")
+        self.assertEqual(r.eliminated, {2, 3})
+        self.assertEqual([q["seat"] for q in r.queue if q["stock"] == "all-of-us"], [2], "the dying seat with a voice says it")
+
+    def test_a_single_death_is_not_a_kill_shot(self):
+        r = self.r
+        self._snap(9, 1); r.queue.clear()
+        r.rng.random = lambda: 0.0
+        r._last_hit_by = {2: ([1], 9)}
+        seats = [self._seat(0), self._seat(1), self._seat(3)]             # seat 2 alone vanished
+        (self.mailbox / "observer-state.json").write_text(json.dumps({"turn": 9, "phase": "COMBAT_DAMAGE", "activeSeat": 1, "gameOver": False,
+                                                                        "seats": seats, "events": [], "stackDetail": []}))
+        r.scan_observer()
+        stocks = [q["stock"] for q in r.queue]
+        self.assertNotIn("table-kill", stocks); self.assertNotIn("all-of-us", stocks)
+        self.assertIn("kill", stocks)
+
+    def test_threat_memory_names_the_real_threat_and_decays(self):
+        r = self.r
+        seats = [self._seat(0, life=40), self._seat(1, life=45), self._seat(2, life=30), self._seat(3, life=20)]
+        self._snap(6, 1, seats=seats); r.queue.clear()
+        self.assertEqual(r.leader_of(2), 1, "no pin: the life leader")
+        r.raise_threat(3, 3.0, "combo online")
+        self.assertEqual(r.leader_of(2), 3, "a pin above THREAT_MIN outranks life")
+        cands = {(pid, tgt) for _, pid, tgt, _ in r.patter_candidates(r._last_snapshot, [1, 2, 3])}
+        self.assertIn(("youre-the-threat", 3), cands); self.assertIn(("kill-that", 3), cands)
+        self.assertNotIn(("youre-the-threat", 1), cands, "the life leader is not the threat while a pin is raised")
+        r.raise_threat(3, 4.0, "a loop called")
+        cands = {(pid, tgt) for _, pid, tgt, _ in r.patter_candidates(r._last_snapshot, [1, 2, 3])}
+        self.assertIn(("someone-wins", 3), cands, "at THREAT_WINNING the table says so")
+        r.decay_threat(); r.decay_threat()
+        self.assertAlmostEqual(r._threat[3], 1.75)
+        self.assertEqual(r.leader_of(2), 1, "decayed under THREAT_MIN: back to life")
+        self.assertIn("3", r._recency_state()["threat"], "the pin travels in the checkpoint")
+        levels = [x for x in self._records("noted", "threat")]
+        self.assertEqual(len(levels), 2)
+
+    def test_the_second_hit_earns_the_grudge(self):
+        self.assertEqual(ev_mod.GRUDGE_EVERY, 2, "the memory layer pays out (2026-09-16)")
+
+
+class RunnerRecords(_TableCase):
+    def test_up_and_summary_records_and_the_spoke_target(self):
+        r = self.r
+        r.record_up()
+        ups = [x for x in self._records("up")]
+        self.assertEqual((ups[-1]["restart"], ups[-1]["kind"]), (0, "runner"))
+        r.record_up()
+        self.assertEqual(self._records("up")[-1]["restart"], 1, "the second start counts the first")
+        self._snap(4, 1); r.queue.clear()
+        r.rng.random = lambda: 0.0
+        r.maybe_bark(1, "kill-that", turn=4, source="patter", p=1.0, ctx={"targets": [2]})
+        self.clock.t += 10
+        item = r.next_item()
+        self.assertIsNotNone(item)
+        r.speak(item)
+        sp = self._records("spoke", "bark")[-1]
+        self.assertEqual(sp["target"], 2, "who the line was aimed at, for hygiene's grounding score")
+        r.record_summary()
+        sm = self._records("summary")[-1]
+        self.assertGreaterEqual(sm["spoke"], 1); self.assertIn("patter", sm["by_source"]); self.assertEqual(sm["atoms"], 0)

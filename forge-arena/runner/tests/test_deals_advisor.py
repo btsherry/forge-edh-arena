@@ -403,10 +403,6 @@ class DealTests(unittest.TestCase):
         self.assertEqual(r2._game_pos, p.stat().st_size)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SeatOffers(unittest.TestCase):
     """Ben, 2026-09-16: a seat's own offer, from its DEAL record with "propose". Seat to seat: one table line.
     To the player: the panel line with the typed answer, remembered like a counter, Joshua's assessment at once."""

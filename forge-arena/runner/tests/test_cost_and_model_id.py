@@ -16,7 +16,6 @@ import queue
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import unittest
 from pathlib import Path
@@ -333,7 +332,3 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual((rec["model"], rec["model_alias"]), ("claude-opus-5-5", "opus"))
         self.assertEqual((rec["cum"]["model_id"], rec["cum"]["cost_basis"]), ("claude-opus-5-5", "per-call"))
         self.assertAlmostEqual(rec["cum"]["cost_usd"], 1.7533, places=4)
-
-
-if __name__ == "__main__":
-    unittest.main()

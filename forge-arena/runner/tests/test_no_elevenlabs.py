@@ -7,7 +7,6 @@ import json
 import os
 import sys
 import time
-import unittest
 import urllib.error
 from pathlib import Path
 
@@ -90,7 +89,3 @@ class KeyButApiDown(_TableCase):
         self.assertTrue(any(x["kind"] == "bark" for x in self._records("spoke")), "the seats kept talking on stock takes")
         self.assertTrue(any(x["kind"] == "game_over" for x in self._records("spoke")), "the ending played")
         self.assertTrue((self.mailbox / "seat-0-voice" / "final.json").exists())
-
-
-if __name__ == "__main__":
-    unittest.main()

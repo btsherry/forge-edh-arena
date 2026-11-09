@@ -1,31 +1,43 @@
-"""BL-52 (game 49, 2026-09-16): a bystander's REACT memo never matched while
-a loop pinged it. `_react_signature` kept the seat's OWN life exact (game
-25's rule — the LOOPER's life moved then, not the bystanders'), so Agate
-Instigator's one-ping-per-recast changed Giada's life on every window and
-136 of her 137 turn-10 REACT windows went to the model to say "pass".
+"""The same-turn REACT memo (seatd/runner.py `_react_signature` / `_fastpath` "memo").
 
-Own life now gets the rule everyone else's life already had: exact at ten
-or below (kill range — the decision may change with every point), bucketed
-by five above it. Everything else must still match a window the model
-already passed this turn; a model ACTION never feeds the memo; the turn
-boundary still clears it; the cycle signature (which ignores life) is
-untouched. Run: python3 -m unittest discover -s tests -p 'test_react_memo.py'"""
+A window identical to one the MODEL already passed this turn is passed without a call. What
+"identical" means has been earned one game at a time:
+- wave 2 (2026-08-28): the signature keys on phase, combat and stack targets — one correct pass at
+  "beginning of combat, nothing declared" must not fast-pass the post-blocks fog window;
+- options A/B (2026-08-17): a SHRINKING cascade of the seat's own identical triggers collapses after
+  the first pass; an opponent object or a non-trigger on the stack breaks the collapse;
+- BL-52 (game 49): own life is bucketed by five above ten like an opponent's, exact at ten or below;
+- plan item 3 (2026-09-03): only a REAL model pass feeds the memo — a punt or an invalid answer never;
+- BL-62 (game 64): the memo forgets its passes when a stack object with a NEW name appears.
+Run: python3 -m unittest discover -s tests"""
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from seatd.runner import SeatRunner  # noqa: E402
 
+
 FIX = Path(__file__).parent / "fixtures"
+
+
 META = {"latency_s": 1.0, "usage": None, "cache_read": None, "raw": "{}"}
+
+
 PASS = {"chosenId": 0}
 
+
 AGATE = ("Agate Instigator",)
+
+
 BIRGI_IGNUS = ("Birgi, God of Storytelling", "Grinning Ignus")
+
+
 IGNUS = ("Grinning Ignus",)
+
+
 MANEUVER = ["Flawless Maneuver  {0} — Creatures you control gain indestructible"]
 
 
@@ -56,6 +68,61 @@ def react(seq, life=40, opp=(40, 35, 40), stack=IGNUS, options=None,
 def runner():
     tmp = Path(tempfile.mkdtemp(prefix="bl52-"))
     return SeatRunner(2, "giada-font-of-hope", str(tmp), log_dir=str(tmp / "logs"))
+
+
+def react_w2(seq, turn=9, phase="MAIN1", stack=(), combat=None, targets=None,
+          options=None, battlefield=None, owners=None):
+    r = json.loads((FIX / "react.json").read_text())
+    r["seq"] = seq
+    r["turn"] = turn
+    r["phase"] = phase
+    r["state"]["stack"] = list(stack)
+    r["state"]["stackOwners"] = list(owners) if owners is not None else [1] * len(stack)
+    r["state"]["stackKinds"] = ["spell"] * len(stack)
+    if combat is not None:
+        r["state"]["combat"] = combat
+    if targets is not None:
+        r["state"]["stackTargets"] = targets
+    if battlefield is not None:
+        r["state"]["battlefield"] = battlefield
+    if options is not None:
+        r["options"] = options
+    return r
+
+
+def runner_p():
+    tmp = Path(tempfile.mkdtemp(prefix="wave2-"))
+    return SeatRunner(0, "purphoros-god-of-the-forge", str(tmp),
+                      log_dir=str(tmp / "logs"))
+
+
+def react_trig(seq, stack, owners, kinds, turn=9, pool=0):
+    r = json.loads((FIX / "react.json").read_text())
+    r["seq"] = seq
+    r["turn"] = turn
+    r["state"]["stack"] = list(stack)
+    r["state"]["stackOwners"] = list(owners)
+    r["state"]["stackKinds"] = list(kinds)
+    r["state"]["manaPool"] = pool
+    return r
+
+
+def react_cs(seq, turn=9):
+    r = json.loads((FIX / "react.json").read_text())
+    r["seq"] = seq
+    r["turn"] = turn
+    r["state"]["stack"] = ["Counterspell"]
+    r["state"]["stackOwners"] = [1]
+    r["state"]["stackKinds"] = ["spell"]
+    return r
+
+
+def window(seq, stack, turn=9):
+    r = react_cs(seq, turn)
+    r["state"]["stack"] = list(stack)
+    r["state"]["stackOwners"] = [1] * len(stack)
+    r["state"]["stackKinds"] = ["spell"] * len(stack)
+    return r
 
 
 class OwnLifeBucket(unittest.TestCase):
@@ -156,7 +223,7 @@ class OwnLifeBucket(unittest.TestCase):
         self.assertEqual(SeatRunner._life_bucket(44), "40+")
         self.assertEqual(SeatRunner._life_bucket(45), "45+")
         self.assertIsNone(SeatRunner._life_bucket(None))
-        self.assertIs(SeatRunner._life_bucket(True), True)   # bools are not lives
+        self.assertIs(SeatRunner._life_bucket(True), True)
 
 
 class MemoSafety(unittest.TestCase):
@@ -216,5 +283,161 @@ class Game49Shape(unittest.TestCase):
         self.assertEqual(kill_range_hits, 0)
 
 
-if __name__ == "__main__":
-    unittest.main()
+class MemoSignatureWave2(unittest.TestCase):
+    def test_combat_change_reopens_the_window(self):
+        r = runner_p()
+        quiet = react_w2(1, phase="COMBAT_DECLARE_ATTACKERS", combat=[])
+        alpha = react_w2(2, phase="COMBAT_DECLARE_ATTACKERS",
+                      combat=[{"attacker": "Serra Angel", "defender": "seat 0",
+                               "blockedBy": []}])
+        r.react_seen.add(r._react_signature(quiet))
+        self.assertIsNone(r._fastpath(alpha),
+                          "attackers on the table is a NEW decision")
+
+
+class TriggerCascadeMemo(unittest.TestCase):
+    def _runner(self):
+        tmp = Path(tempfile.mkdtemp(prefix="trig-"))
+        return SeatRunner(0, "purphoros-god-of-the-forge", str(tmp),
+                          log_dir=str(tmp / "logs"))
+
+    def test_shrinking_own_cascade_memoizes_after_first_pass(self):
+        r = self._runner()
+        # 4 identical own triggers on the stack -> brain decides once (pass)
+        first = react_trig(1, ["Purphoros"] * 4, [0] * 4, ["trigger"] * 4)
+        self.assertIsNone(r._fastpath(first))          # not memoized yet
+        r.react_seen.add(r._react_signature(first))     # brain passed
+        # 3, 2, 1 remaining: same set of names, all own triggers -> memo hits
+        for n in (3, 2, 1):
+            req = react_trig(1 + n, ["Purphoros"] * n, [0] * n, ["trigger"] * n)
+            fp = r._fastpath(req)
+            self.assertIsNotNone(fp, f"cascade of {n} should fastpath")
+            self.assertEqual(fp[1], "memo")
+
+    def test_opponent_object_breaks_the_memo(self):
+        r = self._runner()
+        first = react_trig(1, ["Purphoros"] * 3, [0] * 3, ["trigger"] * 3)
+        r.react_seen.add(r._react_signature(first))
+        # an opponent's spell joins the stack -> exact multiset again -> no memo
+        req = react_trig(2, ["Purphoros", "Purphoros", "Counterspell"],
+                    [0, 0, 2], ["trigger", "trigger", "spell"])
+        self.assertIsNone(r._fastpath(req))
+
+    def test_own_spell_not_trigger_breaks_the_memo(self):
+        r = self._runner()
+        first = react_trig(1, ["Purphoros"] * 3, [0] * 3, ["trigger"] * 3)
+        r.react_seen.add(r._react_signature(first))
+        req = react_trig(2, ["Purphoros", "Purphoros"], [0, 0], ["trigger", "spell"])
+        self.assertIsNone(r._fastpath(req))
+
+    def test_missing_owner_fields_fail_open(self):
+        r = self._runner()
+        a = json.loads((FIX / "react.json").read_text()); a["seq"] = 1; a["turn"] = 9
+        a["state"]["stack"] = ["Purphoros"] * 3
+        a["state"].pop("stackOwners", None); a["state"].pop("stackKinds", None)
+        r.react_seen.add(r._react_signature(a))
+        b = json.loads(json.dumps(a)); b["seq"] = 2
+        b["state"]["stack"] = ["Purphoros"] * 2               # different multiset
+        self.assertIsNone(r._fastpath(b))                     # no collapse w/o fields
+        self.assertFalse(r._all_own_triggers(a))
+
+    def test_life_change_still_reopens(self):
+        r = self._runner()
+        first = react_trig(1, ["Purphoros"] * 3, [0] * 3, ["trigger"] * 3)
+        r.react_seen.add(r._react_signature(first))
+        req = react_trig(2, ["Purphoros"] * 2, [0] * 2, ["trigger"] * 2)
+        req["state"]["life"] = (first["state"].get("life") or 40) - 5
+        self.assertIsNone(r._fastpath(req))
+
+
+class OwnTriggerRouting(unittest.TestCase):
+    def test_predicate(self):
+        r = SeatRunner(2, "giada-font-of-hope", str(Path(tempfile.mkdtemp())),
+                       log_dir=str(Path(tempfile.mkdtemp()) / "logs"))
+        self.assertTrue(r._all_own_triggers(react_trig(1, ["A", "A"], [2, 2], ["trigger", "trigger"])))
+        self.assertFalse(r._all_own_triggers(react_trig(1, ["A", "B"], [2, 1], ["trigger", "trigger"])))
+        self.assertFalse(r._all_own_triggers(react_trig(1, ["A"], [2], ["ability"])))
+        self.assertFalse(r._all_own_triggers(react_trig(1, [], [], [])))
+
+
+class MemoOnlyFromModel(unittest.TestCase):
+    def test_punt_does_not_memoize(self):
+        r = runner_p()
+        r.brain.decide = lambda prompt, **kw: (None, dict(META))   # timeout/wedge
+        req = react_cs(1)
+        r.handle(req)
+        self.assertNotIn(r._react_signature(req), r.react_seen,
+                         "a punt must not install a same-turn memo entry")
+        self.assertIsNone(r._fastpath(react_cs(2)),
+                          "the next identical window must reach the model")
+
+    def test_invalid_answer_does_not_memoize(self):
+        r = runner_p()
+        r.brain.decide = lambda prompt, **kw: ({"chosenId": 999}, dict(META))  # illegal id
+        req = react_cs(1)
+        r.handle(req)
+        self.assertNotIn(r._react_signature(req), r.react_seen)
+
+    def test_deviation_is_cleared_between_decisions(self):
+        r = runner_p()
+        r.brain.decide = lambda prompt, **kw: (
+            {"chosenId": 0, "deviation": {"wanted": "Counterspell", "blocked_by": "no mana"}},
+            dict(META))
+        r.handle(react_cs(1))
+        self.assertIsNotNone(r._deviation, "the model call that reported it keeps it")
+        # a memo hit: no model call, so no deviation may be attached to its record
+        recorded = []
+        r._record = lambda req, answer, source, meta=None, why=None, consumed=None: \
+            recorded.append((source, getattr(r, "_deviation", None)))
+        r.handle(react_cs(2))
+        self.assertEqual(recorded[-1][0], "memo")
+        self.assertIsNone(recorded[-1][1],
+                          "a model-free decision must not carry a stale deviation")
+
+
+class MemoSeesANewSpell(unittest.TestCase):
+    def setUp(self):
+        self.r = runner_p()
+        self.calls = []
+        self.r.brain.decide = lambda prompt, **kw: (self.calls.append(1) or {"chosenId": 0, "why": "wait"}, dict(META))
+
+    def test_the_window_after_a_new_spell_resolved_goes_to_the_model(self):
+        r = self.r
+        r.handle(window(1, ["Kabira Takedown"]))
+        r.handle(window(2, ["Collective Resistance", "Kabira Takedown"]))
+        self.assertEqual(len(self.calls), 2, "a new spell above mine: the model is asked")
+        r.handle(window(3, ["Kabira Takedown"]))
+        self.assertEqual(len(self.calls), 3, "game 64 t21: the stack looks like window 1, but Resistance resolved in between")
+        r.handle(window(4, ["Kabira Takedown"]))
+        self.assertEqual(len(self.calls), 3, "the same window again, nothing new since: the memo replays the pass")
+
+    def test_names_already_seen_keep_the_memo(self):
+        r = self.r
+        for seq, stack in ((1, ["Grinning Ignus"]), (2, ["Purphoros, God of the Forge", "Grinning Ignus"]), (3, ["Grinning Ignus"])):
+            r.handle(window(seq, stack))
+        self.assertEqual(len(self.calls), 3, "each stack shape once")
+        for seq, stack in ((4, ["Purphoros, God of the Forge", "Grinning Ignus"]), (5, ["Grinning Ignus"]),
+                           (6, ["Purphoros, God of the Forge", "Grinning Ignus"]), (7, ["Grinning Ignus"])):
+            r.handle(window(seq, stack))
+        self.assertEqual(len(self.calls), 3, "a loop repeats names the seat has seen: every later lap is memoised (BL-52 keeps its saving)")
+
+    def test_a_yield_is_forgotten_with_the_memo(self):
+        """Review 2026-10-02: my trigger on the stack (passed -> yielded), a new spell above it (passed), then the
+        trigger alone again: it was auto-yielded with no model call."""
+        r = self.r
+        def trig(seq, stack, kinds):
+            w = window(seq, stack)
+            w["state"]["stackKinds"] = list(kinds)
+            w["state"]["stackOwners"] = [r.seat] * len(stack)
+            return w
+        r.handle(trig(1, ["Ravenous Chupacabra"], ["trigger"]))
+        r.handle(trig(2, ["Collective Resistance", "Ravenous Chupacabra"], ["spell", "trigger"]))
+        r.handle(trig(3, ["Ravenous Chupacabra"], ["trigger"]))
+        self.assertEqual(len(self.calls), 3, "the window after the new spell resolved reaches the model, not the yield")
+
+    def test_the_turn_boundary_clears_the_names(self):
+        r = self.r
+        r.handle(window(1, ["Kabira Takedown"]))
+        self.assertEqual(r._stack_names_seen, {"Kabira Takedown"})
+        r.handle(window(2, ["Swords to Plowshares"], turn=10))
+        self.assertEqual(r._stack_names_seen, {"Swords to Plowshares"})

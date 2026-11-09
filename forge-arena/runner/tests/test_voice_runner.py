@@ -1,7 +1,8 @@
-"""The advisor's voice (2026-09-07): voice_runner speaks stock phrases and
-first-sentence advice, one utterance at a time, rate-limited, never for a
-window the human already answered, live only with a key, cached forever.
-Run: python3 -m unittest discover -s tests"""
+"""The advisor's voice (2026-09-07): voice_runner speaks stock phrases and first-sentence advice, one utterance
+at a time, rate-limited, never for a window the human already answered, live only with a key, cached forever;
+the renderer backs off after repeated live failures and publishes its state once per change; the advisor pause
+silences every line; ElevenLabs PCM wrapped in our own WAV header, the pure-Python effects chain, the voice
+resolved by NAME on a 404; the stop poll kills the player process. Run: python3 -m unittest discover -s tests"""
 import io
 import json
 import os
@@ -14,14 +15,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import voice_runner as vr  # noqa: E402
+from tests.support import Clock, silent_wav as _silent_wav  # noqa: E402
+
+WAV = vr.pcm_to_wav(b"\x00\x00" * 2400, 24000)
 
 
 def silent_wav(seconds: float = 0.2) -> bytes:
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(44100)
-        w.writeframes(b"\x00\x00" * int(44100 * seconds))
-    return buf.getvalue()
+    """Joshua's format: 44.1 kHz."""
+    return _silent_wav(seconds, 44100)
 
 
 def base(name: str) -> str:
@@ -35,14 +36,6 @@ class FakePlayer:
 
     def play(self, path):
         self.played.append(base(Path(path).name))
-
-
-class Clock:
-    def __init__(self):
-        self.t = 1000.0
-
-    def __call__(self):
-        return self.t
 
 
 class VoiceRunnerTests(unittest.TestCase):
@@ -273,6 +266,106 @@ class VoiceRunnerTests(unittest.TestCase):
         return [json.loads(l) for l in p.read_text().splitlines() if json.loads(l).get("event") == kind]
 
 
+class VoiceBackoff(unittest.TestCase):
+    def setUp(self):
+        self._env = {k: os.environ.get(k) for k in ("ARENA_VOICE_FX", "ARENA_VOICE_GLITCH")}
+        os.environ["ARENA_VOICE_FX"] = "off"; os.environ["ARENA_VOICE_GLITCH"] = "off"
+
+    def tearDown(self):
+        for k, v in self._env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def test_three_failures_pause_live_lines_and_recovery_is_logged(self):
+        tmp = Path(tempfile.mkdtemp(prefix="vb-"))
+        now = [1000.0]; calls = [0]; ok = [False]; logs = []; events = []
+
+        def tts(text):
+            calls[0] += 1
+            if not ok[0]:
+                raise RuntimeError("HTTP 401 quota_exceeded")
+            return WAV
+        rd = vr.Renderer(tmp, log=logs.append, fake_tts=tts, record=lambda ev, **b: events.append((ev, b)), clock=lambda: now[0])
+        for i in range(3):
+            self.assertIsNone(rd.render(f"line {i}"))
+        self.assertEqual(calls[0], 3)
+        self.assertEqual(sum("live render failed:" in l for l in logs), 1, "the first failure logs in full")
+        self.assertEqual(sum("paused 60s" in l for l in logs), 1)
+        self.assertIsNone(rd.render("line 3")); self.assertEqual(calls[0], 3, "paused: no call")
+        now[0] += 61
+        self.assertIsNone(rd.render("line 4")); self.assertEqual(calls[0], 4, "pause over: one probe")
+        self.assertTrue(any("paused 120s" in l for l in logs), "the pause doubles")
+        self.assertEqual([e for e, _ in events].count("live-paused"), 2)
+        self.assertEqual(rd.fails_total, 4)
+        now[0] += 121; ok[0] = True
+        self.assertIsNotNone(rd.render("line 5"))
+        self.assertTrue(any("recovered after 4 failure(s)" in l for l in logs))
+        self.assertEqual((rd.fail_streak, rd.renders, rd.pause_s), (0, 1, rd.PAUSE_FIRST_S))
+
+
+class ConditionalQuips(unittest.TestCase):
+    """Ben, 2026-09-08: stock quips are boosted ONLY while live lines are down."""
+    def test_renderer_state_names_the_reason(self):
+        tmp = Path(tempfile.mkdtemp(prefix="st-"))
+        now = [0.0]
+        rd = vr.Renderer(tmp, log=lambda m: None, clock=lambda: now[0])
+        rd.api_key = ""
+        self.assertEqual(rd.state(), (False, "no ELEVENLABS_API_KEY"))
+        rd.api_key = "k"
+        self.assertEqual(rd.state(), (True, "ok"))
+        rd.paused_until = 50.0
+        self.assertEqual(rd.state(), (False, "paused after repeated failures"))
+        now[0] = 60.0
+        self.assertEqual(rd.state()[0], True)
+        rd.chars_used = rd.max_chars
+        self.assertFalse(rd.state()[0])
+
+    def test_runner_publishes_state_once_per_change(self):
+        tmp = Path(tempfile.mkdtemp(prefix="vs-"))
+        (tmp / "logs").mkdir(); (tmp / "mailbox").mkdir()
+        run = vr.VoiceRunner(tmp / "logs", tmp / "mailbox", dry_run=True)
+        run.renderer.api_key = ""
+        run.publish_state()
+        st = tmp / "mailbox" / "seat-0-voice" / "state.json"
+        d = json.loads(st.read_text())
+        self.assertEqual((d["live"], d["enabled"]), (False, True)); self.assertIn("ELEVENLABS", d["reason"])
+        m1 = st.stat().st_mtime_ns
+        run.publish_state()
+        self.assertEqual(st.stat().st_mtime_ns, m1, "unchanged state: no rewrite")
+        run.renderer.api_key = "k"
+        run.publish_state()
+        self.assertTrue(json.loads(st.read_text())["live"])
+
+    def test_mute_does_not_log_a_live_transition_and_your_move_waits_while_executive(self):
+        tmp = Path(tempfile.mkdtemp(prefix="vs2-"))
+        (tmp / "logs" / "control").mkdir(parents=True); (tmp / "mailbox").mkdir()
+        run = vr.VoiceRunner(tmp / "logs", tmp / "mailbox", dry_run=True)
+        run.your_move_mode = "on"          # this test is about the Executive gate, not the 2026-09-10 dice
+        run.renderer.api_key = "k"
+        logs = []; run.say = logs.append
+        run.publish_state()
+        (tmp / "logs" / "control" / "voice.json").write_text(json.dumps({"enabled": False}))
+        run.publish_state()
+        self.assertFalse(json.loads((tmp / "mailbox" / "seat-0-voice" / "state.json").read_text())["enabled"])
+        self.assertEqual([l for l in logs if "live lines" in l], [], "a mute is not a live transition")
+        run.renderer.api_key = ""; run.publish_state()
+        run.renderer.api_key = "k"; run.publish_state()
+        self.assertEqual(sum("live lines off" in l for l in logs), 1); self.assertEqual(sum("back on" in l for l in logs), 1)
+        # your move: seat 0 becomes active with the Executive on -> silence; off -> the line
+        (tmp / "logs" / "control" / "voice.json").write_text(json.dumps({"enabled": True}))
+        st = tmp / "mailbox" / "observer-state.json"
+        st.write_text(json.dumps({"turn": 3, "activeSeat": 1, "seats": []})); run.scan_observer()
+        (tmp / "logs" / "control" / "executive.json").write_text(json.dumps({"on": True}))
+        st.write_text(json.dumps({"turn": 4, "activeSeat": 0, "seats": []})); run.scan_observer()
+        self.assertEqual([q["kind"] for q in run.queue if q["kind"] == "your_move"], [])
+        (tmp / "logs" / "control" / "executive.json").write_text(json.dumps({"on": False}))
+        st.write_text(json.dumps({"turn": 5, "activeSeat": 1, "seats": []})); run.scan_observer()
+        st.write_text(json.dumps({"turn": 6, "activeSeat": 0, "seats": []})); run.scan_observer()
+        self.assertEqual([q["kind"] for q in run.queue if q["kind"] == "your_move"], ["your_move"])
+
+
 class StockLibrary(unittest.TestCase):
     """The stock phrase library (2026-09-08: WarGames + RoboCop + HK-47, 63
     lines). Every manifest phrase ships as a baked WAV in the runner's format;
@@ -325,11 +418,6 @@ class StockLibrary(unittest.TestCase):
             self.assertIn("at most once per game each", guide)
         self.assertIn("one line in two", ar.QUIP_GUIDE_DENSE)
         self.assertIn("at most every other turn", ar.QUIP_GUIDE_SPARSE)
-
-
-if __name__ == "__main__":
-    unittest.main()
-
 
 
 class AdvisorPauseSilencesVoice(unittest.TestCase):

@@ -73,7 +73,3 @@ class GuardTests(unittest.TestCase):
         r = self._runner()
         req = cast_req(5, [(7, "Goldhound  {R}")])
         self.assertIsNone(r._plan_guard(req, {"card": "Sol Ring"}))
-
-
-if __name__ == "__main__":
-    unittest.main()

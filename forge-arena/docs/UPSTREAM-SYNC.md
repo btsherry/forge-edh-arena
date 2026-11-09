@@ -5,7 +5,7 @@
 same afternoon (the record is below). Companion to [INVENTORY.md](INVENTORY.md) §1 (the authoritative
 divergence list). Read both before ANY merge from upstream.*
 
-## The situation, plainly (as of 2026-10-02, after the second sync)
+## The situation, plainly (as of 2026-10-02, after the second sync; 2026-11-07 added one behavioural hunk to `ComputerUtilMana`, see the rows below)
 
 - We are a fork of [Card-Forge/forge](https://github.com/Card-Forge/forge)
   (`origin`), working on branch `arena`, pushed to `private`
@@ -208,6 +208,9 @@ merge can invalidate without a conflict. The arbiter is the test; the column
 | every `PlayerController` subclass of ours (`MailboxController`, `AdvisorControllerHuman`, `ComboAwareLobbyPlayer`, `GoldfishLobbyPlayer`) | `PlayerController` abstract surface | no new abstract method is left unimplemented | (compile) | **three new abstract methods** (`chooseSticker`, `chooseStickerNamePosition`, `chooseCardToKeepStickers`, `5e3caa29a7d` Unfinity stickers) — implemented in `PlayerControllerAi`/`Human` upstream, so ours inherit them; compiled clean |
 | Test fixtures on real cards | `res/cardsfolder`: Frost Breath, Tezzeret the Seeker, Shatterskull Smashing, Bogardan Hellkite, Electrolyze, Gemstone Caverns, Savannah Lions, Llanowar Elves, Grizzly Bears, Hill Giant, Gray Ogre, Mind Stone, Grim Monolith, Sol Ring, Mox Opal, Walking Ballista, Generous Gift, Winter Orb, Rhystic Study, Tidespout Tyrant, Counterspell | the scripts keep their target shape and costs | the tests themselves | all unchanged between the base and `fb4d8091126` |
 
+| the `selfSpell` window (W-14, 2026-11-07): `aimsAtOwnStack` / `chainCopiesOwn` | `ApiType.CopySpellAbility`, `SpellAbility.getSubAbility` chains, `TargetRestrictions.getZone` / `canTargetSpellAbility`, `CharmEffect.makePossibleOptions`, `TriggeredAbility.ensureAbility().copy(activator)`, `ComputerUtilCost.canPayCost` | a copy effect is the `CopySpellAbility` API somewhere in the chain (Charm modes enumerated, redirect roots walked), its own part or a `Defined$ Targeted` part under a Stack-targeting ancestor reaches an own object; a host trigger probed with the seat as activator reads "spell you control" | `SelfSpellWindowTest` (Flare, Dualcaster, Naru Meha, Wild Ricochet, Return the Favor, Lithoform; Counterspell / Deflecting Swat never open it) | (new since the sync) |
+| `ComputerUtilMana` BL-65 reroute (2026-11-07, in forge-ai: a Phyrexian or life-keyword shard goes to life when the sources are short and `lifeBridgesTheGap`) | `ManaCostShard.isPhyrexian`, `ManaCostBeingPaid.getUnpaidShards` / `getNextShardToPay` order, `Player.canPayLife`, `ComputerUtilMana.getManaSourcesToPayCost` / `getAvailableManaSources` | the payer visits shards in a stable order and `sourcesForShards` is the full untapped set; a shard sent to life is paid through the existing life branch; a failed payment rolls mana and cost parts back, never life | `LifeForManaPayerTest` (K'rrik, Dismember, Phyrexian Metamorph, Tamiyo, Solphim) | (new since the sync) |
+
 Add a row whenever a new seam leans on an upstream method; delete the row
 when the seam goes.
 
@@ -237,7 +240,7 @@ git merge origin/master
 
 | Class | Files | Resolution rule |
 |---|---|---|
-| Behavioral patches | `ComputerUtil.java`, `ComputerUtilMana.java`, `MyRandom.java` | Take upstream's new shape, **re-apply our behavior by hand** at the marker site; the guarding test is the arbiter. If upstream restructured the whole method, port the *intent* (rollback-to-origin-zone; refund-in-place for activated abilities; effective-part payment vetting; seedable RNG), not the old lines. |
+| Behavioral patches | `ComputerUtil.java`, `ComputerUtilMana.java`, `MyRandom.java` | Take upstream's new shape, **re-apply our behavior by hand** at the marker site; the guarding test is the arbiter. If upstream restructured the whole method, port the *intent* (rollback-to-origin-zone; refund-in-place for activated abilities; effective-part payment vetting; restricted-mana-first sorting; a Phyrexian/life-keyword shard to life only when the sources are short and life bridges the gap, BL-65; seedable RNG), not the old lines. |
 | Additive hooks | `AiCostDecision.java` (+`TapCostPreference`, `SacCostPreference`, `PaymentPickPreference`) | Re-insert the hook blocks ahead of upstream's (possibly new) stock logic. `TapSymmetryBreakTest` / `SacrificeSeatChoiceTest` / `PaymentPickPreferenceTest` arbitrate. |
 | Diagnostics | `MagicStack.java` | Re-add the FIZZLE / DECLINED-TRIGGER stderr block wherever the fizzle branch now lives. Cheap; skip only if the branch vanished. |
 | Defensive fixes | `Combat.java`, `StaticAbilityTurnPhaseReversed.java` | Check if upstream fixed it themselves (both are upstream-worthy); if yes, drop ours — divergence shrinks. |

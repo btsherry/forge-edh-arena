@@ -1,16 +1,15 @@
-"""Scheduler hardening (experimental/voicework2, 2026-09-14 — plan Lane C, items C2, §5.1, A6,
-§4.2, A5, A3, A14). One classification shared by eviction, the governor, the seat guard and the
-hygiene script; the governor as a mean, not a ceiling; one human_turn() predicate switched off
-while the Executive plays the seat; the silence floor's pool on its record, anchored first and an
-atom when the pool is empty or filler-only; the seat guard holds only between two lines of the
-same class; a proposal's replies are terminal; Joshua never answers a seat.
-Run: python3 -m unittest discover -s tests"""
+"""The scheduler (voice/scheduler.py; lane C of the 2026-09-14 hardening plan — C2, §5.1, A6, §4.2, A5, A3,
+A14): one classification shared by eviction, the governor, the seat guard and the hygiene script; the governor
+as a mean, not a ceiling; one human_turn() predicate switched off while the Executive plays the seat; the
+silence floor's pool on its record, anchored first and an atom when the pool is empty or filler-only; the seat
+guard holds only between two lines of the same class; a proposal's replies are terminal; Joshua never answers a
+seat; BL-53 long-turn relief; procedural narration is never governed; a named line heard lately falls back to
+its generic. Run: python3 -m unittest discover -s tests"""
 import importlib.util
 import json
 import os
 import random
 import sys
-import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -19,8 +18,13 @@ from chains import ChainTable, plan_reply  # noqa: E402
 from voice import scheduler as sch  # noqa: E402
 from test_table_lines import _TableCase  # noqa: E402
 
+
 RUNNER = Path(__file__).resolve().parents[1]
+
+
 SOURCES = ("event", "card", "procedural", "opener", "brain", "recap", "advice", "patter", "chain")
+
+
 FILLER = ("nothing-happening", "this-is-fine", "good-hand", "what-turn")
 
 
@@ -149,6 +153,33 @@ class GovernorIsAMean(_TableCase):
 
     def test_constants(self):
         self.assertEqual((sch.OPTIONAL_FLOOR, sch.GOVERNOR_TAPER_AT), (0.15, 1.5))
+
+
+class UngovernedLines(_TableCase):
+    """Release features (2026-09-16): a seat narrating its own turn is always worth the breath; a named line heard lately falls back to its generic."""
+
+    def test_procedural_narration_is_not_governed(self):
+        r = self.r
+        self._snap(4, 1); r.queue.clear()
+        r.duty = lambda window=sch.DUTY_WINDOW_S: 1.0                     # far over budget
+        r.rng.random = lambda: 0.2                                        # passes a certain line, fails a governed 0.9 x 0.15
+        self.assertTrue(r.maybe_bark(1, "land-go", turn=4, source="procedural", p=1.0, ctx={"targets": []}),
+                        "a seat narrating its own turn is always worth the breath (game 48: thirty died to the budget)")
+        r.queue.clear()
+        self.assertFalse(r.maybe_bark(2, "nothing-happening", turn=4, source="patter", p=0.9, ctx={"targets": []}),
+                         "filler still answers to the governor")
+
+    def test_a_named_line_heard_lately_falls_back_to_its_generic(self):
+        r = self.r
+        self._snap(4, 1); r.queue.clear()
+        r.rng.random = lambda: 0.0                                        # the address swap always wants the named take
+        named = r.address_swap(1, "deal", {"targets": [2]})
+        if not named:
+            self.skipTest("no named wording for seat 2's commander in this fixture")
+        r._said_at[named] = self.clock.t - 60                             # heard a minute ago
+        self.assertEqual(r.address_swap(1, "deal", {"targets": [2]}), "", "the generic, with its several takes, speaks instead")
+        r._said_at[named] = self.clock.t - sch.PATTER_REPEAT_S - 1
+        self.assertEqual(r.address_swap(1, "deal", {"targets": [2]}), named, "five minutes on, the named take is back")
 
 
 class HumanTurnPredicate(_TableCase):
@@ -517,8 +548,6 @@ def _sixty_second_turn(case) -> list:
     return trace
 
 
-# What HEAD (844e5ba24f8, the per-turn SET) produced for _sixty_second_turn — captured by running the same
-# function with HEAD's SchedulerMixin mixed in ahead of VoiceRunner (git show HEAD:… into a scratch module).
 HEAD_TRACE_60S = [
     True, False,                                                           # the filler, then "already said this turn"
     True, False,                                                           # "land, go", then the same
@@ -658,7 +687,3 @@ class LongTurnRelief(_TableCase):
 
     def test_a_short_turn_is_exactly_as_before(self):
         self.assertEqual(_sixty_second_turn(self), HEAD_TRACE_60S, "a 60 s turn: the same results, queue and records as HEAD's set")
-
-
-if __name__ == "__main__":
-    unittest.main()

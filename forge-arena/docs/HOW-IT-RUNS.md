@@ -171,3 +171,53 @@ fallbacks, punts, refusals, deviations, timeouts, restarts, wedges, the
 engine's mirrored yields, voice and advisor counts. The last line is `OK` or
 `!! HYGIENE: …` naming what was not zero. It is saved as `hygiene.txt` in the
 archive folder beside the logs.
+
+## What was added after this was written (2026-09-10 → 2026-11-07), in plain words
+
+**The table talks.** The three AI seats have voices: Harry, Bill and Lily,
+pre-rendered lines on disk, no model call. A voice runner watches the engine's
+public snapshot (attacks, damage, casts, things dying, counters) and the
+seats' own logs, and composes what a kitchen table would say: openers,
+reactions, "land, go", a question answered with the true life total, a reply
+to a jab, a truce struck and a truce broken. One dial, `ARENA_CHATTER`, is a
+talk budget: the fraction of the last minute somebody may be speaking. The
+advisor's voice, Joshua, stays outside the game and never answers a seat.
+
+**Deals.** Type `@urza truce 2 rounds` in the Advisor chat and Urza's brain is
+told at its next decision; it accepts, refuses or counters in its own voice
+and in the tab. A truce forbids attacks, no-target forbids targeting, an
+alliance both. The voice runner keeps the ledger (`runner/logs/deals.jsonl`)
+and calls out a break at the table. A seat may offer you one too, once a
+round; a pane in the dock takes your answer.
+
+**Talk-back (2026-11-07).** Anything else you type at a seat is table talk.
+Its own brain answers in one sentence, under your line, in about two seconds,
+on the same chat it plays from. No second brain, no faster polling: the seat's
+idle loop checks one directory once a pass.
+
+**The brains write their own lines (2026-11-07).** Beside a decision the seat's
+brain may name a line from a short menu the runner builds for the moment (it
+was just hit, it is blocking, a threat is on the stack, it is casting
+something big), aimed at a seat or at you. The voice speaks it at once, or
+holds "big swing" for the attack that follows. A brain may also arm a reflex
+for the next hit or counter against it, performed at the event with no call.
+Two lines a seat a turn. Everything still goes through the same runner and
+voice; nothing new runs.
+
+**A seat can copy its own spell (2026-11-07).** The engine used to pass a
+seat's priority whenever only its own spell sat on the stack. Now, when the
+seat holds an affordable copy effect that can reach that spell, one window
+opens before it resolves. Counters and redirects never open it.
+
+**Phyrexian mana (2026-11-07).** A pip you may pay with life goes to life only
+when the seat's mana cannot cover the whole cost and life can bridge the gap.
+Dismember on two Swamps casts; nobody bleeds for a payment that still fails.
+
+**The dollar figure (2026-10-16).** The AI panel's cost used to sum the CLI's
+running ledger on every answer and showed up to 70 times the truth. It is the
+per-call figure now. The Elo ladder keys on the exact model that played, not
+the alias, and the archive was re-rated once.
+
+**Sleep (2026-10-16).** Every deadline in the seam is wall-clock, so a sleeping
+laptop spends every open window. On macOS the launcher now keeps the machine
+awake for exactly as long as the game window is open.

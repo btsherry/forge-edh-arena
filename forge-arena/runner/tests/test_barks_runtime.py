@@ -9,35 +9,26 @@ drops everything. Several wordings of a line play from a shuffle bag. An AI
 seat's elimination is voiced once, by the seat itself 70 % of the time.
 
 Everything here runs against a synthetic stock tree so it never depends on the
-rendered libraries. Run: python3 -m unittest discover -s tests
-"""
-import io
+rendered libraries. Run: python3 -m unittest discover -s tests"""
 import json
 import os
 import sys
 import tempfile
 import time
 import unittest
-import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import voice_runner as vr  # noqa: E402
 from voice import renderer as vr_renderer, table as vr_table  # noqa: E402  — the split (2026-09-14): STOCK/VOICES_DIR live here
+from tests.support import Clock, silent_wav  # noqa: E402
+
 
 LINES = ("big-swing", "eliminated", "my-turn", "that-hurt", "landed-hit", "counter", "got-countered", "slow-turn", "respect",
          "game-changer", "gc-react", "gc-gone",
          "commander-cast", "wow", "play-slower", "sweep", "got-swept", "lost-commander", "removal", "win", "kill", "big-mana",
          "play-faster", "thinking-hard", "youre-the-threat", "whats-your-life", "low-life-jab", "cards-in-hand", "empty-hand",
          "kill-that", "board-envy", "nothing-happening", "this-is-fine", "good-hand", "what-turn", "deal", "pass-already")
-
-
-def silent_wav(seconds: float = 0.2) -> bytes:
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
-        w.writeframes(b"\x00\x00" * int(22050 * seconds))
-    return buf.getvalue()
 
 
 class FakePlayer:
@@ -48,15 +39,9 @@ class FakePlayer:
         self.played.append(Path(path).name)
 
 
-class Clock:
-    def __init__(self):
-        self.t = 1000.0
-
-    def __call__(self):
-        return self.t
-
-
 REPLIES = ("agree", "disagree", "scoff", "clapback", "brace", "pile-on", "sympathy", "laugh", "last-word", "gg")
+
+
 REAL_CHAINS = Path(__file__).resolve().parents[1] / "voice" / "stock" / "voices" / "chains.json"
 
 
@@ -145,7 +130,6 @@ class _TreeCase(unittest.TestCase):
 
     def _queued(self):
         return [(q["kind"], q["stock"], q.get("library") or "", q.get("seat")) for q in self.r.queue]
-
 
 
 class BarkRuntime(_TreeCase):
@@ -1014,7 +998,3 @@ class PatterClock(_TreeCase):
         self.r.rng.shuffle = lambda x: None
         self.r.after_spoken({"kind": "bark", "stock": "youre-the-threat", "text": "", "seat": 2, "library": "bill", "ctx": {"targets": [1]}, "chain": None})
         self.assertEqual(self.r.queue, [], "the target is dead: no answer")
-
-
-if __name__ == "__main__":
-    unittest.main()

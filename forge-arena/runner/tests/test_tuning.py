@@ -166,10 +166,6 @@ class TheOperatorKnobs(unittest.TestCase):
         self.assertNotIn(f"{cfg.TUNING_FILE}=", text, "a file is not a variable with a value")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TuningContract(unittest.TestCase):
     def test_an_unknown_key_or_a_string_patter_switch_is_refused(self):
         import tempfile, pathlib, sys

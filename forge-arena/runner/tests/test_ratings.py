@@ -1,13 +1,19 @@
-"""ELO applier tests (plan §13, F-20/F-21/F-22/F-23/F-28): tie groups,
-self-pairs, snapshot semantics, attribution, cross-check skips, idempotency.
-Run: python3 -m unittest discover -s tests"""
+"""ELO applier tests (plan §13, F-20/F-21/F-22/F-23/F-28): tie groups, self-pairs, snapshot semantics,
+attribution, cross-check skips, idempotency, voided games (transport-contaminated games are recorded but never
+rated); BL-26 the sweep survives malformed and vanished spools; BL-09 transport events attribute by game id;
+BL-21 a record in game.jsonl AND game-<id>.jsonl is one decision; BL-59 (2026-10-16) the ladder keys on the
+concrete model id — aliases resolve by the record's own time and `ratings.py --rebuild` re-rates the archive
+corpus. Run: python3 -m unittest discover -s tests"""
+import datetime
 import json
+import os
+import shutil
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ratings  # noqa: E402
 
 
@@ -51,6 +57,18 @@ class Env:
 
     def tables(self):
         return json.loads((self.tmp / "ratings.json").read_text())
+
+
+def epoch(iso: str) -> float:
+    return datetime.datetime.fromisoformat(iso).timestamp()
+
+
+ALIASES = ratings.compile_aliases({
+    "_comment": "ignored",
+    "opus": [{"until": "2026-09-25T00:00:00-07:00", "id": "claude-opus-5"},
+             {"id": "claude-opus-5-5"}],
+    "fable": [{"id": "claude-fable-5-1"}],
+})
 
 
 class EloMath(unittest.TestCase):
@@ -254,7 +272,6 @@ class VoidGames(unittest.TestCase):
         self.assertEqual(n, 1, "a few scattered punts are normal, not contamination")
 
     def test_env_override_rates_anyway(self):
-        import os
         env = Env()
         env.add_spool(spool([[3], [2], [1], [0]]))
         self._events(env, [{"ts": 1000_000_000.0 + 120, "seat": 2, "kind": "wedge"}])
@@ -266,5 +283,166 @@ class VoidGames(unittest.TestCase):
         self.assertEqual(n, 1, "ARENA_RATE_VOIDED=1 must force rating")
 
 
-if __name__ == "__main__":
-    unittest.main()
+class SweepHardening(unittest.TestCase):
+    def test_malformed_spool_is_skipped_not_a_traceback(self):
+        env = Env()
+        env.add_spool({"schema": 1, "seats": "nope"}, name="game-1000000000000-9.json")
+        env.add_spool(spool([[3], [2], [1], [0]]))
+        n, out = env.run()
+        self.assertEqual(n, 1, "the good spool still rates")
+        self.assertTrue(list((env.tmp / "results").glob("game-1000000000000-9.json.skipped")))
+        self.assertTrue(any("malformed spool" in ln for ln in out), out)
+
+    def test_vanished_spool_is_another_sweepers_win(self):
+        out = []
+        ok = ratings._rename_quiet(Path(tempfile.mkdtemp()) / "game-x.json", ".rated", out.append)
+        self.assertFalse(ok)
+        self.assertTrue(any("another sweeper" in ln for ln in out))
+
+    def test_spool_problem_names_the_gap(self):
+        self.assertEqual(ratings.spool_problem([]), "not an object")
+        self.assertEqual(ratings.spool_problem({"startMillis": 1}), "missing endMillis")
+        good = spool([[3], [2], [1], [0]])
+        self.assertIsNone(ratings.spool_problem(good))
+
+
+class DualLogNotDoubleCounted(unittest.TestCase):
+    """BL-21 follow-up: a record present in game.jsonl AND game-<id>.jsonl is one decision."""
+
+    def test_records_in_both_files_count_once(self):
+        env = Env()
+        flat = env.game_log.read_text()
+        (env.tmp / "logs" / "game-1000000000000-1.jsonl").write_text(flat)  # the per-game copy
+        recs = ratings.slice_game_log(env.game_log, 1000_000_000.0, 1000_000_000.0 + 3600)
+        self.assertEqual(len(recs), len(flat.splitlines()), "each decision once, not twice")
+        env.add_spool(spool([[3], [2], [1], [0]]))
+        n, _ = env.run()
+        self.assertEqual(n, 1)
+        rec = json.loads((env.tmp / "ratings-history.jsonl").read_text().strip().splitlines()[-1])
+        self.assertEqual(rec["seats"][0]["modelDecisions"], {"mA": 6}, "6 decisions, not 12")
+
+
+class EventsByGameId(unittest.TestCase):
+    def _events(self, env, events):
+        (env.tmp / "logs" / "transport-events.jsonl").write_text(
+            "\n".join(json.dumps(e) for e in events) + "\n")
+
+    def test_other_games_punts_do_not_void_a_stamped_spool(self):
+        env = Env()
+        sp = spool([[3], [2], [1], [0]])
+        sp["gameId"] = "g-this"
+        env.add_spool(sp)
+        # nine punts inside the time window but stamped for ANOTHER game
+        self._events(env, [{"ts": 1000_000_000.0 + 100 + i, "seat": 1,
+                            "kind": "punt", "gameId": "g-other"} for i in range(9)])
+        n, _ = env.run()
+        self.assertEqual(n, 1, "events of another game never void this one")
+
+    def test_own_and_unstamped_events_still_void(self):
+        for gid in ("g-this", None):
+            env = Env()
+            sp = spool([[3], [2], [1], [0]])
+            sp["gameId"] = "g-this"
+            env.add_spool(sp)
+            self._events(env, [{"ts": 1000_000_000.0 + 100 + i, "seat": 1,
+                                "kind": "punt", "gameId": gid} for i in range(9)])
+            n, _ = env.run()
+            self.assertEqual(n, 0, f"gameId={gid!r} must void")
+
+
+class AliasResolution(unittest.TestCase):
+
+    def test_an_alias_resolves_by_the_records_own_time(self):
+        self.assertEqual(ratings.resolve_model("opus", epoch("2026-09-01T12:00:00-07:00"), ALIASES), "claude-opus-5")
+        self.assertEqual(ratings.resolve_model("opus", epoch("2026-09-25T00:00:00-07:00"), ALIASES), "claude-opus-5-5",
+                         "`until` is exclusive")
+        self.assertEqual(ratings.resolve_model("opus", epoch("2026-10-01T12:00:00-07:00"), ALIASES), "claude-opus-5-5")
+
+    def test_no_timestamp_means_the_current_resolution(self):
+        self.assertEqual(ratings.resolve_model("opus", None, ALIASES), "claude-opus-5-5")
+
+    def test_concrete_ids_and_unknown_names_pass_through(self):
+        self.assertEqual(ratings.resolve_model("claude-opus-5-5", 0, ALIASES), "claude-opus-5-5")
+        self.assertEqual(ratings.resolve_model("human+advisor", 0, ALIASES), "human+advisor")
+        self.assertEqual(ratings.resolve_model("", 0, ALIASES), "")
+
+    def test_the_shipped_alias_file_parses(self):
+        table = ratings.load_aliases()
+        self.assertIn("opus", table)
+        self.assertEqual(table["opus"][-1][0], None, "the last entry is the open-ended current resolution")
+        self.assertEqual(table["opus"][-1][1], "claude-opus-5-5")
+
+    def test_the_ladder_keys_on_the_resolved_id(self):
+        # the Env's records sit at ts ~1e9 (2001): an `opus` alias there is claude-opus-5
+        env = Env(models=("opus", "mB", "mC", "mD"))
+        env.add_spool(spool([[0], [1], [2], [3]]))
+        n = ratings.sweep(env.tmp / "results", env.tmp / "ratings.json",
+                          env.tmp / "ratings-history.jsonl", env.game_log,
+                          env.tmp / "logs" / "elo", log=lambda *a: None, aliases=ALIASES)
+        self.assertEqual(n, 1)
+        models = env.tables()["models"]
+        self.assertIn("claude-opus-5", models)
+        self.assertNotIn("opus", models)
+        self.assertIn("claude-opus-5|deck-a", env.tables()["combos"])
+
+
+class Rebuild(unittest.TestCase):
+
+    def _archive_from(self, env: Env) -> Path:
+        """Move a swept Env's logs and consumed spools into archive/<stamp>-stop/
+        the way arena-stop.sh does."""
+        arch = env.tmp / "logs" / "archive" / "20260101-000000-stop"
+        arch.mkdir(parents=True)
+        shutil.copy(env.game_log, arch / "game.jsonl")
+        for p in (env.tmp / "results").glob("game-*.json.*"):
+            shutil.copy(p, arch / p.name)
+        return arch.parent
+
+    def test_rebuild_with_no_aliases_reproduces_the_live_sweep(self):
+        env = Env()
+        env.add_spool(spool([[0], [1], [2], [3]]), name="game-1000000000000-1.json")
+        env.add_spool(spool([[3], [2], [1], [0]], start=1000_000_300_000, end=1000_000_500_000),
+                      name="game-1000000300000-2.json")
+        n, _ = env.run()
+        self.assertEqual(n, 2)
+        live = env.tables()
+        archive = self._archive_from(env)
+        out = env.tmp / "rebuilt"
+        out.mkdir()
+        got = ratings.rebuild(archive, out / "ratings.json", out / "ratings-history.jsonl",
+                              out / "elo", log=lambda *a: None, aliases={}, keep_backups=False)
+        self.assertEqual(got, 2)
+        rebuilt = json.loads((out / "ratings.json").read_text())
+        self.assertEqual(rebuilt["models"], live["models"])
+        self.assertEqual(rebuilt["decks"], live["decks"])
+        self.assertEqual(rebuilt["combos"], live["combos"])
+        history = [json.loads(l) for l in (out / "ratings-history.jsonl").read_text().splitlines()]
+        self.assertEqual([h["spool"] for h in history],
+                         ["game-1000000000000-1.json", "game-1000000300000-2.json"])
+        self.assertTrue(all(h["archive"] == "20260101-000000-stop" for h in history))
+        self.assertTrue(list((out / "elo").glob("seat-*.json")), "digests are written for the last rated game")
+
+    def test_rebuild_with_aliases_splits_one_alias_into_its_ids(self):
+        env = Env(models=("opus", "opus", "mC", "mD"))
+        env.add_spool(spool([[0], [1], [2], [3]]))
+        env.run()
+        archive = self._archive_from(env)
+        out = env.tmp / "rebuilt"
+        out.mkdir()
+        ratings.rebuild(archive, out / "ratings.json", out / "ratings-history.jsonl",
+                        out / "elo", log=lambda *a: None, aliases=ALIASES, keep_backups=False)
+        models = json.loads((out / "ratings.json").read_text())["models"]
+        self.assertIn("claude-opus-5", models)
+        self.assertNotIn("opus", models)
+        # seats 0 and 1 are the same rated player: a self-pair, skipped; games_played still 1
+        self.assertEqual(models["claude-opus-5"]["games"], 1)
+
+    def test_rebuild_backs_up_the_live_files(self):
+        env = Env()
+        env.add_spool(spool([[0], [1], [2], [3]]))
+        env.run()
+        archive = self._archive_from(env)
+        ratings.rebuild(archive, env.tmp / "ratings.json", env.tmp / "ratings-history.jsonl",
+                        env.tmp / "logs" / "elo", log=lambda *a: None, aliases={})
+        baks = list(env.tmp.glob("ratings.json.bak-*")) + list(env.tmp.glob("ratings-history.jsonl.bak-*"))
+        self.assertEqual(len(baks), 2)

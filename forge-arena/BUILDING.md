@@ -108,6 +108,10 @@ mvn -o -pl forge-arena -am test \
 `-Dsurefire.failIfNoSpecifiedTests=false` is needed because `-am` also visits
 upstream modules that contain no matching test.
 
+The Python runner suite (798 tests, 30 files, ~68 s; needs the gitignored
+dossiers on disk) runs with `cd forge-arena/runner && python3 -m unittest
+discover -s tests`. Both gates pass on exit status, never on a filtered tail.
+
 ## Packaging the distributable (forge-light-llm tarball)
 
 After a **green** `mvn -o -pl forge-arena -am package`:

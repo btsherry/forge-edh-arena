@@ -1,13 +1,16 @@
-"""Transport-layer tests (H1 checkpoint). Run: python3 -m unittest discover -s tests"""
+"""Transport-layer tests (H1 checkpoint) for seatd/protocol.py: discovery, atomic responses, the late-response
+GC, the delete race, game identity (plan item 8: the engine's gameId is the only new-game signal for a stamped
+engine) and the heartbeat (plan item 12). Run: python3 -m unittest discover -s tests"""
 import json
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from seatd.protocol import SeatMailbox  # noqa: E402
 
 
@@ -148,10 +151,6 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(self.mb.observer_path.name, "observer-state.json")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class GameIdentityTests(unittest.TestCase):
     """Plan item 8 (2026-09-03): the engine's gameId is the only new-game
     signal for a stamped engine; seq heuristics apply to unstamped ones only."""
@@ -232,3 +231,18 @@ class HeartbeatTests(unittest.TestCase):
         self.assertFalse(self.mb.heartbeat(now=1003.0), "under 5s: no touch")
         self.assertTrue(self.mb.heartbeat(now=1005.0), "5s later: touch")
         self.assertEqual(hb.parent, self.mb.inbox.parent, "lives beside inbox/outbox, own seat only")
+
+    def test_heartbeat_thread_stops(self):   # finding R6 (P2)
+        tmp = Path(tempfile.mkdtemp(prefix="hb-"))
+        mb = SeatMailbox(0, str(tmp))
+        mb.HEARTBEAT_S = 0.05
+        mb.start_heartbeat_thread()
+        time.sleep(0.15)
+        hb = tmp / "seat-0" / "heartbeat"
+        self.assertTrue(hb.exists())
+        mb.stop_heartbeat_thread()
+        time.sleep(0.15)
+        m1 = hb.stat().st_mtime_ns
+        time.sleep(0.2)
+        self.assertEqual(hb.stat().st_mtime_ns, m1, "no beats after stop")
+        self.assertFalse(any(t.name == "seat-0-heartbeat" and t.is_alive() for t in threading.enumerate()))

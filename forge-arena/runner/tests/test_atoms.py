@@ -5,9 +5,7 @@ wordings each, every wording a baked take of at most 3.6 s, resolved by the Rend
 "<lib>/atoms". Behaviour: AtomsMixin on a minimal runner double over a synthetic tree
 with known durations, a FakePlayer that records both channels, a fake clock; the real
 Player's under channel (argv per backend, the dry path, the kill with the main line).
-Run: python3 -m unittest discover -s tests
-"""
-import io
+Run: python3 -m unittest discover -s tests"""
 import json
 import os
 import random
@@ -20,27 +18,24 @@ import unittest
 import wave
 from pathlib import Path
 
-RUNNER = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(RUNNER))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from voice import atoms as A  # noqa: E402
 from voice import renderer as vr_renderer  # noqa: E402
 from voice.atoms import AtomsMixin, atom_class  # noqa: E402
+from tests.support import Clock, silent_wav  # noqa: E402
+
+RUNNER = Path(__file__).resolve().parents[1]
+
 
 VOICES = RUNNER / "voice" / "stock" / "voices"
+
+
 LIBS = ("harry", "bill", "lily")
+
+
 ATOM_IDS = ("sigh", "hmm", "chuckle", "laugh", "gasp", "cough", "throat", "tsk", "exhale", "groan", "oof", "ooh",
             "hah", "mm-hm", "yeah", "no-way", "nice", "wow", "ugh", "hmph", "come-on", "oh-no", "right", "yikes")
 
-
-def silent_wav(seconds: float, rate: int = 22050) -> bytes:
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
-        w.writeframes(b"\x00\x00" * int(rate * seconds))
-    return buf.getvalue()
-
-
-# ---- the shipped libraries --------------------------------------------------------
 
 class ShippedAtoms(unittest.TestCase):
     def test_three_atoms_manifests_24_ids_four_plus_wordings_each(self):
@@ -84,8 +79,6 @@ class ShippedAtoms(unittest.TestCase):
             self.assertEqual(r.variants("gasp", "harry"), [], "the parent library has no gasp: the sub-library is separate")
 
 
-# ---- the mixin on a double ------------------------------------------------------------
-
 class FakePlayer:
     def __init__(self):
         self.played, self.under, self.stops = [], [], 0
@@ -107,14 +100,6 @@ class FakePlayer:
 
     def under_playing(self):
         return self.busy
-
-
-class Clock:
-    def __init__(self):
-        self.t = 1000.0
-
-    def __call__(self):
-        return self.t
 
 
 class Double(AtomsMixin):
@@ -488,8 +473,6 @@ class React(_Tree):
         self.assertEqual(self.atoms_records(), [])
 
 
-# ---- the real Player's under channel ------------------------------------------------
-
 class UnderChannel(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -565,10 +548,6 @@ class UnderChannel(unittest.TestCase):
         for t in ts:
             t.join()
         self.assertEqual(sorted(results), [False, True])
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class Wiring(unittest.TestCase):

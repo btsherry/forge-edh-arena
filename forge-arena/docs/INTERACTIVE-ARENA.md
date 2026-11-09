@@ -2111,6 +2111,77 @@ Hard-won from two live sessions; read before optimizing anything.
     tracebacks. Shipped with `packaging/ship-release.sh`: dated + `-latest`,
     both byte-exact. Tag `v4.1` = 7ed30c62210.
 
+110. **The runner suite consolidated (2026-11-08, Ben: "review all of the tests, remove any
+    that are redundant or not working properly; consolidate, simplify, optimize").** 59
+    era-named files (`test_round_two_*`, `test_review_fixes`, `test_game64_fixes`,
+    `test_release_features`, `test_wave2_*`, `test_hardening`, `test_*_hardening`, …) became
+    30 subject files, every test body lifted verbatim: the memo in `test_react_memo`, every
+    runner-side answer without a model call in `test_fastpath`, the validator and punt table
+    in `test_rules`, the loop in `test_cycle_replay` (the game-47 tape included), the runner
+    around its decisions in `test_runner_lifecycle`, SeatBrain and PersistentClaude in
+    `test_brain_transport`, the backends with the golden argv in `test_backends`, the advisor
+    in `test_advisor`, the scripts and the packager in `test_scripts`, the voice's sources and
+    scheduler in `test_voice_events` / `test_voice_scheduler`. Shared doubles (the clock, a
+    silent WAV, the CompletedProcess stand-in, the advisor's fake brain, the seat-side scripted
+    brain + mailbox + engine-free runner — nine copies before) live in `tests/support.py`.
+    Removed as redundant (each pinned by a stricter sibling): wave 2's phase / target /
+    true-repeat memo tests, the old own-life-exact bucket test, memo-only's model-pass test,
+    the CHOOSE_NUMBER punt pair, the record's budget-fold test, two of the three engine-fixture
+    tests (merged into `SafeDefaultAlwaysLegal`, which now covers both fixture dirs), the
+    duplicate unknown-quip test. Fixed: ten files had `unittest.main()` mid-file with classes
+    after it (fine under discover, skipped when run directly); three assertions that compared
+    a value with itself; the mock HTTP server left unclosed (W-20 D7). Faster: the 429 retry
+    no longer sleeps 2 s, the Executive test's mailbox no longer waits 2 s for an engine,
+    the slow-drip test waits 1 s; the runners' stdout is swallowed (`ARENA_TEST_STDOUT=1`
+    keeps it) so a run prints the results alone. 808 → 798 tests, 68 s. The Java suite was
+    reviewed and left as it is: every class pins one seam with a two-card variant where the
+    rule demands it; the six `headless-scenario` tests stay fenced (HL-21/22, Project 1).
+
+109. **Brain-authored table talk and two engine seams (2026-10-16 → 11-07; commits
+    `66c2001db01`, `3124cc7e899`).** Ben: "5 seconds round trip is too long… brains should
+    write directly to the advisor window"; "put each brain in charge of its own voice". Three
+    steps, planned in `docs/reviews/2026-10-16-brain-authored-talk-plan.md` and reviewed in
+    `2026-10-18-brain-authored-talk-review.md`: (1) **talk-back** (W-24) — the seat runner's
+    idle loop asks its OWN brain for one sentence and appends `[clock · Name → you] text` to
+    `logs/advisor-0.log`, one stat of `notes/` per pass, 2.0–2.5 s typed-to-panel live,
+    `ARENA_TALK_REPLY`; (2) the **say menu** (W-25) — `voices/say-menu.json` is the one source,
+    the runner reads the window's situations from the request and the observer ring with a
+    seq cursor, offers up to 14 ids with glosses on a charged window and the eight-id core
+    line on a quiet one, validates `say: {id, to}` against what it offered, caps two a turn
+    and records target, card and the offered list; the voice speaks a brain line at once
+    (ungoverned, never evicting, waiting out the seat guard like a deal line), HOLDS an
+    own-action id for the seat's next matching ring event, names the brain's addressee with
+    certainty (`attack-them` → `hit-<who>`, the threat pin follows the brain); (3) **stances**
+    — a reflex armed per trigger (`on_hit`, `on_attacked`, `on_counter`, `on_gc`), shape (a)
+    the seat's own reaction line at the event, shape (b) the pre-chosen hop-1 reply to another
+    seat's line, capped by `stance_fires_per_turn`, checkpointed with the held lines;
+    `ARENA_STANCES`. Hygiene prints `says:` / `stances:` / `table talk:`. First game with the
+    menu (`20261018-152857`): Ben, "Best run of the voice overs to date." A Gemini Pro commit
+    review (`docs/reviews/2026-11-07-engine-seams-gan-review.md`) found eight small defects,
+    all taken. The same day's human game (`20261107-184934`) exposed two engine seams, fixed
+    in `3124cc7e899` after a GAN-style debate (two Opus critics, Gemini flash and Pro):
+    **BL-65** (a Phyrexian shard goes to life only when the sources are short and life bridges
+    the gap, colour-aware; `LifeForManaPayerTest`) and **W-14's self-spell window** (note 21c;
+    `SelfSpellWindowTest`). Runner suite 808, Maven gate 496.
+
+108. **Five-lens review, round two, and its first fixes (2026-10-16; commits `516794401fa`,
+    `bdb96a8e6c6`, `117c0e30524`).** Project 2 only: five Fable analysts read the voiced table
+    with agentic seat brains (`docs/research/ai-native-roles-review-2026-10-16.*`, 70 findings,
+    no P0; BUG-LOG rows M1–M2, BL-59). Fixed the same day: **M1** — the CLI's `total_cost_usd`
+    is a running ledger, not a turn's cost, so the panel and `seat-N.usage.json` were 6–70×
+    over; `PersistentClaude.call` now stamps `cost_usd_call` as the delta from a base seeded
+    with the transcript's saved total, `_accumulate` prefers it, `cum.cost_basis = "per-call"`
+    marks corrected records (`test_cost_and_model_id`, an end-to-end replay through a fallback,
+    a restart, a rotation and a note). **BL-59** — the brain captures the concrete model id the
+    transport reports and the CLI version; every record carries `model` + `model_alias`;
+    `ratings.py` resolves older records through the dated `runner/ratings-aliases.json` and
+    `--rebuild` re-rates the archive corpus (identity rebuild reproduced the live ladder; the
+    aliased one re-keyed it: claude-opus-5 42 games, claude-opus-5-5 5). **M2** — eleven of
+    nineteen punts in twenty-one games sat on the laptop waking up; `arena-play.sh` runs
+    `caffeinate -i -s -w <gui pid>` on macOS. Cleanup: `banlists/commander-banlist.txt` from the
+    official WotC list, the test mailbox default rooted under `target/`, the corpus re-homed,
+    three dead archive docs removed.
+
 107. **v4.3 SHIPPED (2026-10-03 ~15:3x PDT) — every target is the seat's, on the
     Forge of 2026-10-02.** `forge-light-llm-20261003.tar.gz` (500,548,035 bytes,
     sha256 `25748615902d…4d430f`) from `7e7315acae9 (arena)`; `-latest` points

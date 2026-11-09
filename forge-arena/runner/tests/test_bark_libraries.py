@@ -235,10 +235,6 @@ class Builder(unittest.TestCase):
             bs.resolve_library("no-such-voice")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TheFourthVoice(unittest.TestCase):
     """Ben, 2026-09-16: the fourth seat gets Joshua. His library sits at seat 0 and is assigned only when no human
     sits there; on a human table seat 0 is never voiced and the three seat voices keep their defaults."""
